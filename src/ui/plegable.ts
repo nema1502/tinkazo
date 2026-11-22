@@ -6,7 +6,8 @@ import { t } from "../i18n";
  * Cuántos ganan quedó afuera, junto al botón de sellar: cambiarlo no abre este pliegue.
  *
  * Con el orden de turnos elegido en el selector de arriba (`src/ui/turnos.ts`), el nombre Turnos lo pone la herramienta:
- * eso no es algo elegido ahí adentro y no abre el pliegue. Un nombre escrito por la persona, sí.
+ * eso no es algo elegido ahí adentro y no abre el pliegue. Un nombre escrito por la persona, sí. Lo mismo con el Amigo
+ * secreto (la marca `data-modo-lista="amigo"` en `<html>`, que pone `src/ui/turnos.ts`) y su nombre de siempre.
  *
  * Y lo plegado del resultado (`#mas-resultado`, ver `plegarElResultado`).
  */
@@ -16,9 +17,12 @@ export function initPlegables(): void {
   if (!mas) return;
   const prize = document.getElementById("prize") as HTMLInputElement | null;
   const enOrden = (): boolean => document.getElementById("btn-turnos")?.getAttribute("aria-pressed") === "true";
+  const enAmigo = (): boolean => document.documentElement.dataset.modoLista === "amigo";
   const revisar = (): void => {
     const premio = prize?.value.trim() ?? "";
-    const premioElegido = premio !== "" && !(enOrden() && ["Turnos", "Turns"].includes(premio));
+    const delModo =
+      (enOrden() && ["Turnos", "Turns"].includes(premio)) || (enAmigo() && ["Amigo secreto", "Secret Santa"].includes(premio));
+    const premioElegido = premio !== "" && !delModo;
     if (premioElegido) mas.open = true;
   };
   prize?.addEventListener("input", revisar);

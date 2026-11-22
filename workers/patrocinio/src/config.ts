@@ -10,6 +10,7 @@
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
 import deployments from "../../../src/stellar/deployments.json";
+import { esCorreo } from "./correo-bienvenida";
 import { leerCuentaUrl } from "./plan";
 
 export interface Env {
@@ -140,6 +141,40 @@ export interface Env {
   PAGOS_RECHAZADOS_DIA?: string;
   /** Cuántas altas de quien ganó se aceptan en 24 horas, entre todas las cuentas. Solo dígitos, hasta 300. */
   ALTAS_PREMIO_DIA?: string;
+
+  // ---------- la bienvenida: los sorteos oficiales gratis de quien entra con su cuenta (solo en mainnet, con `ALTAS`) ----------
+  /** Solo `0` cierra el regalo de bienvenida. Vacía o `1`: abierto. La cuenta se puede activar igual. */
+  BIENVENIDA?: string;
+  /** Cuántos sorteos oficiales trae el regalo, de 1 a 10. Vacía: 3. Mal escrita: el regalo queda cerrado y se anota. */
+  BIENVENIDA_SORTEOS?: string;
+  /** Cuántos días valen esos sorteos, de 1 a 365. Vacía: 60. Mal escrita: el regalo queda cerrado y se anota. */
+  BIENVENIDA_DIAS?: string;
+  /** Freno de emergencia: cuántos regalos en 24 horas, entre todos. Vacía o `0`: sin tope. Solo dígitos. */
+  BIENVENIDA_DIA?: string;
+  /** Freno de emergencia: cuántos regalos en una hora, entre todos. Vacía o `0`: sin tope. Solo dígitos. */
+  BIENVENIDA_HORA?: string;
+  /** Freno de emergencia: cuántos regalos por conexión en 24 horas. Vacía o `0`: sin tope (en un evento todos salen por la misma). */
+  BIENVENIDA_POR_IP?: string;
+  /**
+   * El margen del regalo, en créditos de Pollar: el regalo pasa solo si después de darlo quedan estos créditos por encima del
+   * piso. Vacía: 3.000. Hasta 50.000. Mal escrita: vale la de por defecto y se anota. No es un tope de personas.
+   */
+  RESERVA_REGALO_CREDITOS?: string;
+  /** Los sorteos oficiales que recibe quien organiza una campaña al pagar su comisión (de 1 a 10). Vacía: 3. */
+  ORGANIZADORA_SORTEOS?: string;
+  /** Cuántos días valen esos sorteos (de 1 a 30). Vacía: 7. */
+  ORGANIZADORA_DIAS?: string;
+  /** Cuántas cuentas de quien organiza se admiten en 24 horas, entre todas (de 1 a 300). Vacía: 30. */
+  ORGANIZADORAS_DIA?: string;
+  /** Secreto de 32 caracteres o más: el que manda la sala de las campañas para pedir el acceso de quien organiza. Sin él, la ruta no atiende. */
+  SALA_SECRETO?: string;
+  /**
+   * El correo de bienvenida: solo `1` lo prende (y solo en mainnet con `ALTAS`). Nace en `0`. Sale una vez por persona, unos
+   * 20 minutos después de recibir el regalo, desde la alarma del objeto (ver `correo-envios.ts`).
+   */
+  CORREO_BIENVENIDA?: string;
+  /** El remitente del correo: una dirección del dominio habilitado para el envío. Sin forma de correo, el correo no sale. */
+  CORREO_DE?: string;
   /** Secreto: la llave secreta de la app de mainnet en Pollar. */
   POLLAR_SECRETO?: string;
   /** Secreto: la clave de los cupones, las altas, los derechos, las órdenes pagadas a mano y los pagos sueltos. */
@@ -282,8 +317,49 @@ export interface Config {
   pagosRechazadosDia: number;
   /** Las altas de quien ganó que se aceptan en 24 horas, entre todas las cuentas. Mal escrito, vale el de por defecto y el alta no se prende. */
   altasPremioDia: number;
+
+  // ---------- la bienvenida ----------
+  /**
+   * El regalo de bienvenida abierto por la configuración: en mainnet con `ALTAS=1`, sin `BIENVENIDA=0` y con sus números bien
+   * escritos. Además se cierra en caliente (`AJUSTE_BIENVENIDA_CERRADA`) y con la pausa de las altas.
+   */
+  bienvenida: boolean;
+  /** Los sorteos oficiales del regalo (3 por defecto). */
+  bienvenidaSorteos: number;
+  /** Los días que valen (60 por defecto). */
+  bienvenidaDias: number;
+  /** Los frenos de emergencia de la variable: null es sin tope, que es lo de siempre. Un ajuste en caliente los reemplaza. */
+  bienvenidaDia: number | null;
+  bienvenidaHora: number | null;
+  bienvenidaPorIp: number | null;
+  /** El margen del regalo por encima del piso, en créditos (3.000 por defecto). Un ajuste en caliente lo reemplaza. */
+  reservaRegalo: number;
+  /**
+   * Lo que da el acceso automático de quien organiza una campaña (`POST /v1/alta/organizadora`): cuántos sorteos, por cuántos días,
+   * y cuántas cuentas se admiten en 24 horas. Null fuera de mainnet, sin ALTAS o con una variable mal escrita: la ruta no atiende.
+   */
+  organizadoras: OrganizadorasConfig | null;
+
+  // ---------- el correo de bienvenida ----------
+  /**
+   * El correo de bienvenida prendido por la configuración: en mainnet con `ALTAS=1`, `CORREO_BIENVENIDA=1` y un remitente con
+   * forma de correo. Además hace falta el enlace de envío y la llave de Pollar, y se cierra en caliente (`AJUSTE_CORREO_CERRADO`).
+   */
+  correoBienvenida: boolean;
+  /** El remitente del correo, o null si no tiene forma de correo. */
+  correoDe: string | null;
   /** Lo que falta para lo que se prendió, con nombres fijos y sin valores (para la bitácora). Vacío fuera de mainnet. */
   faltaAltas: string[];
+}
+
+/** Lo que se da a quien organiza una campaña cuando su comisión ya está pagada. */
+export interface OrganizadorasConfig {
+  /** Sorteos oficiales por campaña. */
+  sorteos: number;
+  /** Días que valen esos sorteos. */
+  dias: number;
+  /** Cuentas de quien organiza que se admiten en 24 horas, entre todas. */
+  porDia: number;
 }
 
 /** El costo de un retiro: la segunda operación del pago, a la cuenta de cobros. */
@@ -295,7 +371,8 @@ export interface CostoRetiro {
 }
 
 export type Fondeo = "inmediato" | "diferido";
-export type IdProducto = "alta" | "p10" | "p50";
+/** `sorteo` es el producto por unidad: un precio por sorteo y la cantidad la elige la persona (`UNIDAD_MINIMO` a `UNIDAD_MAXIMO`). */
+export type IdProducto = "alta" | "p10" | "p50" | "sorteo";
 
 export interface Producto {
   id: IdProducto;
@@ -313,16 +390,27 @@ export interface Producto {
  * así perdería. Son también los que valen si `PRECIOS` queda vacía: un precio que pierde nunca entra por defecto.
  */
 export const PRECIOS_POR_DEFECTO = "alta:4:3:90,p10:10:10:365";
-const PRODUCTOS: readonly IdProducto[] = ["alta", "p10", "p50"];
+const PRODUCTOS: readonly IdProducto[] = ["alta", "p10", "p50", "sorteo"];
 /** Lo más que se acepta en un producto: un número más grande es un error de tipeo, no un precio. */
 const MAX_SORTEOS_PRODUCTO = 1000;
 const MAX_DIAS_PRODUCTO = 3650;
+/**
+ * El producto por unidad (`sorteo:1:1:365`): cuántos sorteos se pueden pedir en un pago, de `UNIDAD_MINIMO` a `UNIDAD_MAXIMO`
+ * y de a `UNIDAD_PASO`. Fijos en el código: el sitio los lee de `GET /v1/alta/precios` y nunca los inventa.
+ */
+export const UNIDAD_MINIMO = 5;
+export const UNIDAD_MAXIMO = 50;
+export const UNIDAD_PASO = 5;
+
+/** El producto por unidad de la configuración, o null si `PRECIOS` no lo trae: entonces la venta es la de los paquetes. */
+export const unidadDe = (cfg: Pick<Config, "precios">): Producto | null => cfg.precios?.find((p) => p.id === "sorteo") ?? null;
 
 /**
  * Lee `PRECIOS`: `producto:usdc:sorteos:dias` separados por coma, por ejemplo `alta:2:3:365,p10:5:10:365`.
- * El producto es `alta`, `p10` o `p50`, sin repetir, y `alta` tiene que estar. El monto es positivo, con punto y
- * hasta 7 decimales. Sorteos de 1 a 1.000 y días de 1 a 3.650, enteros. **Cualquier cosa mal escrita rechaza
- * todo** (devuelve null): un precio a medias no se vende.
+ * El producto es `alta`, `p10`, `p50` o `sorteo`, sin repetir, y `alta` o `sorteo` tiene que estar. `sorteo` es el precio
+ * de un sorteo y por eso lleva 1 en sorteos (`sorteo:1:1:365`). El monto es positivo, con punto y hasta 7 decimales.
+ * Sorteos de 1 a 1.000 y días de 1 a 3.650, enteros. **Cualquier cosa mal escrita rechaza todo** (devuelve null): un
+ * precio a medias no se vende.
  */
 export function leerPrecios(s: string): Producto[] | null {
   const productos: Producto[] = [];
@@ -338,9 +426,11 @@ export function leerPrecios(s: string): Producto[] | null {
     const ns = Number(sorteos);
     const nd = Number(dias);
     if (monto <= 0 || ns < 1 || ns > MAX_SORTEOS_PRODUCTO || nd < 1 || nd > MAX_DIAS_PRODUCTO) return null;
+    // El precio por unidad es de un sorteo: otro número ahí es un error de tipeo, no un paquete.
+    if (id === "sorteo" && ns !== 1) return null;
     productos.push({ id: id as IdProducto, usdc, monto, sorteos: ns, dias: nd });
   }
-  return productos.some((p) => p.id === "alta") ? productos : null;
+  return productos.some((p) => p.id === "alta" || p.id === "sorteo") ? productos : null;
 }
 
 /** El recargo por pagar con QR: la primera vez de cada persona (con su verificación) y las siguientes. */
@@ -416,6 +506,59 @@ export const ALTAS_PREMIO_DIA_POR_DEFECTO = 100;
 export const TECHO_TOPE_PAGOS_STROOPS = 100_000_000;
 export const TECHO_PAGOS_RECHAZADOS_DIA = 100;
 export const TECHO_ALTAS_PREMIO_DIA = 300;
+
+/** Lo que trae el regalo de bienvenida si sus variables quedan vacías: 3 sorteos oficiales que valen 60 días. */
+export const BIENVENIDA_SORTEOS_POR_DEFECTO = 3;
+export const BIENVENIDA_DIAS_POR_DEFECTO = 60;
+/** Lo más que pueden valer los sorteos y los días del regalo: más es un error de tipeo y cierra el regalo. */
+export const TECHO_BIENVENIDA_SORTEOS = 10;
+export const TECHO_BIENVENIDA_DIAS = 365;
+/**
+ * Lo más que puede valer un freno de emergencia del regalo (por día, por hora o por conexión), en la variable y en caliente.
+ * Un freno nunca es obligatorio: sin poner no hay tope. El techo solo separa un número de un error de tipeo.
+ */
+export const TECHO_BIENVENIDA_TOPE = 100_000;
+/** Los ajustes en caliente del regalo (`PUT /v1/patrocinio/ajustes`). Con `1`, `bienvenida_cerrada` cierra el regalo sin desplegar. */
+export const AJUSTE_BIENVENIDA_CERRADA = "bienvenida_cerrada";
+/** Los frenos en caliente: un número desde 1 es el tope; `0` lo saca y vuelve a valer el de la variable. */
+export const AJUSTES_BIENVENIDA_TOPE = { dia: "bienvenida_dia", hora: "bienvenida_hora", ip: "bienvenida_ip" } as const;
+/**
+ * El margen del regalo: lo que tiene que quedar por encima del piso después de darlo, para que el regalo no deje sin firma a
+ * quienes ya tienen sorteos (sus cupones, sus premios y sus órdenes miran el piso solo). 3.000 créditos por defecto.
+ */
+export const RESERVA_REGALO_POR_DEFECTO = 3_000;
+/** Lo más que puede valer el margen, en la variable y en caliente: más es un error de tipeo. */
+export const TECHO_RESERVA_REGALO = 50_000;
+/** El margen en caliente: un número de 1 al techo manda; `0` lo saca y vuelve a valer el de la variable. */
+export const AJUSTE_RESERVA_REGALO = "reserva_regalo";
+/** Lo que vale cada variable del acceso de quien organiza si queda vacía, y lo más que puede valer. */
+export const ORGANIZADORA_SORTEOS_POR_DEFECTO = 3;
+export const ORGANIZADORA_DIAS_POR_DEFECTO = 7;
+export const ORGANIZADORAS_DIA_POR_DEFECTO = 30;
+export const TECHO_ORGANIZADORA_SORTEOS = 10;
+export const TECHO_ORGANIZADORA_DIAS = 30;
+export const TECHO_ORGANIZADORAS_DIA = 300;
+/** Lo más corto que se acepta de `SALA_SECRETO`. */
+export const SALA_SECRETO_MINIMO = 32;
+
+/** El correo de bienvenida en caliente (`PUT /v1/patrocinio/ajustes`): con `1`, `correo_bienvenida_cerrado` lo apaga sin desplegar. */
+export const AJUSTE_CORREO_CERRADO = "correo_bienvenida_cerrado";
+/** Cuántos correos se intentan por día (UTC), entre todos: de 1 a su techo manda; `0` vuelve al de por defecto. */
+export const AJUSTE_CORREO_DIA = "correo_bienvenida_dia";
+/**
+ * Hasta qué regalo ya se miró el correo (el id del último derecho `gratis:` intentado). Lo escribe la alarma, nadie a mano. Es
+ * un ajuste y no una columna: el código de antes lo ignora y la vuelta atrás no cambia ninguna tabla.
+ */
+export const AJUSTE_CORREO_HASTA = "correo_bienvenida_hasta";
+/** Los correos intentados hoy (UTC) y si Cloudflare dijo que se acabó la cuota del día. Solo cifras. */
+export const AJUSTE_CORREO_HOY = "correo_bienvenida_hoy";
+/**
+ * Los correos por día al empezar: pocos, porque la cuota diaria de Cloudflare es una sola para la cuenta y la comparte el aviso
+ * a quien gana una campaña, que va primero. Se sube con datos, nunca a más de un tercio de lo que Cloudflare deje por día.
+ */
+export const CORREO_DIA_POR_DEFECTO = 25;
+/** Lo más que puede valer el tope por día, en caliente: más es un error de tipeo. */
+export const TECHO_CORREO_DIA = 1_000;
 
 /** La palabra de `COMPRAS_QR_PILOTO` y `ORDEN_USDC_PILOTO` que abre a cualquier cuenta. */
 export const PILOTO_TODOS = "todos";
@@ -579,6 +722,15 @@ export function leerConfig(env: Partial<Env>): Config {
   const rechazosDia = digitosEnMainnet(env.PAGOS_RECHAZADOS_DIA, PAGOS_RECHAZADOS_DIA_POR_DEFECTO, TECHO_PAGOS_RECHAZADOS_DIA);
   const altasDia = digitosEnMainnet(env.ALTAS_PREMIO_DIA, ALTAS_PREMIO_DIA_POR_DEFECTO, TECHO_ALTAS_PREMIO_DIA);
   const pagosBienEscritos = !topePagos.mal && !rechazosDia.mal;
+  // El acceso de quien organiza una campaña: vacías valen los de por defecto y fuera del rango (un cero de más) se toman como mal escritas.
+  const enRango = (s: string | undefined, porDefecto: number, min: number, techo: number) => {
+    const leido = soloDigitos(s, porDefecto);
+    return leido.mal || leido.valor < min || leido.valor > techo ? { valor: porDefecto, mal: true } : leido;
+  };
+  const orgSorteos = enRango(env.ORGANIZADORA_SORTEOS, ORGANIZADORA_SORTEOS_POR_DEFECTO, 1, TECHO_ORGANIZADORA_SORTEOS);
+  const orgDias = enRango(env.ORGANIZADORA_DIAS, ORGANIZADORA_DIAS_POR_DEFECTO, 1, TECHO_ORGANIZADORA_DIAS);
+  const orgPorDia = enRango(env.ORGANIZADORAS_DIA, ORGANIZADORAS_DIA_POR_DEFECTO, 1, TECHO_ORGANIZADORAS_DIA);
+  const organizadorasMal = orgSorteos.mal || orgDias.mal || orgPorDia.mal;
   const pagosPremio = altas && pidePremio && contractId !== null && pagosBienEscritos;
   const retiros = altas && pideRetiros && cuentaCobros !== null && costoRetiro !== null && pagosBienEscritos;
   const altasPremio = altas && pideAltaPremio && contractId !== null && !altasDia.mal;
@@ -594,6 +746,25 @@ export function leerConfig(env: Partial<Env>): Config {
   anotar(altas && topePagos.mal, "tope-pagos");
   anotar(altas && rechazosDia.mal, "pagos-rechazos");
   anotar(altas && altasDia.mal, "altas-premio-dia");
+  // La bienvenida: abierta salvo un "0", con los sorteos y los días entre 1 y su techo. Los frenos sin poner (o en 0) son sin
+  // tope. Los sorteos o los días mal escritos cierran el regalo y se anotan: no se adivina cuánto dar. Un freno mal escrito
+  // solo se suelta y se anota: es de emergencia, y un error de tipeo en él no puede cerrar la entrada de todos.
+  const bienvenidaSorteos = digitosEnMainnet(env.BIENVENIDA_SORTEOS, BIENVENIDA_SORTEOS_POR_DEFECTO, TECHO_BIENVENIDA_SORTEOS);
+  const bienvenidaDias = digitosEnMainnet(env.BIENVENIDA_DIAS, BIENVENIDA_DIAS_POR_DEFECTO, TECHO_BIENVENIDA_DIAS);
+  const frenos = [env.BIENVENIDA_DIA, env.BIENVENIDA_HORA, env.BIENVENIDA_POR_IP].map((v) => digitosEnMainnet(v, 0, TECHO_BIENVENIDA_TOPE));
+  const [frenoDia, frenoHora, frenoIp] = frenos.map((f) => (f.mal || f.valor === 0 ? null : f.valor));
+  const bienvenidaMal = bienvenidaSorteos.mal || bienvenidaDias.mal || bienvenidaSorteos.valor < 1 || bienvenidaDias.valor < 1;
+  anotar(altas && (bienvenidaMal || frenos.some((f) => f.mal)), "bienvenida");
+  // El margen del regalo mal escrito vale el de por defecto y se anota: ni cierra el regalo ni lo deja sin margen.
+  const reservaRegalo = digitosEnMainnet(env.RESERVA_REGALO_CREDITOS, RESERVA_REGALO_POR_DEFECTO, TECHO_RESERVA_REGALO);
+  anotar(altas && reservaRegalo.mal, "reserva-regalo");
+  anotar(altas && organizadorasMal, "organizadoras");
+  // El correo de bienvenida: solo un "1" con el libro, y con un remitente que tenga forma de correo. Sin remitente bueno no
+  // sale y se anota. Apagado, nada de esto cambia lo que corre.
+  const pideCorreo = altas && prende(env.CORREO_BIENVENIDA);
+  const remitente = (env.CORREO_DE ?? "").trim();
+  const correoDe = enMainnet && esCorreo(remitente) ? remitente : null;
+  anotar(pideCorreo && correoDe === null, "correo-de");
   return {
     red,
     passphrase: d?.networkPassphrase ?? (red === "mainnet" ? "Public Global Stellar Network ; September 2015" : "Test SDF Network ; September 2015"),
@@ -648,6 +819,16 @@ export function leerConfig(env: Partial<Env>): Config {
     topePagos: topePagos.valor,
     pagosRechazadosDia: rechazosDia.valor,
     altasPremioDia: altasDia.valor,
+    bienvenida: altas && (env.BIENVENIDA ?? "").trim() !== "0" && !bienvenidaMal,
+    bienvenidaSorteos: bienvenidaSorteos.valor,
+    bienvenidaDias: bienvenidaDias.valor,
+    bienvenidaDia: frenoDia ?? null,
+    bienvenidaHora: frenoHora ?? null,
+    bienvenidaPorIp: frenoIp ?? null,
+    reservaRegalo: reservaRegalo.valor,
+    organizadoras: altas && !organizadorasMal ? { sorteos: orgSorteos.valor, dias: orgDias.valor, porDia: orgPorDia.valor } : null,
+    correoBienvenida: pideCorreo && correoDe !== null,
+    correoDe,
     faltaAltas,
   };
 }

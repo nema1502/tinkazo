@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { cargarCampana, type RelojDeCarga } from "./carga";
+import { RELOJ_DEL_NAVEGADOR, cargarCampana, type RelojDeCarga } from "./carga";
 
 const cuerpo = (): Record<string, unknown> => ({
   v: 1,
@@ -166,5 +166,37 @@ describe("cargarCampana", () => {
     const pedido = pedir(fetchLento);
     pedido.disparar();
     await expect(pedido.resultado).resolves.toEqual({ ok: false, estado: "sin-red" });
+  });
+});
+
+/**
+ * El reloj de siempre, el que usa la página del celular. En un navegador, setTimeout y clearTimeout tiran Illegal invocation
+ * si se llaman como método de otro objeto. Node no lo exige, así que acá se los reemplaza por unos que sí lo hacen.
+ */
+describe("cargarCampana con el reloj del navegador", () => {
+  const comoEnUnNavegador = <A extends unknown[], R>(nativa: (...a: A) => R) =>
+    function (this: unknown, ...a: A): R {
+      if (this !== undefined && this !== globalThis) throw new TypeError("Illegal invocation");
+      return nativa(...a);
+    };
+
+  it("sin pasarle un reloj, carga la campaña en vez de romperse al programar el tope", async () => {
+    const programar = globalThis.setTimeout;
+    const limpiar = globalThis.clearTimeout;
+    vi.stubGlobal("setTimeout", comoEnUnNavegador(programar));
+    vi.stubGlobal("clearTimeout", comoEnUnNavegador(limpiar));
+    try {
+      const resultado = cargarCampana(async () => respuesta(200, async () => envuelto()), "https://servicio", "ABCDEFGH", "abc");
+      await expect(resultado).resolves.toMatchObject({ ok: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("el reloj de siempre no depende de quién lo llama", () => {
+    const { setTimeout: programar, clearTimeout: limpiar } = RELOJ_DEL_NAVEGADOR;
+    const otro = { programar, limpiar };
+    const id = otro.programar(() => undefined, 60_000);
+    expect(() => otro.limpiar(id)).not.toThrow();
   });
 });

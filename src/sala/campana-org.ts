@@ -137,6 +137,106 @@ export async function crearCampanaEnSala(
   return { ok: true, sala };
 }
 
+/**
+ * Por qué la sala no activó una campaña. Cada motivo es un código que dice la sala (`error`), y `sin-respuesta` es que no
+ * hubo respuesta que se entienda (sin red, cortada, pasado el plazo o un estado que la sala no usa para esto).
+ */
+export type MotivoDeActivar =
+  | "forma"
+  | "red-principal"
+  | "sesion"
+  | "no-google"
+  | "organizadora"
+  | "no-pagada"
+  | "sin-fondos"
+  | "limite"
+  | "red"
+  | "acceso"
+  | "apagada"
+  | "sin-llave"
+  | "sin-pollar"
+  | "sin-respuesta";
+
+export type ResultadoDeActivar =
+  | { ok: true; archivo: { texto: string; firma: string }; evento: string; organizadora: string }
+  | { ok: false; motivo: MotivoDeActivar; campo?: string };
+
+/**
+ * La sala lee la red de a tres páginas de a 8 segundos antes de contestar: este pedido espera más que los demás. Pasado el
+ * plazo se cuenta como sin respuesta, y repetirlo es inofensivo (la firma de un mismo texto es siempre la misma).
+ */
+export const PLAZO_DE_ACTIVAR_MS = 45_000;
+
+/** Lo que la sala dice con cada estado y cada código: el motivo que el panel sabe contar. */
+const DE_ACTIVAR: Record<string, MotivoDeActivar> = {
+  "400:forma": "forma",
+  "400:red": "red-principal",
+  "401:sesion": "sesion",
+  "403:no-google": "no-google",
+  "403:organizadora": "organizadora",
+  "402:no-pagada": "no-pagada",
+  "402:sin-fondos": "sin-fondos",
+  "502:red": "red",
+  "502:acceso": "acceso",
+  "503:apagada": "apagada",
+  "503:sin-llave": "sin-llave",
+  "503:sin-pollar": "sin-pollar",
+  "503:sin-portero": "apagada",
+};
+
+/** Cuánto espera la pregunta de si la sala puede activar: la sala le pregunta al portero, de a 8 segundos. */
+export const PLAZO_DE_PREGUNTAR_MS = 15_000;
+
+/**
+ * Si la sala puede activar campañas ahora, antes de cobrar: se le manda el pedido de activar con el cuerpo vacío, que no mira la
+ * red ni gasta nada. Con la sala y el portero listos contesta 400 forma. Apagada, sin sus llaves, sin el portero o la sala de
+ * antes (sin la ruta) contestan otra cosa, y sin respuesta tampoco se sabe: en todos esos casos no se cobra.
+ */
+export async function salaPuedeActivar(dep: DependenciasOrg = {}, servicio = servicioDeSala()): Promise<boolean> {
+  const conPlazo: DependenciasOrg = { ...dep, senal: dep.senal ?? ((): AbortSignal => AbortSignal.timeout(PLAZO_DE_PREGUNTAR_MS)) };
+  const r = await llamar(conPlazo, `${servicio}/v1/activar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!r || r.status !== 400) return false;
+  const x = (await r.json().catch(() => null)) as Record<string, unknown> | null;
+  return x !== null && x.error === "forma";
+}
+const ES_FIRMA_ACTIVADA = /^(?:[0-9a-f]{128}|[A-Za-z0-9_-]{86})$/u;
+
+/**
+ * Le pide a la sala que firme y deje lista la campaña de un borrador, con la sesión de Google de quien organiza. La sala
+ * comprueba en la red que la comisión se pagó desde esa cuenta y que hay fondos, y recién entonces firma: el sitio no manda
+ * firma ni cuenta de nada. El token de la sesión viaja solo en el cuerpo y de acá no pasa: no se guarda ni se escribe.
+ * Con la respuesta buena el archivo es el de siempre: sigue el camino de crear la sala.
+ */
+export async function activarCampana(
+  pedido: { texto: string; sesion: string },
+  dep: DependenciasOrg = {},
+  servicio = servicioDeSala(),
+): Promise<ResultadoDeActivar> {
+  const conPlazo: DependenciasOrg = { ...dep, senal: dep.senal ?? ((): AbortSignal => AbortSignal.timeout(PLAZO_DE_ACTIVAR_MS)) };
+  const r = await llamar(conPlazo, `${servicio}/v1/activar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ texto: pedido.texto, sesion: pedido.sesion }),
+  });
+  if (!r) return { ok: false, motivo: "sin-respuesta" };
+  const x = (await r.json().catch(() => null)) as Record<string, unknown> | null;
+  if (r.status !== 200) {
+    const error = x && typeof x.error === "string" ? x.error : "";
+    // El tope por día o por conexión es un 429 con cualquier código: el texto es el mismo.
+    const motivo = r.status === 429 ? "limite" : (DE_ACTIVAR[`${r.status}:${error}`] ?? "sin-respuesta");
+    const campo = motivo === "forma" && x && typeof x.campo === "string" ? x.campo.slice(0, 40) : undefined;
+    return campo === undefined ? { ok: false, motivo } : { ok: false, motivo, campo };
+  }
+  const { texto, firma, evento, organizadora } = x ?? {};
+  if (typeof texto !== "string" || typeof firma !== "string" || !ES_FIRMA_ACTIVADA.test(firma)) return { ok: false, motivo: "sin-respuesta" };
+  if (typeof evento !== "string" || !ES_EVENTO.test(evento) || !esCuentaValida(organizadora)) return { ok: false, motivo: "sin-respuesta" };
+  return { ok: true, archivo: { texto, firma }, evento, organizadora };
+}
+
 /** El pase que va en el QR. Vale entre 14 y 16 minutos: se pide otro en el instante `hasta`. */
 export async function pedirPase(s: Sala, dep: DependenciasOrg = {}): Promise<PaseDeSala | FallaDeSala> {
   const r = await llamar(dep, rutaDe(s, "/campana/pase"), { headers: auth(s) });

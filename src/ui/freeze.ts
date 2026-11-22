@@ -47,7 +47,8 @@ import { ponerPremio, recordarPremio } from "./premios";
 import * as premiosModulo from "./premios";
 import { fijarPorCampana, fijoPorCampana, ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { isTurnOrder } from "../modos/turnos";
-import { ajustarPremioDeTurnos, modoTurnosActivo, ordenNoCabe, ponerModoTurnos } from "./turnos";
+import { ajustarPremioDeTurnos, amigoRepetido, modoTurnosActivo, ordenNoCabe, ponerModoAmigo, ponerModoTurnos } from "./turnos";
+import { isSecretSanta } from "../modos/amigo";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { sinCuentaElegido } from "./sin-cuenta";
 import { logoParaSellar } from "../logo-guardado";
@@ -259,6 +260,17 @@ function frase(clave: string, args: readonly number[] = []): string {
 const premiosElegidos = (n: number): number => Math.min(ganadoresPedidos(), Math.max(1, n));
 
 /**
+ * La clave de la línea bajo la cuenta. Sin sello manda: dice que no se puede comprobar. Con sello, un orden de turnos o un
+ * Amigo secreto no tienen quién gane: dicen que nadie elige el número, como la espera en grande en esos dos modos.
+ */
+function claveDeLaLinea(): string {
+  const f = app.frozen;
+  const ganadores = f ? (f.numWinners ?? premiosElegidos(f.names.length)) : 0;
+  const sinGanador = !!f && (isTurnOrder(f.names.length, ganadores, f.prize) || isSecretSanta(f.names.length, ganadores, f.prize));
+  return sinGanador && !sinSelloAhora(f) ? "espNadieSinGanador" : claveDelSello("lineaDeLaEspera", sinSelloAhora(app.frozen));
+}
+
+/**
  * El premio que se lee de los campos: con más de un ganador, los lugares armados en un solo texto (`premioActual` de
  * `premios.ts`). Las pruebas de la red y del sello reemplazan `premios.ts` con lo que usaban antes: ahí, y si el
  * módulo no baja, la lectura es la de siempre, el cuadro único.
@@ -269,6 +281,27 @@ function premioLeido(): string {
     return premiosModulo.premioActual?.() ?? solo;
   } catch {
     return solo;
+  }
+}
+
+/**
+ * Lo escrito en los campos de premio no entra entero en lo que se sella (`premiosNoEntran` de `premios.ts`): no se
+ * sella con un premio de menos ni con uno que la red rechace. Con el módulo reemplazado de las pruebas, entra.
+ */
+function premiosNoEntran(): boolean {
+  try {
+    return premiosModulo.premiosNoEntran?.() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/** Dice debajo de los campos por qué no se sella y lleva al premio que hay que acortar. */
+function mostrarQueNoEntran(): void {
+  try {
+    premiosModulo.mostrarQueNoEntran?.();
+  } catch {
+    /* el módulo reemplazado no lo trae: no hay campos que mostrar */
   }
 }
 
@@ -559,6 +592,27 @@ export interface NumeroVisto {
 /** Cuántas fichas de números quedan a la vista: las últimas nacidas, no la fila entera. */
 export const NUMEROS_EN_PANTALLA = 12;
 
+/**
+ * La fila de números públicos de la espera (issue #79) queda en el código y apagada desde el 20 de noviembre de 2026:
+ * quien organizaba no entendió qué era faltan 13 números, y la fila repetía el reloj en otra unidad. Apagada no se arma
+ * la fila ni se le pide a la red cada número intermedio. Se prende con `?numeros=1` en el enlace (una charla, alguien
+ * que quiere ver de dónde sale el número) o cambiando esta constante, y `?numeros=0` la apaga aunque esté prendida.
+ */
+export const NUMEROS_PRENDIDOS = false;
+let numerosForzados: boolean | null = null;
+/** Para las pruebas: `true` la prende, `false` la apaga y `null` vuelve a lo que trae el sitio. */
+export function forzarNumeros(v: boolean | null): void {
+  numerosForzados = v;
+}
+/** Si la espera muestra la fila de números: lo que fuerce una prueba, si no el enlace, si no la constante. */
+export function numerosALaVista(): boolean {
+  if (numerosForzados !== null) return numerosForzados;
+  const q = params.get("numeros");
+  if (q === "1") return true;
+  if (q === "0") return false;
+  return NUMEROS_PRENDIDOS;
+}
+
 /** Esperas con demasiadas rondas de por medio no muestran números: cientos de fichas por un sorteo retomado de la memoria no entran en pantalla. */
 const RONDAS_DE_ALCANCE = 40;
 
@@ -650,9 +704,16 @@ export function pintarNumerosVistos(caja: HTMLElement | null, vistos: NumeroVist
   caja.textContent = "";
   const faltan = faltanParaLaRonda(vistos, elegida) ?? inicial;
   const fila = document.createElement("p");
-  fila.style.cssText = "margin:0;font-family:ui-monospace,Consolas,monospace;font-size:13px;opacity:.85;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;";
+  // Letra de 16 px como mínimo en la página, y en la espera en grande la misma que el resto de la sala.
+  const letra = caja.classList.contains("espera-feed") ? "calc(clamp(18px, 2vw, 30px) * var(--ajuste, 1))" : "16px";
+  // Las fichas en fila flexible: la separación es el hueco de la fila, sin ningún signo entre una y otra.
+  fila.style.cssText =
+    "margin:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-family:ui-monospace,Consolas,monospace;" +
+    `font-size:${letra};opacity:.85;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;`;
   for (const visto of vistos.slice(-NUMEROS_EN_PANTALLA)) {
-    if (fila.childNodes.length > 0) fila.append(document.createTextNode(" · "));
+    // Un espacio entre ficha y ficha para quien lee el texto (el lector de pantalla, una copia): en la fila flexible
+    // no se dibuja, la separación la da el hueco.
+    if (fila.childNodes.length > 0) fila.append(document.createTextNode(" "));
     const chip = document.createElement("span");
     chip.textContent = `#${visto.round} ${visto.hex}`;
     fila.append(chip);
@@ -679,7 +740,7 @@ function pintarFeed(): void {
   pintarNumerosVistos(grande, feed.vistos, feed.elegida, feed.inicial);
 }
 
-/** Se acabó la espera: se corta el pedido en vuelo y las cajas quedan vacías, para que el «Ya salió el número» hable solo. */
+/** Se acabó la espera: se corta el pedido en vuelo y las cajas quedan vacías, para que el Ya se puede sortear hable solo. */
 function pararFeed(): void {
   feedSeñal?.abort();
   feedSeñal = null;
@@ -739,6 +800,8 @@ function startCountdown(): void {
   // El "Ya se sorteó" del sorteo anterior (draw.ts) no sigue: ahora escribe la cuenta.
   if (left) delete left.dataset.i;
   const line = box?.querySelector(".wait-line");
+  // Empieza en: a la vista mientras falta, escondido cuando el número ya salió (ahí cualquiera podría calcularlo).
+  const rotulo = box?.querySelector<HTMLElement>('[data-i="waitTitle"]');
   const grande = document.getElementById("btn-espera");
   if (grande) {
     grande.onclick = () => abrirEspera();
@@ -750,9 +813,14 @@ function startCountdown(): void {
     grandePendiente = false;
     abrirEspera(true);
   }
-  if (num && app.frozen) num.textContent = `#${app.frozen.round}`;
-  // La fila de números públicos que van naciendo mientras se espera (issue #79): no hay en el modo stand.
-  if (app.frozen && !enStand()) armarFeed(app.frozen);
+  // El número de la ronda se sigue escribiendo (varias pruebas lo leen), escondido mientras la fila de números esté apagada.
+  if (num && app.frozen) {
+    num.textContent = `#${app.frozen.round}`;
+    num.hidden = !numerosALaVista();
+  }
+  // La fila de números públicos que van naciendo mientras se espera (issue #79): no hay en el modo stand, y apagada no
+  // se arma ni le pregunta a la red por cada número intermedio.
+  if (app.frozen && !enStand() && numerosALaVista()) armarFeed(app.frozen);
   // La conexión está ociosa hasta que nazca la ronda: se baja el motor, y se
   // levanta el worker que va a verificar la firma (la portada no lo carga).
   // Anclado, también la curva en la página: el contrato pide la firma
@@ -795,9 +863,10 @@ function startCountdown(): void {
       }
       // Sin `block` en línea: el CSS decide cómo se ve la caja de la espera.
       if (box) box.style.display = "";
+      if (rotulo) rotulo.hidden = false;
       if (left) left.textContent = reloj;
       // Sin sello no dice "nadie puede elegirlo" como si hubiera algo sellado: dice que no se puede comprobar.
-      if (line) line.textContent = t(claveDelSello("lineaDeLaEspera", sinSelloAhora(app.frozen)));
+      if (line) line.textContent = t(claveDeLaLinea());
       // El tic del feed de números: pregunta por la ronda que toca, junta la que nació y redibuja.
       if (feed) void ticDeLaEspera(feed, { pintar: pintarFeed, señal: feedSeñal?.signal });
     } else {
@@ -815,6 +884,7 @@ function startCountdown(): void {
       // El panel no desaparece de golpe: dice que la ronda ya nació, que es la
       // otra mitad de la idea.
       if (left) left.textContent = t("waitNow");
+      if (rotulo) rotulo.hidden = true;
       if (line) line.textContent = "";
       if (grande) grande.style.display = "none";
       if (countdownTimer !== undefined) clearInterval(countdownTimer);
@@ -956,7 +1026,15 @@ function puedeSellar(): boolean {
   // modos ni `?modo=`, la lista es la de siempre: cada línea, una persona.
   const personas = contarPersonas(names, modesVisible()).personas;
   // En el modo «Orden de turnos», si la lista pasa de lo que admite la red no se sella: un orden incompleto no es un orden.
-  return personas >= 2 && !ordenNoCabe(names.length) && performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS;
+  // Y los premios que no entran enteros tampoco: se avisa debajo de los campos hasta que se acorten. En un Amigo secreto,
+  // tampoco con una persona dos veces en la lista.
+  return (
+    personas >= 2 &&
+    !ordenNoCabe(names.length) &&
+    !premiosNoEntran() &&
+    !amigoRepetido(names) &&
+    performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS
+  );
 }
 
 /**
@@ -1086,7 +1164,8 @@ async function avisarDelPremio(e: unknown, numWinners: number): Promise<void> {
   const salir = (motivo: string) => (): void => {
     void cerrarSesion()
       .catch(() => undefined)
-      .then(() => openPicker({ motivo: t(motivo), volverA: $("btn-freeze") }));
+      // Otra cuenta de correo o una billetera propia: la ventana abre con Otras formas de entrar desplegadas.
+      .then(() => openPicker({ motivo: t(motivo), volverA: $("btn-freeze"), otras: true }));
   };
   const salidas: Array<{ id: string; clave: string; motivo: string }> = [
     { id: "premio-otra-cuenta", clave: "premioOtraCuenta", motivo: "premioMotivoOtra" },
@@ -1145,7 +1224,7 @@ async function siSeAcabaronLosSorteos(e: unknown, btn: HTMLButtonElement): Promi
   try {
     const m = await import("./sin-sorteos");
     if (!m.esSinSorteos(e)) return false;
-    // Ya no se está sellando: «Pasar a Prueba» de la ventana tiene que poder cambiar de modo.
+    // Ya no se está sellando: «Sortear en Prueba» de la ventana tiene que poder cambiar de modo.
     marcarMandandoElSello(false);
     await m.alQuedarseSinSorteos({ volverA: btn });
     return true;
@@ -1157,7 +1236,11 @@ async function siSeAcabaronLosSorteos(e: unknown, btn: HTMLButtonElement): Promi
 async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   renumerarLaLista();
   const names = parseNames();
-  if (!puedeSellar()) return;
+  if (!puedeSellar()) {
+    // Frenado por los premios: el motivo queda a la vista, en el campo que hay que acortar.
+    if (premiosNoEntran()) mostrarQueNoEntran();
+    return;
+  }
 
   const btn = $<HTMLButtonElement>("btn-freeze");
   const hash = bytesToHex(listHash(names));
@@ -1764,7 +1847,9 @@ export function resumeFrozen(e: {
   // El modo de la pantalla pasa a ser el del sorteo sellado. Una recarga vuelve a Sortear premios aunque se haya sellado
   // un orden, y el selector de modo sigue a mano hasta retomar: un orden se retoma como orden, y un sorteo común no queda
   // con la cantidad de la lista porque antes se tocó Orden de turnos.
-  ponerModoTurnos(isTurnOrder(e.names.length, e.numWinners, e.prize));
+  // Un Amigo secreto se retoma como Amigo secreto: con el modo apagado, el paso 2 volvía a ofrecer los juegos.
+  if (isSecretSanta(e.names.length, e.numWinners, e.prize)) ponerModoAmigo(true);
+  else ponerModoTurnos(isTurnOrder(e.names.length, e.numWinners, e.prize));
   ponerPremio(e.prize);
   ponerGanadores(e.numWinners);
   // Los campos por lugar del sorteo retomado: con la cantidad ya puesta, cada premio vuelve a su campo.
@@ -1811,6 +1896,13 @@ export function unfreeze(lista: string): void {
   // Después de soltar el sello, el contador de ganadoras vuelve a ser de quien sortea (el paso de la campaña lo vuelve a fijar).
   if (fijoPorCampana()) fijarPorCampana(false);
   ponerPremio("");
+  // `ponerPremio` vacía solo el 1.er premio: los de los lugares siguientes se borran también, o el próximo sello los
+  // llevaba sin que nadie los volviera a escribir. (Las pruebas que reemplazan `premios.ts` no lo traen.)
+  try {
+    premiosModulo.vaciarLugares?.();
+  } catch {
+    /* el módulo reemplazado no lo trae: no hay campos por lugar */
+  }
   $("sec-frozen").style.display = "none";
   $("wait-box").style.display = "none";
   $("btn-draw").classList.remove("lista");
@@ -1838,7 +1930,12 @@ function textosDelSello(): void {
     titulo.dataset.i = "standListaT";
     titulo.textContent = t("standListaT");
   }
-  ponerTextoDelSello(document.querySelector<HTMLElement>("#wait-box .wait-line"), "lineaDeLaEspera", sin);
+  // La línea bajo la cuenta, con la clave en data-i para que el cambio de idioma la repinte igual.
+  const linea = document.querySelector<HTMLElement>("#wait-box .wait-line");
+  if (linea) {
+    linea.dataset.i = claveDeLaLinea();
+    linea.textContent = t(linea.dataset.i);
+  }
 }
 
 /**
@@ -1947,8 +2044,10 @@ export async function copyRules(btn: HTMLButtonElement): Promise<void> {
   // Con varias participaciones por persona, las bases dicen las dos cuentas, con la misma regla que la
   // verificación y la espera (`seCuentaPorPersona`).
   const { personas, participaciones } = contarPersonas(f.names, seCuentaPorPersona(f.names, modesVisible()));
-  // Un orden de turnos tiene sus bases, sin ganadores ni premio.
-  const bases = isTurnOrder(f.names.length, winners, f.prize) ? T[lang].turnsRules : T[lang].rules;
+  // Un orden de turnos y un Amigo secreto tienen sus bases, sin ganadores ni premio.
+  const bases = isSecretSanta(f.names.length, winners, f.prize)
+    ? T[lang].amigoRules
+    : isTurnOrder(f.names.length, winners, f.prize) ? T[lang].turnsRules : T[lang].rules;
   const text = bases({
     prize: f.prize,
     count: personas,
@@ -2012,11 +2111,14 @@ export async function copyRulesPre(btn: HTMLButtonElement): Promise<void> {
   // Para copiar hacen falta dos personas, contadas como siempre; lo que dicen las bases, con la cuenta del cuadro.
   if (contarPersonas(names, modesVisible()).personas < 2) return;
   const { personas: count, participaciones: entries } = cuentaParaMostrar(names, modesVisible());
-  const prize = premioLeido();
+  // Las bases juntan los espacios de adentro, como antes de los campos por lugar: un premio solo llega tal cual se escribió.
+  const prize = premioLeido().replace(/\s+/g, " ");
   const winners = Math.min(ganadoresPedidos(), names.length);
-  // Un orden de turnos tiene sus bases, sin ganadores ni premio. Se decide por las líneas de la lista
-  // (lo que se sella: cada línea, un turno), no por las personas.
-  const basesPre = isTurnOrder(names.length, winners, prize) ? T[lang].turnsRulesPre : T[lang].rulesPre;
+  // Un orden de turnos y un Amigo secreto tienen sus bases, sin ganadores ni premio. Se decide por las líneas de la
+  // lista (lo que se sella: cada línea, un lugar), no por las personas.
+  const basesPre = isSecretSanta(names.length, winners, prize)
+    ? T[lang].amigoRulesPre
+    : isTurnOrder(names.length, winners, prize) ? T[lang].turnsRulesPre : T[lang].rulesPre;
   const text = basesPre({
     prize,
     count,

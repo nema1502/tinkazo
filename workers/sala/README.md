@@ -42,7 +42,7 @@ Además del stand, la misma sala sirve para que la gente viva el sorteo desde su
 | --- | --- | --- |
 | `PUT /v1/sala/<id>/ronda` | La pantalla comparte la ronda que decide: `{"r","randomness","listHash","k"}` (el número de 32 bytes en hex, la huella de la lista sellada y cuántos ganadores). Con el token. `204`. Se puede volver a mandar: la última es la que vale | 300 bytes |
 | `POST /v1/sala/<id>/cierre` | Quien organiza cierra la lista desde la pantalla: con el token, `204`. Después ya no entra nadie (`409 {"error":"cerrada"}`) | |
-| `GET /v1/sala/<id>/vivo?desde=N` | Sin token, lo que mira el celular del participante cada 3 s: `{"hay","estado","ronda","nombres"}`. Los nombres siguen cifrados (la clave viaja en el QR); el estado es `abierta` o `cerrada` y la ronda es la compartida, o `null` | |
+| `GET /v1/sala/<id>/vivo?desde=N` | Sin token, lo que mira el celular del participante cada 3 s: `{"hay","estado","ronda","ns","nombres"}`. Los nombres siguen cifrados (la clave viaja en el QR); el estado es `abierta` o `cerrada`, la ronda es la compartida, o `null`, y `ns` son los números que siguen en la sala, para que el celular sepa a quién quitaron | |
 
 Mensajes nuevos del socket hacia la pantalla: `{"t":"ronda","r","randomness","listHash","k"}` (la pantalla la volvió a compartir) y `{"t":"lista-cerrada"}`. Al presentarse, el `listo` trae además `estado` y `ronda`, así que la pantalla que se recarga se pone al día sin pedir nada más.
 
@@ -253,6 +253,69 @@ firmar corre los mismos lectores que después leen el archivo, el de la sala y e
 vaya a rechazar (un `sorteo_ms` que falta, un enlace de red que no es de esa red, unas bases vacías). Tampoco deja escribir la
 llave privada dentro del repositorio, ni en la copia principal cuando se corre desde una copia de trabajo anidada, ni por un
 enlace simbólico o una junction.
+
+### Activar una campaña al pagar (`POST /v1/activar`)
+
+Hasta ahora una campaña solo nacía si Tinkazo firmaba su archivo a mano con la llave de siempre. La activación al pagar deja que
+cualquier cuenta de Google arme la suya: la sala firma **sola**, con una segunda llave (automática), cuando comprueba en la red que la
+comisión del evento se pagó desde la cuenta de quien organiza. La llave de siempre sigue valiendo igual, y `POST /v1/campana`
+acepta lo que firme cualquiera de las dos (la pública de la segunda se deriva en el momento del secreto: no se escribe en el código).
+
+Pedido, desde un origen permitido, JSON de hasta 24.000 bytes con `Content-Length`:
+`{"texto": <el JSON de la campaña>, "sesion": <la sesión de quien organiza>}`. Contesta `200`
+`{"texto","firma","evento","organizadora"}`: `texto` es el JSON compacto que se firmó y `firma` es Ed25519 en hexadecimal (128
+caracteres). `POST /v1/campana` acepta esa firma, y también la de siempre en base64url. Ed25519 es determinista: repetir el mismo
+pedido da la misma firma.
+
+El orden va de lo más barato a lo más caro y nada se firma con la duda:
+
+1. Apagada (`503 apagada`) si `ACTIVAR_AL_PAGAR` no es `"1"` o si la comisión está mal escrita; sin llave (`503 sin-llave`) si falta
+   `CAMPANAS_LLAVE_AUTO` (o está mal escrita) o `SALA_SECRETO`.
+2. El texto, con el mismo lector que usa la sala al crear (`leerTextoDeCampana`), y además: red principal (`400 red` si no),
+   entrada `google`, estado `abierta`, `anotadas` en 0, `contrato`, `promo` y `comprobante` en `null`, `organizadora` escrita, de 1 a
+   10 premios del mismo monto (cada uno de 1 a 10.000 dólares digitales, en centavos justos), cierre dentro de los próximos 7
+   días, sorteo entre el cierre y un día después, y un nombre de empresa sin la palabra Tinkazo (sin mayúsculas, acentos, signos,
+   letras anchas o parecidas ni cifras en lugar de letras). Estas reglas viven en `src/campana/reglas-de-activar.ts`, que el panel
+   también mira antes de cobrar. Si no, `400 {"error":"forma","campo"}`.
+3. Los topes: los de rechazos por conexión (300) y por sesión (5) de la lista de la sala, 60 pedidos por conexión cada 10 minutos
+   y 5 campañas distintas por cuenta y por día (`429` con `Retry-After`: `rechazos`, `cupo-conexion`, `cupo-cuenta`). Repetir un
+   evento que ya se activó hoy no gasta lugar. Viven en el objeto `Cupos` y no guardan la cuenta ni la sesión en claro.
+4. La sesión, con el mismo código del alta de quien participa (`pollar.ts`): `401 sesion` (cuenta como rechazo), `403 no-google`
+   (siempre en modo estricto, aunque `SOLO_GOOGLE` diga `suave`; también cuenta como rechazo), `403 organizadora` si la cuenta de
+   la sesión no es la que nombra el archivo, `502 red` si el proveedor no contesta y `503 sin-pollar` si falta `POLLAR_SECRETO`.
+5. El pago, en Horizon de la red principal (solo lectura, sin llave, 8 segundos por pedido y 1 MB por respuesta), en la historia
+   de la cuenta de la sesión (la de Tinkazo la puede llenar cualquiera con pagos chicos): pagos de USDC de Circle a
+   `COMISION_CUENTA`, exitosos, de una transacción con nota `id` igual a la nota del evento (`notaDeLaComision`), que salgan de
+   la cuenta de la sesión y de los últimos 30 días. Se suman. Pagada cuando la suma llega a la comisión menos el costo del retiro
+   (`umbralPagado`). Mira hasta 3 páginas de 200; si Horizon no contesta o quedan páginas sin mirar antes de llegar al umbral,
+   `502 red` y no firma. Sin pagar, `402 {"error":"no-pagada","falta","nota"}`, con `falta` en stroops (lo que falta para el
+   umbral).
+6. Los fondos: el saldo de USDC de Circle de la cuenta tiene que ser al menos el total de los premios, si no
+   `402 {"error":"sin-fondos","falta"}`.
+7. La nota: la primera activación pagada se queda con la nota de su evento por 31 días. Otro evento con la misma nota (dos
+   nombres con la misma huella) no se activa con ese pago: `402 no-pagada`.
+8. El acceso: la sala le pide al portero (`PORTERO_URL`) `POST /v1/alta/organizadora` con la cabecera `x-sala-secreto` y
+   `{"cuenta","evento"}`. Es idempotente. Con el tope del día del portero lleno (`429 cupo`), `429 cupo-portero` con
+   `Retry-After` hasta que se libera el lugar más viejo. Si no contesta o rechaza de otra forma (también con `409 evento-usado`,
+   cuando ese evento ya le dio acceso a otra cuenta), `502 acceso` y no firma.
+9. La firma.
+
+La pregunta del panel antes de cobrar es el mismo pedido con el cuerpo vacío (`{}`): no mira la red, ni el proveedor, ni gasta
+un tope. Con todo listo contesta `400 {"error":"forma","campo":"texto"}`. Antes de eso dice `503 apagada` o `503 sin-llave` como
+arriba, y `503 sin-portero` si el portero no la atiende con su secreto: la sala le manda `{}` a `/v1/alta/organizadora` y espera
+`400 forma`, que no escribe nada (apagado contesta `503`, con otro secreto `401`, y el de antes no tiene la ruta). Que sí atiende
+se recuerda un minuto. Con cualquier otra respuesta el panel no ofrece pagar.
+
+Las cuentas, los montos, el emisor y la nota se calculan con las funciones puras del sitio (`src/campana/comision.ts`,
+`src/stellar/comision-config.ts`, `src/stellar/retiro-config.ts`), importadas con ruta relativa y no copiadas: el panel y la sala
+dan siempre el mismo monto y la misma nota.
+
+Variables en `wrangler.toml`: `ACTIVAR_AL_PAGAR = "1"`, `COMISION_PB = "200"`, `COMISION_MINIMO = "1.50"`, `COSTO_RETIRO = "0.50"`,
+`COMISION_CUENTA` (en el archivo está vacía y la activación queda apagada: al desplegar se escribe la de `VITE_COMISION_CUENTA`
+del sitio) y `PORTERO_URL = "https://pm.tinkazo.app"`. Secretos, con `npx wrangler@4 secret put`: `CAMPANAS_LLAVE_AUTO` (la llave
+privada Ed25519 de la activación automática, 32 bytes en hexadecimal), `SALA_SECRETO` (el mismo secreto que carga el portero, de 32 caracteres o más) y
+`POLLAR_SECRETO` (ya existe). Quien tenga la llave automática puede firmar campañas: vive solo como secreto de Cloudflare, y lo único que la
+mueve es una comisión pagada.
 
 ### El aviso por correo a quien gana
 

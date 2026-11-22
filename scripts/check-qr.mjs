@@ -43,7 +43,7 @@ let bad = 0;
 try {
   // Dos casos: una lista corta y una larga, que es la que estira el QR.
   for (const [etiqueta, n] of [["18 nombres", 18], ["60 nombres", 60]]) {
-    const page = await browser.open(`${base}/?lead=4`);
+    const page = await browser.open(`${base}/?lead=4&red=prueba`);
     let ready = false;
     for (let k = 0; k < 80 && !ready; k++) {
       await page.eval(`document.getElementById('btn-sample').click()`).catch(() => {});

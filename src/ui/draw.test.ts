@@ -25,6 +25,10 @@ const h = vi.hoisted(() => ({
   fin: null as null | (() => void),
   unfreeze: vi.fn(),
   fetchRound: vi.fn(),
+  /** La tarjeta de cómo se juega (`showGameCard`): sus argumentos, y no se muestra. */
+  tarjeta: vi.fn(),
+  /** El sello es el de una campaña (`en-curso.ts`). */
+  campana: false,
 }));
 
 vi.mock("./anchor", () => ({
@@ -64,7 +68,7 @@ vi.mock("./freeze", () => ({
   pintarNotaDelJuego: () => undefined,
 }));
 vi.mock("./pantalla-completa", () => ({ pedirPantallaCompleta: () => undefined, soltarPantallaCompleta: () => undefined }));
-vi.mock("./gamecard", () => ({ CARD_SECONDS: 3.5, showGameCard: () => null }));
+vi.mock("./gamecard", () => ({ CARD_SECONDS: 3.5, showGameCard: (...a: unknown[]) => h.tarjeta(...a) }));
 vi.mock("./wallet-ui", () => ({ currentSession: () => ({ address: "GAAA" }) }));
 vi.mock("./qr", () => ({ pintarQrDelComprobante: async () => true }));
 vi.mock("./leyenda", () => ({ pintarLeyenda: () => undefined }));
@@ -74,6 +78,11 @@ vi.mock("./logo-sorteo", () => ({ pintarLogoEnElResultado: () => undefined, quit
 vi.mock("./history", () => ({ remember: () => undefined, renderHistory: () => undefined }));
 vi.mock("./compartir", () => ({ abrirSorteo: () => undefined }));
 vi.mock("./pantalla", () => ({ mostrarResultado: () => undefined }));
+vi.mock("../campana/en-curso", async (orig) => ({
+  ...(await orig<typeof import("../campana/en-curso")>()),
+  esSorteoDeCampana: (raffleId: bigint | undefined) => h.campana && raffleId === 7n,
+}));
+vi.mock("./campana-resultado-real", () => ({ alRevelarReal: () => undefined }));
 vi.mock("../stellar/monedas-eventos", () => ({ acreditarEnSegundoPlano: () => undefined }));
 vi.mock("../games/engine", () => ({ usePixi: () => true }));
 vi.mock("../games/pixi", () => ({
@@ -101,10 +110,10 @@ const N2 = V.list[P2] ?? "";
 const N3 = V.list[P3] ?? "";
 
 /** Un sello confirmado con la lista y la ronda de los vectores, con la cantidad sellada de lugares. */
-async function sellarCon(numWinners: number): Promise<typeof import("../state")> {
+async function sellarCon(numWinners: number, prize = "Una pizza"): Promise<typeof import("../state")> {
   const state = await import("../state");
   state.app.drawn = null;
-  state.app.frozen = { names: [...V.list], listHash: V.list_hash, ts: 1, at: "", prize: "Una pizza", round: V.quicknet.round, numWinners, raffleId: 7n } as never;
+  state.app.frozen = { names: [...V.list], listHash: V.list_hash, ts: 1, at: "", prize, round: V.quicknet.round, numWinners, raffleId: 7n } as never;
   return state;
 }
 
@@ -117,6 +126,8 @@ beforeEach(() => {
   h.juego.mockReset();
   h.unfreeze.mockReset();
   h.fin = null;
+  h.campana = false;
+  h.tarjeta.mockReset().mockReturnValue(null);
   h.fetchRound.mockReset().mockResolvedValue({ round: V.quicknet.round, signature: V.quicknet.signature });
   Element.prototype.scrollIntoView = () => undefined;
   document.body.innerHTML = new DOMParser().parseFromString(pagina, "text/html").body.innerHTML;
@@ -151,10 +162,65 @@ describe("la lógica pura de la progresión de lugares", () => {
     expect(lugarQueSigue([9], 1)).toBeNull();
   });
 
-  it("el premio de cada lugar queda como gancho (#101): su formato no está definido todavía", async () => {
+  it("sin un sorteo sellado, ningún lugar dice premio", async () => {
     const { premioDelLugar } = await import("./draw");
     expect(premioDelLugar(1)).toBe("");
     expect(premioDelLugar(2)).toBe("");
+  });
+
+  it("con un premio por lugar sellado, cada lugar dice el suyo y uno sin premio no dice nada", async () => {
+    await sellarCon(3, "1.er premio: Bici, 3.er premio: Libro");
+    const { premioDelLugar } = await import("./draw");
+    expect([1, 2, 3].map(premioDelLugar)).toEqual(["Bici", "", "Libro"]);
+  });
+
+  it("con un solo premio para todos, ningún lugar dice premio, como antes", async () => {
+    await sellarCon(3);
+    const { premioDelLugar } = await import("./draw");
+    expect(premioDelLugar(2)).toBe("");
+  });
+});
+
+describe("un sello con tres lugares y un premio por lugar", () => {
+  it("la línea del lugar y la tarjeta dicen el premio del lugar que la sala está viendo", async () => {
+    await sellarCon(3, "1.er premio: Bici, 2.º premio: Termo, 3.er premio: Libro");
+    const { draw, siguientePremio } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    h.fin?.();
+    await vi.waitFor(() => expect(cards()).toContain(N1));
+    expect(document.getElementById("lugar-actual")?.textContent).toBe("Lugar 1 de 3: Bici");
+    expect(cards()).toContain("Se lleva: Bici");
+    expect(cards()).not.toContain("Termo");
+    siguientePremio();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenLastCalledWith([P2]));
+    h.fin?.();
+    await vi.waitFor(() => expect(document.getElementById("lugar-actual")?.textContent).toBe("Lugar 2 de 3: Termo"));
+    expect(cards()).toContain("2.º premio: Termo");
+    expect(cards()).not.toContain("#2");
+    expect(cards()).not.toContain("Libro");
+  });
+
+  it("la tarjeta de cómo se juega dice el premio del lugar que se juega, no el de los tres", async () => {
+    await sellarCon(3, "1.er premio: Bici, 2.º premio: Termo, 3.er premio: Libro");
+    const { draw, siguientePremio } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    // El premio es el sexto argumento de `showGameCard`.
+    expect(h.tarjeta.mock.calls[0]?.[5]).toBe("Bici");
+    h.fin?.();
+    await vi.waitFor(() => expect(cards()).toContain(N1));
+    siguientePremio();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenLastCalledWith([P2]));
+    expect(h.tarjeta.mock.calls.at(-1)?.[5]).toBe("Termo");
+  });
+
+  it("con un solo premio para todos, la tarjeta dice ese premio entero, como siempre", async () => {
+    await sellarCon(3, "Una pizza");
+    const { draw } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    expect(h.tarjeta.mock.calls[0]?.[5]).toBe("Una pizza");
   });
 });
 
@@ -173,10 +239,10 @@ describe("un sello con tres lugares", () => {
     expect(cards()).not.toContain(N2);
     expect(document.getElementById("lugar-actual")?.textContent).toMatch(/1 de 3/);
     expect(document.getElementById("lugar-actual")?.style.display).not.toBe("none");
-    // La verdad a la sala: los lugares quedaron fijos al nacer el número y cualquiera los puede calcular.
+    // La verdad a la sala, en corto: los lugares ya están decididos, nadie los elige después.
     const fijos = document.getElementById("lugares-fijos");
     expect(fijos?.style.display).not.toBe("none");
-    expect(fijos?.textContent).toMatch(/quedaron fijos al nacer el número/);
+    expect(fijos?.textContent).toMatch(/ya están decididos/);
     // El comprobante ya lleva los tres lugares, en el orden de la sala.
     expect(document.getElementById("proof")?.textContent).toContain(`winners=[${ESPERADOS.join(",")}]`);
     // La fila de lo que sigue habla del lugar que viene, no de las personas del próximo sello.
@@ -217,6 +283,38 @@ describe("un sello con tres lugares", () => {
     expect((document.getElementById("btn-draw") as HTMLButtonElement).dataset.i).toBe("draw");
   });
 
+  it("la tarjeta del primer show habla de un premio: el cartel del final corona a uno solo", async () => {
+    await sellarCon(3);
+    const { draw } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    // La primera es la de `sortear`, antes del número: la que la sala lee mientras espera.
+    expect(h.tarjeta.mock.calls[0]?.[2]).toBe(1);
+  });
+
+  it("desde el segundo lugar, la página encuadra la tarjeta de quien acaba de ganar", async () => {
+    const encuadrados: Element[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      encuadrados.push(this);
+    };
+    await sellarCon(3);
+    const { draw, siguientePremio } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    h.fin?.();
+    // El primero, como siempre: la sección entera.
+    await vi.waitFor(() => expect(encuadrados.at(-1)?.id).toBe("sec-draw"));
+    const antes = encuadrados.length;
+    siguientePremio();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalledTimes(2));
+    h.fin?.();
+    await vi.waitFor(() => expect(encuadrados.length).toBeGreaterThan(antes));
+    const ultimo = encuadrados.at(-1);
+    expect(ultimo?.classList.contains("winner-card")).toBe(true);
+    expect(ultimo?.textContent).toContain(N2);
+    expect(ultimo?.textContent).not.toContain(N1);
+  });
+
   it("la vista de la sala vuelve a «Siguiente premio» de siempre cuando se terminan los lugares", async () => {
     const { app } = await sellarCon(3);
     const { draw, siguientePremio } = await import("./draw");
@@ -235,6 +333,32 @@ describe("un sello con tres lugares", () => {
     const left = document.getElementById("again-left")?.textContent ?? "";
     expect(left).not.toMatch(/de 3/);
     expect(left).toMatch(/quedan|Quedan/);
+  });
+});
+
+describe("el sorteo de una campaña con tres premios", () => {
+  it("se juega en un solo show con los tres lugares: su panel no tiene «Siguiente premio»", async () => {
+    h.campana = true;
+    const { app } = await sellarCon(3);
+    const { draw } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    expect(h.juego).toHaveBeenCalledWith(ESPERADOS);
+    expect(app.drawn?.revelados).toBeUndefined();
+    h.fin?.();
+    await vi.waitFor(() => expect(cards()).toContain(N1));
+    expect(cards()).toContain(N2);
+    expect(cards()).toContain(N3);
+    expect(document.getElementById("lugar-actual")?.style.display).toBe("none");
+  });
+
+  it("su tarjeta sigue hablando de los tres premios, como el cartel del final", async () => {
+    h.campana = true;
+    await sellarCon(3);
+    const { draw } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    expect(h.tarjeta.mock.calls[0]?.[2]).toBe(3);
   });
 });
 

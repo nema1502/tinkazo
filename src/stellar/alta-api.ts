@@ -20,9 +20,9 @@ import { configDelPortero } from "./patrocinio-config";
  *   alguien. El sitio nunca arma ninguno de esos datos por su cuenta.
  * - **Sin nada del navegador.** `credentials: "omit"`, sin `Referer`, sin caché.
  *
- * Lo que hay: `estado`, `canjear`, `precios`, `abrir`, `orden` y `pago`, y las de la compra con QR (`/v1/compra/*`):
- * `empezarCompra`, `cargarCompra` y `anularCompra`. Falta a propósito `sortearEnElServidor`: entra con el sorteo por el
- * servidor.
+ * Lo que hay: `estado`, `canjear`, `reclamar` (el regalo de quien entra con su cuenta), `precios`, `abrir`, `orden` y
+ * `pago`, y las de la compra con QR (`/v1/compra/*`): `empezarCompra`, `cargarCompra` y `anularCompra`. Falta a propósito
+ * `sortearEnElServidor`: entra con el sorteo por el servidor.
  */
 
 /** Cuánto se espera cada pedido. */
@@ -30,9 +30,11 @@ export const ESPERA_MS = 8_000;
 
 /**
  * Qué acceso tiene la persona al modo Oficial. `premio`: la cuenta que quien organiza nombró como ganadora de un sorteo suyo
- * ya sorteado. Activa la cuenta, trae cero sorteos y no sirve para organizar.
+ * ya sorteado. Activa la cuenta, trae cero sorteos y no sirve para organizar. Un alta nacida con los sorteos de regalo de
+ * quien entra con su cuenta (`POST /v1/alta/gratis`) llega como `admin`, que también entiende un sitio de antes. `gratis`
+ * se acepta si llega, pero el sitio no depende de él para nada: lo que se ve sale de `bienvenida` y de los sorteos.
  */
-export type Acceso = "ninguno" | "cupon" | "pago" | "admin" | "premio";
+export type Acceso = "ninguno" | "cupon" | "pago" | "admin" | "premio" | "gratis";
 /** Si la cuenta se abre en el momento (`inmediato`) o cuando el servidor lo pide (`diferido`). */
 export type Fondeo = "inmediato" | "diferido";
 /** Qué falta hacer después de un canje. */
@@ -120,8 +122,13 @@ export interface ErrorDeCompra extends ErrorDeAlta {
 
 export type ResultadoDeCompra<T> = { ok: true; datos: T } | ErrorDeCompra;
 
-/** Lo que dice `POST /v1/alta/pago`: pagada (con los sorteos y lo que sigue) o lo que llegó hasta ahora. */
-export type PagoDeOrden = { pagada: true; sorteos: SorteosDeAlta; sigue: Sigue } | { pagada: false; recibido: string; total: string; minimo: string };
+/**
+ * Lo que dice `POST /v1/alta/pago`: pagada (con los sorteos y lo que sigue) o lo que llegó hasta ahora. `sorteosDados`
+ * solo en una orden por unidad: cuántos sorteos ya dio lo que llegó, aunque falte una parte.
+ */
+export type PagoDeOrden =
+  | { pagada: true; sorteos: SorteosDeAlta; sigue: Sigue }
+  | { pagada: false; recibido: string; total: string; minimo: string; sorteosDados?: number };
 
 export interface EstadoDeAlta {
   acceso: Acceso;
@@ -136,6 +143,29 @@ export interface EstadoDeAlta {
   fondeo: Fondeo;
   /** Solo cuando el servidor tiene la compra con QR prendida o la persona tuvo una, y se entiende. */
   compraQr?: CompraQrDelEstado;
+  /**
+   * Los sorteos de regalo de quien entra con su cuenta: solo cuando el servidor los ofrece a esta persona y se entienden.
+   * Sin el campo (el servicio de antes), con `null` o con algo que no se entiende, no viene: el paso de siempre.
+   */
+  bienvenida?: Bienvenida;
+}
+
+/**
+ * Lo que `/v1/alta/estado` dice del regalo: `lista`, se puede recibir ahora; `llena`, no lo recibió y ahora no se da.
+ * `sorteos`: cuántos trae, como lo dice el servidor.
+ */
+export interface Bienvenida {
+  estado: "lista" | "llena";
+  sorteos: number;
+}
+
+/**
+ * Lo que dice `POST /v1/alta/gratis`: la forma del canje de un cupón y qué pasó con el regalo. `dado`: se sumaron en este
+ * pedido; `lleno`: la cuenta quedó con acceso pero el regalo no se dio; `ya`: esa persona ya lo había recibido. Un valor
+ * que no se conoce queda en `null` y el acceso se lee igual: lo que cuentan son los sorteos que dice el servidor.
+ */
+export interface ReclamoDelRegalo extends CanjeDeCupon {
+  regalo: "dado" | "lleno" | "ya" | null;
 }
 
 export interface CanjeDeCupon {
@@ -165,14 +195,35 @@ export interface RecargoQr {
   siguientes: string;
 }
 
+/**
+ * El producto por unidad de `GET /v1/alta/precios`: un precio por sorteo (`usdc`, con punto) y cuántos se pueden pedir
+ * en un pago (de `minimo` a `maximo`, de a `paso`), que valen `dias`. El nombre (`id`) es el que va en la orden.
+ */
+export interface ProductoPorUnidad {
+  id: string;
+  usdc: string;
+  minimo: number;
+  maximo: number;
+  paso: number;
+  dias: number;
+  pausado: boolean;
+}
+
 /** Lo que dice `GET /v1/alta/precios`. `alta` es el primer paquete (`null` si el servidor no lo vende). */
 export interface PreciosDeAlta {
   red: string;
   pago: boolean;
   alta: ProductoDeAlta | null;
   paquetes: (ProductoDeAlta & { id: string })[];
+  /** Solo cuando el servidor vende por unidad y el producto se entiende entero. Sin él, los paquetes de siempre. */
+  unidad?: ProductoPorUnidad;
   /** Solo cuando el servidor tiene prendida la compra con QR y el recargo bien escrito. */
   recargoQr?: RecargoQr;
+  /**
+   * Cuántos sorteos de regalo da hoy el servidor a quien entra, solo cuando los da (un entero desde 1). Con 0, sin el campo
+   * o con algo que no se entiende, no viene: los precios se leen igual.
+   */
+  bienvenida?: number;
 }
 
 export type EstadoDeApertura = "pedido" | "abierta" | "no-hace-falta";
@@ -263,6 +314,11 @@ const CLAVE_EN_LA_ORDEN: Readonly<Record<string, string>> = {
   "ya-tiene-acceso": "pagoYaTenes",
   "fuera-del-piloto": "pagoNoALaVenta",
 };
+/**
+ * La orden por unidad cuenta lo mismo, y además `400 forma` (una cantidad fuera del rango o del paso del servidor, que
+ * pudo cambiar desde que se leyeron los precios): no habla del cupón, dice que no se pudo.
+ */
+const CLAVE_EN_LA_ORDEN_POR_UNIDAD: Readonly<Record<string, string>> = { ...CLAVE_EN_LA_ORDEN, forma: "altaErrServicio" };
 const CLAVE_EN_EL_PAGO: Readonly<Record<string, string>> = {
   "pago-apagado": "pagoErrRed",
   forma: "altaErrServicio",
@@ -270,6 +326,21 @@ const CLAVE_EN_EL_PAGO: Readonly<Record<string, string>> = {
   red: "pagoErrRed",
   "orden-cerrada": "pagoErrOrden",
 };
+
+/**
+ * Los motivos propios del regalo. `503 bienvenida-llena` (el servicio no tiene margen ni para activar) y `503
+ * altas-pausadas` (la pausa a mano) quieren decir que la cuenta no se activó: se dice así, no que se acabó el regalo,
+ * porque la persona podría creer que ya está. Los topes de intentos (`429 intentos` y `429 cupo-ip`) siguen con la clave
+ * de siempre, con los minutos que hay que esperar: son pasajeros y el regalo sigue abierto. `409 ya-tiene-acceso` va sin
+ * clave propia: el paso vuelve a leer el estado y sigue solo.
+ */
+const CLAVE_EN_EL_REGALO: Readonly<Record<string, string>> = {
+  "bienvenida-llena": "altaSinActivarAhora",
+  "altas-pausadas": "altaSinActivarAhora",
+};
+
+/** Las claves propias del regalo, para las pruebas. */
+export const CLAVES_DEL_REGALO: Readonly<Record<string, string>> = CLAVE_EN_EL_REGALO;
 
 /** Las claves propias de cada ruta del pago, para las pruebas. */
 export const CLAVES_DEL_PAGO: Readonly<{ orden: Readonly<Record<string, string>>; pago: Readonly<Record<string, string>> }> = { orden: CLAVE_EN_LA_ORDEN, pago: CLAVE_EN_EL_PAGO };
@@ -519,11 +590,31 @@ function leerPago(x: Record<string, unknown>): PagoDeOrden | null {
     const sorteos = leerSorteos(x.sorteos);
     return sorteos && esTexto(x.sigue) && SIGUE.includes(x.sigue) ? { pagada: true, sorteos, sigue: x.sigue as Sigue } : null;
   }
-  if (x.pagada === false) return esMonto(x.recibido) && esMontoPositivo(x.total) && esMonto(x.minimo) ? { pagada: false, recibido: x.recibido, total: x.total, minimo: x.minimo } : null;
+  if (x.pagada === false) {
+    if (!esMonto(x.recibido) || !esMontoPositivo(x.total) || !esMonto(x.minimo)) return null;
+    // Los sorteos que ya dio una orden por unidad pagada a medias. Uno que no se entiende se deja de lado: lo demás vale.
+    const dados = esSorteosDados(x.sorteosDados) ? { sorteosDados: x.sorteosDados } : {};
+    return { pagada: false, recibido: x.recibido, total: x.total, minimo: x.minimo, ...dados };
+  }
   return null;
 }
 
-const ACCESOS: readonly string[] = ["ninguno", "cupon", "pago", "admin", "premio"];
+/** Lo más que se acepta como sorteos ya dados por una orden: el servidor vende como mucho 50 por pago. */
+const DADOS_MAXIMO = 1000;
+const esSorteosDados = (x: unknown): x is number => typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= DADOS_MAXIMO;
+
+const ACCESOS: readonly string[] = ["ninguno", "cupon", "pago", "admin", "premio", "gratis"];
+
+/** Lo más que se acepta como sorteos de regalo: un número que no es razonable no se muestra. */
+const REGALO_MAXIMO = 100;
+const esCantidadDeRegalo = (x: unknown): x is number => esEnteroPositivo(x) && x <= REGALO_MAXIMO;
+
+/** El regalo del estado, o `null` si no viene, viene en `null` o no se entiende (un estado que no se conoce, sin sorteos). */
+function leerBienvenida(x: unknown): Bienvenida | null {
+  const o = objeto(x);
+  if (!o || (o.estado !== "lista" && o.estado !== "llena") || !esCantidadDeRegalo(o.sorteos)) return null;
+  return { estado: o.estado, sorteos: o.sorteos };
+}
 const SIGUE: readonly string[] = ["crear-billetera", "abrir", "activar", "lista"];
 
 function leerEstado(x: Record<string, unknown>): EstadoDeAlta | null {
@@ -538,13 +629,36 @@ function leerEstado(x: Record<string, unknown>): EstadoDeAlta | null {
   if (x.fondeo !== "inmediato" && x.fondeo !== "diferido") return null;
   // La compra con QR es un dato de más: si no viene o no se entiende, el acceso se lee igual.
   const compraQr = x.compraQr === undefined ? null : leerCompraQr(x.compraQr);
-  return { acceso: x.acceso as Acceso, cuenta: x.cuenta, abierta: x.abierta, pedido: (x.pedido as string | null | undefined) ?? null, sorteos, orden, fondeo: x.fondeo, ...(compraQr ? { compraQr } : {}) };
+  // El regalo también: sin él, o sin entenderlo, el paso es el de siempre.
+  const bienvenida = leerBienvenida(x.bienvenida);
+  return {
+    acceso: x.acceso as Acceso,
+    cuenta: x.cuenta,
+    abierta: x.abierta,
+    pedido: (x.pedido as string | null | undefined) ?? null,
+    sorteos,
+    orden,
+    fondeo: x.fondeo,
+    ...(compraQr ? { compraQr } : {}),
+    ...(bienvenida ? { bienvenida } : {}),
+  };
 }
 
 function leerCanje(x: Record<string, unknown>): CanjeDeCupon | null {
   const sorteos = leerSorteos(x.sorteos);
   if (x.ok !== true || typeof x.repetido !== "boolean" || !esNumero(x.sorteosSumados) || !sorteos || !esTexto(x.sigue) || !SIGUE.includes(x.sigue)) return null;
   return { ok: true, repetido: x.repetido, sorteosSumados: x.sorteosSumados, sorteos, sigue: x.sigue as Sigue };
+}
+
+/** El regalo recibido: la forma del canje, y lo que dijo del regalo si se conoce. */
+function leerReclamo(x: Record<string, unknown>): ReclamoDelRegalo | null {
+  // El servicio manda los sorteos como en el canje (cuántos quedan y el próximo vencimiento). Si llegan solo como cuántos
+  // quedan, se leen igual, sin vencimiento: la persona no se queda sin su acceso por la forma de un dato.
+  const n = x.sorteos;
+  const canje = leerCanje(esNumero(n) && Number.isInteger(n) && n >= 0 ? { ...x, sorteos: { quedan: n, proximoVence: null } } : x);
+  if (!canje) return null;
+  const regalo = x.regalo === "dado" || x.regalo === "lleno" || x.regalo === "ya" ? x.regalo : null;
+  return { ...canje, regalo };
 }
 
 /**
@@ -557,12 +671,59 @@ function leerProducto(x: unknown): ProductoDeAlta | null {
   return { usdc: o.usdc, sorteos: o.sorteos, dias: o.dias, pausado: o.pausado !== undefined && o.pausado !== false };
 }
 
-/** Los precios. Cualquier producto mal escrito rechaza todo: un precio a medias no se muestra (como `leerPrecios` del servidor). */
+/** El nombre del producto por unidad que publica el servidor (`PRECIOS = "sorteo:1:1:365"`). */
+export const PRODUCTO_POR_UNIDAD = "sorteo";
+/** Lo más que se acepta como cantidad de un pago: un número que no es razonable no se ofrece. */
+const CANTIDAD_MAXIMA = 1_000;
+const esCantidad = (x: unknown): x is number => esEnteroPositivo(x) && x <= CANTIDAD_MAXIMA;
+
+/**
+ * Se parece al producto por unidad: trae su rango, o se nombra con `producto` en lugar de `id`, o es el producto `sorteo`.
+ * Así uno escrito de otra forma no se toma por un paquete fijo (que se pediría sin cantidad y el servidor rechazaría).
+ */
+function pareceUnidad(x: unknown): boolean {
+  const o = objeto(x);
+  return !!o && ("minimo" in o || "maximo" in o || "paso" in o || ("producto" in o && !("id" in o)) || o.id === PRODUCTO_POR_UNIDAD);
+}
+
+/**
+ * El producto por unidad, o `null` si no viene o algo no se entiende: el monto por sorteo positivo, y el rango, el paso y
+ * los días enteros desde 1, con el mínimo que no pasa del máximo. Lo pausado se lee como en los paquetes.
+ */
+function leerUnidad(x: unknown): ProductoPorUnidad | null {
+  const o = objeto(x);
+  if (!o) return null;
+  const id = esTexto(o.producto) ? o.producto : o.id;
+  if (!esTexto(id) || !PRODUCTO.test(id) || id === "alta" || !esMontoPositivo(o.usdc)) return null;
+  if (!esCantidad(o.minimo) || !esCantidad(o.maximo) || !esCantidad(o.paso) || o.minimo > o.maximo || !esEnteroPositivo(o.dias)) return null;
+  const pausado = o.pausado !== undefined && o.pausado !== false;
+  return { id, usdc: o.usdc, minimo: o.minimo, maximo: o.maximo, paso: o.paso, dias: o.dias, pausado };
+}
+
+/**
+ * Dónde puede venir el producto por unidad: en su propio campo (`unidad`, el que se espera, o `sorteo`) o dentro de
+ * `paquetes`. El primero que se entiende.
+ */
+function unidadDe(x: Record<string, unknown>): ProductoPorUnidad | null {
+  const lista = Array.isArray(x.paquetes) ? x.paquetes.filter(pareceUnidad) : [];
+  for (const c of [x.unidad, x.sorteo, ...lista]) {
+    const u = c === undefined || c === null ? null : leerUnidad(c);
+    if (u) return u;
+  }
+  return null;
+}
+
+/**
+ * Los precios. Cualquier paquete fijo mal escrito rechaza todo: un precio a medias no se muestra (como `leerPrecios` del
+ * servidor). El producto por unidad es un dato de más: si no se entiende, no viene y los paquetes se leen igual.
+ */
 function leerPrecios(x: Record<string, unknown>): PreciosDeAlta | null {
   const alta = x.alta === null ? null : leerProducto(x.alta);
   if ((x.alta !== null && !alta) || !esTexto(x.red) || typeof x.pago !== "boolean" || !Array.isArray(x.paquetes)) return null;
   const paquetes: PreciosDeAlta["paquetes"] = [];
   for (const p of x.paquetes) {
+    // El producto por unidad no es un paquete fijo: se lee aparte (`unidadDe`).
+    if (pareceUnidad(p)) continue;
     const pr = leerProducto(p);
     const id = objeto(p)?.id;
     if (!pr || !esTexto(id) || !PRODUCTO.test(id) || id === "alta" || paquetes.some((q) => q.id === id)) return null;
@@ -570,7 +731,18 @@ function leerPrecios(x: Record<string, unknown>): PreciosDeAlta | null {
   }
   // Un recargo mal escrito no rechaza los precios: no se abre el QR, y lo demás se vende igual.
   const recargo = leerRecargoQr(x.recargoQr);
-  return { red: x.red, pago: x.pago, alta, paquetes, ...(recargo ? { recargoQr: recargo } : {}) };
+  // El regalo es un dato de más: con 0, sin él o mal escrito, los precios se leen igual y no viene.
+  const bienvenida = esCantidadDeRegalo(x.bienvenida) ? x.bienvenida : null;
+  const unidad = unidadDe(x);
+  return {
+    red: x.red,
+    pago: x.pago,
+    alta,
+    paquetes,
+    ...(recargo ? { recargoQr: recargo } : {}),
+    ...(bienvenida ? { bienvenida } : {}),
+    ...(unidad ? { unidad } : {}),
+  };
 }
 
 /** Un monto del recargo: con punto, de 0 a 50, como lo acepta el servidor. */
@@ -595,6 +767,14 @@ export function canjear(token: string, cupon: string, o: OpcionesDeAlta = {}): P
   return llamar("/v1/alta/cupon", "POST", token, { cupon }, o, leerCanje);
 }
 
+/**
+ * `POST /v1/alta/gratis`: activa el acceso de la persona y le da los sorteos de regalo, una sola vez por persona (pedirlo
+ * otra vez no suma nada). El cuerpo va vacío: quién es lo dice la sesión. Contesta con la forma del canje de un cupón.
+ */
+export function reclamar(token: string, o: OpcionesDeAlta = {}): Promise<ResultadoDeAlta<ReclamoDelRegalo>> {
+  return llamar("/v1/alta/gratis", "POST", token, {}, o, leerReclamo, CLAVE_EN_EL_REGALO);
+}
+
 /** `GET /v1/alta/precios`: abierta, sin sesión. */
 export function precios(o: OpcionesDeAlta = {}): Promise<ResultadoDeAlta<PreciosDeAlta>> {
   return llamar("/v1/alta/precios", "GET", null, null, o, leerPrecios);
@@ -609,10 +789,17 @@ export function abrir(token: string, o: OpcionesDeAlta = {}): Promise<ResultadoD
  * `POST /v1/alta/orden`: la orden abierta de la persona para ese producto, o una nueva. El servidor devuelve la misma
  * mientras siga abierta, así que pedirla otra vez (al volver, o con un doble toque) no crea otra. El producto va en el
  * cuerpo; uno sin forma ni se pide.
+ *
+ * Con `cantidad` (el producto por unidad), el cuerpo es `{ producto, cantidad }` y el servidor arma el monto: acá no se
+ * calcula ningún total. Una cantidad que no es un entero razonable ni se pide. Sin `cantidad`, el cuerpo de siempre.
  */
-export async function orden(token: string, producto: string, o: OpcionesDeAlta = {}): Promise<ResultadoDeAlta<OrdenDePago>> {
+export async function orden(token: string, producto: string, o: OpcionesDeAlta & { cantidad?: number } = {}): Promise<ResultadoDeAlta<OrdenDePago>> {
   if (!PRODUCTO.test(producto)) return error("producto", 0);
-  return llamar("/v1/alta/orden", "POST", token, { producto }, o, (x) => leerOrdenDePago(x.orden, producto), CLAVE_EN_LA_ORDEN);
+  const { cantidad, ...resto } = o;
+  const leer = (x: Record<string, unknown>): OrdenDePago | null => leerOrdenDePago(x.orden, producto);
+  if (cantidad === undefined) return llamar("/v1/alta/orden", "POST", token, { producto }, resto, leer, CLAVE_EN_LA_ORDEN);
+  if (!esCantidad(cantidad)) return error("forma", 0);
+  return llamar("/v1/alta/orden", "POST", token, { producto, cantidad }, resto, leer, CLAVE_EN_LA_ORDEN_POR_UNIDAD);
 }
 
 /**

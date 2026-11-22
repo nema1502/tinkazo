@@ -5,7 +5,8 @@
  */
 .pg-campana.cmp-muestra-nombre .cmp-saber h1,
 .pg-campana.cmp-muestra-nombre .cmp-estado h1 { opacity: 0.75; }
-.pg-campana.cmp-muestra-premio .cmp-premio-texto { opacity: 0.75; }
+/* Sin monto elegido no se muestra un monto inventado: el lugar queda, vacío a la vista. */
+.pg-campana.cmp-muestra-premio .cmp-premio-texto { visibility: hidden; }
 .pg-campana.cmp-muestra-lugar .cmp-lugar { opacity: 0.75; }
 .pg-campana.cmp-muestra-horas .cmp-cierre,
 .pg-campana.cmp-muestra-horas .cmp-hora,

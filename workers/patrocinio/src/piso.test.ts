@@ -36,9 +36,9 @@ describe("el piso de créditos", () => {
     m.abiertas.add(ana.cuenta as string);
     await m.estado(ana.token);
     expect((await m.puerta.resumen()).piso).toBe(300 + 2 * CANJE - 40 - 30);
-    // Lo vencido no está prometido.
+    // Lo vencido no está prometido. El alta de Beto, sin abrir hace más de 7 días, tampoco (`ALTA_SIN_ABRIR_DIAS`).
     m.mover(61 * DIA_MS);
-    expect((await m.puerta.resumen()).piso).toBe(300 + 30);
+    expect((await m.puerta.resumen()).piso).toBe(300);
   });
 
   it("los valores por sorteo y por alta salen de la configuración", async () => {

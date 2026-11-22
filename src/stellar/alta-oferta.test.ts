@@ -1,7 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEXTOS_ALTA } from "../alta-textos";
 import { TEXTOS_ALTA_PAGO } from "../alta-textos-pago";
-import { CACHE_OFERTA_MS, SIN_OFERTA, leerOferta, montoVisible, ofertaDe, olvidarOferta, textoDelProducto, varsDelProducto } from "./alta-oferta";
+import {
+  CACHE_OFERTA_MS,
+  SIN_OFERTA,
+  cantidadInicial,
+  cantidadesDe,
+  claveDelProducto,
+  leerOferta,
+  moverCantidad,
+  totalDe,
+  varsDelTotal,
+  montoVisible,
+  ofertaDe,
+  olvidarOferta,
+  olvidarRegalo,
+  regaloAbierto,
+  textoDelProducto,
+  varsDelProducto,
+} from "./alta-oferta";
 import type { PreciosDeAlta, ResultadoDeAlta } from "./alta-api";
 import { productoPausado } from "./venta-oficial";
 
@@ -23,7 +40,10 @@ function servidor(cuerpo: () => unknown, estadoHttp = 200) {
   return { f: f as unknown as typeof fetch, espia: f };
 }
 
-beforeEach(() => olvidarOferta());
+beforeEach(() => {
+  olvidarOferta();
+  olvidarRegalo();
+});
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -213,5 +233,123 @@ describe("cómo se dice el precio", () => {
     expect(varsDelProducto({ id: "alta", usdc: "3", sorteos: 3, dias: 90 }, "es")).toEqual({ sorteos: "3 sorteos oficiales", precio: "3 dólares" });
     expect(TEXTOS_ALTA.es.altaPrimerPaquete).toBe("{sorteos} por {precio}");
     expect(TEXTOS_ALTA_PAGO.es.pagoSorteosN).toBe("{n} sorteos oficiales");
+  });
+});
+
+describe("el regalo de quien entra, para la hoja de modo", () => {
+  it("con el regalo abierto, el número del servidor", async () => {
+    const { f } = servidor(() => ({ ...PRECIOS, bienvenida: 3 }));
+    expect(await regaloAbierto({ alta: true, url: URL, fetch: f })).toBe(3);
+  });
+
+  it("con 0, sin el campo (el servicio de antes) o mal escrito, 0", async () => {
+    for (const bienvenida of [0, undefined, "3", -2]) {
+      olvidarRegalo();
+      const { f } = servidor(() => ({ ...PRECIOS, bienvenida }));
+      expect(await regaloAbierto({ alta: true, url: URL, fetch: f }), String(bienvenida)).toBe(0);
+    }
+  });
+
+  it("sin el acceso por el servidor en el build no se pregunta nada", async () => {
+    const { f, espia } = servidor(() => ({ ...PRECIOS, bienvenida: 3 }));
+    expect(await regaloAbierto({ alta: false, url: URL, fetch: f })).toBe(0);
+    expect(espia).not.toHaveBeenCalled();
+  });
+
+  it("sin respuesta o de otra red, 0", async () => {
+    const caido = servidor(() => ({ motivo: "apagado" }), 503);
+    expect(await regaloAbierto({ alta: true, url: URL, fetch: caido.f })).toBe(0);
+    const otra = servidor(() => ({ ...PRECIOS, red: "testnet", bienvenida: 3 }));
+    expect(await regaloAbierto({ alta: true, url: URL, fetch: otra.f })).toBe(0);
+  });
+
+  it("lo leído se recuerda cinco minutos", async () => {
+    const { f, espia } = servidor(() => ({ ...PRECIOS, bienvenida: 3 }));
+    let ahora = 1_000_000;
+    const o = { alta: true, url: URL, fetch: f, ahora: () => ahora };
+    expect(await regaloAbierto(o)).toBe(3);
+    ahora += CACHE_OFERTA_MS - 1;
+    expect(await regaloAbierto(o)).toBe(3);
+    expect(espia).toHaveBeenCalledTimes(1);
+    ahora += 2;
+    await regaloAbierto(o);
+    expect(espia).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("el producto por unidad", () => {
+  const UNIDAD = { id: "sorteo", usdc: "1", minimo: 5, maximo: 50, paso: 5, dias: 365, pausado: false };
+  const SORTEO = { id: "sorteo", usdc: "1", sorteos: 1, dias: 365, unidad: { minimo: 5, maximo: 50, paso: 5 } };
+  const U = { minimo: 5, maximo: 50, paso: 5 };
+
+  it("se ofrece primero, con su precio por sorteo y el rango del servidor", () => {
+    expect(ofertaDe(ok({ ...PRECIOS, alta: null, paquetes: [], unidad: UNIDAD }))).toEqual({ alta: null, paquetes: [SORTEO] });
+  });
+
+  it("con paquetes fijos, el producto por unidad va primero y los fijos quedan como siempre", () => {
+    const o = ofertaDe(ok({ ...PRECIOS, alta: null, paquetes: [{ id: "p10", ...conPausa({ usdc: "9", sorteos: 10, dias: 365 }) }], unidad: UNIDAD }));
+    expect(o.paquetes).toEqual([SORTEO, { id: "p10", usdc: "9", sorteos: 10, dias: 365 }]);
+  });
+
+  it("pausado, con el pago apagado o fuera de la red principal, no se ofrece", () => {
+    expect(ofertaDe(ok({ ...PRECIOS, alta: null, paquetes: [], unidad: { ...UNIDAD, pausado: true } }))).toEqual(SIN_OFERTA);
+    expect(ofertaDe(ok({ ...PRECIOS, pago: false, alta: null, paquetes: [], unidad: UNIDAD }))).toEqual(SIN_OFERTA);
+    expect(ofertaDe(ok({ ...PRECIOS, red: "testnet", alta: null, paquetes: [], unidad: UNIDAD }))).toEqual(SIN_OFERTA);
+  });
+
+  it("leído del servidor y recordado, cada lectura trae su propia copia del rango", async () => {
+    const unidad = { producto: "sorteo", usdc: "1", minimo: 5, maximo: 50, paso: 5, dias: 365 };
+    const { f } = servidor(() => ({ ...PRECIOS, alta: null, paquetes: [], unidad }));
+    const a = await leerOferta({ pago: true, url: URL, fetch: f });
+    expect(a.paquetes).toEqual([SORTEO]);
+    (a.paquetes[0]?.unidad as { maximo: number }).maximo = 999;
+    expect((await leerOferta({ pago: true, url: URL, fetch: f })).paquetes).toEqual([SORTEO]);
+  });
+
+  it("se ofrece como Sumar sorteos: todavía no tiene una cantidad que nombrar", () => {
+    expect(claveDelProducto(SORTEO)).toBe("cupoOfSumar");
+    expect(textoDelProducto(SORTEO, "es")).toBe(TEXTOS_ALTA.es.cupoOfSumar);
+    expect(textoDelProducto(SORTEO, "en")).toBe(TEXTOS_ALTA.en.cupoOfSumar);
+  });
+
+  it("un paquete fijo se sigue ofreciendo con su cantidad y su precio", () => {
+    const p10 = { id: "p10", usdc: "9", sorteos: 10, dias: 365 };
+    expect(claveDelProducto(p10)).toBe("cupoOfSumarPaquete");
+    expect(claveDelProducto({ ...p10, id: "alta" })).toBe("altaPrimerPaquete");
+    expect(textoDelProducto(p10, "es")).toBe("Organizá 10 sorteos oficiales por 9 dólares");
+  });
+
+  it("las cantidades van del mínimo al máximo, de a paso", () => {
+    expect(cantidadesDe(U)).toEqual([5, 10, 15, 20, 25, 30, 35, 40, 45, 50]);
+    expect(cantidadesDe({ minimo: 5, maximo: 12, paso: 5 })).toEqual([5, 10]);
+    expect(cantidadesDe({ minimo: 7, maximo: 7, paso: 5 })).toEqual([7]);
+  });
+
+  it("abre en 10 si se puede pedir, y si no en el mínimo", () => {
+    expect(cantidadInicial(U)).toBe(10);
+    expect(cantidadInicial({ minimo: 20, maximo: 50, paso: 5 })).toBe(20);
+    expect(cantidadInicial({ minimo: 3, maximo: 30, paso: 3 })).toBe(3);
+  });
+
+  it("menos no baja del mínimo y más no pasa del máximo", () => {
+    expect(moverCantidad(U, 10, -1)).toBe(5);
+    expect(moverCantidad(U, 5, -1)).toBe(5);
+    expect(moverCantidad(U, 45, 1)).toBe(50);
+    expect(moverCantidad(U, 50, 1)).toBe(50);
+    expect(moverCantidad(U, 12, 1)).toBe(10);
+  });
+
+  it("el total es el precio por la cantidad, sin redondear", () => {
+    expect(totalDe("1", 10)).toBe("10");
+    expect(totalDe("1", 50)).toBe("50");
+    expect(totalDe("0.95", 5)).toBe("4.75");
+    expect(totalDe("1.0000001", 10)).toBe("10.000001");
+    expect(totalDe("raro", 5)).toBe("raro");
+  });
+
+  it("el total se dice como un precio, en cada idioma", () => {
+    expect(varsDelTotal(SORTEO, 10, "es")).toEqual({ total: "10 dólares" });
+    expect(varsDelTotal(SORTEO, 10, "en")).toEqual({ total: "US$10" });
+    expect(varsDelTotal({ ...SORTEO, usdc: "0.5" }, 5, "es")).toEqual({ total: "2,50 dólares" });
   });
 });

@@ -1,11 +1,20 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { T, setLang } from "../i18n";
 import { app } from "../state";
 import { saveSessionKind } from "../stellar/session-store";
-import { MARCA_INGRESAR } from "./cuenta-estado";
+import { MARCA_INGRESAR, MARCA_PRACTICAR } from "./cuenta-estado";
 import { CLAVE_PASO_CUPON } from "../stellar/cupon-paso-guardado";
-import { abrirHojaDeModo, cambioBloqueado, haceFaltaConfirmar, marcarSellandoAhora, otroModo, pasarAModo, puedeCambiarDeModo } from "./modo-ui";
+import {
+  abrirHojaDeModo,
+  cambioBloqueado,
+  haceFaltaConfirmar,
+  marcarSellandoAhora,
+  otroModo,
+  pasarAModo,
+  practicarEnPrueba,
+  puedeCambiarDeModo,
+} from "./modo-ui";
 
 const h = vi.hoisted(() => ({
   red: "testnet" as "mainnet" | "testnet",
@@ -13,6 +22,16 @@ const h = vi.hoisted(() => ({
   destinos: [] as (string | undefined)[],
   cambia: true,
   tipo: "sin" as "sin" | "propia" | "sitio" | "prueba",
+}));
+
+/** Cuántos sorteos de regalo dice el servidor que da hoy (`regaloAbierto`, de los precios). */
+const regalo = vi.hoisted(() => ({ n: 0, preguntas: 0 }));
+vi.mock("../stellar/alta-oferta", async (orig) => ({
+  ...(await orig<typeof import("../stellar/alta-oferta")>()),
+  regaloAbierto: async () => {
+    regalo.preguntas++;
+    return regalo.n;
+  },
 }));
 
 vi.mock("../stellar/config", async (orig) => {
@@ -187,10 +206,10 @@ describe("la guarda del cambio de modo, en un solo lugar", () => {
   });
 
   it.each([
-    ["es", "testnet", "Cada modo tiene su propia cuenta. En Oficial vas a entrar una vez más, y tu cuenta de Prueba sigue acá cuando vuelvas."],
-    ["es", "mainnet", "Cada modo tiene su propia cuenta. En Prueba vas a entrar una vez más, y tu cuenta de Oficial sigue acá cuando vuelvas."],
-    ["en", "testnet", "Each mode has its own account. You'll sign in once more in Live, and your Test account will still be here when you come back."],
-    ["en", "mainnet", "Each mode has its own account. You'll sign in once more in Test, and your Live account will still be here when you come back."],
+    ["es", "testnet", "En Oficial entrás de nuevo. Tu cuenta de Prueba te espera."],
+    ["es", "mainnet", "En Prueba entrás de nuevo. Tu cuenta de Oficial te espera."],
+    ["en", "testnet", "In Live you sign in again. Your Test account will be waiting."],
+    ["en", "mainnet", "In Test you sign in again. Your Live account will be waiting."],
   ] as const)("la hoja avisa la cuenta del otro modo en %s desde %s", (lang, red, texto) => {
     h.tipo = "sitio";
     h.red = red;
@@ -228,5 +247,93 @@ describe("la guarda del cambio de modo, en un solo lugar", () => {
     h.red = "mainnet";
     abrirHojaDeModo();
     expect(document.querySelector(".modo-card .modo-cupon")).toBeNull();
+  });
+});
+
+describe("lo que dice de Oficial la hoja, con el regalo", () => {
+  /** El párrafo de Oficial en la hoja: la primera opción es la de la red principal. */
+  const deOficial = (): string => document.querySelectorAll(".modo-card .modo-opcion p")[0]?.textContent ?? "";
+  const esperar = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+  /** La primera vez el módulo de los precios se baja entero: puede tardar más que la espera de siempre. */
+  const ESPERA = { timeout: 5_000 };
+  // El módulo de los precios, ya bajado: la hoja lo pide aparte y así ninguna prueba espera su primera carga.
+  beforeAll(async () => {
+    const m = await import("../stellar/alta-oferta");
+    expect(typeof m.regaloAbierto).toBe("function");
+  });
+  /** Abre la hoja y espera a que el regalo se haya preguntado y contestado (el módulo se baja aparte). */
+  const abrirYEsperar = async (): Promise<void> => {
+    const antes = regalo.preguntas;
+    abrirHojaDeModo();
+    await vi.waitFor(() => expect(regalo.preguntas).toBeGreaterThan(antes), ESPERA);
+    await esperar();
+  };
+
+  it("con el regalo abierto, dice que se organizan esos sorteos gratis, con el número del servidor", async () => {
+    regalo.n = 3;
+    abrirHojaDeModo();
+    await vi.waitFor(() => expect(deOficial()).toBe("Para los sorteos que cuentan. Organizás 3 gratis."), ESPERA);
+    regalo.n = 0;
+  });
+
+  it("en inglés", async () => {
+    regalo.n = 3;
+    setLang("en");
+    abrirHojaDeModo();
+    await vi.waitFor(() => expect(deOficial()).toBe("For the draws that count. Run 3 for free."), ESPERA);
+    setLang("es");
+    regalo.n = 0;
+  });
+
+  it("con el regalo en 0 (o sin el campo, el servicio de antes), lo de siempre", async () => {
+    regalo.n = 0;
+    await abrirYEsperar();
+    expect(deOficial()).toBe(T.es.modeOfficialBody);
+  });
+});
+
+describe("Practicar en Prueba, de un toque", () => {
+  beforeEach(() => {
+    h.red = "mainnet";
+    h.cambios = [];
+    h.destinos = [];
+    h.cambia = true;
+    h.tipo = "sin";
+    app.frozen = null;
+    app.drawn = null;
+    marcarSellandoAhora(false);
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  it("pasa a Prueba con la herramienta abierta y deja la marca de entrar con la cuenta de prueba", () => {
+    expect(practicarEnPrueba()).toBe(true);
+    expect(h.cambios).toEqual(["testnet"]);
+    expect(h.destinos).toEqual(["sortear"]);
+    expect(sessionStorage.getItem(MARCA_PRACTICAR)).toBe("1");
+  });
+
+  it("no pide la ventana de entrar: la página de Prueba entra sola", () => {
+    practicarEnPrueba();
+    expect(sessionStorage.getItem(MARCA_INGRESAR)).toBeNull();
+  });
+
+  it("limpia un campo del cupón que no se llegó a usar", () => {
+    sessionStorage.setItem(CLAVE_PASO_CUPON, "1");
+    practicarEnPrueba();
+    expect(sessionStorage.getItem(CLAVE_PASO_CUPON)).toBeNull();
+  });
+
+  it("con un sorteo sellado esperando su número no hace nada ni deja la marca", () => {
+    app.frozen = { names: ["Ana", "Beto"] } as unknown as typeof app.frozen;
+    expect(practicarEnPrueba()).toBe(false);
+    expect(h.cambios).toEqual([]);
+    expect(sessionStorage.getItem(MARCA_PRACTICAR)).toBeNull();
+  });
+
+  it("si el cambio no recarga, no deja la marca", () => {
+    h.cambia = false;
+    expect(practicarEnPrueba()).toBe(false);
+    expect(sessionStorage.getItem(MARCA_PRACTICAR)).toBeNull();
   });
 });

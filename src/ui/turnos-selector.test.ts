@@ -159,6 +159,33 @@ describe("elegir el modo con un toque", () => {
     expect(pliegue().querySelector("summary")?.textContent).toBe("Premio y subir CSV");
   });
 
+  it("con los tres botones, el grupo va en tres columnas desde que carga, con Sortear premios elegido", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    await montar(8);
+    const grupo = $("modo-botones");
+    expect(grupo.querySelectorAll(".modo-op")).toHaveLength(3);
+    expect(grupo.dataset.modo).toBe("sorteo");
+    expect(grupo.classList.contains("con-amigo")).toBe(true);
+  });
+
+  it("el dibujo de Amigo secreto no es el regalo de Sortear premios", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    await montar(8);
+    const dibujo = (id: string): string => $(id).querySelector(".modo-ico path")?.getAttribute("d") ?? "";
+    expect(dibujo("btn-amigo")).not.toBe("");
+    expect(dibujo("btn-amigo")).not.toBe(dibujo("btn-modo-sorteo"));
+    // El regalo de Sortear premios empieza con su caja (un rectángulo de 16 de ancho): el de Amigo secreto no lleva caja.
+    expect(dibujo("btn-amigo")).not.toMatch(/h16v/);
+  });
+
+  it("con los tres botones, elegir Orden de turnos deja el grupo en tres columnas", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    await montar(8);
+    turnos().click();
+    expect($("modo-botones").dataset.modo).toBe("turnos");
+    expect($("modo-botones").classList.contains("con-amigo")).toBe(true);
+  });
+
   it("tocar Orden de turnos lo elige: cambian el título del paso, la ayuda y el resumen de junto al botón, y el pliegue no se abre", async () => {
     vi.stubEnv("VITE_MODOS", "1");
     const { turnos: m } = await montar(8);
@@ -309,6 +336,33 @@ describe("los estilos del selector", () => {
     // Y el toque sigue siendo grande.
     const alto = Number(/min-height:\s*(\d+)px/.exec(regla(/\.modo-op\s*$/))?.[1] ?? 48);
     expect(alto).toBeGreaterThanOrEqual(48);
+  });
+
+  it("las tres columnas van con el tercer botón y no solo con el Amigo secreto elegido, en escritorio y en celular", () => {
+    // Atadas a data-modo="amigo", al abrir (sorteo) o con turnos el tercero caía a una segunda fila.
+    const tresColumnas = reglas.filter((r) => /grid-template-columns:\s*(1fr\s+1fr\s+1fr|repeat\(3)/.test(r.cuerpo));
+    expect(tresColumnas.length, "una regla de escritorio y una de celular").toBe(2);
+    for (const r of tresColumnas) {
+      expect(r.selector).toMatch(/\.modo-botones\.con-amigo\s*$/);
+      expect(r.selector).not.toMatch(/data-modo/);
+    }
+    // La marca mide un tercio: el ancho menos el relleno de los dos lados y los dos huecos (5 + 5 + 6 + 6 y 4 + 4 + 4 + 4).
+    const anchos = reglas.filter((r) => /\.con-amigo::before\s*$/.test(r.selector)).map((r) => /width:\s*([^;]+)/.exec(r.cuerpo)?.[1]?.trim());
+    expect(anchos).toEqual(["calc((100% - 22px) / 3)", "calc((100% - 16px) / 3)"]);
+  });
+
+  it("con tres botones los títulos van arriba en escritorio, para que el de un renglón quede a la altura de los otros", () => {
+    const alineados = reglas
+      .filter((r) => /\.modo-botones\.con-amigo \.modo-op\s*$/.test(r.selector))
+      .map((r) => /align-content:\s*(\w+)/.exec(r.cuerpo)?.[1]);
+    // El primero es el de escritorio. En el celular cada botón lleva solo el nombre, centrado.
+    expect(alineados).toEqual(["start", "center"]);
+  });
+
+  it("con menos movimiento la marca del Amigo secreto no se corre: ninguna regla de ese bloque la mueve", () => {
+    const bloque = /@media \(prefers-reduced-motion: reduce\)\s*\{([^@]*?\.modo-[^@]*?)\}\s*\}/.exec(estilos)?.[1] ?? "";
+    expect(bloque).not.toBe("");
+    expect(bloque).not.toMatch(/translateX/);
   });
 
   it("con menos movimiento no se anima", () => {

@@ -80,7 +80,7 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
-import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
+import { ABRIR_OTRAS_FORMAS_JS, HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -440,6 +440,8 @@ async function conectarCuentaDePrueba(page) {
   await page.eval(TOCAR_ENTRAR_JS);
   const ventana = await page.waitFor("document.querySelector('.login-opt')", 15000);
   hayFalla(!ventana.ok, "no se abrió la ventana de ingreso");
+  // La cuenta de prueba está detrás de Otras formas de entrar: se despliega antes de buscarla.
+  await page.eval(ABRIR_OTRAS_FORMAS_JS);
   await sleep(300);
   const i = await page.eval(`String([...document.querySelectorAll('.login-opt')].findIndex((e) => /prueba|Test account/.test(e.textContent)))`);
   hayFalla(i === "-1", "la ventana de ingreso no ofrece la cuenta de prueba");
@@ -677,6 +679,64 @@ async function primerRpcCortado(browser, vista, tema) {
     check(`${quien}: sella igual, por el segundo`, sello.ok, sello.ok ? `en ${(sello.elapsed / 1000).toFixed(0)} s` : `no selló en ${Math.round(selloMax / 1000)} s`);
     const caja = JSON.parse(await page.eval(MEDIR_RED));
     check(`${quien}: no avisó nada de la red`, !caja.visible || !TEXTO.sinRpc.test(caja.texto), caja.texto.slice(0, 80));
+  } finally {
+    await cerrar(page);
+  }
+}
+
+/**
+ * En Oficial, el ingreso cortado: el proveedor de cuentas no contesta. Pedir el código del correo falla y, junto al error,
+ * se ofrece Practicar en Prueba (y nunca seguir sin cuenta, que es solo de Prueba). Tocarlo pasa a Prueba y entra solo con
+ * la cuenta de prueba, sin la ventana de entrar. No graba nada en Oficial; la cuenta de prueba pide fondos a la testnet,
+ * por eso va en una sola pantalla. Sin modo Oficial o sin la llave del proveedor en este build, se anota y se saltea.
+ */
+async function ingresoCortadoEnOficial(browser, vista, tema) {
+  const [etiqueta, ancho, alto, dpr, celular] = vista;
+  const quien = `${etiqueta} ${tema}, el ingreso cortado en Oficial`;
+  const page = await browser.open("about:blank");
+  try {
+    const pantalla = { width: ancho, height: alto, deviceScaleFactor: dpr, mobile: celular, screenWidth: ancho, screenHeight: alto };
+    await page.send("Emulation.setDeviceMetricsOverride", pantalla);
+    await interceptar(page, ["*sdk.api.pollar.xyz*"], () => "fallar");
+    await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido&red=oficial#sortear` });
+    await page.waitFor("document.readyState === 'complete'", 20000);
+    if ((await page.eval("String(sessionStorage.getItem('tinkazo.red'))")) !== "oficial") {
+      info(`${quien}: este build no tiene modo Oficial, se saltea`);
+      return;
+    }
+    const chip = await page.waitFor(`!!document.querySelector(${JSON.stringify(SELECTOR_CHIP_ENTRAR)})`, 20000);
+    hayFalla(!chip.ok, "no apareció el botón de entrar de la cabecera");
+    await page.eval(`document.querySelector(${JSON.stringify(SELECTOR_CHIP_ENTRAR)}).click(); true`);
+    const ventana = await page.waitFor("document.querySelector('.modal-card.login')", 15000);
+    hayFalla(!ventana.ok, "no se abrió la ventana de ingreso");
+    if ((await page.eval("String(!!document.querySelector('#login-mail'))")) !== "true") {
+      info(`${quien}: este build no tiene la llave del proveedor en Oficial, se saltea`);
+      return;
+    }
+    // El correo está detrás de Otras formas de entrar.
+    await page.eval(ABRIR_OTRAS_FORMAS_JS);
+    await page.eval(`(() => {
+      const m = document.querySelector('#login-mail');
+      m.value = 'prueba@example.org';
+      m.dispatchEvent(new Event('input', { bubbles: true }));
+      m.closest('form').requestSubmit();
+      return true;
+    })()`);
+    const ofrece = await page.waitFor("!!document.querySelector('button[data-salida=\"practicar\"]')", 45000);
+    check(`${quien}: junto al error ofrece Practicar en Prueba`, ofrece.ok, ofrece.ok ? "" : "no apareció en 45 s");
+    if (!ofrece.ok) return;
+    const texto = await page.eval("String(document.querySelector('button[data-salida=\"practicar\"]').textContent || '').trim()");
+    check(`${quien}: el botón dice Practicar en Prueba`, /^(Practicar en Prueba|Practice in Test)$/.test(texto), `dice "${texto}"`);
+    const sinCuenta = await page.eval("String(!!document.querySelector('button[data-salida=\"sin-cuenta\"]'))");
+    check(`${quien}: no ofrece seguir sin cuenta`, sinCuenta === "false", "");
+    await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-7-ingreso-cortado-en-oficial.png`));
+    await page.eval("document.querySelector('button[data-salida=\"practicar\"]').click(); true");
+    const enPrueba = "sessionStorage.getItem('tinkazo.red') === 'prueba'";
+    const adentro = `${enPrueba} && !document.querySelector('.modal-card.login') && !!document.querySelector('#wallet-box .hello')`;
+    const entro = await page.waitFor(adentro, 120000);
+    const cuanto = entro.ok ? `en ${(entro.elapsed / 1000).toFixed(0)} s` : "no entró en 120 s";
+    check(`${quien}: pasa a Prueba y entra solo con la cuenta de prueba`, entro.ok, cuanto);
+    check(`${quien}: sin excepciones`, page.exceptions.length === 0, page.exceptions.slice(0, 2).join(" | "));
   } finally {
     await cerrar(page);
   }
@@ -1210,7 +1270,11 @@ async function main() {
     ["sin saldo", (b, v, t) => sinSaldo(b, v, t)],
   ];
   for (const [i, vista] of pantallasDeFallos.entries()) {
-    const casos = i === 0 ? [...casosDeFallos, ["el primer RPC cortado", (b, v, t) => primerRpcCortado(b, v, t)]] : casosDeFallos;
+    const soloEnLaPrimera = [
+      ["el primer RPC cortado", (b, v, t) => primerRpcCortado(b, v, t)],
+      ["el ingreso cortado en Oficial", (b, v, t) => ingresoCortadoEnOficial(b, v, t)],
+    ];
+    const casos = i === 0 ? [...casosDeFallos, ...soloEnLaPrimera] : casosDeFallos;
     for (const [nombre, correr] of casos) {
       if (soloCasos.length && !soloCasos.some((c) => nombre.toLowerCase().includes(c))) continue;
       let hecho = false;

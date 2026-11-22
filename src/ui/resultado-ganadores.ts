@@ -3,6 +3,7 @@ import { T, getLang, t } from "../i18n";
 import { isTurnOrder } from "../modos/turnos";
 import { nombreDePersona, salieronVariasVeces } from "../participaciones";
 import { htmlDeTurnos } from "./lista-de-turnos";
+import { premioDeLugarEn } from "./lugares-de-meta";
 
 /**
  * Los ganadores en la página del resultado (`#winner-cards`).
@@ -82,14 +83,23 @@ function nombreParaMostrar(d: DatosDeGanadores, k: number): string {
   return (d.porPersona ?? true) ? nombreDePersona(sellado) : sellado;
 }
 
+/**
+ * Lo que se lleva el ganador `k`: con un premio por lugar, el de su lugar (`k + 1`, en el orden que dio el sorteo), o
+ * "" si ese lugar quedó sin premio. Sin lugares, el premio sellado entero, el mismo para todos, como siempre.
+ */
+const premioDe = (d: DatosDeGanadores, k: number): string => premioDeLugarEn(d.prize, k + 1) ?? d.prize;
+
 function tarjeta(d: DatosDeGanadores, k: number): string {
   const name = nombreParaMostrar(d, k);
   const varios = d.winners.length > 1;
-  const tag = d.prize
-    ? `<p class="winner-prize"><span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(d.prize)}${varios ? ` #${k + 1}` : ""}</p>`
-    : varios
-      ? `<p class="winner-prize">#${k + 1}</p>`
-      : "";
+  const premio = premioDe(d, k);
+  // Con varios y un premio por lugar, el lugar va delante con su rótulo («2.º premio: Termo»): el número pegado detrás
+  // («Termo #2») se leía como el termo número dos. Con un premio para todos, «Se lleva: Termo #2», como siempre.
+  const porLugar = varios && premioDeLugarEn(d.prize, k + 1) !== null;
+  const lleva = porLugar
+    ? `<span>${esc(T[getLang()].prizeLugar(k + 1))}:</span> ${esc(premio)}`
+    : `<span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(premio)}${varios ? ` #${k + 1}` : ""}`;
+  const tag = premio ? `<p class="winner-prize">${lleva}</p>` : varios ? `<p class="winner-prize">#${k + 1}</p>` : "";
   return `<div class="winner-card" style="transform: rotate(${k % 2 ? 1.5 : -1.5}deg)">
         <img src="${d.avatar(name, 128)}" alt="" />
         <div>
@@ -100,12 +110,19 @@ function tarjeta(d: DatosDeGanadores, k: number): string {
       </div>`;
 }
 
-/** Un renglón de la lista: su número, su nombre (con el id que lee `aria-describedby` del botón) y «No está». */
+/**
+ * Un renglón de la lista: su número, su nombre (con el id que lee `aria-describedby` del botón) y «No está». Con un
+ * premio por lugar, el de ese lugar va debajo del nombre; sin lugares, el premio de todos va una vez arriba de la lista.
+ */
 function fila(d: DatosDeGanadores, k: number): string {
   const name = nombreParaMostrar(d, k);
+  const premio = premioDeLugarEn(d.prize, k + 1);
+  const nombre = `<span class="winner-name" id="wn-${k}">${esc(name)}</span>`;
+  // El nombre queda en su propio elemento, como siempre: lo que lo busca en la página lo encuentra igual.
+  const quien = premio ? `<span class="winner-fila-quien">${nombre}<span class="winner-fila-premio">${esc(premio)}</span></span>` : nombre;
   return `<li class="winner-fila" value="${k + 1}">
         <span class="winner-num" aria-hidden="true">#${k + 1}</span>
-        <span class="winner-name" id="wn-${k}">${esc(name)}</span>
+        ${quien}
         ${d.reemplazo ? `<div class="ausente" data-k="${k}">${botonAusente(k, true)}</div>` : ""}
       </li>`;
 }
@@ -126,7 +143,10 @@ export function htmlDeGanadores(d: DatosDeGanadores): string {
     .map((v) => `<p class="again-note veces">${esc(T[getLang()].salioVarias(v.nombre, v.veces, v.puestos))}</p>`)
     .join("");
   if (!enLista(n)) return d.winners.map((_, k) => tarjeta(d, k)).join(" ") + varias;
-  const premio = d.prize ? `<p class="winner-prize winner-lista-premio"><span>${esc(t("winnersCadaUno"))}</span> ${esc(d.prize)}</p>` : "";
+  // «Cada quien se lleva» solo con un premio para todos: con premios por lugar, cada renglón dice el suyo (`fila`).
+  const porLugar = premioDeLugarEn(d.prize, 1) !== null;
+  const premio =
+    d.prize && !porLugar ? `<p class="winner-prize winner-lista-premio"><span>${esc(t("winnersCadaUno"))}</span> ${esc(d.prize)}</p>` : "";
   return (
     tarjeta(d, 0) +
     `<h3 class="winner-lista-t" id="winner-lista-t">${esc(t(d.stand ? "standOtros" : "winnersOtros").replace("{n}", String(n - 1)))}</h3>${premio}` +

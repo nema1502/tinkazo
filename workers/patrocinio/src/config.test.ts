@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it, vi } from "vitest";
-import { PRECIOS_POR_DEFECTO, leerConfig, leerPrecios } from "./config";
+import { PRECIOS_POR_DEFECTO, leerConfig, leerPrecios, unidadDe } from "./config";
+import { PorIp } from "./por-ip";
 import { HORIZON_MAINNET, POLLAR_SERVIDOR, ServidorAjeno, haciaHorizon, haciaPollar } from "./servidores";
 
 /** Todas las variables nuevas prendidas y bien escritas: lo que diría el portero de mainnet el día que se use todo. */
@@ -369,6 +370,27 @@ describe("PRECIOS", () => {
     expect(cfg.faltaAltas).toEqual(["precios"]);
   });
 
+  it("el producto por unidad solo: un precio por sorteo, sin el primer paquete", () => {
+    expect(leerPrecios("sorteo:1:1:365")).toEqual([{ id: "sorteo", usdc: "1", monto: 10_000_000, sorteos: 1, dias: 365 }]);
+    expect(unidadDe({ precios: leerPrecios("sorteo:1:1:365") })).toEqual({ id: "sorteo", usdc: "1", monto: 10_000_000, sorteos: 1, dias: 365 });
+  });
+
+  it("el producto por unidad con los paquetes fijos al lado", () => {
+    expect(leerPrecios("alta:2:3:365,sorteo:1.5:1:180,p10:5:10:365")).toEqual([
+      { id: "alta", usdc: "2", monto: 20_000_000, sorteos: 3, dias: 365 },
+      { id: "sorteo", usdc: "1.5", monto: 15_000_000, sorteos: 1, dias: 180 },
+      { id: "p10", usdc: "5", monto: 50_000_000, sorteos: 10, dias: 365 },
+    ]);
+    expect(unidadDe({ precios: leerPrecios(PRECIOS_POR_DEFECTO) })).toBeNull();
+  });
+
+  it("el producto por unidad mal escrito rechaza todo", () => {
+    const malos = ["sorteo:1:2:365", "sorteo:1:1", "sorteo:0:1:365", "sorteo:1:1:365,sorteo:2:1:365", "alta:2:3:365,sorteo:uno:1:365", "SORTEO:1:1:365"];
+    for (const mal of malos) {
+      expect(leerPrecios(mal), mal).toBeNull();
+    }
+  });
+
   it("sin PRECIOS (o vacío) valen los del diseño", () => {
     expect(leerConfig({ RED: "mainnet", PRECIOS: "" }).precios).toEqual(leerPrecios(PRECIOS_POR_DEFECTO));
     expect(leerConfig({ RED: "mainnet" }).precios).toEqual(leerPrecios(PRECIOS_POR_DEFECTO));
@@ -533,9 +555,19 @@ describe("wrangler.toml: el portero de testnet no cambia y el de mainnet es otro
     expect(valor("vars", "SOLO_SELLOS_PORTERO")).toBeUndefined();
   });
 
-  it("mainnet fija sus pagos por dirección para un stand que sale por la misma wifi", () => {
-    expect(valor("env.mainnet.vars", "POR_IP_POR_HORA")).toBe('"600"');
+  it("mainnet fija sus pagos por dirección para una sala que sale por la misma wifi", () => {
+    expect(valor("env.mainnet.vars", "POR_IP_POR_HORA")).toBe('"3000"');
     expect(valor("vars", "POR_IP_POR_HORA")).toBeUndefined();
+    // El valor por defecto del código no cambia: es el de testnet.
+    expect(leerConfig({ RED: "mainnet" }).porIpPorHora).toBe(240);
+  });
+
+  it("una sala de 150 personas por la misma wifi activa, sella y sortea veinte veces cada una en la hora", () => {
+    const cfg = leerConfig({ RED: "mainnet", POR_IP_POR_HORA: varsDeMainnet().POR_IP_POR_HORA });
+    expect(cfg.porIpPorHora).toBe(3000);
+    const porIp = new PorIp();
+    for (let i = 0; i < 150 * 20; i++) expect(porIp.toca("190.129.10.20", cfg.porIpPorHora)).toBe(true);
+    expect(porIp.toca("190.129.10.20", cfg.porIpPorHora)).toBe(false);
   });
 
   it("las siete variables de los pagos están solo en mainnet: las tres de prender en 1 y los números de siempre", () => {

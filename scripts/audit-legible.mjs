@@ -153,7 +153,7 @@ async function juzgarDom(page, textos, pantalla, tamano, tema, { conCaptura = tr
 
 /** Los pasos del sorteo, con el DOM. */
 async function pasosDom(browser, tamano, tema, opciones = {}) {
-  let page = await abrir(browser, tamano, `${base}/?theme=${tema}&lang=es`);
+  let page = await abrir(browser, tamano, `${base}/?theme=${tema}&lang=es&red=prueba`);
   await page.waitFor("document.readyState === 'complete'", 30_000);
   await sleep(900);
   await juzgarDom(page, JSON.parse(await page.eval(llamar(escanearDom, ""))), "inicio (la lista)", tamano, tema, opciones);

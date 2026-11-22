@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-titulo-clave="confirmarTitulo" data-desc-clave="confirmarDesc">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tu Amigo secreto, en Tinkazo</title>
+<title>Tu amigo secreto, en Tinkazo</title>
 <meta name="robots" content="noindex" />
-<meta name="description" content="A quién le regalás en el Amigo secreto: solo tu parte del reparto, con el nombre del sorteo y el número del sello." />
-<meta property="og:title" content="Tu Amigo secreto" />
-<meta property="og:description" content="A quién le regalás: solo tu parte del reparto." />
+<meta name="description" content="A quién le regalás en el amigo secreto." />
+<meta property="og:title" content="Tu amigo secreto" />
+<meta property="og:description" content="A quién le regalás en el amigo secreto." />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Tinkazo" />
 <meta property="og:url" content="https://tinkazo.app/confirmar.html" />
@@ -49,23 +49,23 @@
 <main>
   <!-- La página del enlace de cada persona en un Amigo secreto (issue #99, S6). Lo que dice viene en el fragmento
        del enlace, igual que el comprobante y la lista: no pasa por ningún servidor. Y dice solo la parte de quien
-       abre: a quién le regala, el nombre del sorteo y el número del sello. Nunca la lista entera. -->
-  <section class="hero" style="padding: 40px 0 8px">
+       abre: el nombre del sorteo y a quién le regala. Nunca la lista entera. Las dos secciones nacen escondidas y
+       src/confirmar.ts muestra una: con un enlace roto no queda a la vista ningún encabezado a medias. El aviso del
+       enlace roto va primero, con su propio título. -->
+  <section class="portada-sec confirmar-error" id="c-error" hidden>
+    <h1 data-i="confirmarError">Este enlace no funciona</h1>
+    <p class="sec-b" data-i="confirmarErrorB">Pedile a quien organizó que te lo mande de nuevo.</p>
+    <p class="confirmar-ir"><a class="primary" href="/" data-i="confirmarIr">Ir a Tinkazo</a></p>
+  </section>
+
+  <section class="hero confirmar-ok" id="c-ok" hidden>
     <div class="hero-copy">
-      <span class="sticker" style="background:var(--purple);color:#fff" data-i="confirmarT">Te toca regalarle a…</span>
-      <h1 style="font-size: clamp(30px, 4.4vw, 46px)" id="c-hacia">…</h1>
-      <p class="lead" data-i="confirmarNota">Este enlace dice solo a quién le regalás. No lleva la lista entera ni muestra el reparto de los demás.</p>
+      <span class="sticker" id="c-premio"></span>
+      <p class="lead confirmar-para" id="c-para"></p>
+      <h1 class="confirmar-hacia" id="c-hacia"></h1>
+      <p class="lead" data-i="confirmarNota">Es secreto: no se lo muestres a nadie.</p>
+      <a class="confirmar-como" href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
     </div>
-  </section>
-
-  <section class="portada-sec" id="c-error" style="display:none">
-    <p class="sec-b" data-i="confirmarError">Este enlace no trae un Amigo secreto.</p>
-  </section>
-
-  <section class="portada-sec lista-pg" id="c-ok" style="display:none">
-    <p class="kicker"><span data-i="confirmarPara">Para:</span> <b id="c-desde"></b></p>
-    <p class="kicker" id="c-premio-row" style="display:none"><span data-i="confirmarSorteo">Sorteo:</span> <b id="c-premio"></b></p>
-    <p class="kicker"><span data-i="confirmarSello">Número del sello:</span> <b class="mono" id="c-ronda"></b></p>
   </section>
 </main>
 
@@ -85,33 +85,8 @@
   </nav>
   <span data-i="footR">Hecho con ♥ en Bolivia</span>
 </div></footer>
-<!-- El módulo del fragmento: la página lo usa para leer su parte, y el build lo toma como entrada para traer
-     los textos de esta página en los dos idiomas (vite.config.ts, «textos por página»). -->
-<script type="module" src="/src/protocol/proof.ts"></script>
-<script type="module">
-import { decodeAmigo } from "/src/protocol/proof.ts";
-import { chooseLang, initialLang, setLang, textosDeLaPagina } from "/src/idioma.ts";
-import "/src/styles.css";
-
-textosDeLaPagina();
-setLang(initialLang());
-document.getElementById("l-es")?.addEventListener("click", () => chooseLang("es"));
-document.getElementById("l-en")?.addEventListener("click", () => chooseLang("en"));
-
-const $ = (id) => document.getElementById(id);
-try {
-  // Lo que dice la página viene en el fragmento: a quién le regala, el sorteo y el número del sello. Si falta algo,
-  // o el enlace trae otra cosa, se dice y no se inventa nada.
-  const parte = await decodeAmigo(location.hash);
-  $("c-desde").textContent = parte.from;
-  $("c-hacia").textContent = parte.to;
-  $("c-premio").textContent = parte.prize ?? "";
-  $("c-premio-row").style.display = parte.prize ? "" : "none";
-  $("c-ronda").textContent = String(parte.round);
-  $("c-ok").style.display = "block";
-} catch {
-  $("c-error").style.display = "block";
-}
-</script>
+<!-- Una entrada externa, como las demás páginas: carga lo común (src/pagina.ts: el tema, el menú, la cuenta y el
+     idioma), y el build la recorre para traer los textos de esta página en los dos idiomas (vite.config.ts). -->
+<script type="module" src="/src/confirmar.ts"></script>
 </body>
 </html>

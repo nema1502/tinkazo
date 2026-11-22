@@ -64,7 +64,7 @@ try {
     if (m.method === "Network.loadingFailed" && !m.params.canceled) fallidos.push(`${m.params.errorText} ${m.params.requestId}`);
   });
   await page.send("Network.enable");
-  await page.send("Page.navigate", { url: `${base}/?lang=es` });
+  await page.send("Page.navigate", { url: `${base}/?lang=es&red=prueba` });
   await page.waitFor("document.querySelector('.hero [data-entrar-stand]')", 20000);
   await sleep(1500);
 
@@ -91,7 +91,7 @@ try {
   check("«Empezar la ronda» en lugar de «Sellar»", await page.eval(`/Empezar la ronda/.test(document.getElementById('btn-freeze').textContent)`));
 
   // El atajo y la recarga pasan también por el estado de la red: ninguno puede volver a decir Sellar la lista.
-  await page.send("Page.navigate", { url: `${base}/?stand&lang=es` });
+  await page.send("Page.navigate", { url: `${base}/?stand&lang=es&red=prueba` });
   await page.waitFor("document.body.dataset.stand === '1'", 10000);
   check(
     "entrar por /?stand mantiene Empezar la ronda",

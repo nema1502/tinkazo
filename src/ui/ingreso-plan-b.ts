@@ -1,3 +1,4 @@
+import { network } from "../stellar/config";
 import { errorKey } from "../stellar/errores";
 import { ingresoPlanB, ingresoPlanBPrendida } from "../stellar/ingreso-bandera";
 import { codigoDeLaPersona, nombresDe } from "./ingreso-errores";
@@ -104,6 +105,17 @@ export interface DependenciasDeLaSalida {
  */
 export async function ofrecerSalida(e: unknown, paso: PasoDelIngreso, dep: DependenciasDeLaSalida = {}): Promise<boolean> {
   if (!ingresoPlanB(dep.env, dep.red)) return false;
+  if (quienFalla(e, paso) === "persona") return false;
+  return (dep.hayInternet ?? hayInternet)();
+}
+
+/**
+ * ¿Este aviso de ingreso ofrece Practicar en Prueba? Es la salida de Oficial, donde sin cuenta no se sortea: solo en
+ * Oficial, sin bandera, y con las mismas reglas que la de Prueba. La falla tiene que ser del proveedor o un plazo vencido, y
+ * la propia página tiene que seguir contestando. Una falla de la persona nunca la ofrece y no hace ni el pedido.
+ */
+export async function ofrecerPractica(e: unknown, paso: PasoDelIngreso, dep: DependenciasDeLaSalida = {}): Promise<boolean> {
+  if ((dep.red ?? network.name) !== "mainnet") return false;
   if (quienFalla(e, paso) === "persona") return false;
   return (dep.hayInternet ?? hayInternet)();
 }

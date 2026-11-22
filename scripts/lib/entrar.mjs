@@ -34,5 +34,15 @@ export const BOTON_ENTRAR_JS = `((() => { const p = document.querySelector(${JSO
 /** Verdadero cuando hay un botón de entrar para tocar. Para `page.waitFor`. */
 export const HAY_BOTON_ENTRAR_JS = `!!${BOTON_ENTRAR_JS}`;
 
+/**
+ * En la ventana de entrar, Entrar con Google va solo a la vista: el correo, la billetera y la cuenta de prueba esperan
+ * detrás del renglón Otras formas de entrar (`.login-otras`, un botón con `aria-expanded`). Esto lo despliega si está
+ * cerrado y no hace nada si ya está abierto o si la ventana no lo tiene (sin Google, o desde el navegador de una app).
+ * Devuelve `true` si lo desplegó. Para `page.eval`.
+ */
+export const SELECTOR_OTRAS_FORMAS_CERRADO = ".login-otras[aria-expanded='false']";
+export const ABRIR_OTRAS_FORMAS_JS =
+  `(() => { const b = document.querySelector(${JSON.stringify(SELECTOR_OTRAS_FORMAS_CERRADO)}); if (!b) return false; b.click(); return true; })()`;
+
 /** Toca el botón de entrar. Devuelve `true` si lo tocó y `false` si no había ninguno. Para `page.eval`. */
 export const TOCAR_ENTRAR_JS = `(() => { const b = ${BOTON_ENTRAR_JS}; if (!b) return false; b.click(); return true; })()`;

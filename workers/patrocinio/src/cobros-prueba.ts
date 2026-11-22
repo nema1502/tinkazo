@@ -6,9 +6,9 @@
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { Administracion } from "./admin";
 import { type PollarDeMentira, SECRETO_CUPON, montarAltas } from "./altas-prueba";
-import { Cobros, EMISOR_USDC, LectorDeCobros } from "./cobros";
+import { Cobros, type Conversion, EMISOR_USDC, LectorDeCobros } from "./cobros";
 import { ComprasQr } from "./compras";
-import { type Env, leerConfig } from "./config";
+import { type Env, leerConfig, unidadDe } from "./config";
 import { PuertaAltas } from "./rutas-altas";
 import { HORIZON_MAINNET } from "./servidores";
 
@@ -108,17 +108,36 @@ export const IDS = ["ABCD2345", "K7M29QXA", "4HTR0PQZ", "MN56VWXY", "1234ABCD", 
  */
 export const PRECIOS_DE_PRUEBA = "alta:2:3:365,p10:5:10:365,p50:20:50:365";
 
-export function montarPagos(env: Partial<Env> = {}, opciones: { cadaMs?: number; sql?: NonNullable<Parameters<typeof montarAltas>[1]>["sql"] } = {}) {
+/**
+ * Los precios de las pruebas de la venta por unidad: 1 USDC por sorteo, por un año, junto a los paquetes de siempre.
+ */
+export const PRECIOS_POR_UNIDAD = "sorteo:1:1:365,alta:2:3:365,p10:5:10:365";
+
+export function montarPagos(
+  env: Partial<Env> = {},
+  opciones: { cadaMs?: number; sql?: NonNullable<Parameters<typeof montarAltas>[1]>["sql"]; porUnidad?: boolean } = {},
+) {
   const m = montarAltas({ ALTAS_PAGO: "1", CUENTA_COBROS: COBROS, PRECIOS: PRECIOS_DE_PRUEBA, ...env }, opciones.sql ? { sql: opciones.sql } : {});
   const h = horizonDeCobros(COBROS);
   let i = 0;
-  const cobros = new Cobros(m.sql, m.cupos, { idAlAzar: () => IDS[i++] ?? "QQQQ9999" });
+  // Con `porUnidad`, como en el objeto con el producto por unidad en `PRECIOS`: la conversión mira los frenos de la puerta y
+  // cada lectura refresca antes el saldo de créditos. Sin eso, todo como siempre.
+  let puertaDeLaConversion: PuertaAltas | null = null;
+  const unidad = unidadDe(m.cfg);
+  const conversion: Conversion | null =
+    opciones.porUnidad && unidad ? { precio: () => unidad, permite: (c, ahora) => puertaDeLaConversion?.permiteConvertir(c, ahora) ?? false } : null;
+  // Y la lectura nueva: los pagos chicos sin orden no escriben fila y la lectura se pone al día con muchas páginas.
+  const vigilante = conversion ? { vigilante: true } : {};
+  const cobros = new Cobros(m.sql, m.cupos, { idAlAzar: () => IDS[i++] ?? "QQQQ9999", ...(conversion ? { conversion } : {}), ...vigilante });
   const registrar = (e: string, d?: Record<string, string | number>) => void m.anotado.push([e, d]);
-  const lector = new LectorDeCobros({ cobros, cuenta: COBROS, fetch: h.fetch, reloj: m.hora, registrar, cadaMs: opciones.cadaMs ?? 0 });
+  const pollar = m.pollar;
+  const antes = conversion && pollar ? { antes: () => pollar.creditos(), alDia: true } : {};
+  const lector = new LectorDeCobros({ cobros, cuenta: COBROS, fetch: h.fetch, reloj: m.hora, registrar, cadaMs: opciones.cadaMs ?? 0, ...antes });
   // Como en el objeto: si al arrancar no se pudo sumar la hora del último aviso, la vigilancia la cuenta sin ella.
   const compras = new ComprasQr(m.sql, m.cfg);
   if (m.cupos.faltaColumna("compras_qr", "avisada")) compras.sinHoraDeAviso();
   const puerta = new PuertaAltas({ cfg: m.cfg, cupos: m.cupos, altas: m.altas, pollar: m.pollar, cuponSecreto: SECRETO_CUPON, red: m.red, reloj: m.hora, registrar, cobros, lector, compras });
+  puertaDeLaConversion = puerta;
   const admin = new Administracion({ cfg: m.cfg, cupos: m.cupos, altas: m.altas, cuponSecreto: SECRETO_CUPON, red: m.red, reloj: m.hora, registrar, cobros, lector, compras });
   const pm: PollarDeMentira = m.pm;
   const ip = "190.129.10.20";
@@ -151,6 +170,8 @@ export function montarPagos(env: Partial<Env> = {}, opciones: { cadaMs?: number;
     estado: (token: string | null) => puerta.estado({ token, ip, cuerpo: {} }),
     cupon: (token: string | null, c: unknown) => puerta.cupon({ token, ip, cuerpo: { cupon: c } }),
     orden: (token: string | null, producto: unknown) => puerta.atenderPago("orden", { token, ip, cuerpo: { producto } }),
+    /** La orden por unidad: el producto `sorteo` con su cantidad. */
+    ordenPorUnidad: (token: string | null, cantidad: unknown) => puerta.atenderPago("orden", { token, ip, cuerpo: { producto: "sorteo", cantidad } }),
     pago: (token: string | null, orden: unknown) => puerta.atenderPago("pago", { token, ip, cuerpo: { orden } }),
     empezar: (token: string | null, producto: unknown) => puerta.atenderCompra("empezar", { token, ip, cuerpo: { producto } }),
     /** El aviso de carga; `extra` suma campos al cuerpo (`{reemplazar: true}`). */

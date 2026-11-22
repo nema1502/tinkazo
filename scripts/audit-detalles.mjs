@@ -32,7 +32,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
-import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
+import { ABRIR_OTRAS_FORMAS_JS, HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -69,7 +69,7 @@ async function abrir(browser, v, tema, query = "", hash = "#sortear") {
   const page = await browser.open("about:blank");
   await page.send("Emulation.setDeviceMetricsOverride", { width: v.w, height: v.h, deviceScaleFactor: 1, mobile: v.celular, screenWidth: v.w, screenHeight: v.h });
   const sep = query ? "&" : "?";
-  await page.send("Page.navigate", { url: `${base}/${query}${sep}theme=${tema}&lang=es${hash}` });
+  await page.send("Page.navigate", { url: `${base}/${query}${sep}theme=${tema}&lang=es&red=prueba${hash}` });
   await page.waitFor("document.readyState === 'complete'", 20000);
   await sleep(900);
   return page;
@@ -133,6 +133,8 @@ async function cuentaDePrueba(page) {
   await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
   await page.eval(TOCAR_ENTRAR_JS);
   await page.waitFor("document.querySelector('.login-opt')", 15000);
+  // La cuenta de prueba está detrás de Otras formas de entrar: se despliega antes de buscarla.
+  await page.eval(ABRIR_OTRAS_FORMAS_JS);
   await page.eval("[...document.querySelectorAll('.login-opt')].find((e) => /prueba|Test account/.test(e.textContent))?.click(); true");
   const entro = await page.waitFor("!document.querySelector('.modal-back') && document.querySelector('#wallet-box .hello')", 60000);
   if (!entro.ok) throw new Error("no entró la cuenta de prueba");
@@ -397,7 +399,7 @@ const DETALLES = {
         await sleep(900);
         await sellar(page);
         const cuenta = await page.eval("document.getElementById('wait-left').textContent");
-        check(`${quien} · con la lista sellada otra vez, la caja vuelve a contar`, /^\d+:\d\d$|^Ya salió el número/.test(cuenta), `"${cuenta}"`);
+        check(`${quien} · con la lista sellada otra vez, la caja vuelve a contar`, /^\d+:\d\d$|^Ya se puede sortear/.test(cuenta), `"${cuenta}"`);
         await sortearYSaltar(page);
         await page.eval("document.getElementById('btn-grande').focus({ preventScroll: true }); true");
         await sleep(1400);
@@ -463,7 +465,7 @@ const DETALLES = {
           { organizer: addr, listHash: "b".repeat(64), count: 11, numWinners: 1, round: 33000101, sealedAt: ahora - 3000, prize: "Polera", winners: ["Luis Mamani"], proof: "https://tinkazo.app/verificar.html#p=dos" },
         ];
         await page.eval(`localStorage.setItem('tinkazo.history.testnet', ${js(JSON.stringify(filas))}); localStorage.removeItem('tinkazo.eventos.testnet'); true`);
-        await page.send("Page.navigate", { url: `${base}/?grifo=0&theme=${tema}&lang=es#mis-sorteos` });
+        await page.send("Page.navigate", { url: `${base}/?grifo=0&theme=${tema}&lang=es&red=prueba#mis-sorteos` });
         await page.waitFor("document.readyState === 'complete'", 20000);
         const hay = await page.waitFor("document.querySelector('[data-nombrar]')", 30000);
         if (!hay.ok) throw new Error('no apareció "Ponerle nombre"');

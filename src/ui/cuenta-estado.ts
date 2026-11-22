@@ -53,6 +53,12 @@ export type EstadoCuenta =
 export const MARCA_INGRESAR = "tinkazo.ingresar";
 
 /**
+ * La marca de Practicar en Prueba (`practicarEnPrueba` en modo-ui.ts): la página que abre en Prueba la lee una sola vez y
+ * entra sola con la cuenta de prueba, sin pasar por la ventana de entrar (`initWalletUI`). Vive en la pestaña.
+ */
+export const MARCA_PRACTICAR = "tinkazo.entrar.prueba";
+
+/**
  * La vía de la sesión que quedó guardada en este navegador, sin cargar ninguna billetera: las páginas de lectura solo
  * saben esto. `kind` es el tipo de sesión guardado (`session-store.ts`) y `marcaPollar` por dónde entró con Pollar
  * (`tinkazo.pollar.intent`: Google o correo, que se guardan los dos como "google").

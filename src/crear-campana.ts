@@ -11,6 +11,10 @@ import { achicarLogo, depsDelNavegador } from "./campana/crear/logo";
 import { zonaDelNavegador } from "./campana/crear/horas";
 import { sufijoNuevo } from "./campana/crear/estado";
 import { costoDelRetiroTexto } from "./costo-del-retiro";
+import { guardarBorrador } from "./campana/borrador";
+import { comisionDelBuild } from "./stellar/comision-config";
+import { comisionDelArmado } from "./campana/crear/costo";
+import { entornoDelBuild } from "./stellar/venta-piloto";
 
 const raiz = document.querySelector<HTMLElement>("#ccp");
 const aviso = document.querySelector<HTMLElement>("#ccp-aviso");
@@ -54,7 +58,19 @@ function compartirConElSistema(): DepsDelCreador["compartir"] {
   };
 }
 
+/**
+ * Deja la campaña como borrador (solo el JSON, nada personal) y lleva al panel de la portada en el modo oficial, que cobra,
+ * activa y abre la inscripción. Si el navegador no deja guardar, no se va: la persona se queda y se le dice.
+ */
+function activarEnElPanel(texto: string): boolean {
+  if (!guardarBorrador(almacenLocal(), texto)) return false;
+  location.assign("/?campana&red=oficial");
+  return true;
+}
+
 function depsReales(): DepsDelCreador {
+  // Lo que cobra Tinkazo, el mismo cobro que después pide el panel de la portada.
+  const cobro = comisionDelBuild(entornoDelBuild());
   return {
     tx: texto,
     dic: (idioma, clave) => String(textos(idioma)[clave] ?? clave),
@@ -74,6 +90,11 @@ function depsReales(): DepsDelCreador {
     descargar: bajarTexto,
     compartir: compartirConElSistema(),
     costo: costoDelRetiroTexto,
+    // Activar solo se ofrece con lo que cobra Tinkazo configurado: es el mismo cobro que después pide el panel. Sin eso, la
+    // página es la de siempre y solo baja la campaña.
+    activar: cobro === null ? undefined : activarEnElPanel,
+    // El resumen dice el servicio y el total a poner antes de pedir nada, calculados para esta campaña.
+    comision: comisionDelArmado(cobro),
     origen: location.origin,
     tema: parametros.get("theme"),
     cuadro: (f) => {

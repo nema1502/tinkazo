@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLAVE_VENTANA, marcarVentana } from "../campana/invitada";
 
@@ -14,12 +15,26 @@ const h = vi.hoisted(() => ({
   callar: vi.fn(),
   esperarla: vi.fn(),
   permitir: vi.fn(),
+  red: "mainnet" as "mainnet" | "testnet",
+  montar: vi.fn(),
+  avisar: vi.fn(),
 }));
 
 vi.mock("../stellar/config", async (orig) => {
   const o = await orig<typeof import("../stellar/config")>();
-  return { ...o, network: { ...o.network, name: "mainnet" } };
+  return {
+    ...o,
+    hayModoOficial: true,
+    network: {
+      ...o.network,
+      get name() {
+        return h.red;
+      },
+    },
+  };
 });
+vi.mock("./campana-sala", () => ({ montarPanelDeCampana: () => h.montar() }));
+vi.mock("./campana-pendiente", () => ({ avisarEnPrueba: () => h.avisar() }));
 vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false, enPractica: () => false }));
 vi.mock("./wallet-ui", () => ({ currentSession: () => h.sesion }));
 vi.mock("./saldo", () => ({ abrirSaldo: (...a: unknown[]) => h.abrirSaldo(...a) }));
@@ -50,7 +65,9 @@ beforeEach(() => {
   vi.stubEnv("VITE_RAMPA", "premios");
   h.sesion = null;
   h.sala = false;
-  for (const f of [h.abrirSaldo, h.callar, h.esperarla, h.permitir]) f.mockReset();
+  h.red = "mainnet";
+  localStorage.clear();
+  for (const f of [h.abrirSaldo, h.callar, h.esperarla, h.permitir, h.montar, h.avisar]) f.mockReset();
   h.abrirSaldo.mockResolvedValue(undefined);
   sessionStorage.clear();
   document.body.innerHTML = "";
@@ -169,5 +186,157 @@ describe("la entrada de quien ganó", () => {
     expect(location.search).toBe("?red=oficial&premio=1&lang=es");
     await dejarCorrer();
     expect(h.abrirSaldo).not.toHaveBeenCalled();
+  });
+});
+
+describe("la campaña por activar que dejó crear-campana.html", () => {
+  const BORRADOR = JSON.stringify({ evento: "panaderia-la-estrella-x", empresa: { nombre: "Panadería La Estrella" } });
+
+  it("con el borrador y sin ?campana, en Oficial: monta el panel y abre la herramienta", async () => {
+    localStorage.setItem("tinkazo.campana.borrador", BORRADOR);
+    const cambios: string[] = [];
+    const alCambiar = (): void => void cambios.push(location.hash);
+    addEventListener("hashchange", alCambiar);
+    await arrancar();
+    removeEventListener("hashchange", alCambiar);
+    await vi.waitFor(() => expect(h.montar).toHaveBeenCalledTimes(1));
+    expect(location.hash).toBe("#sortear");
+    expect(cambios).toEqual(["#sortear"]);
+    expect(h.avisar).not.toHaveBeenCalled();
+  });
+
+  it("con sesión y con el borrador: la página abre la herramienta, y ahí la sección del sorteo se ve con el panel adentro", async () => {
+    h.sesion = { address: "GORGANIZA" };
+    localStorage.setItem("tinkazo.campana.borrador", BORRADOR);
+    history.replaceState(null, "", "/?campana&red=oficial");
+    // La vista la cambia main.ts con el fragmento: #sortear es la herramienta, la misma que abre Sortear del menú.
+    const main = readFileSync("src/main.ts", "utf8");
+    expect(main).toMatch(/if \(h === "#sortear" \|\| h === "#ta"\) setVista\("app", "nuevo"\);/);
+    expect(main).toContain('addEventListener("hashchange", () => void porHash());');
+    const html = readFileSync("index.html", "utf8");
+    document.body.innerHTML = /<body[^>]*>([\s\S]*)<\/body>/.exec(html)?.[1] ?? "";
+    document.body.dataset.vista = "portada";
+    const porHash = (): void => {
+      if (location.hash === "#sortear") document.body.dataset.vista = "app";
+    };
+    addEventListener("hashchange", porHash);
+    await arrancar();
+    removeEventListener("hashchange", porHash);
+    await vi.waitFor(() => expect(h.montar).toHaveBeenCalledTimes(1));
+    expect(document.body.dataset.vista).toBe("app");
+    // En la herramienta la sección del sorteo se ve (styles.css esconde .app-only solo en la portada), y el panel se monta
+    // antes de #origenes, que vive en ella (montarPanelDeCampana).
+    const seccion = document.getElementById("sec-participants");
+    expect(seccion?.classList.contains("app-only")).toBe(true);
+    expect(seccion?.contains(document.getElementById("origenes"))).toBe(true);
+    const css = readFileSync("src/styles.css", "utf8");
+    expect(css).toContain('body[data-vista="portada"] .app-only { display: none !important; }');
+  });
+
+  it("tocar Sortear en el menú (sin ?campana y con #sortear) igual la monta, sin tocar la dirección", async () => {
+    localStorage.setItem("tinkazo.campana.borrador", BORRADOR);
+    history.replaceState(null, "", "/#sortear");
+    await arrancar();
+    await vi.waitFor(() => expect(h.montar).toHaveBeenCalledTimes(1));
+    expect(location.hash).toBe("#sortear");
+  });
+
+  it("Mis sorteos se respeta: monta el panel sin cambiar de vista", async () => {
+    localStorage.setItem("tinkazo.campana.borrador", BORRADOR);
+    history.replaceState(null, "", "/#mis-sorteos");
+    await arrancar();
+    await vi.waitFor(() => expect(h.montar).toHaveBeenCalledTimes(1));
+    expect(location.hash).toBe("#mis-sorteos");
+  });
+
+  it("en Prueba no monta el panel: avisa y deja la portada como está", async () => {
+    h.red = "testnet";
+    localStorage.setItem("tinkazo.campana.borrador", BORRADOR);
+    await arrancar();
+    await vi.waitFor(() => expect(h.avisar).toHaveBeenCalledTimes(1));
+    await dejarCorrer();
+    expect(h.montar).not.toHaveBeenCalled();
+    expect(location.hash).toBe("");
+  });
+
+  it("sin borrador no baja nada: ni el panel ni el aviso, y la dirección queda igual", async () => {
+    await arrancar();
+    await dejarCorrer();
+    expect(h.montar).not.toHaveBeenCalled();
+    expect(h.avisar).not.toHaveBeenCalled();
+    expect(location.hash).toBe("");
+    h.red = "testnet";
+    await arrancar();
+    await dejarCorrer();
+    expect(h.montar).not.toHaveBeenCalled();
+    expect(h.avisar).not.toHaveBeenCalled();
+  });
+
+  it("con ?campana y sin borrador sigue montando el panel, y abre la herramienta donde vive", async () => {
+    history.replaceState(null, "", "/?campana&red=oficial");
+    await arrancar();
+    await vi.waitFor(() => expect(h.montar).toHaveBeenCalledTimes(1));
+    expect(location.hash).toBe("#sortear");
+  });
+
+  it("un borrador roto no cambia nada: ni la vista, ni el panel, ni el aviso", async () => {
+    for (const crudo of ["basura", "{}", "null", JSON.stringify({ evento: "x" }), JSON.stringify({ empresa: { nombre: "A" } })]) {
+      localStorage.setItem("tinkazo.campana.borrador", crudo);
+      history.replaceState(null, "", "/");
+      for (const red of ["mainnet", "testnet"] as const) {
+        h.red = red;
+        await arrancar();
+        await dejarCorrer();
+        expect(h.montar, crudo).not.toHaveBeenCalled();
+        expect(h.avisar, crudo).not.toHaveBeenCalled();
+        expect(location.hash, crudo).toBe("");
+      }
+    }
+  });
+
+  it("sin almacenamiento no pasa nada", async () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("bloqueado");
+    });
+    await arrancar();
+    await dejarCorrer();
+    getItem.mockRestore();
+    expect(h.montar).not.toHaveBeenCalled();
+    expect(location.hash).toBe("");
+  });
+
+  it("la clave del borrador es la misma que usa borrador.ts", async () => {
+    const { CLAVE_DEL_BORRADOR } = await import("../campana/borrador");
+    const { CLAVE_DEL_BORRADOR_AQUI } = await import("./campana-arranque");
+    expect(CLAVE_DEL_BORRADOR_AQUI).toBe(CLAVE_DEL_BORRADOR);
+  });
+
+  it("con ?campana y con sesión, sin borrador: abre la herramienta con el panel, como Sortear del menú", async () => {
+    h.sesion = { address: "GORGANIZA" };
+    history.replaceState(null, "", "/?campana&red=oficial");
+    await arrancar();
+    await vi.waitFor(() => expect(h.montar).toHaveBeenCalledTimes(1));
+    expect(location.hash).toBe("#sortear");
+  });
+
+  it("con una demostración en la dirección, el borrador no se pone encima", async () => {
+    localStorage.setItem("tinkazo.campana.borrador", BORRADOR);
+    history.replaceState(null, "", "/?demo=race");
+    await arrancar();
+    await dejarCorrer();
+    expect(h.montar).not.toHaveBeenCalled();
+    expect(location.hash).toBe("");
+    h.red = "testnet";
+    await arrancar();
+    await dejarCorrer();
+    expect(h.avisar).not.toHaveBeenCalled();
+  });
+
+  it("la entrada de quien ganó no se mezcla: con el premio en la dirección no monta la campaña", async () => {
+    localStorage.setItem("tinkazo.campana.borrador", BORRADOR);
+    history.replaceState(null, "", "/?red=oficial&premio=1");
+    await arrancar();
+    await dejarCorrer();
+    expect(h.montar).not.toHaveBeenCalled();
   });
 });

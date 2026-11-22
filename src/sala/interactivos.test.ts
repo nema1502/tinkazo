@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { validarRondaDeSala } from "../../workers/sala/src/logica";
 import { listHash } from "../protocol/canonical";
 import { select } from "../protocol/select";
-import { cifrarNombre, generarClave } from "./cifra";
+import { cifrarNombre, generarClave, huellaNombre } from "./cifra";
 import { cerrarListaEnSala, compartirRonda, escucharSala, type Sala } from "./cliente";
 import { anotarseEnSala, datosDeParticipante, enlaceDeParticipante, ganadoresDe, resultadoPersonal, seguirVivo, type RondaViva } from "./participante";
 
@@ -114,6 +114,19 @@ describe("la pantalla comparte la ronda y cierra la lista", () => {
     expect(f).toHaveBeenCalledWith("http://sala.test/v1/sala/AbCd1234/cierre", { method: "POST", headers: { Authorization: `Bearer ${sala.token}` } });
     await expect(cerrarListaEnSala(sala, { fetch: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) })).resolves.toBe(false);
   });
+
+  it("un 404 al cerrar la lista no es una lista cerrada: vuelve aparte, para decirlo", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta({ error: "no-existe" }, 404));
+    await expect(cerrarListaEnSala(sala, { fetch: f })).resolves.toBe("no-existe");
+    await expect(cerrarListaEnSala(sala, { fetch: vi.fn().mockResolvedValue(respuesta({ error: "token" }, 403)) })).resolves.toBe(false);
+  });
+
+  it("un 404 al compartir la ronda vuelve aparte, y otro fallo es un fallo común", async () => {
+    const ronda = { r: 9, randomness: "a".repeat(64), listHash: "b".repeat(64), k: 3 };
+    const noEsta = vi.fn().mockResolvedValue(respuesta({ error: "no-existe" }, 404));
+    await expect(compartirRonda(sala, ronda, { fetch: noEsta })).resolves.toBe("no-existe");
+    await expect(compartirRonda(sala, ronda, { fetch: vi.fn().mockResolvedValue(new Response("no", { status: 500 })) })).resolves.toBe(false);
+  });
 });
 
 /* --------------------------------------------------------- el participante */
@@ -143,9 +156,30 @@ describe("el participante se anota", () => {
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("http://sala.test/v1/sala/AbCd1234");
     expect(init.method).toBe("POST");
-    const dato = String(init.body);
-    expect(dato).not.toContain("Ana");
-    expect(await descifra(sala.clave, dato)).toBe("Ana Quispe");
+    expect(String(init.body)).not.toContain("Ana");
+    const { d } = JSON.parse(String(init.body)) as { d: string };
+    expect(await descifra(sala.clave, d)).toBe("Ana Quispe");
+  });
+  it("manda el JSON que pide una sala nueva: el nombre cifrado, su huella con la clave del QR y la llave del celular", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta({ n: 1 }, 201));
+    await anotarseEnSala(sala.id, sala.clave, "Ana Quispe", sala.servicio, { fetch: f });
+    const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.headers).toEqual({ "Content-Type": "application/json" });
+    const cuerpo = JSON.parse(String(init.body)) as { d: string; h: string; llave: string };
+    expect(Object.keys(cuerpo).sort()).toEqual(["d", "h", "llave"]);
+    expect(cuerpo.h).toBe(await huellaNombre(sala.clave, "Ana Quispe"));
+    expect(cuerpo.llave).toMatch(/^[A-Za-z0-9_-]{22}$/);
+  });
+  it("el mismo celular manda siempre la misma llave en la misma sala", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta({ n: 1 }, 201));
+    await anotarseEnSala("LlAv1234", sala.clave, "Ana", sala.servicio, { fetch: f });
+    await anotarseEnSala("LlAv1234", sala.clave, "Ana Quispe", sala.servicio, { fetch: f });
+    const llaves = f.mock.calls.map((c) => (JSON.parse(String((c[1] as RequestInit).body)) as { llave: string }).llave);
+    expect(llaves[0]).toBe(llaves[1]);
+  });
+  it("toma como bien el 200 de la sala, que es la respuesta al mismo celular que vuelve a mandar su nombre", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta({ n: 4, r: [2] }, 200));
+    await expect(anotarseEnSala(sala.id, sala.clave, "Ana", sala.servicio, { fetch: f })).resolves.toEqual({ ok: true, n: 4 });
   });
   it("dice el motivo cuando la sala no lo acepta, y «red» si no hay red", async () => {
     await expect(anotarseEnSala(sala.id, sala.clave, "Ana", sala.servicio, { fetch: vi.fn().mockResolvedValue(respuesta({ error: "cerrada" }, 409)) })).resolves.toEqual({ ok: false, motivo: "cerrada" });
@@ -163,9 +197,17 @@ describe("el participante sigue la sala", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  /** Espera a que algo pase: descifrar nombres usa crypto de verdad, y hay que darle vueltas al bucle. */
+  /**
+   * Espera a que algo pase: descifrar nombres usa crypto de verdad, y hay que darle vueltas al bucle. Cada vuelta pasa
+   * también por el mismo grupo de hilos donde corre el descifrado: con la máquina cargada, la espera se estira al mismo
+   * ritmo y no se acaba antes de que lleguen los nombres (con vueltas de reloj falso solamente, se acababa en unos
+   * 20 ms y a veces llegaba un solo nombre de los dos).
+   */
   async function hasta(condicion: () => boolean): Promise<void> {
-    for (let i = 0; i < 200 && !condicion(); i++) await vi.advanceTimersByTimeAsync(50);
+    for (let i = 0; i < 200 && !condicion(); i++) {
+      await vi.advanceTimersByTimeAsync(50);
+      await crypto.subtle.digest("SHA-256", new Uint8Array(0));
+    }
   }
 
   it("pide /vivo sin token, descifra los nombres y avanza el cursor", async () => {
@@ -209,6 +251,89 @@ describe("el participante sigue la sala", () => {
     expect(alVencida).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(10_000);
     expect(f).toHaveBeenCalledTimes(1);
+    s.parar();
+  });
+
+  it("si la sala contesta que se fue (410) también avisa y para", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta({ error: "no-existe" }, 410));
+    const alVencida = vi.fn();
+    const s = seguirVivo(sala.id, generarClave(), sala.servicio, { alNombre: vi.fn(), alVencida }, { fetch: f });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(alVencida).toHaveBeenCalledTimes(1);
+    s.parar();
+  });
+
+  it("sin la lista de números en la respuesta, sigue la sala igual y no da nada por cerrado", async () => {
+    const clave = generarClave();
+    const d1 = await cifrarNombre(clave, "Ana");
+    const f = vi.fn().mockResolvedValue(respuesta({ hay: 1, estado: "abierta", ronda: null, nombres: [{ n: 1, d: d1 }] }));
+    const alNombre = vi.fn();
+    const alVencida = vi.fn();
+    const alQuitado = vi.fn();
+    const s = seguirVivo(sala.id, clave, sala.servicio, { alNombre, alVencida, alQuitado }, { fetch: f });
+    await hasta(() => f.mock.calls.length >= 3);
+    expect(alNombre.mock.calls).toEqual([[1, "Ana"]]);
+    expect(alVencida).not.toHaveBeenCalled();
+    expect(alQuitado).not.toHaveBeenCalled();
+    s.parar();
+  });
+
+  it("un error del servicio no saca a nadie: vuelve a pedir", async () => {
+    const clave = generarClave();
+    const d1 = await cifrarNombre(clave, "Ana");
+    let pedido = 0;
+    const f = vi.fn().mockImplementation(async () => {
+      pedido++;
+      if (pedido === 1) return new Response("no", { status: 500 });
+      return respuesta({ hay: 1, estado: "abierta", ronda: null, ns: [1], nombres: [{ n: 1, d: d1 }] });
+    });
+    const alNombre = vi.fn();
+    const alVencida = vi.fn();
+    const s = seguirVivo(sala.id, clave, sala.servicio, { alNombre, alVencida }, { fetch: f });
+    await hasta(() => alNombre.mock.calls.length === 1);
+    expect(alNombre).toHaveBeenCalledWith(1, "Ana");
+    expect(alVencida).not.toHaveBeenCalled();
+    s.parar();
+  });
+
+  it("un corte de red tampoco: vuelve a pedir cada 3 s", async () => {
+    const f = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const alVencida = vi.fn();
+    const s = seguirVivo(sala.id, generarClave(), sala.servicio, { alNombre: vi.fn(), alVencida }, { fetch: f });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(f).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(alVencida).not.toHaveBeenCalled();
+    s.parar();
+  });
+
+  it("tras cinco pedidos fallidos seguidos deja de mirar y lo avisa una vez", async () => {
+    const f = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const alVencida = vi.fn();
+    const s = seguirVivo(sala.id, generarClave(), sala.servicio, { alNombre: vi.fn(), alVencida }, { fetch: f });
+    await vi.advanceTimersByTimeAsync(4 * 3_000 + 10);
+    expect(f).toHaveBeenCalledTimes(5);
+    expect(alVencida).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(f).toHaveBeenCalledTimes(5);
+    s.parar();
+  });
+
+  it("una respuesta buena vuelve a poner en cero la cuenta de fallos", async () => {
+    let pedido = 0;
+    // Cuatro fallos, una buena y otros cuatro fallos: nunca cinco seguidos.
+    const f = vi.fn().mockImplementation(async () => {
+      pedido++;
+      if (pedido === 5) return respuesta({ hay: 0, estado: "abierta", ronda: null, ns: [], nombres: [] });
+      if (pedido <= 9) throw new TypeError("Failed to fetch");
+      return respuesta({ hay: 0, estado: "abierta", ronda: null, ns: [], nombres: [] });
+    });
+    const alVencida = vi.fn();
+    const s = seguirVivo(sala.id, generarClave(), sala.servicio, { alNombre: vi.fn(), alVencida }, { fetch: f });
+    await vi.advanceTimersByTimeAsync(9 * 3_000 + 10);
+    expect(f.mock.calls.length).toBeGreaterThanOrEqual(10);
+    expect(alVencida).not.toHaveBeenCalled();
     s.parar();
   });
 

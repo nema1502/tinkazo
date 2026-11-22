@@ -249,14 +249,18 @@
      redonda, limpia y centrada, con los colores de Tinkazo. Es la única
      tarjeta redonda del sitio a propósito: se lee como el momento de entrar,
      no como una parte más de la página. */
+  /* Anclada arriba y no centrada: al desplegar Otras formas de entrar la lista crece hacia abajo, y lo de arriba (Google y
+     el renglón que se tocó) se queda quieto debajo del dedo. Centrada, toda la ventana subía unos 100 px. */
   .modal-card.login {
-    position: relative; max-width: min(420px, calc(100vw - 28px));
-    max-height: calc(100vh - 2 * var(--modal-pad)); max-height: calc(100dvh - 2 * var(--modal-pad)); overflow-y: auto;
+    --login-arriba: min(6vh, 64px);
+    position: relative; max-width: min(420px, calc(100vw - 28px)); margin: var(--login-arriba) auto auto;
+    max-height: calc(100vh - 2 * var(--modal-pad) - var(--login-arriba));
+    max-height: calc(100dvh - 2 * var(--modal-pad) - var(--login-arriba)); overflow-y: auto;
     border: 0; border-radius: 22px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.38);
     padding: 34px 32px 16px; gap: 0;
   }
   .login-x {
-    position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; display: grid; place-items: center;
+    position: absolute; top: 12px; right: 12px; width: 48px; height: 48px; display: grid; place-items: center;
     background: var(--card); color: var(--ink2); border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
   }
   .login-x:hover { color: var(--ink); border-color: var(--ink2); }
@@ -308,23 +312,44 @@
   /* La billetera y la cuenta de prueba, plegadas: casi nadie las necesita. */
   .login-mas { margin-top: 18px; }
   .login-mas > summary {
-    display: flex; align-items: center; justify-content: center; min-height: 44px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; min-height: 48px; cursor: pointer;
     color: var(--ink2); font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
   }
   .login-mas[open] > summary { margin-bottom: 10px; }
+  /* Otras formas de entrar: un solo renglón debajo de Google que despliega el correo, la billetera y la cuenta de prueba. */
+  .login-otras {
+    display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; margin-top: 18px; padding: 0;
+    background: none; border: 0; cursor: pointer; font-family: inherit;
+    color: var(--ink2); font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .login-otras[aria-expanded="true"] { margin-bottom: 10px; }
+  .login-otras-lista { display: flex; flex-direction: column; gap: 10px; }
+  .login-otras-lista[hidden] { display: none; }
+  /* Lo que este navegador ya usa, a la vista debajo de Google. */
+  .login-recordadas { margin-top: 10px; }
   /* Desde el navegador de una app: por qué el correo va primero. */
   .login-app { margin: 0 0 14px; padding: 10px 12px; border-left: 6px solid var(--orange); background: var(--field); font-size: 16px; font-weight: 600; color: var(--ink); line-height: 1.45; }
   .login-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 0 18px; margin-top: 8px; }
   .login-link {
-    min-height: 44px; padding: 0 4px; background: none; border: 0; cursor: pointer;
+    min-height: 48px; padding: 0 4px; background: none; border: 0; cursor: pointer;
     color: var(--ink2); font-family: inherit; font-size: 16px; font-weight: 700; text-decoration: underline;
   }
   .login-link:disabled { opacity: 0.5; cursor: default; }
+  /* Copiar el enlace, pegado al aviso del navegador de una app, y Practicar sin cuenta, debajo de las formas de entrar. */
+  .login-copiar { display: flex; justify-content: center; margin: -8px 0 6px; }
+  /* Practicar sin cuenta no es otra forma de entrar: lleva a Prueba. Más aire arriba y letra sin negrita (de 16 px, el
+     piso de la ventana de ingreso) para que no se lea como un par de Otras formas de entrar. */
+  .login-practicar { display: flex; justify-content: center; margin-top: 20px; }
+  .login-practicar .login-link { font-weight: 400; }
+  /* Si un fallo ya ofrece el botón Practicar en Prueba, el enlace hace lo mismo: se va mientras el botón está y vuelve con él. */
+  .modal-card.login:has([data-salida="practicar"]) .login-practicar { display: none; }
+  /* Tengo un cupón, el enlace chico de Se te acabaron: centrado debajo de los botones del pie. */
+  .dlg-pie > .sin-sorteos-enlace { align-self: center; }
   .login-foot { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line); text-align: center; font-size: 14px; color: var(--muted); }
   .login-by { display: inline-flex; align-items: center; gap: 6px; }
   .login-by svg { width: 15px; height: 15px; color: var(--purple-ink); }
   .login-by b { color: var(--ink); font-weight: 800; }
-  .login-foot summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; color: var(--ink2); text-decoration: underline; }
+  .login-foot summary { display: inline-flex; align-items: center; min-height: 48px; cursor: pointer; color: var(--ink2); text-decoration: underline; }
   .login-foot details p { color: var(--ink2); line-height: 1.5; padding-bottom: 6px; }
   @media (max-width: 420px) {
     .modal-card.login { padding: 30px 20px 12px; border-radius: 18px; }
@@ -612,6 +637,9 @@
     overflow-wrap: anywhere;
   }
   .winner-prize { font-size: 18px; font-weight: 700; margin-top: 2px; }
+  /* "Lugar 2 de 3: Termo", debajo de las tarjetas: la tarjeta va girada, por encima y con sombra, y sin este aire le
+     tapaba la mitad de arriba de las letras. */
+  .lugar-actual { margin-top: 18px; }
   /* "No está", dentro de la tarjeta: siempre tinta sobre amarillo, en los dos
      temas. Chico, para que no le compita al nombre en el proyector. */
   /* `width: 0` con `min-width: 100%`: toma el ancho de la tarjeta sin agrandarla, así la pregunta no empuja a la de al lado. */
@@ -646,6 +674,10 @@
   .winner-num { flex: 0 0 auto; min-width: 3.2ch; font: 800 16px/1.2 ui-monospace, Consolas, monospace; }
   .winner-fila .winner-name { flex: 1 1 0; min-width: 0; font-size: clamp(20px, 2.2vw, 30px); font-weight: 900; line-height: 1.15; }
   .winner-fila .ausente { flex: 0 0 auto; width: auto; min-width: 0; margin: 0; }
+  /* Con un premio por lugar, el de cada renglón va debajo del nombre, en la letra del texto y sobre el mismo amarillo. */
+  .winner-fila-quien { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+  .winner-fila-quien .winner-name { flex: 0 0 auto; }
+  .winner-fila-premio { font-size: var(--letra-sec); font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
   /* La pregunta de confirmar ocupa el renglón entero, debajo del nombre. */
   .winner-fila:has(.ausente-q) { grid-column: 1 / -1; flex-wrap: wrap; }
   .winner-fila:has(.ausente-q) .ausente { flex: 1 1 100%; }
@@ -676,6 +708,66 @@
     .winner-turnos .turno-resto .turno-avisar { margin-left: auto; }
   }
   .turnos-texto { display: block; box-sizing: border-box; width: 100%; min-height: 6em; margin-top: 10px; font: inherit; }
+  /* Amigo secreto (src/ui/draw.ts, pintarAmigo y reveal). El resultado lleva la marca #winner-box.es-amigo: se ve la lista
+     de personas en el orden pegado, cada una con Copiar enlace, y el aviso chico del comprobante. Lo demás del resultado
+     no va: la verificación con su QR (el comprobante es el reparto entero), la historia, la leyenda, la nota del
+     movimiento, la fila de en grande y los lugares. Cada regla esconde algo que ya existe: si la marca falla, la
+     pantalla queda como siempre. Va con !important porque varios de estos se muestran con un estilo puesto desde el
+     código, que le gana a la hoja. */
+  #winner-box.es-amigo :is(.verify, #lore-box, #leyenda-box, #motion-note, .grande-row, #lugares-fijos, #lugar-actual) {
+    display: none !important;
+  }
+  /* Con el Amigo secreto elegido o sellado (data-modo-lista en <html>, src/ui/turnos.ts), el paso 2 no ofrece juegos: en
+     este modo no se juega nada. Quedan la caja del número, Lanzar el sorteo y Mostrar la espera en grande. */
+  html[data-modo-lista="amigo"] :is(
+    #pick-label, #rec-head, #rec-sel-nota, #juego-nota, #gamepick, #wheel-cap, #ver3d-row, #lanzar .juego-actual, #wait-box .wait-vol
+  ) {
+    display: none !important;
+  }
+  /* La fila ya copiada queda marcada, para saber a quién ya se le mandó. El cuadro de copiar a mano baja a su renglón. */
+  .amigo-fila { flex-wrap: wrap; }
+  .amigo-fila.copiado { background: var(--paper); color: var(--ink); }
+  .amigo-fila .amigo-a-mano { flex: 1 1 100%; min-height: 3em; margin-top: 4px; }
+  .amigo-aviso { margin-top: 16px; }
+  .amigo-aviso .enlace { margin: 0; }
+  /* Los enlaces de nuevo desde Mis sorteos (src/ui/history.ts): la misma lista, con la letra de la tarjeta. */
+  .hist-card .amigo-lista { grid-template-columns: 1fr; }
+  .hist-card .amigo-fila .winner-name { font-size: 18px; font-weight: 800; }
+  /* Con el Amigo secreto elegido, el paso 1 tampoco ofrece lo que en este modo no sirve: el stand, el registro de equipos
+     con cupón, el logo (no hay show ni foto) y la fila de cuántos (la cantidad sigue a la lista y no se toca). Tampoco
+     el pliegue del sonido y la duración del show, ni el enlace de los juegos interactivos (acá no se juega nada). Cada
+     regla esconde algo que existe: sin la marca, todo sigue igual. */
+  html[data-modo-lista="amigo"] #btn-stand,
+  html[data-modo-lista="amigo"] #btn-equipos,
+  html[data-modo-lista="amigo"] #logo-fila,
+  html[data-modo-lista="amigo"] #ganadores-control,
+  html[data-modo-lista="amigo"] #mas-ajustes,
+  html[data-modo-lista="amigo"] #btn-interactivos {
+    display: none !important;
+  }
+  /* Ya sorteado, la tarjeta de la lista sellada decía Ya se sorteó dos veces: la caja del número y el botón apagado. Queda
+     la caja. */
+  html[data-modo-lista="amigo"] #btn-draw[data-i="drawnDone"] { display: none !important; }
+  /* En el resultado, Usar otra lista va solo, sin el marco grande que en los otros modos junta título, línea y botones. */
+  #winner-box.es-amigo .again { padding: 0; background: none; border: 0; box-shadow: none; }
+  /* En el celular el nombre se lleva el renglón entero y Copiar enlace va debajo, a todo el ancho: al lado, el botón
+     dejaba tan poco lugar que a 360 px Ana Paz se partía en dos renglones. */
+  @media (max-width: 420px) {
+    .amigo-fila .winner-name { flex: 1 1 100%; }
+    .amigo-fila [data-amigo-enlace] { flex: 1 1 100%; }
+  }
+  /* La página del enlace de cada persona (confirmar.html, src/confirmar.ts). Las dos secciones nacen con hidden y el
+     .hero se arma con display:grid, que le ganaría al atributo: sin esta regla el regalo vacío quedaría encima del aviso
+     del enlace roto. El nombre de a quién le regala va grande y, si es muy largo, se parte en vez de salirse. */
+  .hero.confirmar-ok[hidden] { display: none; }
+  .hero.confirmar-ok { padding: 40px 0 8px; }
+  .confirmar-ok .sticker { background: var(--purple); color: var(--on-purple); }
+  .confirmar-ok .confirmar-para { font-weight: 700; }
+  .confirmar-hacia { margin-top: -10px; font-size: clamp(44px, 9vw, 76px); line-height: 1.05; overflow-wrap: anywhere; }
+  .confirmar-como { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); font-weight: 700; }
+  .confirmar-error { padding-top: 40px; }
+  .confirmar-error h1 { font-size: clamp(30px, 4.4vw, 46px); }
+  .confirmar-ir { margin-top: 20px; }
   .verify { margin-top: 22px; border: 2px solid var(--ink); padding: 16px; background: var(--paper); display: grid; grid-template-columns: 1fr auto; gap: 16px; }
   .verify a { color: var(--ink); font-weight: 700; }
   .qr { text-align: center; }
@@ -877,8 +969,13 @@
   }
   /* "¿Primera vez?" ya ofrece el ensayo: con ella a la vista, "o probá con un ejemplo" de más abajo sobra. */
   #primera-vez:not([style*="none"]) ~ #btn-ensayo { display: none !important; }
+  /* Con la puerta diciendo que la cuenta está abierta en el otro modo (wallet-ui.ts), "¿Primera vez?" se contradice. */
+  .gate.otro-modo:not([style*="none"]) ~ #primera-vez { display: none !important; }
   .gate p { flex: 1 1 220px; font-size: 16px; font-weight: 700; line-height: 1.45; padding: 4px 0; }
   .gate button { min-height: 44px; }
+  /* "Ir a Oficial", el segundo botón de la puerta: sin el margen desparejo de los enlaces, que lo dejaba 2 px más arriba
+     que Entrar, y con aire hasta el borde derecho. */
+  .gate .enlace { margin: 0 8px 0 0; }
   .gate.retomando p { color: var(--ink2); }
   /* Sin cuenta, la lista, los premios y sus etiquetas se leen igual: se puede
      armar la lista antes de conectar. El botón de sellar sigue con el color de la
@@ -1182,10 +1279,12 @@
     position: relative; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 6px; padding: 5px;
     background: var(--paper); border: 2px solid var(--ink);
   }
-  /* Con el Amigo secreto activo hay tres botones, la marca mide un tercio y desliza por turnos (mitad) y amigo (final).
-     Sin el Amigo secreto, nada cambia: dos columnas y la marca de la mitad, como siempre. */
-  .modo-botones[data-modo="amigo"] { grid-template-columns: 1fr 1fr 1fr; }
-  .modo-botones[data-modo="amigo"]::before { width: calc((100% - 24px) / 3); }
+  /* Con el tercer botón armado (la clase con-amigo la pone src/ui/turnos.ts apenas existe #btn-amigo) hay tres columnas
+     desde que carga la página, elija lo que se elija: con la regla atada al Amigo secreto elegido, el tercero caía a una
+     segunda fila y la marca morada se estiraba detrás de los dos. La marca mide un tercio (el ancho menos el relleno y
+     los dos huecos) y desliza a turnos (un lugar) y a amigo (dos). Sin el tercer botón, nada cambia: dos columnas. */
+  .modo-botones.con-amigo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .modo-botones.con-amigo::before { width: calc((100% - 22px) / 3); }
   .modo-botones::before {
     content: ""; position: absolute; top: 5px; bottom: 5px; left: 5px; width: calc((100% - 16px) / 2); box-sizing: border-box;
     background: var(--purple); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -1211,18 +1310,56 @@
   .modo-op:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   .modo-op:disabled { cursor: default; }
   .modo-op:disabled[aria-pressed="false"] { color: var(--muted); }
+  /* Con tres botones, los títulos van arriba y no centrados: con un renglón menos, el de Amigo secreto quedaba más
+     abajo que los otros dos. */
+  .modo-botones.con-amigo .modo-op { align-content: start; }
   .modo-ico { grid-area: ico; width: 28px; height: 28px; transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
   .modo-op[aria-pressed="true"] .modo-ico { transform: rotate(-8deg) scale(1.12); }
   .modo-tit { grid-area: tit; font-size: 18px; font-weight: 800; line-height: 1.2; }
   .modo-sub { grid-area: sub; font-size: 16px; font-weight: 600; line-height: 1.25; }
-  .modo-elegir .modo-ayuda { margin-top: 8px; color: var(--ink2); text-wrap: balance; }
+  /* La i (src/ui/turnos.ts, 20 de noviembre de 2026): lo que hace el modo elegido va plegado detrás de ella, y debajo de
+     los tres botones no queda ningún párrafo a la vista. Va pegada al marco, abajo a la derecha: al costado le quitaba
+     ancho a los tres botones en el celular, y arriba, junto al rótulo, el panel abría lejos de ella o corría los botones.
+     Así el panel abre justo debajo y nada de lo que se toca se mueve. El blanco de toque es de 48 px y el dibujo de 24,
+     con el borde del círculo alineado con el del marco. Abierta, el círculo se llena.
+     Su renglón no ocupa alto (.modo-pie mide 0): la i cuelga en el aire de debajo del marco, sobre el costado derecho de
+     Pegar lista, que le deja ese lado libre. En su propio renglón se comía 48 px, y a 360 x 780 los nombres de ejemplo
+     del cuadro quedaban debajo de la pantalla. El panel abierto empieza donde termina la i. */
+  .modo-pie { display: flex; justify-content: flex-end; align-items: flex-start; height: 0; }
+  .modo-i {
+    position: relative; z-index: 2; width: 48px; height: 48px; margin: -4px -12px 0 0; padding: 0; display: grid;
+    place-items: center; color: var(--ink2); background: transparent; border: 0; cursor: pointer;
+  }
+  /* Lo que va debajo del selector con el panel cerrado deja libre el costado de la i: la nota de los avisos y los
+     orígenes, que además no pasan del ancho del selector (en el escritorio la i queda a 640 px, en medio del renglón). */
+  .modo-info[hidden] + .nw-nota { padding-right: 40px; }
+  .modo-elegir:not([hidden]) ~ #origenes { max-width: 640px; padding-right: 40px; box-sizing: border-box; }
+  .modo-i svg { width: 24px; height: 24px; overflow: visible; }
+  .modo-i-aro { fill: none; }
+  .modo-i-letra { stroke: currentColor; }
+  .modo-i-punto { fill: currentColor; }
+  .modo-i:hover .modo-i-aro { fill: var(--card); }
+  .modo-i[aria-expanded="true"] { color: var(--ink); }
+  .modo-i[aria-expanded="true"] .modo-i-aro { fill: currentColor; }
+  .modo-i[aria-expanded="true"] .modo-i-letra { stroke: var(--paper); }
+  .modo-i[aria-expanded="true"] .modo-i-punto { fill: var(--paper); }
+  .modo-i:focus-visible { outline: 3px solid var(--ink); outline-offset: -4px; }
+  /* Al abrirlo, turnos.ts lo lleva a la vista lo justo: abajo deja el alto de la barra de lo que sigue y un poco de aire,
+     que si no lo tapaba entero a 320 px. */
+  .modo-info {
+    margin-top: 44px; padding: 10px 14px; background: var(--card); border: 2px dashed var(--ink2);
+    scroll-margin-bottom: calc(var(--sig-alto, 0px) + 12px);
+  }
+  .modo-info[hidden] { display: none; }
+  .modo-info .note { margin: 0; color: var(--ink2); text-wrap: pretty; }
+  .modo-info .note + .note:not([hidden]) { margin-top: 6px; }
   .lista-cerrada .modo-botones { border-style: dashed; }
   /* El título del paso y la ayuda entran con un movimiento corto cada vez que cambia el modo. */
   .modo-cambia { animation: modo-entra 200ms ease-out; }
   span.modo-cambia { display: inline-block; }
   @keyframes modo-entra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   /* En el celular el selector va compacto: los dos botones lado a lado, cada uno con su dibujo y su nombre (que puede ir
-     en dos renglones), sin el rótulo y sin para qué sirve. Lo que hace cada modo lo dice la ayuda de abajo, que cambia
+     en dos renglones), sin el rótulo y sin para qué sirve. Lo que hace cada modo lo dice el pliegue de la i, que cambia
      con él. Uno debajo del otro y con todo medía 231 px (271 a 360 px de ancho), y con las barras del navegador
      (390 x 664) sacaba Pegar lista de la pantalla. Así mide 109. */
   @media (max-width: 460px) {
@@ -1231,23 +1368,29 @@
     .modo-botones { gap: 4px; padding: 4px; }
     .modo-botones::before { top: 4px; bottom: 4px; left: 4px; width: calc((100% - 12px) / 2); }
     .modo-botones[data-modo="turnos"]::before { transform: translateX(calc(100% + 4px)); }
-    .modo-botones[data-modo="amigo"] { grid-template-columns: 1fr 1fr 1fr; }
-    .modo-botones[data-modo="amigo"]::before { width: calc((100% - 20px) / 3); }
     .modo-botones[data-modo="amigo"]::before { transform: translateX(calc(200% + 8px)); }
     .modo-op { min-height: 48px; grid-template-areas: "ico tit"; column-gap: 6px; padding: 4px 8px; }
     .modo-ico { width: 20px; height: 20px; }
     .modo-tit { font-size: 16px; line-height: 1.1; }
-    .modo-elegir .modo-ayuda { margin-top: 6px; line-height: 1.35; }
+    .modo-info .note { line-height: 1.35; }
+    /* Con tres botones, cada uno mide un tercio: el nombre va solo, sin el dibujo, centrado y en dos renglones si hace
+       falta. Con el dibujo al lado, a 360 px a «premios» le quedaban unos 60 px. Las columnas son parejas aunque una
+       palabra sea más larga (minmax(0, 1fr)): con 1fr, a 320 px medían 76, 64 y 70. */
+    .modo-botones.con-amigo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .modo-botones.con-amigo::before { width: calc((100% - 16px) / 3); }
+    .con-amigo .modo-ico { display: none; }
+    .con-amigo .modo-op { grid-template-columns: 1fr; grid-template-areas: "tit"; padding: 4px 2px; text-align: center; }
+    .modo-botones.con-amigo .modo-op { align-content: center; }
   }
-  /* En los más angostos (320 px) el nombre no entra al lado del dibujo: va solo. */
+  /* En los más angostos (320 px) el nombre no entra al lado del dibujo: va solo. Con tres botones, la letra baja a 15 px:
+     en castellano «Orden de turnos» va en tres renglones, sin cortarse, y Pegar lista sigue a la vista. */
   @media (max-width: 359px) {
     .modo-ico { display: none; }
     .modo-op { grid-template-columns: 1fr; grid-template-areas: "tit"; }
+    .con-amigo .modo-tit { font-size: 15px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .modo-botones::before, .modo-ico, .modo-op, .modo-op[aria-pressed="true"] { transition: none; }
-    /* Con tres modos reduce-motion, la marca salta sin animación: translateX no se anima, pero la regla base con transform vale igual. */
-    .modo-botones[data-modo="amigo"]::before { transform: translateX(calc(200% + 8px)); }
     .modo-cambia { animation: none; }
   }
   /* La barra del scroll propio va en su lugar y no encima del «+». */
@@ -1341,8 +1484,18 @@
     /* La X está centrada en sus 44 px: el texto puede entrar en la parte vacía de su izquierda. */
     .primera-vez p { margin-right: -20px; }
   }
-  .pegar-ayuda { margin: -4px 0 10px; }
+  /* Va debajo del cuadro, como su pie: arriba, entre los orígenes y el stand, sumaba 30 px y a 360 x 780 los nombres de
+     ejemplo quedaban fuera de la pantalla. Solo con la lista vacía, así que nunca está junto a Otro nombre. */
+  .pegar-ayuda { margin: 8px 0 0; }
+  /* Otro nombre, pegado debajo del cuadro y a la izquierda: un botón blanco con su más dibujado (participants.ts). */
+  .otro-nombre { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; margin-top: 8px; }
+  .otro-nombre svg { width: 18px; height: 18px; flex: none; }
+  /* En el stand la pantalla lleva solo lo de la ronda, con una acción por paso: los nombres llegan por el QR. */
+  body[data-stand="1"] #btn-otro-nombre { display: none !important; }
   .lista-cuenta { margin: 8px 0 2px; font-size: 20px; font-weight: 900; color: var(--ink); text-wrap: balance; }
+  /* El número de la cuenta, en grande: cuántos hay se lee sin leer la frase (participants.ts, pintarCuenta). */
+  .lista-cuenta .cuenta-num { font-size: 28px; line-height: 1; }
+  @media (min-width: 761px) { .lista-cuenta .cuenta-num { font-size: 32px; } }
   .lista-cuenta-nota { margin: 2px 0 8px; }
   /* Lo que se va a sellar, debajo del botón; y al volver de entrar, lo que sigue. */
   .sellar-resumen { margin: 10px 0 0; font-size: 16px; color: var(--ink2); }
@@ -1629,6 +1782,10 @@
      la fila lleva cuatro entradas y esta sobra. menu.ts lo sigue agregando siempre
      y acá se esconde, así el texto no se pierde. */
   @media (min-width: 761px) { .topnav .mas-lista a[href="/#como-se-usa"] { display: none; } }
+  /* Para empresas va solo en Más del celular, y solo con las campañas abiertas (el atributo hidden lo saca main.ts). En la
+     laptop la fila no tiene Más ni lugar para una quinta entrada: ahí la invitación es la del final de la portada. */
+  .topnav .mas-lista a[data-campana-enlace][hidden] { display: none; }
+  @media (min-width: 761px) { .topnav .mas-lista a[data-campana-enlace] { display: none; } }
   /* En la fila quedan cuatro: Sortear, Mis sorteos, Juegos y Cómo funciona (8 de noviembre
      de 2026; Seguridad y Precios bajaron al pie). Con las siete de antes, entre 1101 y
      1279 px y con la cuenta abierta, se apretaban contra el nombre. Un poco menos de aire
@@ -1759,6 +1916,7 @@
   .portada-fin { text-align: center; padding: 34px 20px; background: var(--purple); color: var(--on-purple); border: var(--bw) solid var(--ink); box-shadow: var(--sh); margin-bottom: 52px; }
   .portada-fin h2 { font-size: clamp(22px, 3vw, 30px); font-weight: 900; }
   .portada-fin .hero-ctas { justify-content: center; margin-top: 16px; }
+  .portada-fin-empresa { margin-top: 10px; }
   .portada-fin .ghost { background: var(--card); color: var(--ink); }
 
   /* La barra de la herramienta: el título y, debajo, los pasos. */
@@ -2244,6 +2402,8 @@
   .pantalla-nombre { font-size: 1em; font-weight: 900; line-height: 1.08; letter-spacing: -0.02em; overflow-wrap: normal; }
   .pantalla-premio { font-size: max(14px, 0.3em); font-weight: 800; margin-top: 0.12em; }
   .pantalla.varios .pantalla-premio { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.06em; }
+  /* Con un premio por lugar («2.º premio: Termo») el pie es texto, con la letra de siempre: la de máquina queda para «#1». */
+  .pantalla.varios .pantalla-premio.por-lugar { font-family: inherit; letter-spacing: normal; }
   /* Con varios ganadores, lo que se llevan: una vez, arriba de las tarjetas, más grande que el número de cada una. */
   .pantalla-llevan { font-size: max(var(--letra-sala-sec), 0.42em); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
   .pantalla-llevan b { font-weight: 900; }
@@ -2258,6 +2418,8 @@
   .pantalla-fila { display: flex; align-items: baseline; gap: 0.35em; break-inside: avoid; padding: 0.08em 0; border-bottom: 2px solid var(--ink); }
   .pantalla-num { flex: 0 0 auto; min-width: 3.1ch; font: 800 0.55em/1.2 ui-monospace, Consolas, monospace; color: var(--ink2); }
   .pantalla-fila .pantalla-nombre { display: block; flex: 1 1 0; min-width: 0; font-size: 1em; line-height: 1.12; }
+  /* Con un premio por lugar, el de cada renglón, más chico que el nombre y sin empujar la columna. */
+  .pantalla-fila-premio { flex: 0 1 auto; min-width: 0; font-size: 0.55em; font-weight: 800; overflow-wrap: anywhere; }
   /* El orden de turnos en grande: «Turno 12» en lugar de «#12», en columnas un poco más anchas. La etiqueta mide
      9ch, uno más que «Turno 12»: desde «Turno 10» el nombre quedaba pegado a su número y ya no empezaba en la misma
      columna que los de una cifra. */
@@ -2606,7 +2768,7 @@
      para la sala está en grande en esa ventana, no hace falta acá. */
   .wait {
     margin: 0; padding: 14px 18px; display: grid; align-items: start; gap: 4px 18px;
-    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "k b" "n b" "i i" "l l";
+    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "k b" "n b" "i i" "l l" "v v";
   }
   .wait-main, .wait-row { display: contents; }
   .wait .kicker { grid-area: k; }
@@ -2617,7 +2779,7 @@
   .wait-line { grid-area: l; max-width: 92ch; font-size: 16px; line-height: 1.45; }
   #btn-espera { grid-area: b; align-self: start; }
   @media (max-width: 560px) {
-    .wait { grid-template-columns: minmax(0, 1fr); grid-template-areas: "k" "n" "i" "l" "b"; padding: 12px 14px; }
+    .wait { grid-template-columns: minmax(0, 1fr); grid-template-areas: "k" "n" "i" "l" "b" "v"; padding: 12px 14px; }
     #btn-espera { justify-self: start; margin-top: 6px; }
   }
 
@@ -2704,6 +2866,20 @@
     .winner-box > .again .row { margin-top: 8px; }
   }
 
+  /* El resultado desde el 20 de noviembre de 2026 (docs/ux.md, El resultado): una sola cosa por pantalla. La etiqueta
+     El resultado de arriba del ganador se esconde, porque el nombre ya dice que es el resultado, y la línea de qué sigue
+     para la sala (Para la sala, tocá Mostrar en grande) también: los botones de abajo ya lo dicen. Se esconden y no se
+     borran, y siguen en el diccionario. Con una lista de Luma la línea sí queda, porque es lo único que manda a copiar el
+     mensaje de abajo. El título de la fila de después (¿Pasamos al siguiente premio?) va con sr-only en el HTML, para que
+     el bloque siga con su nombre para el lector de pantalla. */
+  .winner-box > .kicker[data-i="winnerLabel"] { display: none; }
+  /* Con el logo de la comunidad a la derecha del renglón, la etiqueta reservaba su alto para que el logo no pise la
+     tarjeta: sin texto, pero con su lugar. En un celular el logo baja a su propio renglón y ahí no hace falta. */
+  @media (min-width: 521px) and (min-height: 521px) {
+    .winner-box:has(.winner-logo .logo-pieza) > .kicker[data-i="winnerLabel"] { display: block; visibility: hidden; }
+  }
+  #again-sigue:not([data-i="againSigueLuma"]) { display: none; }
+
   /* UX 19-oct: fondos 2 */
   /* ?grifo=0: las insignias de la red van con el borde punteado, además de decir
      "sin grifo". En el celular la de la cabecera no se muestra y el borde de la
@@ -2738,6 +2914,16 @@
     .premio-chips { gap: 6px; }
     .premio-chips button { padding: 0 10px; font-size: 16px; }
   }
+  /* Un campo por lugar cuando ganan varios (premios.ts): cada uno con su lugar a la izquierda, a la vista aunque se
+     escriba, y con aire entre uno y otro. Sin esto eran cuadros pegados con los bordes dobles y sin decir de qué lugar. */
+  .premio-fila { display: flex; align-items: center; gap: 8px; }
+  .premio-fila > input { flex: 1 1 auto; min-width: 0; }
+  .premio-lugar-n { flex: 0 0 auto; min-width: 6.2em; font-size: 14px; font-weight: 800; color: var(--ink); }
+  .premio-lugares { display: grid; gap: 8px; margin-top: 8px; }
+  .premio-lugares[hidden] { display: none; }
+  /* Los premios no entran en lo que se sella: es un aviso, no una ayuda gris, y el campo que no entra queda marcado. */
+  .note.aviso-premio { color: var(--ink); font-weight: 700; border-left: 4px solid var(--orange); padding-left: 10px; }
+  #prize[aria-invalid="true"], .premio-lugares input[aria-invalid="true"] { box-shadow: 0 0 0 3px var(--orange); }
 
   /* Cuántos ganan (src/ui/ganadores.ts), a la vista junto a Sellar la lista. Todo son botones: menos, más y los atajos
      de lo común. El grupo puede bajar de renglón y nunca impone un ancho mayor que su caja, también a 320 px. */
@@ -2770,6 +2956,11 @@
   /* Un campo de menos de 16 px hace que el iPhone agrande la página al tocarlo. */
   textarea, input, select, input[type="text"], input[type="search"], input[type="email"] { font-size: 16px; }
   textarea { line-height: 1.5; }
+  /* El cuadro de la lista: cuatro renglones a la vista y un poco del quinto (1,5 em cada uno, más el relleno de 12 px y el
+     borde de 2 px de cada lado), para que los tres nombres de ejemplo se lean enteros y se vea que entran más. Los
+     ejemplos van en gris, más claros que un nombre escrito: así no se leen como una lista ya cargada. */
+  #ta { min-height: calc(7em + 28px); }
+  #ta::placeholder { color: var(--muted); opacity: 1; }
 
   /* Sin esperar el doble toque, sin el fogonazo gris al tocar y sin seleccionar por accidente
      lo que se proyecta. */
@@ -2818,6 +3009,11 @@
   }
   .gamepick[inert] { opacity: 0.55; cursor: not-allowed; }
   #rec-head { font-size: 16px; }
+  /* La página que espera, desde el 20 de noviembre de 2026: un título, el reloj, una línea y el botón. Dejan de verse
+     el rótulo Juego elegido (queda el nombre del juego con Cambiar de juego) y la cabecera del selector (Para 18
+     personas. Duración: Normal, 41 s). La hora del sello ya no se ve desde antes (.head #frozen-ts, más arriba). Se
+     esconden y no se borran: el código los escribe y las pruebas leen su texto. */
+  .juego-actual .kicker, #rec-head { display: none; }
   .ajustes button, .ajustes select { font-size: 16px; }
 
   /* Para el pulgar: 48 px en las pantallas táctiles. */
@@ -2893,6 +3089,21 @@
   .espera-nadie { font-size: calc(clamp(20px, 2.4vw, 38px) * var(--ajuste, 1)); }
   .espera-id { font-size: calc(clamp(18px, 2vw, 30px) * var(--ajuste, 1)); }
   .espera-ensayo { font-size: calc(clamp(18px, 2vw, 30px) * var(--ajuste, 1)); }
+  /* La espera desde el 20 de noviembre de 2026 (docs/ux.md, La espera): una sola frase de confianza por pantalla. En la
+     sala la dice el pie, así que la línea de Nadie elige se esconde ahí y queda en el celular de quien mira. En ese
+     celular la explicación de que no se maneja desde ahí se esconde (no se borra: las pruebas la leen), porque ya lo
+     dice la calcomanía En vivo con su punto que late. Con el enlace roto no hay nada en vivo y la calcomanía no se ve.
+     La leyenda del QR crece para leerse desde el fondo de la sala. */
+  .espera:not(.espectador) .espera-nadie { display: none; }
+  .espectador .espera-lectura { display: none; }
+  .espectador-roto .sticker { display: none; }
+  .espera-qr figcaption { font-size: calc(clamp(18px, 2vw, 30px) * var(--ajuste, 1)); }
+  .sticker.en-vivo::before {
+    content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 0.5em; vertical-align: 0.1em;
+    border-radius: 50%; background: currentColor; animation: en-vivo-late 1.2s ease-in-out infinite;
+  }
+  @keyframes en-vivo-late { 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) { .sticker.en-vivo::before { animation: none; } }
 
   /* El juego, en la espera en grande: "Juego: Carrera de llamas" y, aparte, "Cambiar de juego" (secundario: la acción
      principal sigue siendo una sola). El selector queda detrás de esta capa y se elige sin salir (26 de octubre de 2026). */
@@ -3111,7 +3322,10 @@
      3 px debajo del borde de la barra (audit-flujo, laptop-100, paso 4). */
   @media (max-height: 660px) {
     #sec-draw .body { padding-top: 10px; }
-    .winner-box { padding-top: 6px; }
+    /* Sin la etiqueta El resultado arriba (más abajo en esta hoja, 20 de noviembre de 2026) la esquina de la tarjeta, que
+       va girada, se subía hasta el borde de la caja y la recortaba: 14 px de aire en lugar de 6, todavía unos 13 px menos
+       que cuando la etiqueta ocupaba su renglón. */
+    .winner-box { padding-top: 14px; }
     .winner-card { margin-top: 0; }
   }
   /* Y en una de 520 px o menos (una laptop a 200 % de zoom, 681 x 316), con dos ganadores lado a lado el botón de «¿No está?»
@@ -3126,8 +3340,9 @@
   .pantalla .pantalla-sig { margin-left: auto; font-size: clamp(20px, 2.4vw, 38px); min-height: 64px; padding: 10px 32px; max-width: 100%; text-wrap: balance; }
   @media (max-width: 700px) { .pantalla .pantalla-sig { margin-left: 0; width: 100%; } }
 
-  /* El volumen: el navegador no sabe si el celular está en silencio, así que, solo en pantallas táctiles, se recuerda. */
-  .wait-vol { display: none; margin-top: 8px; font-size: 17px; font-weight: 800; }
+  /* El volumen: el navegador no sabe si el celular está en silencio, así que, solo en pantallas táctiles, se recuerda.
+     Tiene su fila al final de la caja: sin ella, al esconderse Empieza en el aviso subía a ese lugar, arriba de todo. */
+  .wait-vol { grid-area: v; display: none; margin-top: 8px; font-size: 17px; font-weight: 800; }
   @media (pointer: coarse) { .wait-vol { display: block; } }
 
   /* La cinta de la espera: cada nombre con su cara. */
@@ -3564,6 +3779,14 @@
   .pago-nota { color: var(--ink2); border-left: var(--bw) solid var(--yellow); padding-left: 10px; }
   .pago-cierre { color: var(--ink2); border-top: 2px solid var(--ink2); padding-top: 10px; }
   .pago-cuerpo .cl-secundario, .pago-cuerpo .cl-texto, .pago-cuerpo .pago-app { min-height: 48px; }
+  /* El contador del producto por unidad: menos, la cantidad y más. Cada botón, un blanco de 48 por 48 como mínimo. */
+  .pago-contador { display: flex; align-items: center; justify-content: center; gap: 16px; }
+  .pago-contador-boton {
+    min-width: 48px; min-height: 48px; padding: 0 12px; border: 2px solid var(--ink); background: var(--card); color: var(--ink);
+    font: inherit; font-size: 24px; font-weight: 800; line-height: 1; cursor: pointer;
+  }
+  .pago-contador-boton:disabled { color: var(--ink2); border-color: var(--ink2); cursor: default; }
+  .pago-contador-n { min-width: 3ch; text-align: center; font-size: 32px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
   /* El botón de sumar sorteos, junto a la línea del cupo y en «Se te acabaron»: secundario, nunca como la principal. */
   .cupo-sumar { margin: 4px 0 0; min-height: 44px; }
   .cl-paso-cuerpo > .cl-cierre { border-top: 2px solid var(--ink2); padding-top: 10px; }

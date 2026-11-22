@@ -207,7 +207,7 @@ describe("lo que falta", () => {
   it("sin día, sin lugar o con las horas desordenadas lleva al paso 3", () => {
     expect(faltas({ ...lleno(), fecha: "" }, AHORA, aut)[0]).toMatchObject({ paso: 3, clave: "ccFaltaDia" });
     expect(faltas({ ...lleno(), lugar: "" }, AHORA, aut)[0]).toMatchObject({ paso: 3, clave: "ccFaltaLugar" });
-    expect(faltas({ ...lleno(), cierra: "09:00" }, AHORA, aut)[0]).toMatchObject({ paso: 3, clave: "ccCierraLejos", donde: "ccp-cierra" });
+    expect(faltas({ ...lleno(), cierra: "09:00" }, AHORA, aut)[0]).toMatchObject({ paso: 3, clave: "ccCorregiCierra", donde: "ccp-cierra" });
     expect(faltas({ ...lleno(), cierra: "10:00" }, AHORA, aut)[0]).toMatchObject({ paso: 3, clave: "ccCorregiCierra" });
   });
 

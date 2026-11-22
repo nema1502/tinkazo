@@ -112,8 +112,15 @@ export function leerTextoDeCampana(texto: string, ahora: number): LecturaDelText
   return { ok: true, evento, red, cierraMs, sorteoMs, premios: premios.length, organizadora };
 }
 
-/** Lee solo lo que la sala necesita de una campaña, y solo después de comprobar que Tinkazo firmó el texto entero. */
-export function leerCampanaFirmada(cuerpo: unknown, llaveHex: string | null, ahora: number): LecturaFirmada {
+/**
+ * Lee solo lo que la sala necesita de una campaña, y solo después de comprobar que Tinkazo firmó el texto entero. Valen
+ * varias llaves (la de siempre y la de la activación automática): basta con que firme una. Sin ninguna, nada se firma.
+ */
+export function leerCampanaFirmada(
+  cuerpo: unknown,
+  llaves: string | null | readonly string[],
+  ahora: number,
+): LecturaFirmada {
   if (typeof cuerpo !== "object" || cuerpo === null) return { ok: false, motivo: "forma" };
   const entrada = cuerpo as Record<string, unknown>;
   const texto = entrada.texto;
@@ -121,7 +128,8 @@ export function leerCampanaFirmada(cuerpo: unknown, llaveHex: string | null, aho
   if (typeof texto !== "string" || typeof firma !== "string" || texto.length < 1 || texto.length > MAX_TEXTO_CAMPANA) {
     return { ok: false, motivo: "forma" };
   }
-  if (!verificarFirma(texto, firma, llaveHex)) return { ok: false, motivo: "firma" };
+  const validas: readonly (string | null)[] = typeof llaves === "string" || llaves === null ? [llaves] : llaves;
+  if (!validas.some((llave) => verificarFirma(texto, firma, llave))) return { ok: false, motivo: "firma" };
   const lectura = leerTextoDeCampana(texto, ahora);
   if (!lectura.ok) return { ok: false, motivo: lectura.motivo };
   const { ok, ...datos } = lectura;

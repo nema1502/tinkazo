@@ -32,20 +32,41 @@ export function pasoDe(e: { nombres: number; sellada: boolean; revelado: boolean
  * sellando, y apagado con la ronda ya nacida es que ya se está sorteando.
  * `noCabe` es un orden de turnos más largo de lo que admite la red: el botón
  * está apagado porque no se puede sellar, no porque se esté sellando.
+ * `lugaresPorMostrar`: el resultado trae lugares que la sala todavía no vio
+ * (se muestran de a uno con «Siguiente premio»).
+ * `repetido` es un Amigo secreto con alguien dos veces en la lista: tampoco se puede sellar.
+ * `amigo` es el resultado de un Amigo secreto: nadie gana, y lo que se anuncia dice que ya salió.
  */
-export function claveDelPaso(paso: Paso, e: { segundos: number; apagado: boolean; ganadores: number; turnos?: boolean; noCabe?: boolean }): string {
+export function claveDelPaso(
+  paso: Paso,
+  e: {
+    segundos: number;
+    apagado: boolean;
+    ganadores: number;
+    turnos?: boolean;
+    noCabe?: boolean;
+    lugaresPorMostrar?: boolean;
+    repetido?: boolean;
+    amigo?: boolean;
+  },
+): string {
   switch (paso) {
     case 1:
       // Desde el 22 de octubre de 2026 la barra también ofrece "Pegar lista" (siguiente.ts): su línea dice qué falta.
       return "sigPegar";
     case 2:
       if (e.noCabe) return "sigTope";
+      if (e.repetido) return "sigRepetido";
       return e.apagado ? "sigSellando" : "sigLista";
     case 3:
       return e.segundos > 0 ? "sigEspera" : e.apagado ? "sigSorteando" : "sigRonda";
     case 4:
-      // Un orden de turnos no tiene ganadores: la línea dice que el orden ya salió.
-      return e.turnos ? "sigTurnos" : e.ganadores > 1 ? "sigGanaron" : "sigGano";
+      // Un orden de turnos no tiene ganadores: la línea dice que el orden ya salió. Un Amigo secreto tampoco. Con lugares
+      // del mismo sello que la sala todavía no vio (`lugaresPorMostrar`), no salieron todos: la línea dice qué lugar salió.
+      if (e.amigo) return "sigAmigo";
+      if (e.turnos) return "sigTurnos";
+      if (e.lugaresPorMostrar) return "sigLugarSalio";
+      return e.ganadores > 1 ? "sigGanaron" : "sigGano";
   }
 }
 

@@ -1700,7 +1700,10 @@ class PollarWallet implements SubmittingWallet {
    */
   async #entrarConGoogle(avisos: AvisosDeEntrada): Promise<string> {
     const client = await this.#ensureClient();
-    this.#remember("google");
+    // Con una sesión de correo todavía abierta, el SDK devuelve esa misma cuenta apenas se pide entrar: rotularla como de
+    // Google le abría el cobro de una campaña que la sala no va a activar. Queda como de correo, y para cambiar de cuenta se
+    // cierra antes la sesión (`cambiarDeCuentaReal`, src/ui/campana-comision-real.ts).
+    if (!(this.#via === "email" && client.getWallet()?.address)) this.#remember("google");
     // Al volver, `restore` sabe que es una cuenta recién conectada y no una sesión retomada (el contador, src/contar.ts).
     marcarEntrada();
     // Con el plan B del ingreso prendido (`src/ui/ingreso-plan-b.ts`), un error del proveedor al armar la entrada se dice
@@ -1836,7 +1839,8 @@ class PollarWallet implements SubmittingWallet {
    */
   async sendEmailCode(email: string): Promise<void> {
     const client = await this.#ensureClient();
-    this.#remember("email");
+    // La marca del correo se pone recién cuando la cuenta llega (`verifyEmailCode`): pedir un código y no usarlo no cambia
+    // por dónde entró la sesión que ya está abierta.
     if (client.getAuthState().step !== "entering_email") {
       const lista = waitForStep(client, "entering_email", 20_000);
       client.beginEmailLogin();
@@ -1857,6 +1861,7 @@ class PollarWallet implements SubmittingWallet {
     const lista = waitForWallet(client, 60_000, true);
     client.verifyEmailCode(code);
     const wallet = await lista;
+    this.#remember("email");
     this.address = wallet.address;
     return wallet.address;
   }

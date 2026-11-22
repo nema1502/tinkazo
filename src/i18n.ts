@@ -70,6 +70,15 @@ const basesDeTurnosEn = (p: RulesPreParams): string => {
     : `2. The ${p.count} people on the list take part. Everyone comes out, in order: that order is the turns, 1 to ${p.count}.`;
 };
 
+/** El punto 2 de las bases de un Amigo secreto, antes y después de sellar: quién regala a quién. */
+const basesDeAmigoEs = (p: RulesPreParams): string =>
+  `2. Participan las ${p.count} personas de la lista. Salen todas en un orden, ` +
+  "y cada una le regala a la que sigue. La última le regala a la primera.";
+
+const basesDeAmigoEn = (p: RulesPreParams): string =>
+  `2. The ${p.count} people on the list take part. They all come out in an order, ` +
+  "and each one gives a gift to the next. The last one gives to the first.";
+
 /**
  * Diccionario de la interfaz.
  *
@@ -119,6 +128,10 @@ export interface Dict {
   prizeLugar: (k: number) => string;
   /** El hueco de cada lugar: qué va ahí. */
   prizeLugarPh: string;
+  /** Debajo de los campos, cuando lo escrito no entra entero en lo que se sella: con varios premios o con uno solo. */
+  prizeNoEntran: (varios: boolean) => string;
+  /** El resumen de junto a Sellar y la barra, con varios premios escritos: cuántos son ("3 premios"), en vez de nombrar uno solo. */
+  prizeCuantos: (n: number) => string;
   /** El nombre con su cuenta cuando una persona sale más de una vez: "Ana (2 veces)". */
   repetidoVeces: string;
   /** El aviso de la verificación, cuyas tarjetas no llevan el número de cada premio: "Ana salió 2 veces.". */
@@ -196,6 +209,8 @@ export interface Dict {
   espPie: (n: number) => string;
   /** Lo mismo cuando se siguió sin sello: no dice "sellada" ni deja creer que se puede comprobar. */
   espPieSinSello: (n: number) => string;
+  /** El pie con sello de un orden de turnos o un Amigo secreto, que no tienen quién gane: no habla de ganar. */
+  espPieSinGanador: (n: number) => string;
   cQuiStart: (n: number) => string;
   cQuiNext: (k: number, of: number) => string;
   /** De pie: lo que cada uno revisa en su turno, y la línea grande de cada tipo de pregunta. */
@@ -395,6 +410,9 @@ export interface Dict {
   turnsSellarTope: (n: number, personas?: number, tope?: number) => string;
   turnsRules: (p: RulesParams) => string;
   turnsRulesPre: (p: RulesPreParams) => string;
+  /** El modo «Amigo secreto»: las bases, con quién regala a quién y sin ganadores ni premio. */
+  amigoRules: (p: RulesParams) => string;
+  amigoRulesPre: (p: RulesPreParams) => string;
 }
 
 /**
@@ -503,11 +521,11 @@ export const T: Record<Lang, Dict> = {
     modeOfficial: "Oficial",
     modeOfficialBody: "Para los sorteos que cuentan. El sello queda registrado en Stellar y cualquiera puede rehacer la cuenta con el comprobante.",
     modeTest: "Prueba",
-    modeTestBody: "Para probar con calma. Funciona igual y se puede comprobar, pero se borra el 16 de diciembre.",
+    modeTestBody: "Para practicar. Funciona igual, pero se borra el 16 de diciembre.",
     modeCurrent: "Estás en este modo",
     modeSwitchToOfficial: "Pasar a Oficial",
     modeSwitchToTest: "Pasar a Prueba",
-    modeSwitchAccount: "Cada modo tiene su propia cuenta. En {otro} vas a entrar una vez más, y tu cuenta de {actual} sigue acá cuando vuelvas.",
+    modeSwitchAccount: "En {otro} entrás de nuevo. Tu cuenta de {actual} te espera.",
     modeSwitchGuestAccount: "La Cuenta de prueba es solo de Prueba. En Oficial entrás con Google.",
     modeHaveCoupon: "Tengo un cupón",
     modeSwitchBlocked: "Terminá este sorteo antes de cambiar de modo.",
@@ -517,10 +535,10 @@ export const T: Record<Lang, Dict> = {
     otraRedComoCambiar: "En tu billetera elegí {etiqueta} y volvé a tocar Sellar la lista.",
     walletNetLabelMain: "Main Net",
     walletNetLabelTest: "Test Net",
-    firstOfficialTitle: "Vas a sellar en modo Oficial",
-    firstOfficialBody: "El sello queda registrado en Stellar. Los nombres no se publican, solo la huella de la lista.",
+    firstOfficialTitle: "Este sorteo cuenta",
+    firstOfficialBody: "Queda guardado y cualquiera lo puede comprobar. Los nombres no se publican.",
     firstOfficialSeal: "Sellar",
-    firstOfficialToTest: "Pasar a Prueba",
+    firstOfficialToTest: "Practicar en Prueba",
     historyOtherModeTest: "Tus sorteos de Prueba están en el modo Prueba.",
     historyOtherModeOfficial: "Tus sorteos de Oficial están en el modo Oficial.",
     historySwitchToTest: "Pasar a Prueba",
@@ -542,7 +560,7 @@ export const T: Record<Lang, Dict> = {
     musicNo: "Música: no",
     freezeHint: "Hacen falta al menos dos nombres.",
     freezeHintPersonas: "Hacen falta al menos dos personas.",
-    freeRule: 'Participar es gratis, siempre: no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.',
+    freeRule: 'Participar es gratis, siempre. No es para entrada paga ni apuestas. Al sellar aceptás los <a href="/terminos.html">términos</a>.',
     frozenOk: "Lista sellada ✓",
     csvHas: (col, n) => `Con algo en la columna ${col} (${n})`,
     csvIs: (col, v, n) => `${col}: ${v} (${n})`,
@@ -1081,25 +1099,28 @@ export const T: Record<Lang, Dict> = {
     // Un premio por lugar cuando ganan varios: primero y tercero van con "er", los demás con "º".
     prizeLugar: (k) => `${k}.${k === 1 || k === 3 ? "er" : "º"} premio`,
     prizeLugarPh: "Lo que se lleva este lugar…",
+    prizeNoEntran: (varios) =>
+      varios ? "No entran todos los premios. Acortá alguno para poder sellar." : "El premio es muy largo. Acortalo para poder sellar.",
+    prizeCuantos: (n) => `${n} premios`,
     kEntries: "participantes", kDigest: "huella de la lista", kStatus: "estado del sorteo",
     // La etiqueta de la cuenta sellada cuando las participaciones no son una por persona (freeze.ts).
     kEntriesDe: (n) => `participaciones de ${n === 1 ? "1 persona" : `${n} personas`}`,
     // Sin "ronda" ni "faro": eran las dudas de quien sorteaba por primera vez (diseño del onboarding, 22 de octubre de 2026).
-    waitTitle: "El número que va a decidir",
-    waitLine: "Nadie puede elegirlo, ni quien organiza.",
-    waitLineSinSello: "Lo publica una red independiente en unos segundos. Sin sello: este sorteo no se puede comprobar.",
-    volAviso: "Subí el volumen del celular: el show tiene música.",
-    waitNow: "Ya salió el número. Tocá Lanzar el sorteo.",
+    waitTitle: "Empieza en",
+    waitLine: "Con la lista sellada, nadie elige quién gana.",
+    waitLineSinSello: "Sin sello: este sorteo no se puede comprobar.",
+    volAviso: "Subí el volumen: el show tiene música.",
+    waitNow: "Ya se puede sortear.",
     // El contador de números públicos que van naciendo mientras se espera (issue #79, freeze.ts).
     espFaltanN: (n) => (n === 1 ? "falta 1 número" : `faltan ${n} números`),
     espSticker: "Todavía nadie sabe quién gana",
     espStickerOrden: "Todavía nadie sabe el orden",
-    espFaltan: "para que salga el número del sorteo",
+    espFaltan: "para que empiece",
     espVolver: "Volver a la página",
-    espQrT: "Escaneá para ver en vivo",
+    espQrT: "Escaneá y miralo en tu celular",
     espQrBoton: "QR para ver en vivo",
     espQrSub: "La misma cuenta regresiva y el mismo show, en vivo en tu teléfono.",
-    espVistaEspectador: "Vista de espectador",
+    espVistaEspectador: "En vivo",
     espLectura: "Solo lectura: el sorteo lo maneja quien organiza.",
     // Los casos de No llegó (main): cuando el número del sorteo tarda o no coincide.
     espProbar: "Probar de nuevo",
@@ -1107,7 +1128,7 @@ export const T: Record<Lang, Dict> = {
     espSinNumeroOrden: "Todavía no llegó el número del sorteo. El orden va a ser el mismo. Tocá Probar de nuevo.",
     espTarda: "La sala todavía no guardó el sorteo. Lo vas a ver acá en cuanto quede guardado.",
     espNoCoincide: "Este enlace no es del sorteo que quedó grabado. Mirá la pantalla de la sala.",
-    espQrPreparando: "Preparando el QR para verlo en vivo…",
+    espQrPreparando: "Preparando el QR…",
     espQrFallo: "No pudimos preparar el QR para verlo en vivo.",
     espQrJuegoAnterior: "Quienes ya escanearon lo ven con el juego anterior.",
     espEsperaLaSala: "Esperamos a la pantalla de la sala para no adelantarnos.",
@@ -1115,7 +1136,7 @@ export const T: Record<Lang, Dict> = {
     espPonerAlDia: "El sorteo ya empezó. Te ponemos al día.",
     espEnlaceRoto: "Este enlace para ver el sorteo en vivo llegó incompleto. Escaneá de nuevo el QR de la pantalla.",
     espIrALaPagina: "Ir a Tinkazo",
-    espFinSiguiente: "¿Hay otro premio? Escaneá el QR nuevo de la pantalla.",
+    espFinSiguiente: "¿Otro premio? Escaneá el QR nuevo.",
     espVerDeNuevo: "Ver de nuevo",
     espHacerElTuyo: "Hacé tu propio sorteo",
     espMiraLaSala: "El show sigue en la pantalla de la sala. Cuando termine, acá vas a ver quién salió.",
@@ -1125,15 +1146,16 @@ export const T: Record<Lang, Dict> = {
     // Los juegos interactivos (juegos-interactivos): la sala donde cada persona vive el sorteo desde su celular.
     jiLink: "Juegos interactivos: que cada quien viva el sorteo desde su celular",
     jiT: "Juegos interactivos",
-    jiB: "Abrí la sala y mostrá el QR: cada persona entra desde su celular, ve la lista en vivo y, cuando sellás, ve si le tocó.",
+    jiB: "Abrí la sala y mostrá el QR: cada persona entra desde su celular, ve la lista en vivo y, en esta ronda de ejemplo, ve si le tocó.",
     jiAbrir: "Abrir la sala",
     jiQrSub: "Escaneá para entrar y poner tu nombre",
     jiCerrarLista: "Cerrar la lista",
     jiListaCerrada: "Lista cerrada: ya no entra nadie.",
-    jiSellar: "Sellar y anunciar",
+    jiSellar: "Sortear de ejemplo",
     jiAnunciando: "Compartiendo el número…",
     jiPocos: "Con menos de dos nombres no hay sorteo.",
     jiErrRonda: "No se pudo compartir el número. Probá de nuevo.",
+    jiErrNoDisponible: "El juego en vivo no está disponible ahora.",
     jiResultadoT: "Con {n} en la lista, salió:",
     jiRondaEjemplo: "Es una ronda de ejemplo: el número no es público y no se puede comprobar.",
     jiPRotulo: "Vista de participante",
@@ -1146,6 +1168,7 @@ export const T: Record<Lang, Dict> = {
     jiPCerrada: "Cerraron la lista: esperá el número.",
     jiPTarde: "La lista ya se cerró: esta vez quedaste afuera.",
     jiPTeToco: "¡Te tocó!",
+    jiPMarcaEjemplo: "Ejemplo",
     jiPNoGano: "Esta vez no salió tu nombre",
     jiPGanadores: "Salieron:",
     jiPNoSePudo: "No se pudo decidir con la lista de tu celular. Avisale a quien organiza.",
@@ -1153,16 +1176,18 @@ export const T: Record<Lang, Dict> = {
     jiPErrLlena: "La sala se llenó. Avisale a quien organiza.",
     jiPErrRed: "Sin señal. Probá otra vez.",
     jiPErrOtro: "No entró. Probá otra vez.",
+    jiPErrRepetido: "Ese nombre ya está en la lista. Probá con otro.",
     jiPNombreMalo: "Probá con tu nombre o apodo, sin enlaces.",
     jiPEjemplo: "Ronda de ejemplo: no queda comprobante y no se entrega nada.",
     masOpciones: "Premio y subir CSV",
     masAjustes: "Sonido, duración y más",
     recRangoAria: "Para {r} personas",
-    espPie: (n) => `${n} en la lista, sellada: ya nadie la puede cambiar.`,
-    espPieSinSello: (n) => `${n} en la lista, cerrada sin sello: este sorteo no se puede comprobar.`,
+    espPie: (n) => `Lista sellada con ${n}. Nadie elige quién gana.`,
+    espPieSinSello: (n) => `Lista cerrada con ${n}, sin sello: no se puede comprobar.`,
+    espPieSinGanador: (n) => `${n} en la lista, sellada: ya nadie la puede cambiar.`,
     // La espera que desemboca en el show (21 de octubre de 2026): cuando nace el número.
-    espStickerYa: "El número que decide ya existe",
-    espAprobar: "Tu billetera te va a pedir que lo apruebes.",
+    espStickerYa: "Ya se puede sortear",
+    espAprobar: "Aprobalo en tu billetera.",
     winnerLabel: "El resultado", verifyTitle: "Por si alguien duda",
     verifyHow: "Cualquiera puede rehacer este sorteo desde su celular y le tiene que dar el mismo nombre. No hace falta que me creas.",
     verifyPasos: "Paso a paso: 1) Abrí la ronda de quicknet y verificá su prueba con la clave pública del faro. 2) randomness = sha256(prueba). 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.",
@@ -1248,7 +1273,8 @@ export const T: Record<Lang, Dict> = {
     // técnico. "N.º" y no "#": "Sorteo #N" ya es el número del sorteo en Mis
     // sorteos, y este es el del número público que lo decidió.
     src: "fuente: pegado / csv", frozenAt: "sellada:", seed: "número público n.º", drandLink: "ver el número del sorteo ↗", proofOk: "prueba verificada",
-    placeholder: "Un nombre por línea…", winsPrize: "Se lleva:", skip: "Saltar",
+    // El cuadro vacío muestra tres nombres de ejemplo, uno por renglón: se ve sin leer que va uno debajo del otro.
+    placeholder: "Ana Quispe\nBeto Mamani\nCarla Flores", winsPrize: "Se lleva:", skip: "Saltar",
     fetching: "Esperando el número público…",
     drandTry: (i, n) => `Todavía no llega el número del sorteo. Intento ${i} de ${n}…`,
     drawTry: (i, n) => `La red todavía no ve ese número. Reintento ${i} de ${n}…`,
@@ -1273,16 +1299,16 @@ export const T: Record<Lang, Dict> = {
     againFew: (n, eq = cuadroEsDeEquipos()) => (n === 1 ? `Queda ${eq ? "un solo equipo" : "una sola persona"} sin premio: para otro sorteo, usá otra lista.` : "Ya ganaron todos los de la lista: para otro premio, usá otra lista."),
     againQuitados: (nombres, n, eq = cuadroEsDeEquipos()) => (nombres.length > 3 ? `${nombres.length} ${eq ? "equipos" : "personas"} ya ganaron y no están en esta lista. Quedan ${n}.` : nombres.length === 1 ? `${nombres[0]} ya ganó y no está en esta lista. Quedan ${n}.` : `${new Intl.ListFormat("es", { type: "conjunction" }).format(nombres)} ya ganaron y no están en esta lista. Quedan ${n}.`),
     lugarDe: (n, total) => `Lugar ${n} de ${total}`,
-    lugaresFijos: "Todos los lugares quedaron fijos al nacer el número: cualquiera los puede calcular desde ese momento.",
+    lugaresFijos: "Todos los lugares ya están decididos.",
     fijosAlNacer: "El número elige todos los lugares de una vez: cuando nazca quedan fijos, y desde ese momento cualquiera los puede calcular.",
     againLugarBoton: "Siguiente premio",
-    againLugar: (n, total) => `El lugar ${n} de ${total} ya quedó decidido: se muestra sin sellar otra vez.`,
+    againLugar: (n, total) => `Sigue el lugar ${n} de ${total}.`,
     recuperarLista: "Recuperar la lista anterior",
     cortinaSe: "Se sortea",
     cortinaSeOrden: "Se sortea el orden de los turnos",
     cortinaSin: "Ya sale el sorteo",
     cortinaGraba: "Grabando el sorteo para que nadie lo pueda cambiar…",
-    cortinaNumero: "Ya casi llega el número del sorteo…",
+    cortinaNumero: "Ya casi",
     grabGuardando: "Guardando el sorteo para que nadie lo pueda cambiar…",
     grabGuardado: "Sorteo guardado. Ya nadie lo puede cambiar.",
     grabReintentar: "Guardar el sorteo",
@@ -1314,7 +1340,7 @@ export const T: Record<Lang, Dict> = {
     // --- El primer sorteo, "¿Cómo se usa?" y el ensayo (onboarding, 22 de octubre
     //     de 2026; la regla, en docs/ux.md, "El primer sorteo y el tutorial"). Sin
     //     tecnicismos: ni ronda, ni faro, ni transacción.
-    ctaGoogle: "Entrar con Google y sortear",
+    ctaGoogle: "Entrar con Google y sortear gratis",
     ctaOtras: "Otras formas de entrar",
     ctaEnsayo: "Probar con un ejemplo",
     ctaStand: "Tengo un stand",
@@ -1328,7 +1354,10 @@ export const T: Record<Lang, Dict> = {
     get yaEntraste() {
       return cuadroEsDeEquipos() ? "Ya entraste. Sellá tu lista de {n} equipos." : "Ya entraste. Sellá tu lista de {n} personas.";
     },
-    pegarAyuda: "Pegá los nombres de WhatsApp o de una hoja de cálculo, o traé tu lista de Luma.",
+    // Con la lista vacía, una sola línea: que va un nombre por renglón ya lo muestran los ejemplos del cuadro.
+    pegarAyuda: "Pegá tu lista o escribí un nombre.",
+    // El botón de debajo del cuadro que baja de renglón: para quien no sabe que cada nombre va en su renglón.
+    otroNombre: "Otro nombre",
     // Sola, junto al cuadro: va con mayúscula. La de la barra (sigLista) va en medio de la línea.
     get listaCuenta() {
       return cuadroEsDeEquipos() ? "Lista de {n} equipos" : "Lista de {n} personas";
@@ -1355,7 +1384,16 @@ export const T: Record<Lang, Dict> = {
     loginCorreoO: "o con tu correo",
     loginGoogle: "Entrar con Google",
     loginMas: "Más formas de entrar",
+    // El renglón que pliega el correo, la billetera y la cuenta de prueba debajo de Entrar con Google (src/ui/wallet-ui.ts).
+    loginOtras: "Otras formas de entrar",
     loginEnApp: "Desde esta app, Google no deja entrar. Usá tu correo, o abrí la página en el navegador.",
+    // Junto al aviso de arriba: copia la dirección de la página para pegarla en el navegador (src/ui/wallet-ui.ts).
+    loginCopiarEnlace: "Copiar el enlace",
+    // En Oficial, debajo de las formas de entrar: pasa a Prueba y entra solo con la cuenta de prueba (practicarEnPrueba).
+    loginPracticar: "Practicar sin cuenta",
+    // En Oficial, un ingreso que falló por el proveedor ofrece practicar en Prueba (src/ui/ingreso-plan-b.ts).
+    ingresoPracticar: "Practicar en Prueba",
+    ingresoPracticarLinea: "En Prueba funciona igual, pero no cuenta y se borra el 16 de diciembre.",
     comoT: "Cómo se usa, en 4 pasos",
     comoAca: "Estás acá",
     como1T: "Pegá la lista",
@@ -1382,8 +1420,8 @@ export const T: Record<Lang, Dict> = {
     ensGuia1: "Sellar cierra la lista antes de que salga el número: ni vos la podés cambiar.",
     ensGuia2: "Sellada. El número sale en {s} s. Mientras, elegí el juego.",
     ensGuia3: "Ya salió el número. Tocá Lanzar el sorteo.",
-    ensFinT: "Era un ensayo: quien salió es de mentira y no se grabó nada.",
-    ensFinB: "Así se sortea. En vivo, entrá y pegá tu lista antes de proyectar: la espera es de cerca de un minuto.",
+    ensFinT: "Era un ensayo. Quien salió no vale.",
+    ensFinB: "En un sorteo de verdad, se espera cerca de un minuto.",
     ensFinCta: "Sortear con mi lista",
     ensOtroJuego: "Probar otro juego",
     otroJuegoBtn: "Ver de nuevo con otro juego",
@@ -1391,7 +1429,7 @@ export const T: Record<Lang, Dict> = {
     juegoVerDeNuevo: "Tocá un juego y ves este mismo resultado de nuevo con él.",
     feedbackFin: "¿Algo para mejorar? Contanos en 30 segundos",
     ensEstadio: "ENSAYO: no se graba",
-    standLink: "Tengo un stand: rondas rápidas con quienes pasan",
+    standLink: "Tengo un stand",
     standNoSorteo: "Hay un sorteo en curso. Terminalo antes de abrir el stand.",
     standNoEjemplo: "Salí del ejemplo para abrir el stand.",
     standTitulo: "Tu stand",
@@ -1472,7 +1510,9 @@ export const T: Record<Lang, Dict> = {
     standSalaErrQuitar: "No pudimos quitar el nombre porque no hay conexión. Volvió a la lista. Probá de nuevo.",
     standSalaQrAlt: "QR para sumarse a la ronda",
     standSalaListaAria: "Quiénes se sumaron",
-    espNadie: "Nadie puede elegir el número: tampoco quien organiza.",
+    espNadie: "Con la lista sellada, nadie elige quién gana.",
+    // En un orden de turnos o un Amigo secreto nadie gana: la línea de siempre, sin hablar de ganar.
+    espNadieSinGanador: "Nadie puede elegir el número: tampoco quien organiza.",
     badSig: "No pudimos confirmar el número del sorteo. Probá de nuevo.",
     drawIn: (mmss) => `Se habilita en ${mmss}`,
     backHome: "Volver a sortear",
@@ -1683,6 +1723,7 @@ export const T: Record<Lang, Dict> = {
     // --- La portada, la herramienta y Cómo funciona (3 de octubre de 2026).
     navSortear: "Sortear",
     navComo: "Cómo funciona",
+    navEmpresas: "Para empresas",
     navMis: "Mis sorteos",
     // En el celular, lo que no entra en la fila de la cabecera (Juegos, Cómo funciona, Seguridad, Precios).
     navMas: "Más",
@@ -1721,6 +1762,7 @@ export const T: Record<Lang, Dict> = {
     faq5q: "¿Qué queda guardado y dónde?",
     faq5a: 'Los nombres nunca se publican: quedan en tu equipo y en el comprobante que compartís. De cada sorteo solo queda un registro público, a nombre de tu cuenta y sin nombres. <a href="/como-funciona.html#que-se-guarda">Qué se guarda, en Cómo funciona</a>.',
     finT: "¿Lo usamos en tu próximo evento?",
+    ctaEmpresa: "¿Sos una empresa? Armá tu campaña",
     appTitle: "Tu sorteo",
     histNoAcct: "Entrá con tu cuenta para ver tus sorteos. Los que registraste aparecen en cualquier equipo donde entres.",
     histNone: "Todavía no hay sorteos con esta cuenta. El primero aparece acá en cuanto sellás una lista.",
@@ -1757,7 +1799,7 @@ export const T: Record<Lang, Dict> = {
     salaCopiar: "Copiar el enlace para el grupo",
     salaCopiado: "Copiado ✓",
     vSealsEjemplo: "Es la lista de ejemplo del sitio: la sella cualquiera que lo prueba con su cuenta, así que verla repetida no dice nada.",
-    salaPie: "Si falta alguien o está repetido, se arregla ahora: después de sellar no se puede cambiar.",
+    salaPie: "¿Falta alguien o se repite? Después de sellar no cambia.",
     // La lista ya sellada, en el proyector y en el celular (21 de octubre de 2026).
     salaTSellada: "La lista sellada",
     salaPieSellada: "La lista está sellada y ya no cambia. Buscate mientras sale el número.",
@@ -2227,7 +2269,7 @@ export const T: Record<Lang, Dict> = {
     gcOrdenGeneral: "El orden completo sale al final.",
     gcPeople: (n) => (n === 1 ? "1 participante" : `${n} participantes`),
     gcPrizes: (k) => (k === 1 ? "1 premio" : `${k} premios`),
-    gcPrizesNote: (k) => `Hay ${k} premios: el juego cuenta el primero y el cartel del final muestra a todos.`,
+    gcPrizesNote: (k) => `Hay ${k} premios. Al final se ven todos.`,
     // La tarjeta de cómo se juega en una ronda del stand: dice quién sale. Ahí nadie gana, no hay premios ni número público.
     gcStandNota: (k) => `Salen ${k} personas: el juego cuenta a la primera y el cartel del final las muestra a todas.`,
     gcStandGeneral: "El juego va mostrando quiénes salen.",
@@ -2403,11 +2445,12 @@ export const T: Record<Lang, Dict> = {
     // Lo que cobra Tinkazo a una campaña de empresa, dicho en precios y en los términos. {p} es el porcentaje, {m} el mínimo y
     // {e} lo que carga una empresa que reparte 120 (src/comision-texto.ts). Solo entran con la comisión configurada.
     prComisionT: "Lo que cuesta una campaña de empresa",
+    prComisionLink: "Armá la campaña de tu empresa →",
     prComision:
       "Cuando una empresa sortea premios en dólares digitales, paga a Tinkazo {p} del total de los premios, con un mínimo de {m}. " +
       "Se suma a lo que carga y no sale del premio: para repartir 120, carga {e}. Quien gana recibe el premio entero y anotarse es gratis.",
     prNoteComision:
-      "El modo Prueba es gratis, y el Oficial también con el cupón de tu evento. " +
+      "Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. " +
       "Las campañas de empresa con premios pagan un porcentaje. Participar y comprobar es gratis, siempre.",
     tmComisionT: "Si tu empresa sortea premios",
     tmComisionB:
@@ -3040,6 +3083,8 @@ export const T: Record<Lang, Dict> = {
     sigSorteando: "Sorteando",
     sigGano: "Ya salió el ganador",
     sigGanaron: "Ya salieron los ganadores",
+    // Con los lugares de a uno, mientras quedan lugares por mostrar: salió uno, no todos.
+    sigLugarSalio: "Ya salió el lugar {lugar} de {total}",
     sigTurnos: "Ya salió el orden de los turnos",
     sigAvisoRonda: "El número ya salió. Podés lanzar el sorteo.",
     juegoElegido: "Juego elegido",
@@ -3091,7 +3136,7 @@ export const T: Record<Lang, Dict> = {
     ver3dOn: "En 3D",
     ver3dOff: "En 2D",
     ver3dEtiqueta: "Ver en 3D",
-    ver3dNota: "Este juego se ve con cámara y relieve de verdad. Si el equipo se pone lento, tocá y pasa a 2D. El sorteo y quién gana son los mismos.",
+    ver3dNota: "Si se traba, tocá para verlo en 2D.",
     compartirOn: "Para compartir: sí",
     compartirOff: "Para compartir: no",
     compartirTip: "Más contraste, nombres más grandes y menos partículas, para que se lea en Zoom o en una pantalla compartida. Vale para esta pestaña.",
@@ -3131,7 +3176,6 @@ export const T: Record<Lang, Dict> = {
     // ponen el botón para ir, en vez de pedir entrar como si nunca hubiera entrado.
     cuentaOtroModo: "Tu cuenta está abierta en el modo {modo}.",
     cuentaOtroModoIr: "Ir a {modo}",
-    cuentaOtroModoChip: "Cuenta en {modo}",
     acctCargando: "Leyendo el saldo…",
     cuentaSinSesion: "No pudimos abrir la entrada con Google. Probá de nuevo o entrá con tu correo.",
     cuentaViaPruebaC: "Invitado",
@@ -3326,11 +3370,13 @@ export const T: Record<Lang, Dict> = {
     turnsPrizeLabel: "Nombre de los turnos (opcional)",
     turnsPrize: "Turnos",
     turnsMas: "Nombre de los turnos y subir CSV",
-    // El selector de modo, arriba de la lista (src/ui/turnos.ts): la otra opción y la ayuda que cambia con el modo.
+    // El selector de modo, arriba de la lista (src/ui/turnos.ts): la otra opción y la ayuda que cambia con el modo. La
+    // ayuda va plegada detrás de la i de debajo del selector, y modoInfo es el nombre de esa i para el lector de pantalla.
     modoRotulo: "¿Qué vas a hacer?",
     modoSorteo: "Sortear premios",
     modoSorteoSub: "Gana una persona o varias",
     modoSorteoAyuda: "De la lista salen quienes ganan. Vos elegís cuántos.",
+    modoInfo: "Qué hace esta opción",
     turnsLimit: "El orden llega hasta {n} turnos en este modo. Achicá la lista para poder sellar.",
     turnsWord: "Turno",
     turnsResultTitle: "El orden de los turnos",
@@ -3390,41 +3436,91 @@ export const T: Record<Lang, Dict> = {
     turnsFotoLinea: "{n} personas, turnos del 1 al {n}",
     turnsFotoLineaPart: "{k} personas, {n} turnos, turnos del 1 al {n}",
     // --- El modo «Amigo secreto» (issue #99, src/ui/turnos.ts y src/modos/amigo.ts): salen todos y cada uno le
-    //     regala a una persona. El reparto entero nunca se muestra: cada persona recibe su enlace (confirmar.html).
+    //     regala a una persona. Ninguna pantalla muestra el reparto, salvo el comprobante: cada persona recibe su enlace
+    //     (confirmar.html), y la línea de privacidad dice lo que el modo no protege.
     //     Sin palabras de ganar ni de premio, como en el orden de turnos.
     amigoOption: "Amigo secreto",
-    amigoSub: "Cada uno le regala a una persona",
+    amigoSub: "Cada uno regala a otro",
     amigoTitulo: "Quiénes participan",
     amigoCount: "Cuántos participan",
     amigoPrizeLabel: "Nombre del amigo secreto (opcional)",
     amigoPrize: "Amigo secreto",
     amigoMas: "Nombre del amigo secreto y subir CSV",
-    amigoHelp: "Salen todos: cada uno le regala a una persona y recibe de otra. El reparto no se muestra en ninguna pantalla.",
+    amigoHelp: "Cada uno recibe un enlace que dice solo a quién le regala.",
     amigoRulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige quién regala a quién antes de que se sepa, y dejan anotado cuál es el sorteo que vale.",
-    // La línea antes de sellar: quien tenga la lista y el número puede calcular el reparto. Con 2 o 3 personas, no hay secreto.
-    amigoPrivacidad: "El reparto no se muestra, pero quien tenga la lista y el número del sorteo puede calcularlo entero. El comprobante completo se comparte después del intercambio.",
-    amigoPrivacidadPoca: "Con 2 o 3 personas no hay secreto: aunque no se muestre el reparto, cada uno puede deducirlo entero.",
-    // Al nacer la ronda: la lista de personas con su enlace, nunca el reparto.
-    amigoResultadoT: "El enlace de cada persona",
-    amigoResultadoNota: "Nadie ve el reparto entero: mandale a cada persona su enlace, que dice solo a quién le toca regalar.",
+    // Las bases que se copian (`copyRules` y `copyRulesPre` de freeze.ts): cómo sale quién regala a quién, sin ganadores ni
+    // premio. Sin el punto del juego en pantalla, porque en este modo no se juega nada.
+    amigoRules: (p) => [
+      `Bases: ${p.prize || "Amigo secreto"}`,
+      "",
+      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+      basesDeAmigoEs(p),
+      `3. La lista se cerró el ${p.sealedAt}, antes de que existiera el número que decide. Si alguien la cambia, la huella ya no coincide:`,
+      `   ${p.listHash}`,
+      `4. El reparto sale de un número al azar que se publica el ${p.roundAt} y que nadie conocía al cerrar la lista.`,
+      p.raffleId
+        ? `5. El número de este sorteo es ${p.raffleId}. Con él se comprueba todo en el enlace de abajo.`
+        : "5. Esta lista se cerró en el navegador de quien organiza: nadie más puede atestiguar cuándo.",
+      "6. Cada persona recibe un enlace que dice solo a quién le regala.",
+      "7. Tinkazo solo hace el reparto. Quien organiza responde por el intercambio.",
+      "",
+      `Para comprobarlo: ${p.verifyUrl}`,
+    ].join("\n"),
+    amigoRulesPre: (p) => [
+      `Bases: ${p.prize || "Amigo secreto"}`,
+      "",
+      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+      basesDeAmigoEs(p),
+      "3. Cómo se elige: la lista se cierra y se publica antes de que exista el número que decide, y cualquiera puede comprobarlo.",
+      "4. Al cerrar la lista se publica el número de este sorteo. Con él se comprueba todo en el enlace de abajo.",
+      "5. Cada persona recibe un enlace que dice solo a quién le regala.",
+      "6. Tinkazo solo hace el reparto. Quien organiza responde por el intercambio.",
+      "",
+      `Para comprobarlo: ${p.verifyUrl}`,
+    ].join("\n"),
+    // Debajo de Sellar (participants.ts): cuántas personas y que la lista se cierra. Sin ganadores ni premio.
+    amigoSellarResumen: "{n} personas. Al sellar, la lista queda cerrada.",
+    // Lo que el modo no protege, sin esconder nada: quien organiza ve el reparto, y con la lista y el número del sorteo
+    // (va a la vista en la espera y dentro de cada enlace) se calcula. Va en el pliegue de la i, junto a amigoHelp. Con
+    // 2 o 3 personas no hay secreto: ese aviso no se pliega, sale a la vista debajo del selector.
+    amigoPrivacidad: "Quien organiza ve todo el reparto, y quien tenga la lista y el número del sorteo lo puede calcular.",
+    amigoPrivacidadPoca: "Con 2 o 3 personas no hay secreto: cada uno puede adivinar el reparto.",
+    // Alguien dos veces en la lista se podría regalar a sí mismo: no se sella. Va junto a Sellar (participants.ts), y la
+    // barra de lo que sigue lo dice corto (`sigRepetido`), como el tope de los turnos.
+    amigoRepetido: "{nombre} está dos veces. Si son dos personas, agregá una inicial.",
+    sigRepetido: "no se puede sellar, hay un nombre dos veces",
+    // Lo que se anuncia al lector de pantalla al llegar al resultado (`claveDelPaso`, pasos.ts): sin ganadores.
+    sigAmigo: "Ya salió el amigo secreto",
+    // Al nacer la ronda: la lista de personas en el orden pegado, con su enlace, nunca el reparto.
+    amigoResultadoT: "Mandale a cada uno su enlace",
+    amigoResultadoNota: "Por privado: cada enlace dice solo a quién le regala esa persona.",
     amigoCopiar: "Copiar enlace",
-    // El comprobante completo, ofrecido aparte: lleva el orden entero.
-    amigoAvisoComprobante: "El comprobante completo muestra el reparto entero: compartilo recién después del intercambio.",
-    amigoVerComprobante: "Abrir el comprobante",
-    amigoAgainLeft: "El amigo secreto ya salió. Tocá Copiar enlace para mandarle a cada persona el suyo.",
+    // Mis sorteos vuelve a armar los enlaces de cada persona (history.ts), si la pestaña se cerró mientras se mandaban.
+    amigoHistEnlaces: "Ver los enlaces",
+    // Lo que queda en el portapapeles al tocar Copiar enlace: una línea que dice qué es, para que no parezca un enlace suelto.
+    amigoEnlaceMsg: "Tu amigo secreto: {enlace}",
+    // El comprobante completo, ofrecido aparte y chico: lleva el orden entero. Se copia, no se abre en la pantalla.
+    amigoAvisoComprobante: "El comprobante muestra todo el reparto. Compartilo después del intercambio.",
+    amigoVerComprobante: "Copiar el comprobante",
     // El mensaje para el grupo, sin el reparto y sin enlace de verificación: el comprobante lo revela. Con nombre
     // propio, `amigoMsgNombre`; sin él, `amigoMsgCab`.
     amigoMsgCab: "Ya salió el amigo secreto: cada quien va a recibir su enlace con a quién le toca regalar.",
     amigoMsgNombre: "Ya salió {nombre}: cada quien va a recibir su enlace con a quién le toca regalar.",
     amigoMsgPie: "Que nadie comparta su enlace antes del intercambio.",
-    amigoSinComprobante: "Este amigo secreto no se selló antes del sorteo, así que no se puede comprobar.",
-    // La página del enlace de cada persona (confirmar.html): solo a quién le regala, el sorteo y el número del sello.
-    confirmarT: "Te toca regalarle a…",
-    confirmarError: "Este enlace no trae un Amigo secreto.",
-    confirmarPara: "Para:",
-    confirmarSorteo: "Sorteo:",
-    confirmarSello: "Número del sello:",
-    confirmarNota: "Este enlace dice solo a quién le regalás. No lleva la lista entera ni muestra el reparto de los demás.",
+    amigoSinComprobante: "Sin sello: este amigo secreto no se puede comprobar.",
+    // La espera en grande de un Amigo secreto (espera.ts, sin QR ni juegos) y el celular con un enlace viejo (espectador.ts).
+    espStickerAmigo: "Todavía nadie sabe a quién le toca",
+    espAmigoT: "Este amigo secreto no se ve en vivo",
+    espAmigoB: "Cada uno recibe su enlace de quien organiza.",
+    // La página del enlace de cada persona (confirmar.html, src/confirmar.ts): el nombre del sorteo, a quién le regala y
+    // que es secreto. El título y la descripción no llevan nombres. `confirmarT` lleva el de quien abre: lo pone el script.
+    confirmarTitulo: "Tu amigo secreto, en Tinkazo",
+    confirmarDesc: "A quién le regalás en el amigo secreto.",
+    confirmarT: "{nombre}, te toca regalarle a",
+    confirmarNota: "Es secreto: no se lo muestres a nadie.",
+    confirmarError: "Este enlace no funciona",
+    confirmarErrorB: "Pedile a quien organizó que te lo mande de nuevo.",
+    confirmarIr: "Ir a Tinkazo",
     // --- Varias participaciones por persona: se eligen tocando, en el panel de la lista. Solo se ve con la
     //     bandera de los modos o con ?modo= en la dirección (src/modos/bandera.ts).
     partAbrir: "Alguien participa más de una vez",
@@ -3531,11 +3627,11 @@ export const T: Record<Lang, Dict> = {
     modeOfficial: "Live",
     modeOfficialBody: "For the draws that count. The seal stays recorded on Stellar and anyone can redo the math with the receipt.",
     modeTest: "Test",
-    modeTestBody: "For trying things out. Everything works the same and can be checked, but it is wiped on December 16.",
+    modeTestBody: "To practice. It works the same, but it is wiped on December 16.",
     modeCurrent: "You are in this mode",
     modeSwitchToOfficial: "Switch to Live",
     modeSwitchToTest: "Switch to Test",
-    modeSwitchAccount: "Each mode has its own account. You'll sign in once more in {otro}, and your {actual} account will still be here when you come back.",
+    modeSwitchAccount: "In {otro} you sign in again. Your {actual} account will be waiting.",
     modeSwitchGuestAccount: "The test account only works in Test. In Live, sign in with Google.",
     modeHaveCoupon: "I have a coupon",
     modeSwitchBlocked: "Finish this draw before switching modes.",
@@ -3545,10 +3641,10 @@ export const T: Record<Lang, Dict> = {
     otraRedComoCambiar: "In your wallet, pick {etiqueta} and tap Seal the list again.",
     walletNetLabelMain: "Main Net",
     walletNetLabelTest: "Test Net",
-    firstOfficialTitle: "You are about to seal in Live mode",
-    firstOfficialBody: "The seal stays recorded on Stellar. Names are never published, only the fingerprint of the list.",
+    firstOfficialTitle: "This draw counts",
+    firstOfficialBody: "It stays on record and anyone can check it. Names are never published.",
     firstOfficialSeal: "Seal",
-    firstOfficialToTest: "Switch to Test",
+    firstOfficialToTest: "Practice in Test",
     historyOtherModeTest: "Your Test draws are in Test mode.",
     historyOtherModeOfficial: "Your Live draws are in Live mode.",
     historySwitchToTest: "Switch to Test",
@@ -3570,7 +3666,7 @@ export const T: Record<Lang, Dict> = {
     musicNo: "Music: off",
     freezeHint: "At least two names are needed.",
     freezeHintPersonas: "At least two people are needed.",
-    freeRule: 'Taking part is always free. No paid entry, no gambling. By sealing the list you accept the <a href="/terminos.html">terms</a>.',
+    freeRule: 'Taking part is always free. No paid entry, no gambling. Sealing means you accept the <a href="/terminos.html">terms</a>.',
     frozenOk: "List sealed ✓",
     csvHas: (col, n) => `Something in the ${col} column (${n})`,
     csvIs: (col, v, n) => `${col}: ${v} (${n})`,
@@ -4085,31 +4181,33 @@ export const T: Record<Lang, Dict> = {
     // One prize field per place when several win: 1st, 2nd, 3rd, then -th (and 11th to 13th).
     prizeLugar: (k) => `${k}${k % 100 >= 11 && k % 100 <= 13 ? "th" : ["st", "nd", "rd"][k % 10 - 1] ?? "th"} prize`,
     prizeLugarPh: "What this place takes home…",
+    prizeNoEntran: (varios) => (varios ? "Not all the prizes fit. Shorten one to seal." : "The prize is too long. Shorten it to seal."),
+    prizeCuantos: (n) => `${n} prizes`,
     kEntries: "entries", kDigest: "list fingerprint", kStatus: "draw status",
     // The sealed-count label when entries are not one per person (freeze.ts).
     kEntriesDe: (n) => `entries from ${n === 1 ? "1 person" : `${n} people`}`,
-    waitTitle: "The number that will decide",
-    waitLine: "Nobody can pick it, not even the organizer.",
-    waitLineSinSello: "An independent network publishes it in a few seconds. No seal: this draw can't be checked.",
-    volAviso: "Turn your phone's volume up: the show has music.",
-    waitNow: "The number is out. Tap Run the draw.",
+    waitTitle: "Starts in",
+    waitLine: "Once sealed, nobody picks who wins.",
+    waitLineSinSello: "No seal: this draw can't be checked.",
+    volAviso: "Turn the volume up: the show has music.",
+    waitNow: "Ready to draw.",
     // The counter of public numbers being born while waiting (issue #79, freeze.ts).
     espFaltanN: (n) => (n === 1 ? "1 number to go" : `${n} numbers to go`),
     espSticker: "Nobody knows who wins yet",
     espStickerOrden: "Nobody knows the order yet",
-    espFaltan: "until the draw number comes out",
+    espFaltan: "until it starts",
     espVolver: "Back to the page",
-    espQrT: "Scan to watch live",
+    espQrT: "Scan to watch on your phone",
     espQrBoton: "QR to watch live",
     espQrSub: "The same countdown and the same show, live on your phone.",
-    espVistaEspectador: "Spectator view",
+    espVistaEspectador: "Live",
     espLectura: "Read-only: the organizer runs the draw.",
     espProbar: "Try again",
     espSinNumero: "The draw number hasn't arrived yet. The winner will be the same. Tap Try again.",
     espSinNumeroOrden: "The draw number hasn't arrived yet. The order will be the same. Tap Try again.",
     espTarda: "The room hasn't saved the draw yet. You'll see it here as soon as it's saved.",
     espNoCoincide: "This link isn't for the draw that was recorded. Watch the screen in the room.",
-    espQrPreparando: "Preparing the QR to watch live…",
+    espQrPreparando: "Getting the QR ready…",
     espQrFallo: "We couldn't prepare the QR to watch live.",
     espQrJuegoAnterior: "People who already scanned see it with the previous game.",
     espEsperaLaSala: "We're waiting for the room's screen so we don't get ahead of it.",
@@ -4117,7 +4215,7 @@ export const T: Record<Lang, Dict> = {
     espPonerAlDia: "The draw already started. Catching you up.",
     espEnlaceRoto: "This link to watch the draw live arrived incomplete. Scan the QR on the screen again.",
     espIrALaPagina: "Go to Tinkazo",
-    espFinSiguiente: "Another prize? Scan the new QR on the screen.",
+    espFinSiguiente: "Another prize? Scan the new QR.",
     espVerDeNuevo: "Watch again",
     espHacerElTuyo: "Run your own draw",
     espMiraLaSala: "The show is still on the screen in the room. When it ends, you'll see who won here.",
@@ -4127,15 +4225,16 @@ export const T: Record<Lang, Dict> = {
     // Interactive games: the room where everyone lives the draw from their own phone.
     jiLink: "Interactive games: let everyone live the draw from their phone",
     jiT: "Interactive games",
-    jiB: "Open the room and show the QR: everyone joins from their phone, watches the list live and, once you seal it, sees whether they made it.",
+    jiB: "Open the room and show the QR: everyone joins from their phone, watches the list live and, in this sample round, sees whether they made it.",
     jiAbrir: "Open the room",
     jiQrSub: "Scan to join and add your name",
     jiCerrarLista: "Close the list",
     jiListaCerrada: "List closed: no one else can join.",
-    jiSellar: "Seal and announce",
+    jiSellar: "Run a sample draw",
     jiAnunciando: "Sharing the number…",
     jiPocos: "With fewer than two names there's no draw.",
     jiErrRonda: "Couldn't share the number. Try again.",
+    jiErrNoDisponible: "The live game isn't available right now.",
     jiResultadoT: "With {n} on the list, it landed on:",
     jiRondaEjemplo: "This is a sample round: the number isn't public and can't be verified.",
     jiPRotulo: "Participant view",
@@ -4148,6 +4247,7 @@ export const T: Record<Lang, Dict> = {
     jiPCerrada: "The list is closed: wait for the number.",
     jiPTarde: "The list is already closed: you didn't make it in this time.",
     jiPTeToco: "You made it!",
+    jiPMarcaEjemplo: "Sample",
     jiPNoGano: "Your name didn't come up this time",
     jiPGanadores: "Drawn:",
     jiPNoSePudo: "Couldn't decide with your phone's list. Let the organizer know.",
@@ -4155,16 +4255,18 @@ export const T: Record<Lang, Dict> = {
     jiPErrLlena: "The room is full. Let the organizer know.",
     jiPErrRed: "No signal. Try again.",
     jiPErrOtro: "Didn't get in. Try again.",
+    jiPErrRepetido: "That name is already on the list. Try another one.",
     jiPNombreMalo: "Try your name or nickname, no links.",
     jiPEjemplo: "Sample round: no receipt is kept and nothing is given out.",
     masOpciones: "Prize and CSV upload",
     masAjustes: "Sound, length and more",
     recRangoAria: "For {r} people",
-    espPie: (n) => `${n} on the list, sealed: nobody can change it now.`,
-    espPieSinSello: (n) => `${n} on the list, closed with no seal: this draw can't be checked.`,
+    espPie: (n) => `List sealed with ${n}. Nobody picks who wins.`,
+    espPieSinSello: (n) => `List closed with ${n}, no seal: it can't be checked.`,
+    espPieSinGanador: (n) => `${n} on the list, sealed: nobody can change it now.`,
     // The wait that flows into the show (Oct 21, 2026): once the number is out.
-    espStickerYa: "The number that decides is out",
-    espAprobar: "Your wallet will ask you to approve it.",
+    espStickerYa: "Ready to draw",
+    espAprobar: "Approve it in your wallet.",
     winnerLabel: "The result", verifyTitle: "In case anyone doubts it",
     verifyHow: "Anyone can rerun this draw from their phone and will get the same name. You don't have to take my word for it.",
     verifyPasos: "Step by step: 1) Open the quicknet round and check its proof against the beacon's public key. 2) randomness = sha256(proof). 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol at github.com/nema1502/tinkazo, in docs/protocolo.md.",
@@ -4242,7 +4344,8 @@ export const T: Record<Lang, Dict> = {
     footL: "Tinkazo", footR: "Made with ♥ in Bolivia",
     builtOn: "Built on",
     src: "source: paste / csv", frozenAt: "sealed:", seed: "public number no.", drandLink: "see the draw number ↗", proofOk: "proof verified",
-    placeholder: "One name per line…", winsPrize: "Takes home:", skip: "Skip",
+    // The empty box shows three sample names, one per line: you see without reading that each goes on its own line.
+    placeholder: "Ana Quispe\nBen Miller\nCarla Flores", winsPrize: "Takes home:", skip: "Skip",
     fetching: "Waiting for the public number…",
     drandTry: (i, n) => `The draw's number hasn't arrived yet. Attempt ${i} of ${n}…`,
     drawTry: (i, n) => `The network doesn't see that number yet. Retry ${i} of ${n}…`,
@@ -4263,16 +4366,16 @@ export const T: Record<Lang, Dict> = {
     againFew: (n, eq = cuadroEsDeEquipos()) => (n === 1 ? `Only one ${eq ? "team" : "person"} is left without a prize: for another draw, use another list.` : "Everyone on the list has already won: for another prize, use another list."),
     againQuitados: (nombres, n, eq = cuadroEsDeEquipos()) => (nombres.length > 3 ? `${nombres.length} ${eq ? "teams" : "people"} already won and are off this list. ${n} left.` : nombres.length === 1 ? `${nombres[0]} already won and is off this list. ${n} left.` : `${new Intl.ListFormat("en", { type: "conjunction" }).format(nombres)} already won and are off this list. ${n} left.`),
     lugarDe: (n, total) => `Place ${n} of ${total}`,
-    lugaresFijos: "Every place was fixed the moment the number was born: anyone can compute them from then on.",
+    lugaresFijos: "Every place is already decided.",
     fijosAlNacer: "The number picks every place at once: they're fixed the moment it is born, and anyone can compute them from then on.",
     againLugarBoton: "Next prize",
-    againLugar: (n, total) => `Place ${n} of ${total} is already decided: it gets shown without sealing again.`,
+    againLugar: (n, total) => `Place ${n} of ${total} is next.`,
     recuperarLista: "Bring back the previous list",
     cortinaSe: "Now drawing",
     cortinaSeOrden: "Drawing the turn order",
     cortinaSin: "The draw is coming",
     cortinaGraba: "Recording the draw so nobody can change it…",
-    cortinaNumero: "Almost there: the draw number is on its way…",
+    cortinaNumero: "Almost there",
     grabGuardando: "Saving the draw so nobody can change it…",
     grabGuardado: "Draw saved. Nobody can change it now.",
     grabReintentar: "Save the draw",
@@ -4299,7 +4402,7 @@ export const T: Record<Lang, Dict> = {
     imgPremio: "Prize:",
     imgPieVarios: "Nobody picked these names: the list was locked before the number that decided them existed.",
     // --- The first draw, "How to use it" and the rehearsal (onboarding, October 22, 2026).
-    ctaGoogle: "Sign in with Google and draw",
+    ctaGoogle: "Sign in with Google and draw for free",
     ctaOtras: "Other ways to sign in",
     ctaEnsayo: "Try it with a sample",
     ctaStand: "I run a booth",
@@ -4313,7 +4416,10 @@ export const T: Record<Lang, Dict> = {
     get yaEntraste() {
       return cuadroEsDeEquipos() ? "You're in. Seal your list of {n} teams." : "You're in. Seal your list of {n} people.";
     },
-    pegarAyuda: "Paste names from WhatsApp or a spreadsheet, or bring your Luma list.",
+    // With the list empty, a single line: the samples in the box already show one name per line.
+    pegarAyuda: "Paste your list or type a name.",
+    // The button under the box that starts a new line: for whoever doesn't know each name goes on its own line.
+    otroNombre: "Another name",
     // On its own, next to the box: capitalized. The bar's one (sigLista) sits mid-line.
     get listaCuenta() {
       return cuadroEsDeEquipos() ? "List of {n} teams" : "List of {n} people";
@@ -4340,7 +4446,12 @@ export const T: Record<Lang, Dict> = {
     loginCorreoO: "or with your email",
     loginGoogle: "Sign in with Google",
     loginMas: "More ways to sign in",
+    loginOtras: "Other ways to sign in",
     loginEnApp: "Google sign-in doesn't work inside this app. Use your email, or open the page in your browser.",
+    loginCopiarEnlace: "Copy the link",
+    loginPracticar: "Practice without an account",
+    ingresoPracticar: "Practice in Test",
+    ingresoPracticarLinea: "In Test it works the same, but it doesn't count and is wiped on December 16.",
     comoT: "How to use it, in 4 steps",
     comoAca: "You are here",
     como1T: "Paste the list",
@@ -4367,8 +4478,8 @@ export const T: Record<Lang, Dict> = {
     ensGuia1: "Sealing closes the list before the number exists: not even you can change it.",
     ensGuia2: "Sealed. The number comes out in {s} s. Meanwhile, choose the game.",
     ensGuia3: "The number is out. Tap Run the draw.",
-    ensFinT: "That was a rehearsal: whoever came up is pretend and nothing was recorded.",
-    ensFinB: "That's how it goes. When you go live, sign in and paste your list before you put it on the projector. The wait is about a minute.",
+    ensFinT: "That was a rehearsal. Whoever came up doesn't count.",
+    ensFinB: "In a real draw, the wait is about a minute.",
     ensFinCta: "Draw with my list",
     ensOtroJuego: "Try another game",
     otroJuegoBtn: "Watch again with another game",
@@ -4376,7 +4487,7 @@ export const T: Record<Lang, Dict> = {
     juegoVerDeNuevo: "Tap a game to watch this same result again with it.",
     feedbackFin: "Anything to improve? Tell us in 30 seconds",
     ensEstadio: "REHEARSAL: not recorded",
-    standLink: "I run a booth: quick rounds with whoever stops by",
+    standLink: "I run a booth",
     standNoSorteo: "A draw is in progress. Finish it before opening booth mode.",
     standNoEjemplo: "Leave the example to open booth mode.",
     standTitulo: "Your booth",
@@ -4457,7 +4568,9 @@ export const T: Record<Lang, Dict> = {
     standSalaErrQuitar: "We could not remove the name because there is no connection. It is back on the list. Try again.",
     standSalaQrAlt: "QR to join the round",
     standSalaListaAria: "Who joined",
-    espNadie: "Nobody can pick the number: not even the organizer.",
+    espNadie: "Once sealed, nobody picks who wins.",
+    // En un orden de turnos o un Amigo secreto nadie gana: la línea de siempre, sin hablar de ganar.
+    espNadieSinGanador: "Nobody can pick the number: not even the organizer.",
     badSig: "We couldn't confirm the draw's number. Try again.",
     drawIn: (mmss) => `Unlocks in ${mmss}`,
     backHome: "Back to the draw",
@@ -4666,6 +4779,7 @@ export const T: Record<Lang, Dict> = {
     // --- La portada, la herramienta y Cómo funciona (3 de octubre de 2026).
     navSortear: "Draw",
     navComo: "How it works",
+    navEmpresas: "For companies",
     navMis: "My draws",
     // On a phone, what does not fit in the header row (Games, How it works, Security, Pricing).
     navMas: "More",
@@ -4704,6 +4818,7 @@ export const T: Record<Lang, Dict> = {
     faq5q: "What gets saved, and where?",
     faq5a: 'Names are never published: they stay on your device and in the receipt you share. Each draw leaves only a public record, under your account and without names. <a href="/como-funciona.html#que-se-guarda">What is kept, in How it works</a>.',
     finT: "Use it at your next event.",
+    ctaEmpresa: "Are you a company? Build your campaign",
     appTitle: "Your draw",
     histNoAcct: "Sign in to see your draws. The ones you recorded show up on any device you sign in from.",
     histNone: "No draws with this account yet. The first one shows up here as soon as you seal a list.",
@@ -4740,7 +4855,7 @@ export const T: Record<Lang, Dict> = {
     salaCopiar: "Copy the link for the group",
     salaCopiado: "Copied ✓",
     vSealsEjemplo: "This is the site's sample list: anyone trying the site with an account seals it, so seeing it repeated means nothing.",
-    salaPie: "If someone is missing or repeated, fix it now: after sealing, nothing can change.",
+    salaPie: "Someone missing or repeated? After sealing, nothing changes.",
     // The list once sealed, on the projector and on the phone (Oct 21, 2026).
     salaTSellada: "The sealed list",
     salaPieSellada: "The list is sealed and can't change. Find yourself while the number comes out.",
@@ -5207,7 +5322,7 @@ export const T: Record<Lang, Dict> = {
     gcOrdenGeneral: "The full order appears at the end.",
     gcPeople: (n) => (n === 1 ? "1 participant" : `${n} participants`),
     gcPrizes: (k) => (k === 1 ? "1 prize" : `${k} prizes`),
-    gcPrizesNote: (k) => `There are ${k} prizes: the game tells the first one and the final card shows them all.`,
+    gcPrizesNote: (k) => `There are ${k} prizes. You'll see them all at the end.`,
     // The how-to-play card in a booth round: it says who is picked. Nobody wins there, there are no prizes and no public number.
     gcStandNota: (k) => `${k} people are picked: the game tells the first one and the final card shows them all.`,
     gcStandGeneral: "The game shows who is picked.",
@@ -5382,12 +5497,13 @@ export const T: Record<Lang, Dict> = {
     // What Tinkazo charges a company campaign, said on pricing and in the terms. {p} is the percentage, {m} the minimum and {e}
     // what a company giving away 120 loads (src/comision-texto.ts). They only appear with the charge configured.
     prComisionT: "What a company campaign costs",
+    prComisionLink: "Build your company's campaign →",
     prComision:
       "When a company gives away prizes in digital dollars, it pays Tinkazo {p} of the prize total, with a minimum of {m}. " +
       "It is added to what the company loads and never comes out of the prize: to give away 120, it loads {e}. " +
       "The winner gets the full prize and signing up is free.",
     prNoteComision:
-      "Test mode is free, and so is Live mode with your event coupon. " +
+      "Run your first 3 Live draws for free. For more, use a coupon. " +
       "Company campaigns with prizes pay a percentage. Taking part and checking are always free.",
     tmComisionT: "If your company gives away prizes",
     tmComisionB:
@@ -6011,6 +6127,7 @@ export const T: Record<Lang, Dict> = {
     sigSorteando: "Drawing",
     sigGano: "The winner is out",
     sigGanaron: "The winners are out",
+    sigLugarSalio: "Place {lugar} of {total} is out",
     sigTurnos: "The turn order is out",
     sigAvisoRonda: "The number is out. You can run the draw.",
     juegoElegido: "Chosen game",
@@ -6062,7 +6179,7 @@ export const T: Record<Lang, Dict> = {
     ver3dOn: "In 3D",
     ver3dOff: "In 2D",
     ver3dEtiqueta: "View in 3D",
-    ver3dNota: "This game plays with a real camera and depth. If the device gets slow, tap to switch to 2D. The draw and who wins are the same.",
+    ver3dNota: "If it stutters, tap to see it in 2D.",
     compartirOn: "For sharing: on",
     compartirOff: "For sharing: off",
     compartirTip: "More contrast, bigger names and fewer particles, so it reads on Zoom or a shared screen. Lasts for this tab.",
@@ -6099,7 +6216,6 @@ export const T: Record<Lang, Dict> = {
     cuentaPideEntrar: "Sign in with Google",
     cuentaOtroModo: "Your account is open in {modo}.",
     cuentaOtroModoIr: "Go to {modo}",
-    cuentaOtroModoChip: "Account in {modo}",
     acctCargando: "Reading the balance…",
     cuentaSinSesion: "We couldn't start the Google sign-in. Try again or sign in with your email.",
     cuentaViaPruebaC: "Guest",
@@ -6296,6 +6412,7 @@ export const T: Record<Lang, Dict> = {
     modoSorteo: "Draw prizes",
     modoSorteoSub: "One or more people win",
     modoSorteoAyuda: "The winners come out of the list. You choose how many.",
+    modoInfo: "What this option does",
     turnsLimit: "The order goes up to {n} turns in this mode. Shorten the list to seal it.",
     turnsWord: "Turn",
     turnsResultTitle: "The turn order",
@@ -6355,41 +6472,87 @@ export const T: Record<Lang, Dict> = {
     turnsFotoLinea: "{n} people, turns 1 to {n}",
     turnsFotoLineaPart: "{k} people, {n} turns, turns 1 to {n}",
     // --- The Secret Santa mode (issue #99, src/ui/turnos.ts and src/modos/amigo.ts): everyone is drawn and each
-    //     person gives a gift to one other person. The whole exchange is never shown: each person gets their own
-    //     link (confirmar.html). No winning or prize words, like the turn order.
+    //     person gives a gift to one other person. No screen shows the exchange except the proof: each person gets their
+    //     own link (confirmar.html), and the privacy line says what the mode doesn't protect. No winning or prize words,
+    //     like the turn order.
     amigoOption: "Secret Santa",
-    amigoSub: "Each person gives to one other person",
+    amigoSub: "Everyone gives to someone",
     amigoTitulo: "Who takes part",
     amigoCount: "How many take part",
     amigoPrizeLabel: "Name for the Secret Santa (optional)",
     amigoPrize: "Secret Santa",
     amigoMas: "Name for the Secret Santa and CSV upload",
-    amigoHelp: "Everyone is drawn: each person gives a gift to one person and receives from another. The exchange is not shown on any screen.",
+    amigoHelp: "Each person gets a link that says only who they give to.",
     amigoRulesNote: "Paste them on Luma, WhatsApp or wherever you announced the draw. They say how the gift exchange is chosen before anyone knows it, and put on record which draw counts.",
-    // The line before sealing: whoever holds the list and the number can work out the whole exchange. With 2 or 3 people, there is no secret.
-    amigoPrivacidad: "The exchange is not shown, but whoever holds the list and the draw number can work it out in full. The full proof is shared after the gift exchange.",
-    amigoPrivacidadPoca: "With 2 or 3 people there is no secret: even without showing the exchange, everyone can work it out in full.",
-    // When the round is born: the list of people with their link, never the exchange.
-    amigoResultadoT: "Each person's link",
-    amigoResultadoNota: "Nobody sees the whole exchange: send each person their link, which says only who they give to.",
+    // The rules that get copied (`copyRules` and `copyRulesPre` in freeze.ts): who gives to whom, no winners or prize.
+    // No point about the game on screen, since nothing is played in this mode.
+    amigoRules: (p) => [
+      `Rules: ${p.prize || "Secret Santa"}`,
+      "",
+      "1. Entry is free. Nothing to buy and no account needed.",
+      basesDeAmigoEn(p),
+      `3. The list was closed on ${p.sealedAt}, before the deciding number existed. If anyone changes it, the fingerprint no longer matches:`,
+      `   ${p.listHash}`,
+      `4. The exchange comes from a random number published on ${p.roundAt} that nobody knew when the list was closed.`,
+      p.raffleId
+        ? `5. This draw's number is ${p.raffleId}. Everything is checked with it at the link below.`
+        : "5. This list was closed in the organizer's browser: nobody else can vouch for when it was closed.",
+      "6. Each person gets a link that says only who they give to.",
+      "7. Tinkazo only makes the exchange. The organizer is responsible for the gift exchange.",
+      "",
+      `To check it: ${p.verifyUrl}`,
+    ].join("\n"),
+    amigoRulesPre: (p) => [
+      `Rules: ${p.prize || "Secret Santa"}`,
+      "",
+      "1. Entry is free. Nothing to buy and no account needed.",
+      basesDeAmigoEn(p),
+      "3. How it is chosen: the list is closed and published before the deciding number exists, and anyone can check it.",
+      "4. When the list is closed, this draw's number is published. Everything is checked with it at the link below.",
+      "5. Each person gets a link that says only who they give to.",
+      "6. Tinkazo only makes the exchange. The organizer is responsible for the gift exchange.",
+      "",
+      `To check it: ${p.verifyUrl}`,
+    ].join("\n"),
+    // Under Seal (participants.ts): how many people and that the list gets locked. No winners or prize.
+    amigoSellarResumen: "{n} people. Sealing locks the list.",
+    // What the mode does not protect, hiding nothing: the organizer sees the exchange, and with the list and the draw
+    // number (shown during the wait and inside every link) it can be worked out. It goes behind the i, with amigoHelp.
+    amigoPrivacidad: "The organizer sees the whole exchange, and anyone with the list and the draw number can work it out.",
+    amigoPrivacidadPoca: "With 2 or 3 people there is no secret: everyone can guess the exchange.",
+    amigoRepetido: "{nombre} is on the list twice. If they're two people, add an initial.",
+    sigRepetido: "can't seal, a name is on the list twice",
+    // What the screen reader hears on reaching the result (`claveDelPaso`, pasos.ts): no winners.
+    sigAmigo: "The Secret Santa is drawn",
+    // When the round is born: the list of people in the pasted order, with their link, never the exchange.
+    amigoResultadoT: "Send each person their link",
+    amigoResultadoNota: "Privately: each link says only who that person gives to.",
     amigoCopiar: "Copy link",
-    // The full proof, offered separately: it carries the whole order.
-    amigoAvisoComprobante: "The full proof shows the whole exchange: share it only after the gift exchange.",
-    amigoVerComprobante: "Open the proof",
-    amigoAgainLeft: "The Secret Santa is drawn. Tap Copy link to send each person theirs.",
+    amigoHistEnlaces: "See the links",
+    // What lands on the clipboard on Copy link: a line that says what it is, so it doesn't look like a stray link.
+    amigoEnlaceMsg: "Your Secret Santa: {enlace}",
+    // The full proof, offered separately and small: it carries the whole order. It is copied, not opened on screen.
+    amigoAvisoComprobante: "The proof shows the whole exchange. Share it after the gift exchange.",
+    amigoVerComprobante: "Copy the proof",
     // The message for the group, without the exchange and without a verification link: the proof reveals it.
     // With a custom name, `amigoMsgNombre`; without one, `amigoMsgCab`.
     amigoMsgCab: "The Secret Santa is drawn: each person will get their own link saying who they give to.",
     amigoMsgNombre: "{nombre} is drawn: each person will get their own link saying who they give to.",
     amigoMsgPie: "Nobody should share their link before the exchange.",
-    amigoSinComprobante: "This Secret Santa was not sealed before the draw, so it can't be checked.",
-    // The page behind each person's link (confirmar.html): only who they give to, the draw and the seal number.
-    confirmarT: "You give a gift to…",
-    confirmarError: "This link does not carry a Secret Santa.",
-    confirmarPara: "For:",
-    confirmarSorteo: "Draw:",
-    confirmarSello: "Seal number:",
-    confirmarNota: "This link only says who you give to. It does not carry the whole list or show anyone else's part of the exchange.",
+    amigoSinComprobante: "No seal: this Secret Santa can't be checked.",
+    // The big wait of a Secret Santa (espera.ts, no QR or games) and the phone with an old link (espectador.ts).
+    espStickerAmigo: "Nobody knows who gets whom yet",
+    espAmigoT: "This Secret Santa isn't shown live",
+    espAmigoB: "Each person gets their own link from the organizer.",
+    // The page behind each person's link (confirmar.html, src/confirmar.ts): the draw's name, who they give to and that it
+    // is a secret. The title and description carry no names. `confirmarT` carries the opener's name: the script fills it.
+    confirmarTitulo: "Your Secret Santa, on Tinkazo",
+    confirmarDesc: "Who you give a gift to in the Secret Santa.",
+    confirmarT: "{nombre}, you give a gift to",
+    confirmarNota: "It's a secret: don't show it to anyone.",
+    confirmarError: "This link doesn't work",
+    confirmarErrorB: "Ask the organizer to send it again.",
+    confirmarIr: "Go to Tinkazo",
     // --- Several entries per person: chosen by tapping, in the list panel. Only shown with the modes flag
     //     or with ?modo= in the address (src/modos/bandera.ts).
     partAbrir: "Someone takes part more than once",
@@ -6494,7 +6657,7 @@ T.es.pagoMemoNumUso = "Si tu app pide solo números, usá esta nota en vez de la
 T.en.pagoMemoNumRotulo = "Numeric memo";
 T.en.pagoMemoNumUso = "If your app only takes numbers, use this memo instead of the other one.";
 // Con el modo Oficial a la vista, los nombres Prueba y Oficial reemplazan al de siempre, y las páginas de lectura dicen
-// que con un cupón de evento el modo Oficial es gratis (`i18n-modo-oficial.ts`). La puerta es la excepción: el diccionario
+// que los primeros 3 sorteos oficiales son gratis y que para más se usa un cupón (`i18n-modo-oficial.ts`). La puerta es la excepción: el diccionario
 // existe en los dos modos, pero su frase sobre dejar la cuenta lista solo vale cuando la persona está en Oficial.
 if (HAY_MODO_OFICIAL) {
   const { cuentaPideGoogle: puertaOficialEs, ...textosOficialesEs } = TEXTOS_MODO_OFICIAL.es;

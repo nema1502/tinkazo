@@ -152,6 +152,10 @@ export function instantesDe(f: DiaYHoras): InstantesDelEvento | null {
   return { abreMs, cierraMs, sorteoMs, cierraMasUno, sorteoMasUno, sorteoGiro };
 }
 
+const DIA_MS = 24 * 60 * 60 * 1000;
+/** Un cierre hasta seis horas antes de abrir en el reloj se toma como escrito antes de abrir, no como del día siguiente. */
+const CIERRE_ESCRITO_ANTES_MS = 6 * 60 * 60 * 1000;
+
 /**
  * El primer problema de las horas, con el campo que hay que corregir. Rechaza que cierre y abra sean la misma hora, que
  * el sorteo quede antes del cierre sin ser del día siguiente (más de 12 horas después de abrir) y que entre abrir y el
@@ -166,9 +170,15 @@ export function revisarHoras(f: DiaYHoras, ahora: number): { problema: ProblemaD
   if (f.cierra === f.abre) return { problema: "cierra-antes", donde: "ccp-cierra" };
   const t = instantesDe(f);
   if (!t) return { problema: "falta-hora", donde: "ccp-cierra" };
-  // Un cierre a más de 12 horas de abrir (por ejemplo 18:00 abriendo a las 20:00, que ya es del día siguiente) no es una noche
-  // larga: se dice que queda lejos y no que sea antes de abrir, porque la persona ve +1 día y el mensaje se contradiría.
-  if (t.cierraMs - t.abreMs > MAXIMO_HASTA_EL_SORTEO_MS) return { problema: "cierra-lejos", donde: "ccp-cierra" };
+  // Un cierre anterior a abrir en el reloj se toma del día siguiente (abre 22:00 y cierra 01:00 es una noche corta). Si así
+  // queda a más de 12 horas, depende de cuánto antes de abrir se escribió: unas pocas horas antes (abre 19:50 y cierra 19:10)
+  // es un cierre escrito antes de abrir y se dice eso. La mañana siguiente (abre 20:00 y cierra 09:00) sí es un plazo largo,
+  // igual que un cierre del mismo día a más de 12 horas: queda lejos.
+  const plazo = t.cierraMs - t.abreMs;
+  if (plazo > MAXIMO_HASTA_EL_SORTEO_MS) {
+    const escritoAntes = t.cierraMasUno && plazo >= DIA_MS - CIERRE_ESCRITO_ANTES_MS;
+    return { problema: escritoAntes ? "cierra-antes" : "cierra-lejos", donde: "ccp-cierra" };
+  }
   if (t.sorteoMs - t.abreMs > MAXIMO_HASTA_EL_SORTEO_MS) {
     // Un sorteo escrito antes del cierre que dio la vuelta al día es un error de la hora del sorteo, no un plazo largo.
     return { problema: t.sorteoGiro ? "sorteo-antes" : "sorteo-lejos", donde: "ccp-sorteo" };

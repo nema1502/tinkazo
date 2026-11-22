@@ -2,9 +2,12 @@ import { onLangChange, t } from "../i18n";
 import { modesVisible, requestedMode } from "../modos/bandera";
 import { isSecretSantaPrize, noHaySecreto, secretPrize } from "../modos/amigo";
 import { isTurnPrize, turnPrize } from "../modos/turnos";
+import { repetidos } from "../buscar";
+import { canonicalList } from "../protocol/canonical";
+import { nombreDePersona } from "../participaciones";
 import { topeDeGanadores } from "../stellar/config";
 import { fijarGanadores, ponerGanadores } from "./ganadores";
-import { actualizarLugares, bloquearLugares, ponerPremio } from "./premios";
+import { actualizarLugares, bloquearLugares, ponerPremio, premiosDeLosCampos, reponerLugares } from "./premios";
 
 /**
  * El modo del sorteo, elegido a la vista: el selector de arriba de la lista (`#turnos-opcion` de `index.html`), con tres
@@ -24,9 +27,11 @@ import { actualizarLugares, bloquearLugares, ponerPremio } from "./premios";
  * - Si la lista pasa de lo que admite el contrato de esta red, no se puede sellar: un orden incompleto nunca se presenta
  *   como un orden, ni un Amigo secreto a medias como un Amigo secreto. No es un aviso, es que el botón de sellar queda
  *   apagado (`ordenNoCabe`).
- * - El título del paso y la ayuda de debajo del selector dicen lo que va a pasar. En el Amigo secreto, una línea más
- *   (`#amigo-privacidad`) dice lo que se decidió sobre la privacidad: quien tenga la lista y el número podría calcular
- *   el reparto, y con 2 o 3 personas no hay secreto (S3).
+ * - El título del paso dice lo que va a pasar. Lo que hace el modo elegido va plegado detrás de la i de debajo del
+ *   selector (`#btn-modo-info`, desde el 20 de noviembre de 2026: dos párrafos a la vista eran demasiado texto en el
+ *   celular). En el Amigo secreto el pliegue trae una línea más (`#amigo-privacidad`), lo que el modo no protege: quien
+ *   organiza ve el reparto, y quien tenga la lista y el número del sorteo lo puede calcular. Que con 2 o 3 personas no
+ *   hay secreto (S3) no se pliega: sale a la vista en la nota del selector (`#turnos-nota`), igual que el tope.
  *
  * El botón del Amigo secreto se arma acá y no en el HTML porque el selector vive en `index.html`, que es de producción:
  * así el markup de siempre no cambia y el modo entra con su propia pieza.
@@ -49,6 +54,8 @@ let cerrada = false;
 /** Lo que decían el campo de la cantidad y el nombre antes de prender el modo, para devolverlos al apagarlo. */
 let cantidadAntes = "";
 let premioAntes = "";
+/** Los premios del 2.º lugar en adelante antes de prender el modo: el modo saca sus campos, y al apagarlo vuelven. */
+let lugaresAntes: string[] = [];
 
 const $id = <T extends HTMLElement>(id: string): T | null => document.getElementById(id) as T | null;
 
@@ -60,6 +67,28 @@ export const modoAmigoActivo = (): boolean => encendido && amigo;
 
 /** ¿La lista pasa de lo que esta red admite en un orden o un Amigo secreto? Con el modo apagado nunca: ahí manda el tope de siempre. */
 export const ordenNoCabe = (n: number = personas): boolean => encendido && n > topeDeGanadores();
+
+/**
+ * En un Amigo secreto, la primera persona que está dos veces en la lista, o null. El reparto va de renglón en renglón:
+ * con dos renglones de la misma persona, uno puede caer justo antes del otro y esa persona se regala a sí misma. Se
+ * compara sin tildes ni mayúsculas y sin la marca de una participación («Ana (1/2)» es Ana). Con una, no se sella
+ * (`participants.ts` y `freeze.ts`) y la línea de junto a Sellar dice cuál. En los otros modos nunca.
+ */
+export function amigoRepetido(names: readonly string[]): string | null {
+  if (!encendido || !amigo) return null;
+  const deCadaUno = names.map(nombreDePersona);
+  const dobles = repetidos(deCadaUno);
+  return dobles.size ? (deCadaUno[Math.min(...dobles)] ?? null) : null;
+}
+
+/**
+ * El repetido de la lista que está ahora en el cuadro (`#ta`), para quien no tiene la lista a mano: la red, al repintar
+ * Sellar (`red.ts`), lo volvía a prender con un repetido y el toque no hacía nada.
+ */
+export function amigoRepetidoEnElCuadro(): string | null {
+  const cuadro = $id<HTMLTextAreaElement>("ta");
+  return cuadro ? amigoRepetido(canonicalList(cuadro.value)) : null;
+}
 
 /** El nombre por defecto del modo elegido, en el idioma de ahora. */
 const premioPorDefecto = (): string => t(amigo ? "amigoPrize" : "turnsPrize");
@@ -76,7 +105,7 @@ const nombreDelModo = (texto: string): string => (amigo ? secretPrize(texto, t("
 
 /**
  * Los rótulos que cambian con el modo: se cambia la clave (`data-i`) y el cambio de idioma los sigue traduciendo. El
- * título del paso y la ayuda de debajo del selector dicen lo que va a pasar. [selector, apagado, turnos, amigo].
+ * título del paso y la ayuda del pliegue de la i dicen lo que va a pasar. [selector, apagado, turnos, amigo].
  */
 const ROTULOS: ReadonlyArray<readonly [selector: string, apagado: string, turnos: string, amigo: string]> = [
   ['label[for="nw"]', "winners", "turnsCount", "amigoCount"],
@@ -119,14 +148,17 @@ function armarBotonAmigo(): HTMLButtonElement | null {
   svg.setAttribute("aria-hidden", "true");
   svg.setAttribute("focusable", "false");
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  // Dos personas y una flecha de una a la otra: cada uno le regala a otro. Era un regalo, igual al de Sortear premios.
   path.setAttribute(
     "d",
-    "M4 10h16v4H4zM6 14h12v7H6zM12 10v11M12 10c-2 0-4-.8-4-2.5S10.5 5 12 7c1.5-2 4.5-1.2 4.5.5S14 10 12 10z",
+    "M7 4.5h10M14.5 2l2.5 2.5-2.5 2.5M8.5 11a2.5 2.5 0 1 1-5 0a2.5 2.5 0 1 1 5 0M20.5 11a2.5 2.5 0 1 1-5 0a2.5 2.5 0 1 1 5 0" +
+      "M2 21a4 4 0 0 1 8 0M14 21a4 4 0 0 1 8 0",
   );
   path.setAttribute("fill", "none");
   path.setAttribute("stroke", "currentColor");
   path.setAttribute("stroke-width", "2");
   path.setAttribute("stroke-linejoin", "round");
+  path.setAttribute("stroke-linecap", "round");
   svg.appendChild(path);
   b.appendChild(svg);
   const tit = document.createElement("span");
@@ -150,7 +182,10 @@ function elegirAmigo(desde: HTMLButtonElement): void {
   animarElCambio();
 }
 
-/** La línea de privacidad antes de sellar (S3). Se arma una vez, junto a la ayuda del selector. */
+/**
+ * La línea de privacidad antes de sellar (S3). Se arma una vez, junto a la ayuda del selector y dentro de su pliegue:
+ * es una explicación y no un aviso, así que no se anuncia sola (el de 2 o 3 personas va en `#turnos-nota`).
+ */
 function armarLineaDePrivacidad(): HTMLElement | null {
   let el = $id<HTMLElement>("amigo-privacidad");
   if (el) return el;
@@ -159,7 +194,6 @@ function armarLineaDePrivacidad(): HTMLElement | null {
   el = document.createElement("p");
   el.id = "amigo-privacidad";
   el.className = "note amigo-privacidad";
-  el.setAttribute("role", "status");
   el.hidden = true;
   ayuda.after(el);
   return el;
@@ -174,6 +208,12 @@ function pintar(): void {
   // La marca del elegido se desliza de un botón al otro (styles.css, `.modo-botones`).
   const grupo = $id("modo-botones");
   if (grupo) grupo.dataset.modo = !encendido ? "sorteo" : amigo ? "amigo" : "turnos";
+  // Con el tercer botón armado, tres columnas desde el primer pintado, con cualquier modo elegido (styles.css, `.con-amigo`).
+  grupo?.classList.toggle("con-amigo", !!$id("btn-amigo"));
+  // La marca del Amigo secreto en la página (styles.css, bloque «Amigo secreto»): en el paso 2 no se ofrecen juegos ni
+  // el aviso del volumen, porque en este modo no se juega nada. Se va al cambiar de modo.
+  if (encendido && amigo) document.documentElement.dataset.modoLista = "amigo";
+  else delete document.documentElement.dataset.modoLista;
   for (const [selector, apagado, turnos, deAmigo] of ROTULOS) {
     const el = document.querySelector<HTMLElement>(selector);
     if (!el) continue;
@@ -215,20 +255,64 @@ function animarElCambio(): void {
   }
 }
 
-/** El orden y el Amigo secreto llegan hasta N en este modo. El aviso sale solo cuando la lista no entra: cuenta las líneas, no las personas. */
+/**
+ * La nota del selector, a la vista y nunca plegada, sale solo cuando pasa algo que hay que saber antes de sellar: que
+ * la lista no entra en lo que admite esta red (el orden y el Amigo secreto llegan hasta N: cuenta las líneas, no las
+ * personas) o, en un Amigo secreto, que con 2 o 3 personas no hay secreto. Lo que el modo no protege con 4 o más va
+ * en el pliegue de la i, junto a la ayuda.
+ */
 function pintarAviso(): void {
   const nota = $id("turnos-nota");
   if (nota) {
     const excede = ordenNoCabe();
-    nota.textContent = excede ? t("turnsLimit").replace("{n}", String(topeDeGanadores())) : "";
-    nota.hidden = !excede;
+    const sinSecreto = encendido && amigo && noHaySecreto(personas);
+    nota.textContent = excede
+      ? t("turnsLimit").replace("{n}", String(topeDeGanadores()))
+      : sinSecreto
+        ? t("amigoPrivacidadPoca")
+        : "";
+    nota.hidden = !excede && !sinSecreto;
   }
-  // La línea de privacidad (S3): con el Amigo secreto elegido, lo que se decidió. Con 2 o 3 personas, que no hay secreto.
+  // La línea de privacidad (S3), en el pliegue: con el Amigo secreto elegido, lo que se decidió.
   const linea = armarLineaDePrivacidad();
   if (linea) {
-    linea.textContent = amigo ? t(noHaySecreto(personas) ? "amigoPrivacidadPoca" : "amigoPrivacidad") : "";
+    linea.textContent = amigo ? t("amigoPrivacidad") : "";
     linea.hidden = !amigo;
   }
+}
+
+/**
+ * La i de debajo del selector despliega y pliega lo que hace el modo elegido (`#modo-info`). Nace cerrada y no guarda
+ * nada. El panel va debajo de la i: al abrirlo no se corre nada de lo que está arriba, ni la i misma. Abierto o
+ * cerrado, al cambiar de modo los textos ya son los del modo nuevo (`ROTULOS` y `pintarAviso`). Escape lo cierra con
+ * el foco en el selector, y el foco queda en la i.
+ *
+ * Al abrirlo, si el panel termina debajo de la pantalla o donde entra la barra de lo que sigue, la página baja lo justo
+ * para verlo entero: el alto de la barra va en su `scroll-margin-bottom` (styles.css). A 320 px el panel empujaba
+ * Pegar lista fuera de la pantalla, entraba la barra y lo tapaba entero: la i se llenaba y no se leía nada. Si ya se ve,
+ * no se mueve nada.
+ */
+function montarLaI(opcion: HTMLElement): void {
+  const i = $id<HTMLButtonElement>("btn-modo-info");
+  const panel = $id("modo-info");
+  if (!i || !panel) return;
+  const poner = (abierto: boolean): void => {
+    panel.hidden = !abierto;
+    i.setAttribute("aria-expanded", String(abierto));
+  };
+  poner(false);
+  i.addEventListener("click", () => {
+    const abrir = panel.hasAttribute("hidden");
+    poner(abrir);
+    if (!abrir) return;
+    const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    panel.scrollIntoView?.({ block: "nearest", behavior: reducido ? "auto" : "smooth" });
+  });
+  opcion.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || panel.hasAttribute("hidden")) return;
+    poner(false);
+    i.focus({ preventScroll: true });
+  });
 }
 
 /**
@@ -248,14 +332,21 @@ export function seguirLaLista(n: number): void {
 function prender(comoAmigo: boolean): void {
   const campo = $id<HTMLInputElement>("nw");
   const premio = $id<HTMLInputElement>("prize");
+  // Lo de antes se guarda al entrar al modo, no al pasar de un modo al otro: para entonces sus campos ya no estaban, y
+  // el nombre y la cantidad ya eran los del otro modo. Al apagar vuelve lo del sorteo de premios.
+  if (!encendido) {
+    lugaresAntes = premiosDeLosCampos().slice(1);
+    cantidadAntes = campo?.value ?? "";
+    premioAntes = premio?.value ?? "";
+  }
+  const actual = premio?.value ?? "";
   encendido = true;
   amigo = comoAmigo;
   fijarGanadores(true);
-  cantidadAntes = campo?.value ?? "";
-  premioAntes = premio?.value ?? "";
   // El modo elegido se ve en el selector, arriba de la lista: el pliegue de las opciones no se abre para mostrarlo.
-  // Un nombre que ya empieza con la frase del modo se queda; el resto lo reemplaza el de por defecto.
-  ponerPremio(nombreDelModo(esDeAlgunModo(premioAntes) ? premioAntes : ""));
+  // Un nombre que ya empieza con la frase del modo se queda; el resto lo reemplaza el de por defecto. El nombre por
+  // defecto del otro modo cuenta como vacío: de Turnos a Amigo secreto quedaba Amigo secreto: Turnos.
+  ponerPremio(nombreDelModo(esDeAlgunModo(actual) && !esElDeSiempre(actual) ? actual : ""));
   ponerGanadores(personas);
   pintar();
   $id("turnos-opcion")?.dispatchEvent(new CustomEvent("tinkazo:modo"));
@@ -269,8 +360,12 @@ function apagar(): void {
   ponerGanadores(Number(cantidadAntes) || 1);
   // El nombre que puso la persona se queda; el de por defecto se va y vuelve lo que había antes.
   const premio = $id<HTMLInputElement>("prize");
-  if (premio && esElDeSiempre(premio.value)) ponerPremio(esDeAlgunModo(premioAntes) ? "" : premioAntes);
+  const vuelve = premio !== null && esElDeSiempre(premio.value);
+  if (vuelve) ponerPremio(esDeAlgunModo(premioAntes) ? "" : premioAntes);
   pintar();
+  // Con el premio de antes vuelven también los de los lugares siguientes, ya con sus campos armados por `pintar`.
+  if (vuelve) reponerLugares(lugaresAntes);
+  lugaresAntes = [];
   $id("turnos-opcion")?.dispatchEvent(new CustomEvent("tinkazo:modo"));
 }
 
@@ -349,6 +444,7 @@ export function montarTurnos(): void {
   montado = true;
   opcion.hidden = !modesVisible();
   armarLineaDePrivacidad();
+  montarLaI(opcion);
   rotularElPliegue();
   // Cada botón elige su modo. Tocar el que ya está elegido no hace nada: no es un interruptor.
   const elegir = (modo: "turnos" | "amigo", desde: HTMLButtonElement): void => {

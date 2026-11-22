@@ -44,6 +44,12 @@ describe("de qué se trata cada paso", () => {
     expect(claveDelPaso(4, { ...ok, ganadores: 12, turnos: true })).toBe("sigTurnos");
   });
 
+  it("un Amigo secreto tampoco tiene ganadores: lo que se anuncia dice que ya salió", () => {
+    expect(claveDelPaso(4, { ...ok, ganadores: 12, amigo: true })).toBe("sigAmigo");
+    expect(T.es.sigAmigo).toBe("Ya salió el amigo secreto");
+    expect(T.en.sigAmigo).toBe("The Secret Santa is drawn");
+  });
+
   it("un orden que no entra en la red no está sellando, aunque el botón esté apagado: dice el tope", () => {
     expect(claveDelPaso(2, { ...ok, apagado: true, noCabe: true })).toBe("sigTope");
     // Aunque el botón se viera prendido, si no entra no se puede sellar.
@@ -53,8 +59,22 @@ describe("de qué se trata cada paso", () => {
     expect(claveDelPaso(2, { ...ok, apagado: true, noCabe: false })).toBe("sigSellando");
   });
 
+  it("con lugares del mismo sello por mostrar, no dice que ya salieron los ganadores", () => {
+    expect(claveDelPaso(4, { ...ok, ganadores: 3, lugaresPorMostrar: true })).toBe("sigLugarSalio");
+    // Con todos los lugares vistos, como siempre.
+    expect(claveDelPaso(4, { ...ok, ganadores: 3, lugaresPorMostrar: false })).toBe("sigGanaron");
+  });
+
+  it("el lugar que salió se dice con su número y el total, en los dos idiomas", () => {
+    expect(T.es.sigLugarSalio).toBe("Ya salió el lugar {lugar} de {total}");
+    expect(T.en.sigLugarSalio).toBe("Place {lugar} of {total} is out");
+  });
+
   it("todos esos textos existen en los dos idiomas", () => {
-    const claves = ["sigPegar", "sigLista", "sigSellando", "sigTope", "sigEspera", "sigRonda", "sigSorteando", "sigGano", "sigGanaron", "sigTurnos", "sigAvisoRonda"];
+    const claves = [
+      ...["sigPegar", "sigLista", "sigSellando", "sigTope", "sigEspera", "sigRonda", "sigSorteando"],
+      ...["sigGano", "sigGanaron", "sigLugarSalio", "sigTurnos", "sigAvisoRonda"],
+    ];
     const faltan = (["es", "en"] as const).flatMap((l) => claves.filter((k) => typeof T[l][k] !== "string" || !(T[l][k] as string).trim()).map((k) => `${l}.${k}`));
     expect(faltan).toEqual([]);
   });

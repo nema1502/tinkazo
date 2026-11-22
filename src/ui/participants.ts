@@ -9,12 +9,14 @@ import { type Table, cleanName, decodeText, dropListHeader, igualesQuitados, par
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
 import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
 import { parecidos } from "../buscar";
-import { ponerPremio, sincronizarPremios } from "./premios";
+import { ponerPremio, premiosDeLosCampos, reponerLugares, sincronizarPremios } from "./premios";
+import { premioDelResumen } from "./premios-escritos";
 import { isTurnOrder } from "../modos/turnos";
+import { isSecretSanta } from "../modos/amigo";
 import { modesVisible, modoVigente, recordarModo } from "../modos/bandera";
 import { TOPE_POR_PERSONA, contar, cuentaParaMostrar as cuentaParaMostrarSinSellar, nombreDePersona, personasDelCuadro, ponerParticipaciones, repartir, seCuentaPorPersona, terminaEnNumero } from "../participaciones";
 import { bloquearGanadores, ganadoresPedidos, lineasDeLaLista, ponerGanadores } from "./ganadores";
-import { bloquearTurnos, modoTurnosActivo, ordenNoCabe, ponerModoTurnos, seguirLaLista } from "./turnos";
+import { amigoRepetido, bloquearTurnos, modoAmigoActivo, modoTurnosActivo, ordenNoCabe, ponerModoTurnos, seguirLaLista } from "./turnos";
 import { contarUnaVez } from "../contar";
 import { cuadroEsDeEquipos, etiquetaDe } from "../equipos/etiquetas";
 import { tamanoDe } from "../../workers/enlaces/src/conteo";
@@ -45,6 +47,22 @@ const cuentaDeLista = (n: number, k = n): string =>
     : modoTurnosActivo()
       ? T[getLang()].listaCuentaTurnos(n, k)
       : T[getLang()].listaCuentaPart(n, k);
+
+/**
+ * Escribe la cuenta de junto al cuadro con el número en grande: en Lista de 18 personas el 18 se lee de un vistazo, sin
+ * leer la frase. Solo el primer grupo de cifras va en grande. El texto no cambia: lo leen las pruebas y la lista en grande.
+ */
+function pintarCuenta(el: HTMLElement, texto: string): void {
+  const cifras = /\d+/.exec(texto);
+  if (!cifras) {
+    el.textContent = texto;
+    return;
+  }
+  const numero = document.createElement("b");
+  numero.className = "cuenta-num";
+  numero.textContent = cifras[0];
+  el.replaceChildren(texto.slice(0, cifras.index), numero, texto.slice(cifras.index + cifras[0].length));
+}
 
 /**
  * Cierra la lista a los cambios, o la vuelve a abrir.
@@ -98,7 +116,8 @@ export function renderNames(): void {
   seguirLaLista(names.length);
   // En el stand, Cuántos salen tiene de tope la lista de la ronda (`ganadores.ts`).
   lineasDeLaLista(names.length);
-  $<HTMLButtonElement>("btn-freeze").disabled = personas < 2 || listaCerrada() || ordenNoCabe(names.length);
+  // En un Amigo secreto, alguien dos veces en la lista se podría regalar a sí mismo: no se sella (`amigoRepetido`).
+  $<HTMLButtonElement>("btn-freeze").disabled = personas < 2 || listaCerrada() || ordenNoCabe(names.length) || !!amigoRepetido(names);
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
   const hint = $("freeze-hint");
   hint.style.display = personas < 2 && !app.frozen ? "block" : "none";
@@ -133,10 +152,17 @@ export function renderNames(): void {
   sellar.classList.toggle("ghost", !alcanza);
   const ayuda = document.getElementById("pegar-ayuda");
   if (ayuda) ayuda.style.display = vacia && !enEnsayo() ? "" : "none";
+  // Otro nombre, debajo del cuadro: desde el primer nombre y mientras el cuadro se pueda escribir. Con la lista cerrada,
+  // en el ensayo (el cuadro es de solo lectura) o con una lista de equipos (cada renglón es una cuenta), no hay nombre que sumar.
+  const otro = document.getElementById("btn-otro-nombre");
+  if (otro) {
+    const cuadro = $<HTMLTextAreaElement>("ta");
+    otro.hidden = names.length === 0 || cuadro.disabled || cuadro.readOnly || listaCerrada() || cuadroEsDeEquipos();
+  }
   // "20 personas", en grande junto al cuadro: que pegó se ve de un vistazo.
   const cuenta = document.getElementById("lista-cuenta");
   if (cuenta) {
-    cuenta.textContent = names.length ? cuentaDeLista(cuentaParaMostrar(names).personas, names.length) : "";
+    pintarCuenta(cuenta, names.length ? cuentaDeLista(cuentaParaMostrar(names).personas, names.length) : "");
     cuenta.style.display = names.length ? "" : "none";
   }
   // "Ya entraste. Sellá tu lista…" vale para la lista con que se entró: si cambia, o al sellarla, se va.
@@ -209,6 +235,8 @@ function pintarResumen(): void {
   const entradas = parseNames().length;
   const k = Math.min(ganadoresPedidos(), entradas);
   const premio = $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " ");
+  // Lo que se nombra: con varios premios escritos (uno por lugar), cuántos son, y no solo el primero.
+  const escrito = premioDelResumen();
   // En el ensayo no se nombra el premio que falta: nada se sella de verdad.
   // Un orden de turnos dice «12 personas, turnos del 1 al 12», no cuántos ganan. Se decide por las líneas
   // de la lista (lo que se sella: cada línea, un turno), no por las personas: una lista repartida de 2
@@ -217,12 +245,38 @@ function pintarResumen(): void {
   // Una lista de más de 300 líneas no entra en ninguna red: «Cuántos ganan» se recorta a 300 y `k` ya no es igual a
   // las líneas. Con el modo prendido eso se decide por el modo (`ordenNoCabe`) y no por el recorte: sigue siendo un
   // orden que no se puede sellar, y no un sorteo común con ganadores.
-  el.textContent = ordenNoCabe(entradas)
-    ? L.turnsSellarTope(entradas, n, topeDeGanadores())
-    : isTurnOrder(entradas, k, premio)
-      ? L.turnsSellarResumen(entradas, n)
-      : L.sellarResumen(n, k, enEnsayo() && !premio ? null : premio, entradas);
+  // En un Amigo secreto con alguien dos veces, esta línea pegada a Sellar dice por qué no se puede sellar y cómo seguir.
+  // Sin repetidos, un Amigo secreto dice cuántas personas y que la lista se cierra: nadie gana nada. El nombre entra como
+  // función para que un $$ o un $& escrito en la lista no se lea como patrón del reemplazo.
+  const repetido = amigoRepetido(nombres);
+  el.textContent = repetido
+    ? t("amigoRepetido").replace("{nombre}", () => repetido)
+    : ordenNoCabe(entradas)
+      ? L.turnsSellarTope(entradas, n, topeDeGanadores())
+      : isSecretSanta(entradas, k, premio)
+        ? t("amigoSellarResumen").replace("{n}", String(n))
+        : isTurnOrder(entradas, k, premio)
+          ? L.turnsSellarResumen(entradas, n)
+          : L.sellarResumen(n, k, enEnsayo() && !escrito ? null : escrito, entradas);
   el.style.display = "";
+}
+
+/**
+ * Otro nombre, debajo del cuadro: deja el cuadro listo para el nombre siguiente, en un renglón nuevo. Mucha gente no sabe
+ * que para separar los nombres hay que bajar de renglón con Enter. Si el último renglón ya está en blanco no suma otro:
+ * dos toques seguidos no dejan dos renglones vacíos. La lista no cambia, porque un renglón vacío no es nadie.
+ * El foco va dentro del clic, que es lo que el teléfono acepta para abrir el teclado, y el cursor queda al final.
+ */
+function otroNombre(ta: HTMLTextAreaElement): void {
+  if (ta.disabled || ta.readOnly || listaCerrada()) return;
+  const sumar = !/(?:^|\n)[^\S\n]*$/.test(ta.value);
+  if (sumar) ta.value += "\n";
+  ta.focus();
+  const fin = ta.value.length;
+  ta.setSelectionRange(fin, fin);
+  ta.scrollTop = ta.scrollHeight;
+  // El aviso de siempre, como al escribir: siguen el borrador, la cuenta y el resumen de junto a Sellar.
+  if (sumar) ta.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 export function loadSample(): void {
@@ -252,6 +306,8 @@ export function bindParticipants(): void {
     // Para el contador, solo lo que hizo la persona: una lista puesta por el código (el ejemplo, el borrador, la demo) no cuenta.
     if (e.isTrusted) anotarOrigen(pegado ? "paste" : "typed", pegado);
   });
+  // Otro nombre, debajo del cuadro: un renglón nuevo y el cursor listo para escribir (`otroNombre`).
+  document.getElementById("btn-otro-nombre")?.addEventListener("click", () => otroNombre(ta));
   // Una lista escrita a mano se cuenta cuando se deja de escribir; si la página se va antes (el viaje a Google), en ese momento.
   addEventListener("pagehide", contarLista);
   // El borrador sigue al premio y a la cantidad de ganadores, y se escribe del
@@ -263,6 +319,8 @@ export function bindParticipants(): void {
   // El resumen de junto a "Sellar la lista" sigue al premio y a la cantidad de ganadores.
   $("prize").addEventListener("input", () => pintarResumen());
   $("prize").addEventListener("tinkazo:premio", () => pintarResumen());
+  // Y a los campos de cada lugar: con varios premios escritos, el resumen dice cuántos son (`premioDelResumen`).
+  document.getElementById("prize-lugares")?.addEventListener("input", () => pintarResumen());
   $("prize-chips").addEventListener("click", () => queueMicrotask(() => pintarResumen()));
   for (const evento of ["input", "change"]) $("nw").addEventListener(evento, () => pintarResumen());
   // Prender o apagar «Orden de turnos» cambia la cantidad y si se puede sellar: la lista se vuelve a pintar y se guarda el borrador.
@@ -299,7 +357,7 @@ export function bindParticipants(): void {
     pintarListaDeEquipos();
     const cuenta = document.getElementById("lista-cuenta");
     const { personas, participaciones } = cuentaParaMostrar(parseNames());
-    if (cuenta && participaciones) cuenta.textContent = cuentaDeLista(personas, participaciones);
+    if (cuenta && participaciones) pintarCuenta(cuenta, cuentaDeLista(personas, participaciones));
   });
   addEventListener("pagehide", guardarBorrador);
   // Pegar una tabla entera es lo mismo que subirla: abre la ventana de
@@ -629,7 +687,7 @@ const tactil = (): boolean => typeof matchMedia === "function" && matchMedia("(p
  */
 const variasALaVista = (): boolean => modesVisible();
 
-/** El texto de ayuda del cuadro vacío: un nombre por línea, como siempre. Las veces se eligen tocando. */
+/** El texto gris del cuadro vacío: tres nombres de ejemplo, uno por renglón. Las veces se eligen tocando. */
 const refreshPlaceholder = (): void => {
   const ta = document.getElementById("ta") as HTMLTextAreaElement | null;
   if (ta) ta.placeholder = t("placeholder");
@@ -687,7 +745,8 @@ function pintarVarias(): void {
   const boton = document.getElementById("btn-varias") as HTMLButtonElement | null;
   const panel = document.getElementById("varias-panel");
   if (!boton || !panel) return;
-  const puede = variasALaVista() && !listaCerrada() && parseNames().length >= 2;
+  // En un Amigo secreto cada persona va una vez: varias participaciones harían que alguien se regale a sí mismo.
+  const puede = variasALaVista() && !listaCerrada() && parseNames().length >= 2 && !modoAmigoActivo();
   const turnos = modoTurnosActivo();
   boton.hidden = !puede;
   boton.textContent = t(turnos ? "partAbrirTurnos" : "partAbrir");
@@ -788,7 +847,9 @@ function pintarPreguntaDeNumeros(): void {
   const aviso = document.getElementById("participaciones-aviso");
   if (!aviso) return;
   const texto = $<HTMLTextAreaElement>("ta").value;
-  const numeros = variasALaVista() && !listaCerrada() && texto !== listaSinUsarNumeros && sonVecesQueParticipa(texto) ? numerosDeLaLista(texto) : [];
+  // En un Amigo secreto tampoco se pregunta: un número al lado del nombre no puede ser cuántas veces participa.
+  const sePregunta = variasALaVista() && !listaCerrada() && !modoAmigoActivo() && texto !== listaSinUsarNumeros;
+  const numeros = sePregunta && sonVecesQueParticipa(texto) ? numerosDeLaLista(texto) : [];
   aviso.style.display = numeros.length ? "" : "none";
   if (!numeros.length) return;
   const pregunta = document.getElementById("part-pregunta-texto");
@@ -973,8 +1034,13 @@ function escribirBorrador(aunVacio: boolean): void {
   try {
     const texto = $<HTMLTextAreaElement>("ta").value;
     const premio = $<HTMLInputElement>("prize").value;
+    // Los premios del 2.º lugar en adelante van con el del 1.º, tal como se escribieron: al volver de Google o al recargar
+    // se perdían. Solo si hay alguno escrito, así el borrador de siempre no cambia.
+    const otros = premiosDeLosCampos().slice(1);
+    const lugares = otros.some((p) => p.trim()) ? { lugares: otros } : {};
+    const modo = modoTurnosActivo() ? { modo: "turnos" } : modoVigente() === "varias" ? { modo: "varias" } : {};
     if (!aunVacio && !texto.trim() && !premio.trim()) sessionStorage.removeItem(BORRADOR);
-    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: ganadoresPedidos(), ...(modoTurnosActivo() ? { modo: "turnos" } : modoVigente() === "varias" ? { modo: "varias" } : {}) }));
+    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, ...lugares, nw: ganadoresPedidos(), ...modo }));
   } catch {
     /* sin almacenamiento, no se recupera: nada más */
   }
@@ -1012,7 +1078,7 @@ export function reponerBorrador(): void {
     /* sin almacenamiento, se repone el borrador como siempre */
   }
   const llevada = listaStand?.trim() ? listaStand : null;
-  type Guardado = { texto?: unknown; premio?: unknown; nw?: unknown; modo?: unknown } | null;
+  type Guardado = { texto?: unknown; premio?: unknown; lugares?: unknown; nw?: unknown; modo?: unknown } | null;
   let b: Guardado = null;
   try {
     b = JSON.parse(sessionStorage.getItem(BORRADOR) ?? "null") as Guardado;
@@ -1036,6 +1102,9 @@ export function reponerBorrador(): void {
   const nw = Number(b?.nw);
   // Un borrador torcido (más que el protocolo) no se repone; y uno de más que lo que esta red admite baja a lo que admite.
   if (!enTurnos && Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS) ponerGanadores(Math.min(nw, topeDeGanadores()));
+  // Con la cantidad ya puesta (no avisa con un evento), los premios del 2.º lugar en adelante vuelven a sus campos.
+  const lugares: unknown = b?.lugares;
+  if (Array.isArray(lugares)) reponerLugares(lugares as readonly unknown[]);
   // La lista llevada del stand no se avisa como recuperada: la eligió quien atiende.
   if (!llevada && canonicalList(texto).length) avisar(() => t("borradorRepuesto"));
 }

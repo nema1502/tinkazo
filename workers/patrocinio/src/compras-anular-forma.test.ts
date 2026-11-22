@@ -40,6 +40,8 @@ describe("después de anular, el estado y la orden", () => {
           minimoBs: 0,
           recargoPendiente: "4.25",
         },
+        // Sin alta y con créditos de sobra: puede recibir el regalo de bienvenida.
+        bienvenida: { estado: "lista", sorteos: 3 },
       },
     });
     const orden = await m.orden(ana.token, "alta");

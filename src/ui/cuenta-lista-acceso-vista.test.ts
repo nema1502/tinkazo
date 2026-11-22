@@ -6,6 +6,7 @@ import {
   type Para,
   activarPermitido,
   faltaElAcceso,
+  pagoInicial,
   portadaDe,
   vistaDe,
 } from "./cuenta-lista-estado";
@@ -347,6 +348,195 @@ describe("«Usar un cupón» con la cuenta ya lista", () => {
     expect(v({ activacion: "lista", proteccion: "lista", para: "sello" }, { ...pide, canjeado: 3, cadena: true }).volver).toBeNull();
     // Sin «Volver», el campo conserva el suyo, que vuelve a «Tengo un cupón».
     expect(acciones(v({ activacion: "lista", proteccion: "lista", para: "sello" }, { estado: "ninguno", escribiendo: true }))).toContain("volver-cupon");
+  });
+});
+
+describe("el regalo de quien entra con su cuenta", () => {
+  const LISTA = { estado: "lista", sorteos: 3 } as const;
+  const LLENA = { estado: "llena", sorteos: 3 } as const;
+  const conRegalo = (o: Partial<EntradaVista> = {}, a: Partial<AccesoEnLaVista> = {}) => v(o, { bienvenida: LISTA, ...a });
+
+  it("sin el regalo (el servicio de antes), ninguna fila de la muestra ofrece pedirlo", () => {
+    for (const e of todas()) expect(acciones(vistaDe(e)), JSON.stringify(e.acceso)).not.toContain("reclamar");
+  });
+
+  it("listo: un título, la línea con el número del servidor y «Activar mi cuenta», con «Tengo un cupón» de salida chica", () => {
+    const vista = conRegalo();
+    expect(portadaDe(vista)).toMatchObject({ forma: "uno", titulo: "clActivarTitulo", linea: { clave: "altaBienvenida", vars: { n: "3" } } });
+    expect(vista.principal).toMatchObject({ accion: "reclamar", clave: "clActivarBoton", apagado: false });
+    const cupon = expect.objectContaining({ accion: "tengo-cupon", clave: "altaTengoCupon", forma: "texto" });
+    expect(vista.cajas.flatMap((c) => c.secundarios)).toEqual([cupon]);
+    expect(acciones(vista)).not.toContain("activar");
+  });
+
+  it("el número de la línea es el que manda el servidor", () => {
+    expect(portadaDe(v({}, { bienvenida: { estado: "lista", sorteos: 5 } })).linea).toEqual({ clave: "altaBienvenida", vars: { n: "5" } });
+  });
+
+  it("lleno: la línea de que hoy ya se entregaron y se reciben más tarde, y la principal sigue siendo «Activar mi cuenta»", () => {
+    const vista = v({}, { bienvenida: LLENA });
+    expect(portadaDe(vista).linea).toEqual({ clave: "altaBienvenidaLlena", luego: { clave: "altaBienvenidaMasTarde" } });
+    expect(vista.principal).toMatchObject({ accion: "reclamar", clave: "clActivarBoton", apagado: false });
+  });
+
+  it("lleno y con la cuenta ya activada: la misma línea, con el título de los sorteos", () => {
+    const vista = v({ activacion: "lista", proteccion: "lista" }, { bienvenida: LLENA });
+    const linea = { clave: "altaBienvenidaLlena", luego: { clave: "altaBienvenidaMasTarde" } };
+    expect(portadaDe(vista)).toMatchObject({ titulo: "altaTituloSorteos", linea });
+    expect(vista.principal?.accion).toBe("reclamar");
+  });
+
+  it("con la cuenta ya activada y sin acceso: el título de los sorteos, con la misma línea y la misma principal", () => {
+    const vista = conRegalo({ activacion: "lista", proteccion: "lista" });
+    expect(vista.final).toBe(false);
+    expect(portadaDe(vista)).toMatchObject({ titulo: "altaTituloSorteos", linea: { clave: "altaBienvenida" } });
+    expect(vista.principal?.accion).toBe("reclamar");
+  });
+
+  it("mientras se pide: la principal gira con «Activando tu cuenta…», el pie lo dice y el cupón se apaga", () => {
+    const vista = conRegalo({ corre: "reclamando" });
+    expect(vista.principal).toMatchObject({ accion: "reclamar", clave: "clActivarHaciendo", apagado: true, ocupado: true });
+    expect(vista.estado).toEqual({ clave: "clActivarHaciendo" });
+    expect(vista.cajas.flatMap((c) => c.secundarios).every((s) => s.apagado)).toBe(true);
+    expect(vista.cajas.find((c) => c.parte === "activar")?.ocupada).toBe(true);
+  });
+
+  it("las salidas a la vista en cada fila del regalo, y nunca apagadas por algo que corre", () => {
+    for (const bienvenida of [LISTA, LLENA])
+      for (const corre of [null, "reclamando"] as const)
+        for (const proteccion of ["lista", "falta", "aparato-nuevo"] as const) {
+          const vista = v({ corre, proteccion, correoConfirmado: true }, { bienvenida });
+          expect(vista.salidas?.cerrar.apagado).toBe(false);
+          expect(vista.salidas?.prueba?.apagado).toBe(false);
+        }
+  });
+
+  it("sin red: el motivo en lugar de la línea, y la principal es la misma, para probar de nuevo", () => {
+    const vista = conRegalo({}, { error: { clave: "clErrFallo" }, arreglo: "probar" });
+    const caja = vista.cajas.find((c) => c.parte === "activar");
+    expect(caja?.error).toEqual([{ clave: "clErrFallo" }]);
+    expect(caja?.textos).toEqual([]);
+    expect(vista.principal).toMatchObject({ accion: "reclamar", clave: "clActivarBoton" });
+  });
+
+  it("la cuenta de otra persona no se arregla probando: «Pasar a Prueba»; sin sesión, «Entrar de nuevo»", () => {
+    expect(conRegalo({}, { error: { clave: "altaErrCuentaDeOtro" }, arreglo: "ninguno" }).principal?.accion).toBe("pasar-a-prueba");
+    expect(conRegalo({}, { error: { clave: "clErrSesion" }, arreglo: "entrar" }).principal?.accion).toBe("entrar-de-nuevo");
+  });
+
+  it("con un cupón en mano o escribiéndolo, la caja del cupón de siempre", () => {
+    expect(conRegalo({}, { cuponEnMano: CUPON }).principal?.accion).toBe("usar-cupon");
+    expect(conRegalo({}, { escribiendo: true }).cajas.find((c) => c.parte === "activar")?.campo).toBe("cupon");
+  });
+
+  it("abierto para usar un cupón, el campo de siempre y no el regalo", () => {
+    const vista = conRegalo({ activacion: "lista", proteccion: "lista", para: "sello" }, { pideCupon: true, escribiendo: true });
+    expect(acciones(vista)).not.toContain("reclamar");
+  });
+
+  it("quien vino a recibir un premio no ve el regalo", () => {
+    expect(acciones(conRegalo({ para: "premio" }))).not.toContain("reclamar");
+  });
+
+  it("con el primer paquete a la venta, la principal sigue siendo «Activar mi cuenta»", () => {
+    const pago = pagoInicial("es", { id: "alta", usdc: "2", sorteos: 3, dias: 365 });
+    expect(conRegalo({}, { pago }).principal?.accion).toBe("reclamar");
+  });
+
+  it("con el acceso del regalo y la cadena en marcha: «Activando tu cuenta…», sin nombrar ningún cupón", () => {
+    const vista = v({}, { estado: "con", por: null, delRegalo: true, canjeado: 3, cadena: true });
+    const caja = vista.cajas.find((c) => c.parte === "activar");
+    expect(caja?.textos).toEqual([]);
+    expect(vista.principal).toMatchObject({ clave: "clActivarHaciendo", ocupado: true });
+  });
+
+  it("si algo falla después del regalo: que no se pudo activar, y «Probar de nuevo» sigue sin volver a pedirlo", () => {
+    const vista = v({}, { estado: "con", por: null, delRegalo: true, canjeado: 3, fallaTrasCanje: true });
+    expect(vista.cajas.find((c) => c.parte === "activar")?.error).toEqual([{ clave: "clErrFallo" }]);
+    expect(vista.principal).toMatchObject({ accion: "seguir-cupon", clave: "clProbarDeNuevo" });
+  });
+
+  // El nombre del acceso que conteste el servidor no cambia nada de lo que se ve con el regalo: el de hoy dice `admin`, y
+  // `gratis` se tolera si llega.
+  it.each(["admin", "gratis", null] as const)("con el regalo y el acceso %s, la cadena no nombra ningún cupón", (por) => {
+    const vista = v({}, { estado: "con", por, delRegalo: true, canjeado: 3, cadena: true });
+    expect(vista.cajas.find((c) => c.parte === "activar")?.textos).toEqual([]);
+  });
+
+  it.each(["admin", "gratis", null] as const)("con el regalo y el acceso %s, una falla después dice que no se pudo activar", (por) => {
+    const vista = v({}, { estado: "con", por, delRegalo: true, canjeado: 3, fallaTrasCanje: true });
+    expect(vista.cajas.find((c) => c.parte === "activar")?.error).toEqual([{ clave: "clErrFallo" }]);
+  });
+
+  it("después de un cupón, una falla sigue diciendo que el cupón quedó guardado", () => {
+    const vista = v({}, { estado: "con", por: "cupon", canjeado: 3, fallaTrasCanje: true });
+    expect(vista.cajas.find((c) => c.parte === "activar")?.error).toEqual([{ clave: "altaCuponGuardado" }]);
+  });
+
+  it.each(["admin", "gratis"] as const)("con el acceso %s confirmado y la cuenta por activar, la caja de activar de siempre", (por) => {
+    const vista = v({}, { estado: "con", por });
+    const caja = vista.cajas.find((c) => c.parte === "activar");
+    expect(caja?.textos).toEqual([{ clave: "clActivarTexto" }]);
+    expect(vista.principal).toMatchObject({ accion: "activar", clave: "clActivarBoton" });
+  });
+
+  /** La cuenta lista, con lo que dejó el regalo recibido en el paso. El servidor de hoy dice `admin` para esa alta. */
+  const listaCon = (s: NonNullable<AccesoEnLaVista["sorteosDelRegalo"]>) =>
+    v({ activacion: "lista", proteccion: "lista" }, { estado: "con", por: "admin", delRegalo: true, sorteosDelRegalo: s });
+
+  it("la cuenta lista con el regalo: la línea dice cuántos quedan y cuándo vencen", () => {
+    const vista = listaCon({ quedan: 3, vence: { fecha: "19 de enero", cuantos: 3 } });
+    expect(vista.final).toBe(true);
+    const vence = { clave: "cupoOfVencenTodos", vars: { n: "3", fecha: "19 de enero" } };
+    expect(portadaDe(vista).linea).toEqual({ clave: "cupoOfQuedan", vars: { n: "3" }, luego: vence });
+  });
+
+  it("la línea del final va en singular con un solo sorteo, y dice cuántos vencen si no son todos", () => {
+    const uno = listaCon({ quedan: 1, vence: { fecha: "x", cuantos: 1 } });
+    expect(portadaDe(uno).linea).toEqual({ clave: "cupoOfQueda1", luego: { clave: "cupoOfVenceSolo", vars: { n: "1", fecha: "x" } } });
+    const parte = listaCon({ quedan: 5, vence: { fecha: "x", cuantos: 2 } });
+    const vence = { clave: "cupoOfVencen", vars: { n: "2", fecha: "x" } };
+    expect(portadaDe(parte).linea).toEqual({ clave: "cupoOfQuedan", vars: { n: "5" }, luego: vence });
+  });
+
+  it("la línea del final sin fecha dice solo cuántos quedan, y con cero no hay línea propia", () => {
+    const sinFecha = listaCon({ quedan: 3, vence: null });
+    expect(portadaDe(sinFecha).linea).toEqual({ clave: "cupoOfQuedan", vars: { n: "3" } });
+    const cero = listaCon({ quedan: 0, vence: null });
+    expect(cero.linea).toBeUndefined();
+    expect(portadaDe(cero).linea).toBeNull();
+  });
+
+  it("la cuenta activada sin el regalo y sin sorteos: el final dice que hoy ya se entregaron y que llegan más tarde", () => {
+    const vista = listaCon({ quedan: 0, vence: null, lleno: true });
+    expect(vista.final).toBe(true);
+    expect(portadaDe(vista).linea).toEqual({ clave: "altaBienvenidaLlena", luego: { clave: "altaBienvenidaMasTarde" } });
+    // Mientras tanto, el enlace chico Sortear en Prueba, con el nombre de «Se te acabaron» (Practicar sin cuenta diría lo
+    // contrario de Tu cuenta está lista). La principal sigue siendo la del final.
+    expect(vista.practicar).toEqual({ accion: "practicar", clave: "pagoSortearEnPrueba", apagado: false });
+    expect(vista.principal?.accion).not.toBe("practicar");
+  });
+
+  it("sin el regalo y con sorteos de antes, o con el cambio de modo cerrado, no hay enlace a Prueba", () => {
+    expect(listaCon({ quedan: 2, vence: null, lleno: true }).practicar).toBeUndefined();
+    expect(listaCon({ quedan: 3, vence: null }).practicar).toBeUndefined();
+    const cerrado = v(
+      { activacion: "lista", proteccion: "lista", puedePasarAPrueba: false },
+      { estado: "con", por: "admin", delRegalo: true, sorteosDelRegalo: { quedan: 0, vence: null, lleno: true } },
+    );
+    expect(cerrado.final).toBe(true);
+    expect(cerrado.practicar).toBeUndefined();
+  });
+
+  it("la cuenta activada sin el regalo pero con sorteos de antes: el final dice cuántos quedan", () => {
+    const vista = listaCon({ quedan: 2, vence: null, lleno: true });
+    expect(portadaDe(vista).linea).toEqual({ clave: "cupoOfQuedan", vars: { n: "2" } });
+  });
+
+  it("sin el regalo recibido en el paso, el final de siempre", () => {
+    const vista = v({ activacion: "lista", proteccion: "lista", primerOficialPendiente: true }, { estado: "con", por: "cupon" });
+    expect(vista.linea).toBeUndefined();
+    expect(portadaDe(vista).linea).toEqual({ clave: "clPrimerSello" });
   });
 });
 

@@ -225,7 +225,7 @@ describe("el sello frenado por la puerta de la firma (premioGuardado)", () => {
     boton(id)?.click();
     await vi.waitFor(() => expect(h.openPicker).toHaveBeenCalledTimes(1));
     expect(h.cerrarSesion).toHaveBeenCalledTimes(1);
-    expect(h.openPicker).toHaveBeenCalledWith({ motivo: T.es[motivo], volverA: document.getElementById("btn-freeze") });
+    expect(h.openPicker).toHaveBeenCalledWith({ motivo: T.es[motivo], volverA: document.getElementById("btn-freeze"), otras: true });
     // Primero se cierra la sesión y después se abre la ventana.
     expect(h.cerrarSesion.mock.invocationCallOrder[0]).toBeLessThan(h.openPicker.mock.invocationCallOrder[0] as number);
   });
@@ -233,7 +233,8 @@ describe("el sello frenado por la puerta de la firma (premioGuardado)", () => {
   it("las acciones de la espera en grande hacen lo mismo que los botones", async () => {
     await conPremioGuardado();
     ultimaAccion(2)?.ejecutar();
-    await vi.waitFor(() => expect(h.openPicker).toHaveBeenCalledWith({ motivo: T.es.premioMotivoBilletera, volverA: document.getElementById("btn-freeze") }));
+    const pedido = { motivo: T.es.premioMotivoBilletera, volverA: document.getElementById("btn-freeze"), otras: true };
+    await vi.waitFor(() => expect(h.openPicker).toHaveBeenCalledWith(pedido));
   });
 
   it("si cerrar la sesión falla, igual se abre la ventana", async () => {

@@ -6,11 +6,13 @@ import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
 import { type Paso, acortarPremio, claveDelPaso, claveEnElStand, detalleDeLista, lineaDelPaso, pasoDe, premioLimpio, premioQueEntra, relojDe, unirDetalle } from "./pasos";
 import { esResultadoDeTurnos } from "../modos/turnos";
+import { isSecretSanta } from "../modos/amigo";
 import { modesVisible } from "../modos/bandera";
 import { contar, seCuentaPorPersona } from "../participaciones";
 import { canonicalList } from "../protocol/canonical";
 import { topeDeGanadores } from "../stellar/config";
-import { ordenNoCabe } from "./turnos";
+import { amigoRepetido, ordenNoCabe } from "./turnos";
+import { premioDelResumen, premiosEscritos } from "./premios-escritos";
 
 /**
  * Lo que sigue: que en cada paso se vea cuál es la acción principal.
@@ -149,6 +151,10 @@ function botonDe(paso: Paso): HTMLButtonElement | null {
     case 4: {
       const fin = document.body.dataset.ensayo === "1" ? document.getElementById("ens-otro") : null;
       if (fin instanceof HTMLButtonElement) return fin;
+      // En un Amigo secreto no hay una acción que la barra pueda repetir: lo que sigue es Copiar enlace en cada fila, y
+      // «Compartir el resultado» no va (llevaría el reparto). Se decide por lo sellado y no por lo que se ve.
+      const f = app.frozen;
+      if (f && app.drawn && isSecretSanta(f.names.length, app.drawn.winners.length, f.prize)) return null;
       const sin = $<HTMLButtonElement>("btn-again-sin");
       const sigue = $("again-row").style.display !== "none" && sin.style.display !== "none";
       return sigue ? sin : $<HTMLButtonElement>("btn-proof");
@@ -206,11 +212,34 @@ function calcular(): Toca {
   // Un orden de turnos más largo de lo que admite la red también deja el botón apagado, y tampoco es sellar: no se puede,
   // y la barra lo dice con el tope. Se cuenta con la misma regla que apaga el botón (`ordenNoCabe`, participants.ts).
   const noCabe = paso === 2 && ordenNoCabe(n);
-  const apagado = (boton?.disabled ?? false) && !faltaOtraPersona && !noCabe;
-  const clave = claveDelPaso(paso, { segundos: restan, apagado, ganadores: app.drawn?.winners.length ?? 1, turnos: esResultadoDeTurnos(), noCabe });
+  // Un Amigo secreto con alguien dos veces tampoco se sella (`amigoRepetido`, participants.ts): no es que se esté sellando.
+  const repetido = paso === 2 && !!ta2 && !!amigoRepetido(canonicalList(ta2.value));
+  const apagado = (boton?.disabled ?? false) && !faltaOtraPersona && !noCabe && !repetido;
+  // Los lugares de a uno (`revelados`, draw.ts): mientras la sala no vio todos, no salieron los ganadores, salió un lugar.
+  const total = app.drawn?.winners.length ?? 1;
+  const vistos = app.drawn?.revelados;
+  const lugaresPorMostrar = vistos !== undefined && total > 1 && vistos < total;
+  // En el resultado de un Amigo secreto la barra no sale, pero el aviso al lector de pantalla sí: sin ganadores.
+  const amigo = !!app.frozen && !!app.drawn && isSecretSanta(app.frozen.names.length, app.drawn.winners.length, app.frozen.prize);
+  const clave = claveDelPaso(paso, {
+    segundos: restan,
+    apagado,
+    ganadores: total,
+    turnos: esResultadoDeTurnos(),
+    noCabe,
+    lugaresPorMostrar,
+    repetido,
+    amigo,
+  });
   // En el stand nadie gana: el aviso del resultado dice quién salió (la clave del paso no cambia, solo el texto).
-  const delTexto = enStand() ? claveEnElStand(clave, app.drawn?.winners.length ?? 1) : clave;
-  let detalle = delTexto ? t(delTexto).replace("{n}", String(n)).replace("{tope}", String(topeDeGanadores())) : "";
+  const delTexto = enStand() ? claveEnElStand(clave, total) : clave;
+  let detalle = delTexto
+    ? t(delTexto)
+        .replace("{n}", String(n))
+        .replace("{tope}", String(topeDeGanadores()))
+        .replace("{lugar}", String(vistos ?? 1))
+        .replace("{total}", String(total))
+    : "";
   // La frase del tope es larga: en el celular vale hasta dos renglones, como la de las dos cuentas.
   let doble = clave === "sigTope";
   // Con los modos a la vista, o sin ellos con una lista que es un reparto entero (`seCuentaPorPersona` sin modos, como
@@ -236,9 +265,12 @@ function calcular(): Toca {
   let premio: Toca["premio"] = null;
   if (clave === "sigLista" && !enStand() && !turnosActivo) {
     const lista = detalle;
-    const texto = premioLimpio((document.getElementById("prize") as HTMLInputElement | null)?.value ?? "");
+    // Con varios premios escritos (uno por lugar), cuántos son: nombrar solo el primero hacía creer que todos se lo llevaban.
+    // Esa cuenta va entera o no va: cortada quedaba «3…».
+    const varios = premiosEscritos().length > 1;
+    const texto = premioLimpio(premioDelResumen());
     detalle = detalleDeLista(lista, texto, enEnsayo() ? null : t("sigSinPremio"), Infinity);
-    if (texto) premio = { texto, detalleCon: (p) => unirDetalle(lista, p) };
+    if (texto) premio = { texto, detalleCon: (p) => unirDetalle(lista, varios && p !== texto ? null : p) };
   }
   return { paso, boton, clave, detalle, doble, reloj: restan > 0 ? relojDe(restan) : "", premio };
 }
@@ -519,6 +551,8 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   // El premio está en la línea del paso 2: se rehace al escribirlo, al tocar uno de los premios o cuando la página lo pone.
   $("prize").addEventListener("input", render);
   $("prize").addEventListener("tinkazo:premio", render);
+  // Los campos de cada lugar también: con varios premios escritos, la línea dice cuántos son.
+  document.getElementById("prize-lugares")?.addEventListener("input", render);
   $("prize-chips").addEventListener("click", () => queueMicrotask(render));
   // El sello se apaga y se prende sin cambiar de botón; la puerta, al conectar la cuenta.
   general.observe($("sec-participants"), { attributes: true, subtree: true, attributeFilter: ["class"] });

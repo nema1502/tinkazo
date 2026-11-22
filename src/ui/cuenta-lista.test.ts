@@ -600,7 +600,7 @@ describe("las salidas", () => {
   it("no hay explicación bajo Pasar a Prueba", async () => {
     await abrir();
     expect(raiz()?.querySelector(".cl-cuenta-modo")).toBeNull();
-    const notaVieja = "Cada modo tiene su propia cuenta. En Prueba vas a entrar una vez más, y tu cuenta de Oficial sigue acá cuando vuelvas.";
+    const notaVieja = "En Prueba entrás de nuevo. Tu cuenta de Oficial te espera.";
     expect(textoDe()).not.toContain(notaVieja);
   });
 

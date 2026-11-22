@@ -17,6 +17,7 @@ import { type DatosDelPago, type Envio, type MotivoDeRechazo, type MotivoSinPago
 import { type BusquedaDePago, buscarPago } from "../stellar/pagos-red";
 import { mirarCuenta, usdcDeLaRed } from "../stellar/usdc-cuenta";
 import { type ManejadorDePagar, alCambiarDeIdioma, el, textoDePagos as tx } from "./panel-ganadores";
+import { premioDeLugarEn } from "./lugares-de-meta";
 
 /**
  * "Pagar premio": el pago en USDC de quien organiza a quien ganó, armado acá y firmado en la billetera de quien organiza.
@@ -524,6 +525,9 @@ export function pagarPremioEn(ctx: ContextoDePago): ManejadorDePagar {
     }
     const form = el("form", "gan-form");
     form.noValidate = true;
+    // El monto sale del premio del lugar de esta fila (`puesto` cuenta desde 0, el lugar desde 1): con un premio por
+    // lugar, nunca del de otro lugar, y si el suyo quedó sin premio no hay monto que ofrecer. Sin lugares, el de todos.
+    const premioDeLaFila = premioDeLugarEn(ctx.premio, fila.puesto + 1) ?? ctx.premio;
 
     const montoL = el("label", "gan-campo");
     const montoT = el("span", "kicker");
@@ -531,7 +535,7 @@ export function pagarPremioEn(ctx: ContextoDePago): ManejadorDePagar {
     monto.type = "text";
     monto.inputMode = "decimal";
     monto.autocomplete = "off";
-    monto.value = montoDelPremio(ctx.premio) ?? "";
+    monto.value = montoDelPremio(premioDeLaFila) ?? "";
     const ayuda = el("span", "note gan-ayuda");
     montoL.append(montoT, monto, ayuda);
 
@@ -636,7 +640,7 @@ export function pagarPremioEn(ctx: ContextoDePago): ManejadorDePagar {
     let cuentaSola = "";
     let abrirCarga: Dependencias["cargar"];
     let saldo: bigint | null = null;
-    const fijo = montoFijoDelPremio(ctx.premio);
+    const fijo = montoFijoDelPremio(premioDeLaFila);
     let enContador = fijo === null;
     let cuanto = fijo ?? UN_DOLAR;
     // El último resultado pide cargar saldo (la cuenta que paga todavía no tiene dólares digitales).

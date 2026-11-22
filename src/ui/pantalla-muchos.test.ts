@@ -63,6 +63,15 @@ describe("el resultado en grande según cuántos ganan", () => {
     expect(p.querySelectorAll(".pantalla-lista b")).toHaveLength(0);
   });
 
+  it("con un premio por lugar, la lista no anuncia todos arriba y cada renglón con premio dice el suyo", async () => {
+    const p = await abrir(14, "1.er premio: Bici, 2.º premio: Termo");
+    expect(p.querySelector(".pantalla-llevan")).toBeNull();
+    const filas = [...p.querySelectorAll<HTMLElement>(".pantalla-lista .pantalla-fila")];
+    expect(filas.map((f) => f.querySelector(".pantalla-fila-premio")?.textContent ?? "").slice(0, 3)).toEqual(["Bici", "Termo", ""]);
+    // El nombre sigue solo en su elemento: la letra se mide con él.
+    expect(filas[0]?.querySelector(".pantalla-nombre")?.textContent).toBe("Persona <2> & Co");
+  });
+
   it("sin modos, una lista hecha toda de marcas que cierran se lee sin marca y una común tal cual", async () => {
     vi.stubEnv("VITE_MODOS", "0");
     sessionStorage.clear();

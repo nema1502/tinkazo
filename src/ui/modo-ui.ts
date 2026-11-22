@@ -6,7 +6,7 @@ import { cuponDelFragmento } from "../stellar/cupon-guardado";
 import { limpiarPasoDelCupon } from "../stellar/cupon-paso-guardado";
 import { activeWallet } from "../stellar/wallet-lite";
 import { abrirDialogo, botonPrincipal } from "./dialogo";
-import { MARCA_INGRESAR } from "./cuenta-estado";
+import { MARCA_INGRESAR, MARCA_PRACTICAR } from "./cuenta-estado";
 import { pedirPasoDelCupon } from "./cupon-paso";
 
 /**
@@ -90,6 +90,32 @@ export function pasarAModo(target: NetworkName, o: { cupon?: boolean } = {}): bo
   return true;
 }
 
+/**
+ * Practicar en Prueba, de un toque: pasa a Prueba con la herramienta abierta y deja la marca para que la página de allá
+ * entre sola con la cuenta de prueba (`initWalletUI` en wallet-ui.ts), sin la ventana de entrar en el medio. La lista que
+ * se estaba armando viaja con el borrador de la pestaña (`reponerBorrador`). Con la guarda del cambio de modo cerrada no
+ * hace nada, y si la recarga no se pudo pedir no deja la marca. Devuelve si se pidió el cambio.
+ */
+export function practicarEnPrueba(): boolean {
+  if (!puedeCambiarDeModo()) return false;
+  try {
+    sessionStorage.setItem(MARCA_PRACTICAR, "1");
+  } catch {
+    /* sin almacenamiento, la página de Prueba abre con su botón de entrar */
+  }
+  const cambia = changeMode("testnet", "sortear");
+  if (!cambia) {
+    try {
+      sessionStorage.removeItem(MARCA_PRACTICAR);
+    } catch {
+      /* no había nada que borrar */
+    }
+    return false;
+  }
+  limpiarPasoDelCupon();
+  return true;
+}
+
 /** El otro modo al que se puede pasar desde el vigente. */
 export const otroModo = (name: NetworkName): NetworkName => (name === "mainnet" ? "testnet" : "mainnet");
 
@@ -152,6 +178,22 @@ export function confirmarPrimerSelloOficial(): Promise<boolean> {
   });
 }
 
+/**
+ * Lo que dice de Oficial la hoja: si el servidor da hoy el regalo a quien entra (`regaloAbierto`, de los precios), que
+ * se organizan esos sorteos gratis. Se pregunta sin hacer esperar a la hoja, y con 0, sin respuesta o con la hoja ya
+ * cerrada, queda lo de siempre.
+ */
+function decirElRegalo(cuerpo: HTMLElement): void {
+  void import("../stellar/alta-oferta")
+    .then((m) => m.regaloAbierto())
+    .then(
+      (n) => {
+        if (n > 0 && cuerpo.isConnected) cuerpo.textContent = t("modeOfficialBodyRegalo").replace("{n}", String(n));
+      },
+      () => undefined,
+    );
+}
+
 /** Abre la hoja del modo. Sin modo Oficial para ofrecer, no hace nada. */
 export function abrirHojaDeModo(): void {
   if (!hayModoOficial || typeof document === "undefined") return;
@@ -179,6 +221,7 @@ export function abrirHojaDeModo(): void {
     nombre.textContent = t(modeNameKey(name));
     const cuerpo = document.createElement("p");
     cuerpo.textContent = t(name === "mainnet" ? "modeOfficialBody" : "modeTestBody");
+    if (name === "mainnet") decirElRegalo(cuerpo);
     opcion.append(nombre, cuerpo);
     if (name === network.name) {
       const actual = document.createElement("p");
@@ -191,7 +234,8 @@ export function abrirHojaDeModo(): void {
 
   const boton = document.createElement("button");
   boton.type = "button";
-  boton.className = "primary modo-cambiar";
+  // El botón principal queda solo para pasar a Oficial: pasar a Prueba es la acción secundaria de la hoja.
+  boton.className = `${otro === "mainnet" ? "primary" : "ghost"} modo-cambiar`;
   boton.textContent = t(otro === "mainnet" ? "modeSwitchToOfficial" : "modeSwitchToTest");
   boton.disabled = bloqueado;
   boton.addEventListener("click", () => pasarAModo(otro));

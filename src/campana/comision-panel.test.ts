@@ -125,6 +125,33 @@ describe("otra billetera", () => {
   });
 });
 
+describe("una cuenta que entró con correo", () => {
+  it("con un borrador no llega a cargar ni a pagar, aunque tenga saldo y el servicio atienda", () => {
+    expect(estadoDeComision(con({ billetera: "correo", soloGoogle: true }))).toEqual({ tipo: "solo-google" });
+    expect(estadoDeComision(con({ billetera: "correo", soloGoogle: true, saldo: 0n }))).toEqual({ tipo: "solo-google" });
+  });
+
+  it("con un archivo firmado paga con un toque como antes: ahí no hay sala que pida Google", () => {
+    expect(estadoDeComision(con({ billetera: "correo" }))).toEqual({ tipo: "lista", sale: d(2.4) });
+    expect(estadoDeComision(con({ billetera: "correo", soloGoogle: false, saldo: 0n }))).toMatchObject({ tipo: "falta-cargar" });
+  });
+
+  it("lo que ya pasó le sigue ganando: pagada, pagando y la duda", () => {
+    const correo: Partial<EntradaDeComision> = { billetera: "correo", soloGoogle: true };
+    expect(estadoDeComision(con({ ...correo, red: { tipo: "pagada", suma: d(1.9) } }))).toEqual({ tipo: "pagada" });
+    expect(estadoDeComision(con({ ...correo, marcaViva: true }))).toEqual({ tipo: "duda" });
+  });
+
+  it("la de Google con un borrador sigue pudiendo pagar", () => {
+    expect(estadoDeComision(con({ soloGoogle: true }))).toEqual({ tipo: "lista", sale: d(2.4) });
+  });
+
+  it("sin poder mirar la red, a la de Google no se le dice que su cuenta no sirve", () => {
+    expect(estadoDeComision(con({ soloGoogle: true, red: { tipo: "sin-consulta" } }))).toEqual({ tipo: "sin-mirar" });
+    expect(estadoDeComision(con({ soloGoogle: true, portero: "sin-respuesta" }))).toEqual({ tipo: "sin-mirar" });
+  });
+});
+
 describe("el pago a medias", () => {
   it("con nada llegado, paga la comisión entera", () => {
     expect(loQueSale(BASE, 0n)).toBe(d(2.4));

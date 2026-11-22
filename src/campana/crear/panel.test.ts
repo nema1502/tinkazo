@@ -2,6 +2,7 @@
 /** La página para armar campañas por dentro: los seis pasos, la vista, el guardado y la descarga, con todo inyectado. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { comisionDelArmado } from "./costo";
 import { validarCampanaParaFirmar } from "../../sala/validar-campana";
 import { network } from "../../stellar/config";
 import { TEXTOS_CAMPANA } from "../textos";
@@ -215,12 +216,14 @@ describe("los pasos", () => {
     expect(titulo()).toBe("Tu marca");
   });
 
-  it("el paso 2 tiene un solo premio de hasta 500 con botones y el resumen en grande", () => {
+  it("el paso 2 tiene un solo premio, de 5 a 200 con botones, y el resumen en grande", () => {
     crear();
     escribir("ccp-nombre", "Alcancía Andina");
     clic("ccp-seguir");
-    clic("ccp-monto-500");
-    expect(texto("#ccp-premio")).toBe("500 dólares digitales");
+    clic("ccp-monto-5");
+    expect(texto("#ccp-premio")).toBe("5 dólares digitales");
+    clic("ccp-monto-200");
+    expect(texto("#ccp-premio")).toBe("200 dólares digitales");
     clic("ccp-ganan-mas");
     clic("ccp-monto-40");
     expect(texto("#ccp-premio")).toBe("2 premios de 40 dólares digitales");
@@ -238,11 +241,32 @@ describe("los pasos", () => {
     expect(texto("#ccp-premio")).toBe("500 dólares digitales");
   });
 
+  it("en el borde el contador apaga el botón que ya no mueve nada", () => {
+    crear();
+    escribir("ccp-nombre", "Alcancía Andina");
+    clic("ccp-seguir");
+    const boton = (id: string): HTMLButtonElement => q(`#${id}`) as HTMLButtonElement;
+    expect(boton("ccp-ganan-menos").disabled).toBe(true);
+    expect(boton("ccp-ganan-mas").disabled).toBe(false);
+    clic("ccp-monto-5");
+    clic("ccp-otro");
+    expect(texto("#ccp-otro-numero")).toBe("5");
+    expect(boton("ccp-otro-menos").disabled).toBe(true);
+    expect(boton("ccp-otro-mas").disabled).toBe(false);
+    for (let i = 0; i < 40; i += 1) clic("ccp-otro-mas");
+    expect(texto("#ccp-otro-numero")).toBe("1000");
+    expect(boton("ccp-otro-mas").disabled).toBe(true);
+    expect(boton("ccp-otro-menos").disabled).toBe(false);
+  });
+
   it("sin monto el resumen va de muestra y seguir pide elegirlo", () => {
     crear();
     escribir("ccp-nombre", "Alcancía Andina");
     clic("ccp-seguir");
     expect(q("#ccp-premio").classList.contains("ccp-muestra")).toBe(true);
+    // Nada elegido: ningún monto a la vista, ni de muestra.
+    expect(q("#ccp-premio").textContent).toBe("");
+    expect(q(".ccp-cuerpo").textContent).not.toMatch(/\d+ dólares digitales/u);
     clic("ccp-seguir");
     expect(linea()).toBe("Elegí cuánto se lleva cada persona.");
   });
@@ -284,7 +308,7 @@ describe("los pasos", () => {
     expect(titulo()).toBe("Tus redes");
   });
 
-  it("un cierre a 22 horas de abrir lo dice debajo de las horas, no en la barra, y no pone +1 día en ese campo", () => {
+  it("un cierre escrito antes de abrir dice que va después de abrir, debajo de las horas, y no pone +1 día en ningún campo", () => {
     crear();
     sembrar(guardado({ paso: 3, fecha: "2026-11-21", abre: "20:00", cierra: "18:00", sorteo: "18:30" }));
     montados[0]?.desmontar();
@@ -292,12 +316,12 @@ describe("los pasos", () => {
     crear();
     clic("ccp-seguir");
     expect(titulo()).toBe("Cuándo");
-    expect(texto(".ccp-error-hora")).toBe("Cerrá dentro de las 12 horas de abrir.");
+    expect(texto(".ccp-error-hora")).toBe("Corregí hasta qué hora: tiene que ser después de abrir.");
     expect(q(".ccp-error-hora").getAttribute("role")).toBe("alert");
     expect(linea()).toBe("");
     expect(q("#ccp-cierra").getAttribute("aria-invalid")).toBe("true");
     expect(q("#ccp-cierra").parentElement?.querySelector(".ccp-mas-un-dia")).toBeNull();
-    expect(q("#ccp-sorteo").parentElement?.querySelector(".ccp-mas-un-dia")).not.toBeNull();
+    expect(q("#ccp-sorteo").parentElement?.querySelector(".ccp-mas-un-dia")).toBeNull();
   });
 
   it("el error de hora se va en cuanto se cambia una hora", () => {
@@ -760,19 +784,19 @@ describe("el último paso", () => {
     expect([...q(".ccp-botones").children].map((b) => b.id)).toEqual(["ccp-seguir", "ccp-ver-vista"]);
   });
 
-  it("con una comisión el resumen muestra los premios, la comisión y el total a poner sin que la cuenta se rompa", () => {
-    crear({ comision: { dolares: 5 } });
+  it("con el cobro el resumen muestra los premios, el servicio de esta campaña y el total a poner", () => {
+    crear({ comision: comisionDelArmado({ pb: 200n, minimo: 15_000_000n }) });
     llenarHastaElFinal();
     const premio = [...document.querySelectorAll(".ccp-resumen")][1]?.textContent ?? "";
     expect(premio).toContain("En total 120 dólares digitales (3 por 40)");
-    expect(premio).toContain("Comisión: 5 dólares digitales");
-    expect(premio).toContain("Total a poner: 125 dólares digitales");
+    expect(premio).toContain("Servicio de Tinkazo: 2,40 dólares digitales");
+    expect(premio).toContain("Total a poner: 122,40 dólares digitales");
   });
 
-  it("sin comisión no hay renglón de comisión ni de total a poner", () => {
+  it("sin cobro no hay renglón del servicio ni de total a poner", () => {
     crear();
     llenarHastaElFinal();
-    expect(document.body.textContent).not.toContain("Comisión");
+    expect(document.body.textContent).not.toContain("Servicio de Tinkazo");
     expect(document.body.textContent).not.toContain("Total a poner");
   });
 

@@ -427,7 +427,8 @@ describe("los juegos interactivos", () => {
       "jiLink", "jiT", "jiB", "jiAbrir", "jiQrSub", "jiCerrarLista", "jiListaCerrada", "jiSellar", "jiAnunciando", "jiPocos",
       "jiErrRonda", "jiResultadoT", "jiRondaEjemplo", "jiPRotulo", "jiPEstadoEntra", "jiPNombreEt", "jiPNombrePh", "jiPNombreBtn",
       "jiPListo", "jiPListaAria", "jiPCerrada", "jiPTarde", "jiPNoGano", "jiPGanadores", "jiPNoSePudo", "jiPFin",
-      "jiPErrLlena", "jiPErrRed", "jiPErrOtro", "jiPNombreMalo", "jiPEjemplo",
+      "jiPErrLlena", "jiPErrRed", "jiPErrOtro", "jiPNombreMalo", "jiPEjemplo", "jiPErrRepetido", "jiErrNoDisponible",
+      "jiPMarcaEjemplo",
     ]) {
       expect(typeof T.es[k], `es.${k}`).toBe("string");
       expect(typeof T.en[k], `en.${k}`).toBe("string");
@@ -481,10 +482,13 @@ describe("el modo Amigo secreto (issue #99)", () => {
   const CLAVES = [
     "amigoOption", "amigoSub", "amigoTitulo", "amigoCount", "amigoPrizeLabel", "amigoPrize", "amigoMas",
     "amigoHelp", "amigoRulesNote", "amigoPrivacidad", "amigoPrivacidadPoca", "amigoResultadoT", "amigoResultadoNota",
-    "amigoCopiar", "amigoAvisoComprobante", "amigoVerComprobante", "amigoAgainLeft", "amigoMsgCab", "amigoMsgNombre", "amigoMsgPie",
-    "amigoSinComprobante",
+    "amigoCopiar", "amigoAvisoComprobante", "amigoVerComprobante", "amigoMsgCab", "amigoMsgNombre", "amigoMsgPie",
+    "amigoSinComprobante", "amigoEnlaceMsg", "espStickerAmigo", "espAmigoT", "espAmigoB", "amigoHistEnlaces",
+    "amigoRepetido", "sigRepetido", "amigoSellarResumen", "sigAmigo",
   ];
-  const CLAVES_CONFIRMAR = ["confirmarT", "confirmarError", "confirmarPara", "confirmarSorteo", "confirmarSello", "confirmarNota"];
+  const CLAVES_CONFIRMAR = [
+    "confirmarTitulo", "confirmarDesc", "confirmarT", "confirmarNota", "confirmarError", "confirmarErrorB", "confirmarIr",
+  ];
 
   it("sus textos existen en español y en inglés", () => {
     for (const k of [...CLAVES, ...CLAVES_CONFIRMAR]) {
@@ -511,14 +515,31 @@ describe("el modo Amigo secreto (issue #99)", () => {
     expect(T.en.amigoPrivacidadPoca).toMatch(/no secret|not a secret/i);
   });
 
+  it("lo que se copia con Copiar enlace lleva el enlace, en los dos idiomas", () => {
+    expect(T.es.amigoEnlaceMsg).toContain("{enlace}");
+    expect(T.en.amigoEnlaceMsg).toContain("{enlace}");
+  });
+
   it("el aviso del comprobante pide compartirlo después del intercambio", () => {
     expect(T.es.amigoAvisoComprobante).toMatch(/después del intercambio/i);
     expect(T.en.amigoAvisoComprobante).toMatch(/after the (gift )?exchange/i);
   });
 
-  it("la página del enlace personal no promete la lista entera", () => {
-    expect(T.es.confirmarNota).toMatch(/lista entera|reparto entero/i);
-    expect(T.en.confirmarNota).toMatch(/whole list|full list|whole exchange|entire list/i);
+  it("la página del enlace personal pide guardar el secreto", () => {
+    expect(T.es.confirmarNota).toMatch(/secreto/i);
+    expect(T.en.confirmarNota).toMatch(/secret/i);
+  });
+
+  it("la línea del enlace personal lleva el nombre de quien abre, en los dos idiomas", () => {
+    expect(T.es.confirmarT).toContain("{nombre}");
+    expect(T.en.confirmarT).toContain("{nombre}");
+  });
+
+  it("la página del enlace personal ya no dice el número del sello ni repite para quién es", () => {
+    for (const k of ["confirmarPara", "confirmarSorteo", "confirmarSello"]) {
+      expect(T.es[k], `es.${k}`).toBeUndefined();
+      expect(T.en[k], `en.${k}`).toBeUndefined();
+    }
   });
 });
 
@@ -553,8 +574,8 @@ describe("Siguiente premio de a un lugar (issue #102)", () => {
   it("los textos nuevos existen en los dos idiomas", () => {
     expect(T.es.lugarDe(2, 5)).toBe("Lugar 2 de 5");
     expect(T.en.lugarDe(2, 5)).toBe("Place 2 of 5");
-    expect(T.es.lugaresFijos).toContain("quedaron fijos al nacer el número");
-    expect(T.en.lugaresFijos).toContain("fixed the moment the number was born");
+    expect(T.es.lugaresFijos).toContain("ya están decididos");
+    expect(T.en.lugaresFijos).toContain("already decided");
     expect(T.es.fijosAlNacer).toContain("todos los lugares de una vez");
     expect(T.en.fijosAlNacer).toContain("every place at once");
     expect(T.es.againLugarBoton).toBe("Siguiente premio");

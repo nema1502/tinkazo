@@ -1,4 +1,5 @@
 import { altaActiva } from "../stellar/alta-config";
+import { copiarTexto } from "./copiar-texto";
 import { type EntornoDelCupon, iniciarCuponDelEnlace } from "./cupon-enlace";
 import { currentSession, enNavegadorDeApp, entraConGoogle, entrar, estadoDeLaCuenta } from "./wallet-ui";
 
@@ -12,28 +13,6 @@ function almacenDeLaPestana(): EntornoDelCupon["almacen"] {
     return typeof sessionStorage === "undefined" ? null : sessionStorage;
   } catch {
     return null;
-  }
-}
-
-async function copiar(texto: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(texto);
-    return true;
-  } catch {
-    // Sin portapapeles (algunos navegadores de una app): se copia seleccionando un campo que no se ve.
-    try {
-      const campo = document.createElement("textarea");
-      campo.value = texto;
-      campo.setAttribute("readonly", "");
-      campo.style.cssText = "position:fixed;top:0;left:0;opacity:0";
-      document.body.appendChild(campo);
-      campo.select();
-      const ok = document.execCommand("copy");
-      campo.remove();
-      return ok;
-    } catch {
-      return false;
-    }
   }
 }
 
@@ -55,7 +34,7 @@ export function entornoDelCupon(): EntornoDelCupon {
     },
     entrar: () => void entrar(),
     claveDeEntrar: () => (entraConGoogle() ? "ctaGoogle" : "ctaHero"),
-    copiar,
+    copiar: copiarTexto,
     insertar: (el) => {
       const cabecera = document.querySelector("header");
       if (cabecera) cabecera.after(el);

@@ -7,8 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * La sesión se guarda por red: quien ya entró en Oficial y llega a Prueba sin
  * sesión (una pestaña nueva, un cupón, el celular de un equipo) ve "Entrar"
  * como si no hubiera entrado nunca. Si no hay sesión en este modo pero queda
- * cuenta guardada del otro, la puerta del sorteo y la cabecera dicen dónde
- * está y ponen el botón para ir, en vez de pedir entrar.
+ * cuenta guardada del otro, la puerta del sorteo lo dice en su línea: Entrar
+ * sigue primero y con el foco, y el botón para ir al otro modo va segundo. La
+ * cabecera abre la entrada, como siempre.
  *
  * Solo se lee si existe la marca: nunca se abre acá la sesión de la otra red.
  */
@@ -71,6 +72,9 @@ vi.mock("./participants", () => ({ guardarBorrador: () => undefined }));
 vi.mock("../ensayo-modo", () => ({ enPractica: () => false, sinGrabar: () => false }));
 vi.mock("../contar", () => ({ contarEntrada: () => undefined, tomarEntrada: () => undefined }));
 vi.mock("./modo-ui", () => ({ pasarAModo: (...a: unknown[]) => h.pasar(...a), abrirHojaDeModo: () => undefined }));
+// El plan B del ingreso ya elegido (`sin-cuenta.ts` lo dice por su marca), solo en la prueba que lo pide: un `vi.doMock`
+// quedaba puesto para las pruebas que venían después.
+vi.mock("./sin-cuenta", async (orig) => ({ ...(await orig<typeof import("./sin-cuenta")>()), sinCuentaElegido: () => h.sinCuenta }));
 
 type Ui = typeof import("./wallet-ui");
 
@@ -104,10 +108,6 @@ const chip = (): { texto: string; aria: string } => {
 
 /** Abre la página (con las marcas de sesión ya puestas, si las hubo). */
 async function alAbrir(): Promise<{ ui: Ui; t: (k: string) => string }> {
-  if (h.sinCuenta) {
-    // El plan B del ingreso ya fue elegido: `sin-cuenta.ts` lo dice por su marca.
-    vi.doMock("./sin-cuenta", async (orig) => ({ ...(await orig<typeof import("./sin-cuenta")>()), sinCuentaElegido: () => true }));
-  }
   const ui = await import("./wallet-ui");
   const { t } = await import("../i18n");
   ui.initWalletUI();
@@ -120,13 +120,21 @@ const conMarcaDelOtroModo = (): void => {
 };
 
 describe("la puerta del sorteo con la cuenta abierta en el otro modo", () => {
-  it("en Prueba con la cuenta de Oficial guardada, dice dónde está y pone el botón para ir", async () => {
+  it("en Prueba con la cuenta de Oficial guardada, dice dónde está, con Entrar primero y con el foco", async () => {
     conMarcaDelOtroModo();
     const { t } = await alAbrir();
     const p = puerta();
     expect(p.texto).toContain(t("cuentaOtroModo").replace("{modo}", t("netMain")));
-    expect(p.botones).toEqual([t("cuentaOtroModoIr").replace("{modo}", t("netMain"))]);
-    document.querySelector<HTMLButtonElement>("#gate button")?.click();
+    expect(p.botones).toEqual([t("cuentaPideEntrar"), t("cuentaOtroModoIr").replace("{modo}", t("netMain"))]);
+    expect(document.activeElement?.textContent).toBe(t("cuentaPideEntrar"));
+  });
+
+  it("en Prueba con la cuenta de Oficial guardada, el segundo botón es secundario y manda a Oficial", async () => {
+    conMarcaDelOtroModo();
+    await alAbrir();
+    const segundo = document.querySelectorAll<HTMLButtonElement>("#gate button")[1];
+    expect(segundo?.className).toBe("enlace");
+    segundo?.click();
     await vi.waitFor(() => expect(h.pasar).toHaveBeenCalledWith("mainnet"));
   });
 
@@ -136,15 +144,36 @@ describe("la puerta del sorteo con la cuenta abierta en el otro modo", () => {
     expect(puerta().texto).toContain(t("cuentaOtroModo").replace("{modo}", t("netMain")));
   });
 
-  it("en Oficial con la cuenta de Prueba guardada, la puerta manda de vuelta", async () => {
+  it("en Oficial con la cuenta de Prueba guardada, dice dónde está, con Entrar primero y con el foco", async () => {
     h.red = "mainnet";
     localStorage.setItem("tinkazo.session.kind.testnet", "guest");
     const { t } = await alAbrir();
     const p = puerta();
     expect(p.texto).toContain(t("cuentaOtroModo").replace("{modo}", t("netTest")));
-    expect(p.botones).toEqual([t("cuentaOtroModoIr").replace("{modo}", t("netTest"))]);
-    document.querySelector<HTMLButtonElement>("#gate button")?.click();
+    expect(p.botones).toEqual([t("cuentaPideEntrar"), t("cuentaOtroModoIr").replace("{modo}", t("netTest"))]);
+    expect(document.activeElement?.textContent).toBe(t("cuentaPideEntrar"));
+  });
+
+  it("en Oficial con la cuenta de Prueba guardada, el segundo botón manda de vuelta a Prueba", async () => {
+    h.red = "mainnet";
+    localStorage.setItem("tinkazo.session.kind.testnet", "guest");
+    await alAbrir();
+    document.querySelectorAll<HTMLButtonElement>("#gate button")[1]?.click();
     await vi.waitFor(() => expect(h.pasar).toHaveBeenCalledWith("testnet"));
+  });
+
+  it("quien pasó a Oficial para entrar ve Entrar con el foco, aunque quede la cuenta de Prueba guardada", async () => {
+    // Pasar a Oficial deja la marca de entrar y, al recargar, la página llama a pedirEntrar (main.ts).
+    h.red = "mainnet";
+    h.pollar = true;
+    localStorage.setItem("tinkazo.session.kind.testnet", "google");
+    const { ui, t } = await alAbrir();
+    ui.pedirEntrar();
+    await vi.waitFor(() => expect(puerta().botones).toEqual([t("cuentaPideEntrar")]));
+    expect(puerta().texto).toContain(t("cuentaPideGoogle"));
+    expect(document.activeElement?.textContent).toBe(t("cuentaPideEntrar"));
+    expect(chip().texto).toContain(t("cuentaEntrar"));
+    expect(chip().texto).not.toContain(t("netTest"));
   });
 
   it("sin cuenta guardada en el otro modo, la puerta no aparece y la cabecera pide entrar, como siempre", async () => {
@@ -152,6 +181,17 @@ describe("la puerta del sorteo con la cuenta abierta en el otro modo", () => {
     expect(puerta().texto).toBe("");
     expect(puerta().botones).toEqual([]);
     expect(chip().texto).toContain(t("cuentaEntrar"));
+  });
+
+  it("con la cuenta en el otro modo, la puerta lleva la marca que esconde la invitación de primera vez", async () => {
+    conMarcaDelOtroModo();
+    await alAbrir();
+    expect(document.getElementById("gate")?.classList.contains("otro-modo")).toBe(true);
+  });
+
+  it("sin cuenta en el otro modo, la puerta no lleva esa marca y la invitación sigue como siempre", async () => {
+    await alAbrir();
+    expect(document.getElementById("gate")?.classList.contains("otro-modo")).toBe(false);
   });
 
   it("sin modo Oficial para ofrecer, la puerta y la cabecera se quedan como siempre", async () => {
@@ -178,12 +218,12 @@ describe("la puerta del sorteo con la cuenta abierta en el otro modo", () => {
     expect(document.querySelector('#wallet-box [data-estado="retomando"]')?.textContent).toContain(t("cuentaRetomando"));
   });
 
-  it("con el plan B del ingreso elegido, la puerta no aparece; la cabecera dice dónde está la cuenta", async () => {
+  it("con el plan B del ingreso elegido, la puerta no aparece y la cabecera pide entrar, como siempre", async () => {
     h.sinCuenta = true;
     conMarcaDelOtroModo();
     const { t } = await alAbrir();
     expect(puerta().texto).toBe("");
-    expect(chip().texto).toContain(t("cuentaOtroModoChip").replace("{modo}", t("netMain")));
+    expect(chip().texto).toContain(t("cuentaEntrar"));
   });
 
   it("quien ya tiene sesión en este modo no ve la puerta del otro modo: la suya está acá", async () => {
@@ -195,37 +235,46 @@ describe("la puerta del sorteo con la cuenta abierta en el otro modo", () => {
     localStorage.setItem("tinkazo.session.kind.testnet", "guest");
     ui.initWalletUI();
     await vi.waitFor(() => expect(ui.estadoDeLaCuenta().estado).toBe("dentro"), { timeout: 5000 });
-    expect(puerta().texto).toBe("");
+    // Con la sesión, la puerta que decía Retomando se esconde: queda su texto, pero no se ve.
+    expect(document.getElementById("gate")?.style.display).toBe("none");
     expect(document.querySelector('[data-estado="fuera"]')).toBeNull();
   });
 });
 
 describe("la cabecera con la cuenta abierta en el otro modo", () => {
-  it("el chip dice dónde está la cuenta y tocarlo manda para allá, en vez de pedir entrar", async () => {
+  it("en Prueba con la cuenta de Oficial guardada, el chip pide entrar y tocarlo abre la entrada", async () => {
     conMarcaDelOtroModo();
     const { t } = await alAbrir();
-    const c = chip();
-    expect(c.texto).toContain(t("cuentaOtroModoChip").replace("{modo}", t("netMain")));
-    expect(c.aria).toContain(t("cuentaOtroModo").replace("{modo}", t("netMain")));
-    expect(c.aria).toContain(t("cuentaOtroModoIr").replace("{modo}", t("netMain")));
-    expect(c.texto).not.toContain(t("cuentaEntrar"));
+    expect(chip().texto).toContain(t("cuentaEntrar"));
+    expect(chip().aria).toBe(t("cuentaEntrarAria"));
     document.querySelector<HTMLButtonElement>('#wallet-box [data-estado="fuera"]')?.click();
-    await vi.waitFor(() => expect(h.pasar).toHaveBeenCalledWith("mainnet"));
+    await vi.waitFor(() => expect(document.querySelector(".modal-card.login")).not.toBeNull());
+    expect(h.pasar).not.toHaveBeenCalled();
   });
 
-  it("en los dos idiomas", async () => {
+  it("en Oficial con la cuenta de Prueba guardada, el chip pide entrar y tocarlo abre la entrada", async () => {
+    h.red = "mainnet";
+    localStorage.setItem("tinkazo.session.kind.testnet", "guest");
+    const { t } = await alAbrir();
+    expect(chip().texto).toContain(t("cuentaEntrar"));
+    document.querySelector<HTMLButtonElement>('#wallet-box [data-estado="fuera"]')?.click();
+    await vi.waitFor(() => expect(document.querySelector(".modal-card.login")).not.toBeNull());
+    expect(h.pasar).not.toHaveBeenCalled();
+  });
+
+  it("en los dos idiomas, la puerta dice dónde está la cuenta con Entrar primero", async () => {
     conMarcaDelOtroModo();
     await alAbrir();
     // En español (el de la carga).
-    expect(chip().texto).toBe("Cuenta en Oficial");
+    expect(puerta().texto).toContain("Tu cuenta está abierta en el modo Oficial.");
+    expect(puerta().botones).toEqual(["Entrar con Google", "Ir a Oficial"]);
     // En inglés, la página se repinta entera.
     vi.resetModules();
     document.body.innerHTML = `<div><div id="gate"></div></div><div id="wallet-box"></div><div id="fund-box"></div><button id="btn-freeze"></button><div id="cuenta-aviso"></div><section id="sec-history"></section>`;
     const i18n = await import("../i18n");
     i18n.setLang("en");
     await alAbrir();
-    const { t } = i18n;
-    expect(chip().texto).toBe(t("cuentaOtroModoChip").replace("{modo}", t("netMain")));
-    expect(chip().texto).toContain("Live");
+    expect(puerta().texto).toContain("Your account is open in Live.");
+    expect(puerta().botones).toEqual(["Sign in with Google", "Go to Live"]);
   });
 });

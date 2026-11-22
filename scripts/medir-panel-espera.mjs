@@ -115,7 +115,7 @@ if (servir) {
 /** La herramienta en modo libre, con la lista de ejemplo sellada y la espera en grande abierta (sin que nazca el número). */
 async function abrirLaEspera(page, v, tema) {
   await page.send("Emulation.setDeviceMetricsOverride", { width: v.w, height: v.h, deviceScaleFactor: 1, mobile: !!v.celular, screenWidth: v.w, screenHeight: v.h });
-  await page.send("Page.navigate", { url: `${base}/?lead=170&pace=rapido&theme=${tema}&lang=${lang}#sortear` });
+  await page.send("Page.navigate", { url: `${base}/?lead=170&pace=rapido&theme=${tema}&lang=${lang}&red=prueba#sortear` });
   await page.waitFor("document.readyState === 'complete'", 30000);
   await sleep(1200);
   // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.

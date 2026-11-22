@@ -16,6 +16,7 @@ import {
   cambioUnaActivada,
   campanaParaLaVista,
   faltaDeTamano,
+  faltaDeTamanoParaActivar,
   faltas,
   faltasDelPaso,
   formularioDesdeTexto,
@@ -26,10 +27,11 @@ import {
 } from "./armar";
 import { basesAutomaticas, basesFinales, type DatosDeLasBases } from "./bases";
 import { UNIDADES_POR_DOLAR } from "./constantes";
-import { costoDeLaCampana, type ComisionDeLaCampana } from "./costo";
+import { costoDeLaCampana, type ComisionDelArmado } from "./costo";
 import {
   CLAVE_DE_GUARDADO,
   COLORES_EN_ORDEN,
+  MAXIMO_DE_GANAN,
   MAXIMO_DEL_LUGAR,
   MAXIMO_DEL_NOMBRE,
   MAXIMO_DEL_PEDIDO,
@@ -67,12 +69,20 @@ export interface DepsDelCreador {
   /** Compartir un archivo con la hoja del sistema, si el navegador sabe hacerlo. */
   compartir: { puede: (archivo: File) => boolean; enviar: (archivo: File) => Promise<boolean> } | null;
   costo: (idioma: Lang) => string | null;
+  /**
+   * Activar la campaña con la cuenta de Google de quien organiza: guarda el borrador (solo el JSON, nada personal) y lleva al
+   * panel que cobra, activa y abre la inscripción. `false` si no se pudo guardar. Sin esto, solo se baja la campaña.
+   */
+  activar?: (texto: string) => boolean;
   /** El origen con que se habla con la vista. */
   origen: string;
   /** El tema forzado por la dirección de la página, para que la vista lo repita. */
   tema: string | null;
-  /** Lo que cobra Tinkazo por activar la campaña. Hoy no se cobra: sin esto, el resumen no tiene renglón de comisión. */
-  comision?: ComisionDeLaCampana | null;
+  /**
+   * Lo que cobra Tinkazo por activar la campaña, según sus premios (`comisionDelArmado`, la misma cuenta con que cobra el
+   * panel). Sin esto, el resumen no tiene renglón del servicio ni del total.
+   */
+  comision?: ComisionDelArmado | null;
   /** Agenda un envío al próximo cuadro: varios cambios en el mismo cuadro salen en un solo mensaje. */
   cuadro: (f: () => void) => void;
   /** Espera antes de guardar: devuelve cómo cancelar. */
@@ -113,8 +123,8 @@ export interface AccionFinal {
 }
 
 /**
- * Los botones del último paso, en orden, con uno solo principal. Antes de bajar la campaña el principal es bajarla, y después
- * es mandarla. Activar es una acción más con la misma campaña armada: hoy no se ofrece, y el día que se ofrezca es el principal.
+ * Los botones del último paso, en orden, con uno solo principal. Con la activación a la vista, el principal es activar y bajar
+ * la campaña queda como alternativa. Sin ella, antes de bajar la campaña el principal es bajarla, y después es mandarla.
  */
 export function accionesDelFinal(c: { compartir: boolean; activar: boolean; descargada: boolean }): AccionFinal[] {
   const alternativa: AccionFinal = c.compartir ? { id: "compartir", principal: false } : { id: "correo", principal: false };
@@ -126,6 +136,8 @@ export function accionesDelFinal(c: { compartir: boolean; activar: boolean; desc
 }
 
 const CLAVE_DE_PASO = ["ccPaso1", "ccPaso2", "ccPaso3", "ccPaso4", "ccPaso5", "ccPaso6"] as const;
+/** Con la activación a la vista, el último paso no dice Mandala a Tinkazo: dice Activá tu campaña. */
+const CLAVE_DEL_ULTIMO_PASO_CON_ACTIVAR = "ccPaso6Activar";
 const CLAVE_DE_COLOR: Record<ColorDeCampana, string> = {
   rojo: "ccColorRojo",
   naranja: "ccColorNaranja",
@@ -195,6 +207,10 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   let cancelarGuardado: (() => void) | null = null;
   let pendienteDeGuardar = false;
   let desmontado = false;
+
+  /** Se puede activar desde esta página: hay con qué guardar el borrador y no es la demostración, que no guarda nada. */
+  const puedeActivar = (): boolean => deps.activar !== undefined && !deps.demo;
+  const clavePaso = (n: NumeroDePaso): string => (n === 6 && puedeActivar() ? CLAVE_DEL_ULTIMO_PASO_CON_ACTIVAR : (CLAVE_DE_PASO[n - 1] ?? "ccPaso1"));
 
   /* --- lo que se calcula del formulario --- */
 
@@ -334,14 +350,23 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     return b;
   }
 
-  function contador(valor: number, alBajar: () => void, alSubir: () => void, ids: { menos: string; mas: string; numero: string }): HTMLElement {
+  function contador(
+    valor: number,
+    alBajar: () => void,
+    alSubir: () => void,
+    ids: { menos: string; mas: string; numero: string },
+    limites: { minimo: number; maximo: number },
+  ): HTMLElement {
     const fila = el("div", "ccp-contador");
     const menos = boton("−", "ccp-paso-contador", alBajar, ids.menos);
     menos.setAttribute("aria-label", tx("ccMenos"));
+    // En el borde, el botón que ya no mueve nada queda apagado.
+    menos.disabled = valor <= limites.minimo;
     const numero = el("output", "ccp-numero", String(valor));
     numero.id = ids.numero;
     const mas = boton("+", "ccp-paso-contador", alSubir, ids.mas);
     mas.setAttribute("aria-label", tx("ccMasUno"));
+    mas.disabled = valor >= limites.maximo;
     fila.append(menos, numero, mas);
     return fila;
   }
@@ -374,7 +399,9 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     if (!id) return;
     const nuevo = document.getElementById(id);
     if (!(nuevo instanceof HTMLElement)) return;
-    nuevo.focus();
+    // Un contador que llegó al borde apaga su botón: el foco pasa al otro de la misma fila y no se pierde.
+    const apagado = nuevo instanceof HTMLButtonElement && nuevo.disabled;
+    (apagado ? (nuevo.parentElement?.querySelector<HTMLElement>("button:not([disabled])") ?? nuevo) : nuevo).focus();
     if (nuevo instanceof HTMLInputElement && desde !== null && hasta !== null && nuevo.type === "text") nuevo.setSelectionRange(desde, hasta);
   }
 
@@ -419,7 +446,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
       const visitado = n <= f.visitado;
       const b = boton(String(n), "ccp-circulo", () => ir(n), `ccp-ir-${n}`);
       b.disabled = !visitado;
-      b.setAttribute("aria-label", `${n}. ${tx(CLAVE_DE_PASO[n - 1] ?? "ccPaso1")}`);
+      b.setAttribute("aria-label", `${n}. ${tx(clavePaso(n))}`);
       if (n === f.paso) b.setAttribute("aria-current", "step");
       b.classList.toggle("ccp-actual", n === f.paso);
       li.append(b);
@@ -554,6 +581,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
           () => cambiar({ t: "otro-menos" }),
           () => cambiar({ t: "otro-mas" }),
           { menos: "ccp-otro-menos", mas: "ccp-otro-mas", numero: "ccp-otro-numero" },
+          OTRO_MONTO,
         ),
         el("span", "ccp-unidad", tx("ccDolares")),
       );
@@ -567,10 +595,12 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
         () => cambiar({ t: "ganan-menos" }),
         () => cambiar({ t: "ganan-mas" }),
         { menos: "ccp-ganan-menos", mas: "ccp-ganan-mas", numero: "ccp-ganan-numero" },
+        { minimo: 1, maximo: MAXIMO_DE_GANAN },
       ),
     );
     b.append(cuantos);
-    const resumen = el("p", f.monto === null ? "ccp-premio ccp-muestra" : "ccp-premio", premiosTexto(premios(), deps.idioma()));
+    // Sin monto elegido no se muestra un monto inventado: el renglón queda vacío hasta que se elija.
+    const resumen = el("p", f.monto === null ? "ccp-premio ccp-muestra" : "ccp-premio", f.monto === null ? "" : premiosTexto(premios(), deps.idioma()));
     resumen.id = "ccp-premio";
     resumen.setAttribute("aria-live", "polite");
     b.append(resumen);
@@ -630,7 +660,8 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     horas.append(
       hora("abre", "ccAbre", false),
       hora("cierra", "ccCierra", t?.cierraMasUno === true),
-      hora("sorteo", "ccSorteo", t?.sorteoMasUno === true),
+      // Con el cierre mal escrito, el sorteo no se marca +1 día: esa cuenta sale de un cierre que no vale.
+      hora("sorteo", "ccSorteo", t?.sorteoMasUno === true && malaHora !== "ccp-cierra"),
     );
     b.append(horas);
     if (malaHora !== null && faltaVisible) {
@@ -782,10 +813,16 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     const premio = el("div", "ccp-resumen");
     premio.append(el("strong", "", premiosTexto(premios(), idioma)));
     if (f.monto !== null) {
-      const costo = costoDeLaCampana({ premios: { monto: f.monto, ganan: f.ganan }, comision: deps.comision ?? null });
+      const premiosElegidos = { monto: f.monto, ganan: f.ganan };
+      const costo = costoDeLaCampana({ premios: premiosElegidos, comision: deps.comision?.(premiosElegidos) ?? null });
       premio.append(el("span", "ccp-total", fmt("ccTotal", { total: String(costo.premios), n: String(f.ganan), monto: String(f.monto) })));
       if (costo.comision !== null) {
-        const renglon = (clave: string, valor: number): HTMLElement => el("span", "ccp-total", `${tx(clave)}: ${valor} ${tx("ccDolares")}`);
+        // Con centavos, siempre dos decimales: 1,50 y no 1,5.
+        const dinero = (valor: number): string => {
+          const escrito = Number.isInteger(valor) ? String(valor) : valor.toFixed(2);
+          return idioma === "es" ? escrito.replace(".", ",") : escrito;
+        };
+        const renglon = (clave: string, valor: number): HTMLElement => el("span", "ccp-total", `${tx(clave)}: ${dinero(valor)} ${tx("ccDolares")}`);
         premio.append(renglon("ccCostoComision", costo.comision), renglon("ccCostoTotal", costo.total));
       }
     }
@@ -848,20 +885,46 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     if (errorDeHora) llevarALaVista(errorDeHora);
   }
 
-  async function descargarCampana(): Promise<void> {
+  /**
+   * La campaña lista para mandarla donde sea: no falta nada, los dos lectores la aceptan y entra en el tamaño. Si algo no va,
+   * lo muestra donde está y devuelve `null`.
+   */
+  async function campanaLista(): Promise<{ archivo: Record<string, unknown>; texto: string } | null> {
     const primera = faltasDe()[0];
-    if (primera) return mostrar(primera);
+    if (primera) {
+      mostrar(primera);
+      return null;
+    }
     const hecho = armadoDeAhora();
-    if (!hecho) return;
+    if (!hecho) return null;
     const validacion = await deps.validar(hecho.texto, deps.ahora());
-    if (desmontado) return;
+    if (desmontado) return null;
     if (!validacion.ok) {
       const paso = pasoDelFallo(validacion.campo, f.logo !== null);
       const mal: Falta = paso === 6 ? { paso, clave: "ccNoSalio" } : { paso, clave: "ccRevisaPaso", valores: { n: String(paso) } };
-      return mostrar(mal);
+      mostrar(mal);
+      return null;
     }
     const grande = await faltaDeTamano(hecho.texto, hecho.archivo);
-    if (grande) return mostrar(grande);
+    if (grande) {
+      mostrar(grande);
+      return null;
+    }
+    return hecho;
+  }
+
+  /** Activar: la campaña se guarda como borrador y el panel de la portada cobra, activa y abre la inscripción. */
+  async function activarCampana(): Promise<void> {
+    const hecho = await campanaLista();
+    if (!hecho || desmontado) return;
+    const pesada = faltaDeTamanoParaActivar(hecho.texto);
+    if (pesada) return mostrar(pesada);
+    if (deps.activar?.(hecho.texto) !== true) mostrar({ paso: 6, clave: "ccNoSalio" });
+  }
+
+  async function descargarCampana(): Promise<void> {
+    const hecho = await campanaLista();
+    if (!hecho) return;
     const nombre = `${String(hecho.archivo.evento)}.json`;
     deps.descargar(nombre, contenidoDelArchivo(hecho.archivo));
     descargada = nombre;
@@ -998,7 +1061,10 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
       // Si hay un error a la vista, el error es la línea: no se le suma otra.
       const hayError = dicho.some((d) => d.error);
       if (!hayError && descargada) dicho.push({ texto: tx("ccDescargada"), error: false });
-      else if (!hayError && t) dicho.push({ texto: fmt("ccListoLinea", { abre: horaTexto(t.abreMs, f.zona, deps.idioma()) }), error: false });
+      else if (!hayError && t) {
+        const clave = puedeActivar() ? "ccListoLineaActivar" : "ccListoLinea";
+        dicho.push({ texto: fmt(clave, { abre: horaTexto(t.abreMs, f.zona, deps.idioma()) }), error: false });
+      }
     }
     for (const linea of dicho) lineas.append(el("p", linea.error ? "ccp-error" : "ccp-linea", linea.texto));
     barra.append(lineas);
@@ -1010,9 +1076,10 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
       return;
     }
     let correo: HTMLAnchorElement | null = null;
-    const acciones = accionesDelFinal({ compartir: puedeCompartir(), activar: false, descargada: descargada !== null });
+    const acciones = accionesDelFinal({ compartir: puedeCompartir(), activar: puedeActivar(), descargada: descargada !== null });
     for (const accion of acciones) {
       const clase = accion.principal ? "primary" : "ccp-secundario";
+      if (accion.id === "activar") fila.append(boton(tx("ccActivar"), clase, () => void activarCampana(), "ccp-activar"));
       if (accion.id === "descargar") fila.append(boton(tx("ccDescargar"), clase, () => void descargarCampana(), "ccp-descargar"));
       if (accion.id === "compartir") fila.append(boton(tx("ccCompartir"), clase, () => void compartirCampana(), "ccp-compartir"));
       if (accion.id === "correo") {
@@ -1109,7 +1176,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   function pintarPaso(): void {
     conservarFoco(() => {
       seccion.replaceChildren();
-      const titulo = el("h1", "ccp-titulo", tx(CLAVE_DE_PASO[f.paso - 1] ?? "ccPaso1"));
+      const titulo = el("h1", "ccp-titulo", tx(clavePaso(f.paso)));
       titulo.id = "ccp-titulo";
       titulo.tabIndex = -1;
       const cuerpo = [paso1, paso2, paso3, paso4, paso5, paso6][f.paso - 1]?.() ?? el("div");

@@ -10,14 +10,40 @@
 
 /* Con el panel de la campaña en pantalla, el cuadro de la lista de siempre no estorba: queda solo el panel y su principal. */
 body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta) { display: none !important; }
+/* Sin el cuadro tampoco va Otro nombre, que baja de renglón en él. */
+body:has(#cpo-panel) #btn-otro-nombre { display: none !important; }
 /* Elegir, vista previa y confirmar: lo único que hay para tocar es el panel. Sin el editor de la lista debajo (stand, premio y CSV,
    logo, cuántos ganan, sellar) ni el título Participantes encima, que competían con el botón principal y rodeaban el cobro de texto. */
 body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"])) :is(
     #btn-stand, #mas-opciones, #logo-fila, #ganadores-control, .sellar-acciones, #sellar-modo, #freeze-hint, #free-rule,
     #sellar-sin-cuenta, #sec-participants > .head
   ) { display: none !important; }
+/* La campaña por activar que dejó crear-campana.html: sin el título Tu sorteo, los pasos, la puerta de la cuenta ni el
+   selector de modos, que competían con su botón principal. Con o sin sesión, la acción es la del panel. */
+body:has(#cpo-panel[data-borrador][data-vista="previa"]) :is(
+    .appbar, #gate, #primera-vez, #turnos-opcion, #pendiente, #como-panel, #btn-ensayo, #btn-interactivos, #cupo-linea
+  ) {
+  display: none !important;
+}
+/* Sin el título de arriba, el panel deja el mismo aire bajo la cabecera que la portada. */
+body:has(#cpo-panel[data-borrador][data-vista="previa"]) #sec-participants { margin-top: 28px; }
+/* En la laptop no es una caja dentro de otra, y el botón no ocupa todo el ancho. */
+@media (min-width: 700px) {
+  body:has(#cpo-panel[data-borrador][data-vista="previa"]) #sec-participants {
+    border: 0;
+    box-shadow: none;
+    background: none;
+    padding: 0;
+  }
+  #cpo-panel[data-borrador][data-vista="previa"] { max-width: 640px; margin-inline: auto; }
+}
+/* El aviso de la campaña por activar en Prueba (campana-pendiente.ts): el mismo aire bajo la cabecera. */
+.cpo-panel.cpo-pendiente { margin-top: 28px; }
+@media (min-width: 700px) { .cpo-panel.cpo-pendiente { max-width: 640px; margin-inline: auto; } }
 /* Mientras falta pagar el servicio, el premio grande no se muestra: debajo del título se leería como lo que falta pagar. */
 .cpo-panel[data-comision]:not([data-comision="pagada"]) > .cpo-previa { display: none; }
+/* De quién es la campaña por activar, arriba del título. */
+.cpo-panel .cpo-de { margin: 0 0 4px; font-size: 16px; font-weight: 800; color: var(--ink2); }
 /* La marca de que el servicio ya se pagó, bajo el título. */
 .cpo-cab .cpo-marca {
   display: inline-block;

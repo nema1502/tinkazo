@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./qr", () => ({ pintarQr: vi.fn(async () => true) }));
@@ -7,8 +8,16 @@ import { setLang, t } from "../i18n";
 import type { ErrorDeAlta, OrdenDePago, PagoDeOrden, ResultadoDeAlta } from "../stellar/alta-api";
 import { memoIdDe } from "../stellar/alta-api";
 import type { Oferta, ProductoALaVenta } from "../stellar/alta-oferta";
-import { type CompraDePaquetes, type EstadoDelPaquete, type FaseDelPaquete, abrirSumarSorteos, paqueteInicial, vistaDelPaquete } from "./pago-paquete";
-import { CADA_MS, DURANTE_MS } from "./pago-sondeo";
+import {
+  type CompraDePaquetes,
+  type EstadoDelPaquete,
+  type FaseDelPaquete,
+  type VistaDelPaquete,
+  abrirSumarSorteos,
+  paqueteInicial,
+  vistaDelPaquete,
+} from "./pago-paquete";
+import { CADA_MS, DURANTE_MS, DURANTE_SOLO_MS, PRIMEROS_MS } from "./pago-sondeo";
 
 /**
  * «Sumar sorteos» con la cuenta ya lista: la ventana de los paquetes. Lo que se vende sale del servidor y los datos para
@@ -122,6 +131,21 @@ describe("la tabla de la ventana", () => {
                       if (fase === "pagando" && conOrden && vencida && !falta) expect(v.panel).toBeNull();
                     }
     expect(filas).toBeGreaterThan(2000);
+  });
+
+  it("los sorteos dados solo cambian la nota de lo que llegó de menos, y solo si cuadran con la orden", () => {
+    const falta = { recibido: "4.5", total: "10" };
+    const base: EstadoDelPaquete = { ...paqueteInicial("es", ""), fase: "pagando", orden: orden("ABCD2345", "sorteo", "10"), falta };
+    const nota = (x: Partial<EstadoDelPaquete>): VistaDelPaquete["nota"] => vistaDelPaquete({ ...base, ...x }).nota;
+    // Con decimales, lo que falta como un precio. Mirando solo o no, lo mismo.
+    const dados = { clave: "pagoFaltaDados", vars: { dados: "4", n: "10", falta: "5,50 dólares" } };
+    expect(nota({ dados: 4, solo: true })).toEqual(dados);
+    expect(nota({ dados: 4 })).toEqual(dados);
+    // Sin sorteos dados, o tantos como los de la orden (eso ya es pagada), la nota de siempre.
+    for (const d of [0, 10, 12]) expect(nota({ dados: d, solo: true })?.clave, String(d)).toBe("pagoFalta");
+    // Sin nada llegado, o después de «No llegó», tampoco cambia.
+    expect(nota({ dados: 4, solo: true, falta: null })?.clave).not.toBe("pagoFaltaDados");
+    expect(nota({ dados: 4, noLlego: true })?.clave).toBe("pagoRedEquivocada");
   });
 });
 
@@ -389,5 +413,386 @@ describe("sumar sorteos", () => {
     const srv = servidorFalso();
     await abrir(srv);
     expect(panel()?.querySelector('[data-pago="cambio"]')).toBeNull();
+  });
+});
+
+/** El producto por unidad como lo deja `ofertaDe`: 1 dólar por sorteo, de 5 a 50 de a 5, que valen un año. */
+const SORTEO: ProductoALaVenta = { id: "sorteo", usdc: "1", sorteos: 1, dias: 365, unidad: { minimo: 5, maximo: 50, paso: 5 } };
+const cantidad = (): string => card()?.querySelector('[data-dato="cantidad"]')?.textContent ?? "";
+const lado = (accion: "menos" | "mas"): HTMLButtonElement | null =>
+  card()?.querySelector<HTMLButtonElement>(`.pago-contador button[data-accion="${accion}"]`) ?? null;
+const lineas = (): (string | null)[] => [...(card()?.querySelectorAll(".dlg-cuerpo > p, .dlg-cuerpo > .cl-error") ?? [])].map((p) => p.textContent);
+
+describe("el contador del producto por unidad", () => {
+  it("abre en cuántos: la línea del precio, el contador en 10 y Seguir con el total, sin pedir ninguna orden", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await abrir(srv);
+    expect(card()?.querySelector(".dlg-h")?.textContent).toBe(t("cupoOfSumar"));
+    expect(lineas()).toEqual(["Cada sorteo que organizás, 1 dólar en USDC. Valen un año."]);
+    expect(cantidad()).toBe("10");
+    expect(principal().textContent).toBe("Seguir con 10 dólares");
+    expect(card()?.querySelectorAll(".dlg-main").length).toBe(1);
+    expect(panel()).toBeNull();
+    expect(srv.compra.orden).not.toHaveBeenCalled();
+    expect(srv.compra.pago).not.toHaveBeenCalled();
+  });
+
+  it("más suma de a 5 y el total del botón cambia con la cantidad", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await abrir(srv);
+    await tocar(lado("mas"));
+    expect(cantidad()).toBe("15");
+    expect(principal().textContent).toBe("Seguir con 15 dólares");
+    await tocar(lado("menos"));
+    await tocar(lado("menos"));
+    expect(cantidad()).toBe("5");
+    expect(principal().textContent).toBe("Seguir con 5 dólares");
+  });
+
+  it("no baja de 5: en el mínimo, menos queda apagado y la cantidad no se mueve", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await abrir(srv);
+    await tocar(lado("menos"));
+    expect(cantidad()).toBe("5");
+    expect(lado("menos")?.disabled).toBe(true);
+    expect(lado("mas")?.disabled).toBe(false);
+    lado("menos")?.click();
+    await pasa();
+    expect(cantidad()).toBe("5");
+  });
+
+  it("no pasa de 50: en el máximo, más queda apagado y la cantidad no se mueve", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await abrir(srv);
+    for (let i = 0; i < 8; i++) await tocar(lado("mas"));
+    expect(cantidad()).toBe("50");
+    expect(principal().textContent).toBe("Seguir con 50 dólares");
+    expect(lado("mas")?.disabled).toBe(true);
+    lado("mas")?.click();
+    await pasa();
+    expect(cantidad()).toBe("50");
+  });
+
+  it("el mínimo, el máximo y el paso son los del servidor", async () => {
+    const srv = servidorFalso([{ ...SORTEO, unidad: { minimo: 20, maximo: 40, paso: 10 } }]);
+    await abrir(srv);
+    expect(cantidad()).toBe("20");
+    expect(lado("menos")?.disabled).toBe(true);
+    await tocar(lado("mas"));
+    expect(cantidad()).toBe("30");
+    await tocar(lado("mas"));
+    expect(cantidad()).toBe("40");
+    expect(lado("mas")?.disabled).toBe(true);
+  });
+
+  it("Seguir no cobra: pide la orden de esa cantidad y pasa a los datos para pagar, de la orden", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await abrir(srv);
+    await tocar(lado("mas"));
+    await tocar(principal());
+    expect(srv.compra.orden).toHaveBeenCalledTimes(1);
+    expect(srv.compra.orden).toHaveBeenCalledWith("sorteo", 15);
+    expect(panel()?.querySelector('[data-dato="nota"]')?.textContent).toBe("tk:o:ABCD2345");
+    expect(card()?.querySelector(".pago-contador")).toBeNull();
+  });
+
+  it("sin conexión al pedir la orden: el motivo, y Probar de nuevo la pide otra vez con la misma cantidad", async () => {
+    const srv = servidorFalso([SORTEO]);
+    srv.s.ordenes = [err("altaErrServicio", "sin-red", 0), ok(orden("ABCD2345", "sorteo"))];
+    await abrir(srv);
+    await tocar(lado("mas"));
+    await tocar(principal());
+    expect(alerta()).toBe(t("altaErrServicio"));
+    expect(principal().textContent).toBe(t("clProbarDeNuevo"));
+    await tocar(principal());
+    expect(srv.compra.orden).toHaveBeenLastCalledWith("sorteo", 15);
+    expect(panel()).not.toBeNull();
+  });
+
+  it("el foco queda en el contador al tocarlo, y en el borde pasa al otro lado", async () => {
+    const srv = servidorFalso([{ ...SORTEO, unidad: { minimo: 5, maximo: 15, paso: 5 } }]);
+    await abrir(srv);
+    lado("mas")?.focus();
+    await tocar(lado("mas"));
+    expect(cantidad()).toBe("15");
+    expect(document.activeElement).toBe(lado("menos"));
+    await tocar(lado("menos"));
+    expect(document.activeElement).toBe(lado("menos"));
+  });
+
+  it("cada botón dice qué hace, y la cantidad se anuncia cuando cambia", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await abrir(srv);
+    expect(lado("menos")?.getAttribute("aria-label")).toBe(t("pagoMenos"));
+    expect(lado("mas")?.getAttribute("aria-label")).toBe(t("pagoMas"));
+    expect(card()?.querySelector(".pago-contador")?.getAttribute("aria-label")).toBe(t("pagoCuantos"));
+    expect(card()?.querySelector('[data-dato="cantidad"]')?.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("en inglés, sus textos en inglés", async () => {
+    setLang("en");
+    const srv = servidorFalso([SORTEO]);
+    await abrir(srv);
+    expect(lineas()).toEqual(["Each draw you run, US$1 in USDC. Valid for a year."]);
+    expect(principal().textContent).toBe("Continue with US$10");
+  });
+
+  it("con otros días que un año, la línea dice los días del servidor", async () => {
+    const srv = servidorFalso([{ ...SORTEO, dias: 180 }]);
+    await abrir(srv);
+    expect(lineas()).toEqual(["Cada sorteo que organizás, 1 dólar en USDC. Valen 180 días."]);
+  });
+
+  it("con el medio deducido en el QR, el producto por unidad sigue por el contador y sin Estoy en Bolivia", async () => {
+    const srv = servidorFalso([SORTEO]);
+    const alQr = vi.fn();
+    void abrirSumarSorteos(srv.compra, { correo: "a•••@gmail.com", alQr, medio: "qr", almacenDelMedio: null });
+    await pasa();
+    expect(cantidad()).toBe("10");
+    await tocar(principal());
+    expect(alQr).not.toHaveBeenCalled();
+    expect(srv.compra.orden).toHaveBeenCalledWith("sorteo", 10);
+    expect(panel()?.querySelector('[data-pago="cambio"]')).toBeNull();
+  });
+
+  it("un paquete fijo nombrado por quien abre la ventana sigue yendo directo a pagarlo", async () => {
+    const srv = servidorFalso([SORTEO, P10]);
+    await abrir(srv, "p10");
+    expect(srv.compra.orden).toHaveBeenCalledWith("p10");
+    expect(panel()).not.toBeNull();
+  });
+});
+
+describe("mirar el pago solo, por unidad", () => {
+  /** Abre la ventana, deja el contador en 10 y toca Seguir: la orden se muestra y se empieza a mirar. */
+  async function aPagar(srv: ReturnType<typeof servidorFalso>): Promise<{ resultado: Promise<boolean> }> {
+    const abierta = await abrir(srv);
+    await tocar(principal());
+    return abierta;
+  }
+
+  it("al mostrar la orden ya se mira, sin tocar nada: Buscando tu pago abajo y ningún Ya pagué", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await aPagar(srv);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(1);
+    expect(principal().textContent).toBe(t("pagoBuscando"));
+    expect(principal().disabled).toBe(true);
+    expect(boton("mirar-ya")).toBeUndefined();
+    expect(boton("ya-pague")).toBeUndefined();
+    // Todavía no pudo pagar: no se dice que no se ve el pago, se dice cómo pagar.
+    expect(lineas()).toEqual([t("compraAppLinea")]);
+    expect(texto()).not.toContain(t("pagoNoLlego"));
+  });
+
+  it("llega sin tocar nada: Recibimos tu pago de título, cuántos quedan y Cerrar, y el cupo se refresca", async () => {
+    const srv = servidorFalso([SORTEO]);
+    srv.s.pagos = [NO_LLEGO, NO_LLEGO, LLEGO];
+    const { resultado } = await aPagar(srv);
+    await pasa(CADA_MS);
+    await pasa(CADA_MS);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(3);
+    expect(card()?.querySelector(".dlg-h")?.textContent).toBe(t("pagoListoTitulo"));
+    expect(lineas()).toEqual(["Te quedan 13 sorteos oficiales."]);
+    expect(panel()).toBeNull();
+    expect(principal().textContent).toBe(t("acctClose"));
+    expect(srv.compra.refrescarCupo).toHaveBeenCalledTimes(1);
+    await pasa(DURANTE_SOLO_MS);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(3);
+    await tocar(principal());
+    await expect(resultado).resolves.toBe(true);
+  });
+
+  it("Ya pagué aparece como texto chico recién a los 2 minutos sin el pago, y pregunta ya", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await aPagar(srv);
+    await pasa(PRIMEROS_MS - 100);
+    expect(boton("mirar-ya")).toBeUndefined();
+    await pasa(100);
+    const ya = boton("mirar-ya");
+    expect(ya?.textContent).toBe(t("pagoYaPague"));
+    expect(ya?.className).toBe("cl-texto");
+    expect(principal().textContent).toBe(t("pagoBuscando"));
+    const antes = srv.compra.pago.mock.calls.length;
+    await tocar(ya);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(antes + 1);
+  });
+
+  it("después de los 2 minutos pregunta cada 30 segundos", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await aPagar(srv);
+    await pasa(PRIMEROS_MS);
+    const antes = srv.compra.pago.mock.calls.length;
+    await pasa(29_000);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(antes);
+    await pasa(1_000);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(antes + 1);
+  });
+
+  it("a los 30 minutos, que se puede cerrar y llega igual, Cerrar de principal, y Ya pagué vuelve a mirar", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await aPagar(srv);
+    await pasa(DURANTE_SOLO_MS);
+    expect(texto()).toContain(t("pagoTardaSolo"));
+    expect(principal().textContent).toBe(t("acctClose"));
+    expect(boton("no-llego")?.textContent).toBe(t("pagoNoLlegoBoton"));
+    const antes = srv.compra.pago.mock.calls.length;
+    await pasa(10 * 60_000);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(antes);
+    await tocar(boton("ya-pague"));
+    expect(srv.compra.pago).toHaveBeenCalledTimes(antes + 1);
+    expect(principal().textContent).toBe(t("pagoBuscando"));
+  });
+
+  it("con la pestaña oculta no pregunta, y al volver a ella pregunta enseguida", async () => {
+    let vista: DocumentVisibilityState = "visible";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => vista });
+    try {
+      const srv = servidorFalso([SORTEO]);
+      await aPagar(srv);
+      expect(srv.compra.pago).toHaveBeenCalledTimes(1);
+      vista = "hidden";
+      document.dispatchEvent(new Event("visibilitychange"));
+      await pasa(5 * 60_000);
+      expect(srv.compra.pago).toHaveBeenCalledTimes(1);
+      vista = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+      await pasa();
+      expect(srv.compra.pago).toHaveBeenCalledTimes(2);
+    } finally {
+      Reflect.deleteProperty(document, "visibilityState");
+    }
+  });
+
+  it("volver con el foco también pregunta enseguida", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await aPagar(srv);
+    await pasa(5_000);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event("focus"));
+    await pasa();
+    expect(srv.compra.pago).toHaveBeenCalledTimes(2);
+  });
+
+  it("una falla pasajera se dice y se sigue mirando, y la respuesta buena la borra", async () => {
+    const srv = servidorFalso([SORTEO]);
+    srv.s.pagos = [err("altaErrServicio", "sin-red", 0), NO_LLEGO];
+    await aPagar(srv);
+    expect(alerta()).toBe(t("pagoErrRed"));
+    expect(principal().textContent).toBe(t("pagoBuscando"));
+    await pasa(CADA_MS);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(2);
+    expect(alerta()).toBe("");
+  });
+
+  it("una falla que no se arregla mirando corta, como siempre", async () => {
+    const srv = servidorFalso([SORTEO]);
+    srv.s.pagos = [err("pagoErrOrden", "orden", 404)];
+    await aPagar(srv);
+    expect(alerta()).toBe(t("pagoErrOrden"));
+    expect(principal().textContent).toBe(t("acctClose"));
+    await pasa(CADA_MS * 3);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(1);
+  });
+
+  it("cerrar la ventana corta la mirada y suelta la pestaña", async () => {
+    const srv = servidorFalso([SORTEO]);
+    await aPagar(srv);
+    await cerrar();
+    await pasa(CADA_MS * 3);
+    window.dispatchEvent(new Event("focus"));
+    await pasa();
+    expect(srv.compra.pago).toHaveBeenCalledTimes(1);
+  });
+
+  it("llegó de menos y ya dio sorteos: cuántos se sumaron y cuánto falta, y el cupo se refresca una sola vez", async () => {
+    const srv = servidorFalso([SORTEO]);
+    const medias = ok<PagoDeOrden>({ pagada: false, recibido: "9", total: "10", minimo: "9.5", sorteosDados: 9 });
+    srv.s.ordenes = [ok(orden("ABCD2345", "sorteo", "10"))];
+    srv.s.pagos = [medias, medias, LLEGO];
+    await aPagar(srv);
+    expect(lineas()).toEqual(["Sumaste 9 de 10 sorteos. Mandá 1 dólar más con la misma nota."]);
+    expect(card()?.querySelector(".pago-nota")?.getAttribute("role")).toBe("status");
+    expect(srv.compra.refrescarCupo).toHaveBeenCalledTimes(1);
+    expect(principal().textContent).toBe(t("pagoBuscando"));
+    await pasa(CADA_MS);
+    expect(srv.compra.pago).toHaveBeenCalledTimes(2);
+    expect(srv.compra.refrescarCupo).toHaveBeenCalledTimes(1);
+    await pasa(CADA_MS);
+    expect(card()?.querySelector(".dlg-h")?.textContent).toBe(t("pagoListoTitulo"));
+    expect(srv.compra.refrescarCupo).toHaveBeenCalledTimes(2);
+  });
+
+  it("si llega más y suben los sorteos dados, la línea y el cupo se ponen al día", async () => {
+    const srv = servidorFalso([SORTEO]);
+    srv.s.ordenes = [ok(orden("ABCD2345", "sorteo", "10"))];
+    srv.s.pagos = [
+      ok<PagoDeOrden>({ pagada: false, recibido: "5", total: "10", minimo: "9.5", sorteosDados: 5 }),
+      ok<PagoDeOrden>({ pagada: false, recibido: "8", total: "10", minimo: "9.5", sorteosDados: 8 }),
+    ];
+    await aPagar(srv);
+    expect(lineas()).toEqual(["Sumaste 5 de 10 sorteos. Mandá 5 dólares más con la misma nota."]);
+    await pasa(CADA_MS);
+    expect(lineas()).toEqual(["Sumaste 8 de 10 sorteos. Mandá 2 dólares más con la misma nota."]);
+    expect(srv.compra.refrescarCupo).toHaveBeenCalledTimes(2);
+  });
+
+  it("sin sorteos dados en la respuesta, lo de siempre: lo que llegó y lo que falta, sin refrescar el cupo", async () => {
+    const srv = servidorFalso([SORTEO]);
+    srv.s.ordenes = [ok(orden("ABCD2345", "sorteo", "10"))];
+    srv.s.pagos = [ok<PagoDeOrden>({ pagada: false, recibido: "9", total: "10", minimo: "9.5" })];
+    await aPagar(srv);
+    expect(lineas()).toEqual(["Llegaron 9 de 10 USDC. Mandá lo que falta con la misma nota."]);
+    expect(srv.compra.refrescarCupo).not.toHaveBeenCalled();
+  });
+
+  it("con sorteos dados en 0, lo de siempre y sin refrescar el cupo", async () => {
+    const srv = servidorFalso([SORTEO]);
+    srv.s.ordenes = [ok(orden("ABCD2345", "sorteo", "10"))];
+    srv.s.pagos = [ok<PagoDeOrden>({ pagada: false, recibido: "0.4", total: "10", minimo: "9.5", sorteosDados: 0 })];
+    await aPagar(srv);
+    expect(lineas()).toEqual(["Llegaron 0,40 de 10 USDC. Mandá lo que falta con la misma nota."]);
+    expect(srv.compra.refrescarCupo).not.toHaveBeenCalled();
+  });
+
+  it("los sorteos dados en inglés, con el monto que falta", async () => {
+    setLang("en");
+    const srv = servidorFalso([SORTEO]);
+    srv.s.ordenes = [ok({ ...orden("ABCD2345", "sorteo", "5"), sorteos: 5 })];
+    srv.s.pagos = [ok<PagoDeOrden>({ pagada: false, recibido: "4", total: "5", minimo: "4.75", sorteosDados: 4 })];
+    await aPagar(srv);
+    expect(lineas()).toEqual(["You've added 4 of 5 Live draws. Send US$1 more with the same memo."]);
+  });
+
+  it("un paquete fijo no se mira solo: sigue esperando a Ya pagué", async () => {
+    const srv = servidorFalso([P10]);
+    await abrir(srv);
+    await pasa(CADA_MS * 3);
+    expect(srv.compra.pago).not.toHaveBeenCalled();
+    expect(principal().textContent).toBe(t("pagoYaPague"));
+  });
+
+  it("en inglés, sus textos en inglés", async () => {
+    setLang("en");
+    const srv = servidorFalso([SORTEO]);
+    srv.s.pagos = [NO_LLEGO, LLEGO];
+    await aPagar(srv);
+    await pasa(CADA_MS);
+    expect(card()?.querySelector(".dlg-h")?.textContent).toBe("We got your payment");
+    expect(lineas()).toEqual(["You have 13 Live draws left."]);
+  });
+});
+
+describe("los blancos de toque del contador", () => {
+  it("menos y más miden 48 por 48 como mínimo, y los dos llevan esa regla", async () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const regla = css.slice(css.indexOf("  .pago-contador-boton {"), css.indexOf("  .pago-contador-boton:disabled"));
+    expect(regla).toMatch(/min-width: 48px;/);
+    expect(regla).toMatch(/min-height: 48px;/);
+    const srv = servidorFalso([SORTEO]);
+    await abrir(srv);
+    for (const b of [lado("menos"), lado("mas")]) {
+      expect(b?.className).toBe("pago-contador-boton");
+      expect(b?.type).toBe("button");
+    }
   });
 });

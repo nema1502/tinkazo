@@ -365,7 +365,8 @@ function initVistas(): void {
     b.addEventListener("click", () => {
       history.replaceState(null, "", `${location.pathname}${location.search}#sortear`);
       setVista("app", "nuevo");
-      void openPicker();
+      // Las pidió: la ventana abre con Otras formas de entrar desplegadas.
+      void openPicker({ otras: true });
     });
   }
   // El mismo botón al final de la demo navega (sale de `?demo=`), y caía en la
@@ -639,4 +640,8 @@ if (location.hash.startsWith("#participante=")) {
   });
 }
 // Las campañas de empresas (detrás de VITE_CAMPANAS): la entrada de quien ganó y la pestaña que deja la ventana de Google.
-if (campanasActivo()) void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);
+if (campanasActivo()) {
+  // El enlace de la portada a armar la campaña de una empresa se ve solo con las campañas abiertas.
+  for (const enlace of document.querySelectorAll<HTMLElement>("[data-campana-enlace]")) enlace.hidden = false;
+  void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);
+}

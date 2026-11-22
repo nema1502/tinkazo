@@ -26,7 +26,10 @@ export type { PanelDePago } from "./pago-vista";
  *   lo da el acceso que confirma el servidor. Solo medios automáticos (`pago-vista.ts`): con uno solo no se pregunta cómo
  *   pagar. Sin `acceso.pago`, el paso de siempre;
  * - con `para: "premio"` (quien ganó) no hay cupón, compra, sorteos ni Pasar a Prueba: el acceso solo se mira para activar
- *   una cuenta sin activar, y sin él la parte 1 espera (`premioActual`).
+ *   una cuenta sin activar, y sin él la parte 1 espera (`premioActual`);
+ * - con el regalo de quien entra con su cuenta (`acceso.bienvenida`, solo si el servidor lo ofrece), la principal de la
+ *   caja del acceso es «Activar mi cuenta», que lo pide y sigue la cadena del cupón (`regaloActual`). Sin el regalo, la
+ *   caja de siempre.
  */
 
 /**
@@ -42,8 +45,16 @@ export interface AccesoEnLaVista {
   modo: ModoDelAcceso;
   /** Con servidor: preguntándole, sin acceso, con acceso, o no contestó. */
   estado: "revisando" | "ninguno" | "con" | "error";
-  /** Por qué tiene acceso: cambia el texto de la activación (con `premio`, el de siempre). */
-  por: "cupon" | "pago" | "admin" | "premio" | null;
+  /**
+   * Por qué tiene acceso, como lo dijo el servidor: cambia el texto de la activación (con `admin`, `premio` y `gratis`, el
+   * de siempre). Un alta nacida del regalo llega como `admin`, y `gratis` se acepta si llega: nada depende de ese valor.
+   */
+  por: "cupon" | "pago" | "admin" | "premio" | "gratis" | null;
+  /**
+   * El acceso de este paso lo trajo el regalo de quien entra (no un cupón): lo que sigue y lo que falla no nombran ningún
+   * cupón. Lo marca el paso al pedir el regalo, no el nombre del acceso que conteste el servidor.
+   */
+  delRegalo?: boolean;
   /** Se abrió para usar un cupón aunque ya tenga acceso (se quedó sin sorteos oficiales). */
   pideCupon: boolean;
   /** El cupón listo para usar (el del enlace, o el que se escribió), como se muestra, o `null`. */
@@ -64,6 +75,17 @@ export interface AccesoEnLaVista {
   fallaTrasCanje: boolean;
   /** La compra del primer paquete, solo con la compra prendida en el build. Sin esto, ninguna fila del pago. */
   pago?: PagoEnLaVista;
+  /**
+   * El regalo de quien entra con su cuenta, como lo dijo el servidor: `lista` se puede recibir, `llena` hoy no se da.
+   * Sin esto (el servicio de antes, o ya lo recibió), la caja de siempre.
+   */
+  bienvenida?: { estado: "lista" | "llena"; sorteos: number };
+  /**
+   * Los sorteos oficiales que dejó el regalo recibido en este paso, para la línea del final: cuántos quedan y, si se
+   * sabe, cuándo vencen (la fecha ya dicha en el idioma de la persona). Sin esto, el final de siempre. Con `lleno`, el
+   * servidor activó la cuenta pero el regalo no pasó: sin sorteos, el final lo dice (`altaBienvenidaLlena`).
+   */
+  sorteosDelRegalo?: { quedan: number; vence: { fecha: string; cuantos: number } | null; lleno?: boolean };
 }
 
 /**
@@ -136,8 +158,21 @@ export const comoEntrada = (p: Para): boolean => p === "entrada" || p === "premi
 
 export type Parte = "activar" | "proteger";
 
-/** Lo que está corriendo ahora. `esperando`: el voto salió y la cuenta todavía no aparece. `canjeando`: el cupón. */
-export type Corre = "revisando" | "activando" | "esperando" | "desbloqueo" | "mandando" | "confirmando" | "cerrando" | "canjeando" | null;
+/**
+ * Lo que está corriendo ahora. `esperando`: el voto salió y la cuenta todavía no aparece. `canjeando`: el cupón.
+ * `reclamando`: el pedido del regalo, antes de lo que sigue (la misma cadena que el cupón).
+ */
+export type Corre =
+  | "revisando"
+  | "activando"
+  | "esperando"
+  | "desbloqueo"
+  | "mandando"
+  | "confirmando"
+  | "cerrando"
+  | "canjeando"
+  | "reclamando"
+  | null;
 
 /** El último error, en palabras del paso. */
 export type Falla =
@@ -178,6 +213,8 @@ export type Accion =
   | "salir-y-entrar"
   | "entrar-de-nuevo"
   | "pasar-a-prueba"
+  /** «Sortear en Prueba»: pasa a Prueba y entra solo con la cuenta de prueba, con la lista intacta. */
+  | "practicar"
   | "seguir"
   | "sellar"
   | "sortear"
@@ -188,6 +225,8 @@ export type Accion =
   | "usar-cupon"
   /** «Usar otro cupón»: el campo, con el que había guardado a un lado. */
   | "otro-cupon"
+  /** «Activar mi cuenta» con el regalo a la vista: lo pide al servidor y sigue la cadena del cupón. */
+  | "reclamar"
   /** «Volver» desde el campo del cupón. */
   | "volver-cupon"
   /** «Probar de nuevo» cuando no se supo el acceso: solo vuelve a preguntar. */
@@ -219,6 +258,8 @@ export type Accion =
 export interface Texto {
   clave: string;
   vars?: Record<string, string>;
+  /** Otro texto que sigue en la misma línea, separado por un espacio («Te quedan 3 sorteos oficiales. Vencen el…»). */
+  luego?: Texto;
 }
 
 export interface Boton extends Texto {
@@ -281,6 +322,13 @@ export interface Vista {
   volver: Boton | null;
   /** El texto de la confirmación del primer sello en Oficial, arriba de la principal del final. */
   primerOficial: boolean;
+  /** La línea propia del final cuando la cuenta quedó lista con el regalo: cuántos sorteos quedan y cuándo vencen. */
+  linea?: Texto;
+  /**
+   * El enlace chico «Sortear en Prueba» del final, cuando la cuenta quedó activada sin el regalo y sin sorteos: en
+   * Prueba se puede sortear ya, sin esperar. Sin el cambio de modo, no va.
+   */
+  practicar?: Boton;
   /** La línea de estado del pie (`role="status"`). */
   estado: Texto | null;
   notas: string[];
@@ -307,7 +355,10 @@ export function portadaDe(v: Vista): Portada {
     // La línea del final: la propia de la vista (la del premio), la del primer sello, o el aviso de la compu o el celular
     // que no es tuyo, que va debajo del título como la línea de los demás estados (en el pie empujaría el botón). Una sola.
     const aviso = v.estado && v.estado.clave.startsWith("clAparatoListo") ? v.estado : null;
-    const linea: Texto | null = v.bajada ? { clave: v.bajada } : v.primerOficial ? { clave: "clPrimerSello" } : aviso;
+    // Con el regalo recién recibido, la línea dice cuántos sorteos quedan y cuándo vencen (salvo el aviso del aparato,
+    // que importa más). Sin el regalo, como siempre.
+    const delRegalo = v.linea ? (aviso ?? v.linea) : null;
+    const linea: Texto | null = v.bajada ? { clave: v.bajada } : delRegalo ?? (v.primerOficial ? { clave: "clPrimerSello" } : aviso);
     return { forma: "final", titulo: v.titulo, linea, filas: [] };
   }
   if (v.cajas.some((c) => c.estado === "revisando")) {
@@ -395,7 +446,7 @@ export function faltaElAcceso(e: Pick<EntradaVista, "acceso" | "corre"> & Partia
   if (a.modo !== "servidor") return false;
   // Quien ganó no canjea ni compra: sin la cuenta activada, solo el acceso que confirma el servidor la deja activar.
   if (e.para === "premio") return e.activacion !== "lista" && a.estado !== "con";
-  if (a.fallaTrasCanje || a.cadena || e.corre === "canjeando") return true;
+  if (a.fallaTrasCanje || a.cadena || e.corre === "canjeando" || e.corre === "reclamando") return true;
   return a.estado !== "con" || (a.pideCupon && a.canjeado === null);
 }
 
@@ -568,12 +619,16 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
   }
   // Algo después del canje no salió: el cupón quedó en la cuenta, y «Probar de nuevo» sigue desde ahí.
   if (a.fallaTrasCanje) {
-    return { caja: { ...base, estado: "no-salio", error: textos(["altaCuponGuardado"]) }, principal: boton("seguir-cupon", "clProbarDeNuevo") };
+    // Con el regalo no hay cupón que nombrar: lo que no salió es activar la cuenta.
+    const clave = a.delRegalo ? "clErrFallo" : "altaCuponGuardado";
+    return { caja: { ...base, estado: "no-salio", error: textos([clave]) }, principal: boton("seguir-cupon", "clProbarDeNuevo") };
   }
   // Lo que sigue al canje: esperar el pedido, activar y volver a preguntar.
   if (a.cadena) {
     const n = a.canjeado ?? 0;
-    const t: Texto[] = !activada && n > 0 ? [n === 1 ? { clave: "altaCuponOk1" } : { clave: "altaCuponOk", vars: { n: String(n) } }] : [];
+    // Lo que trajo el cupón. Con el regalo no hay cupón que nombrar: solo el botón que dice que se está activando.
+    const delCupon = !activada && n > 0 && !a.delRegalo;
+    const t: Texto[] = delCupon ? [n === 1 ? { clave: "altaCuponOk1" } : { clave: "altaCuponOk", vars: { n: String(n) } }] : [];
     const principal = ocupado("usar-cupon", e.corre === "revisando" ? "clRevisando" : "clActivarHaciendo");
     return { caja: { ...base, estado: "haciendo", sola: true, textos: t, ocupada: true }, principal };
   }
@@ -628,6 +683,8 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
       principal: canjeando ? ocupado("usar-cupon", "altaRevisando") : conArreglo(boton("usar-cupon", usar)),
     };
   }
+  // El regalo de quien entra con su cuenta, sin cupón en mano: «Activar mi cuenta» lo pide y sigue como el cupón.
+  if (a.bienvenida && a.estado === "ninguno" && !a.pideCupon) return regaloActual(e, base, a.bienvenida);
   // Sin cupón y con el primer paquete a la venta: comprarlo es la principal, con el precio del servidor, y el cupón al lado.
   // Poco texto: a la vista, una sola línea (o el error); que la cuenta queda activada y qué hacer sin cupón, plegados.
   if (pago?.alta) {
@@ -656,6 +713,49 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
     ? { estado: "no-salio" as const, textos: [] as Texto[], cierre: [] as Texto[], detalles: cierre }
     : { estado, textos: lead, cierre };
   return { caja: { ...base, ...sinCompra, error: errores }, principal: conArreglo(boton("tengo-cupon", "altaTengoCupon")) };
+}
+
+/**
+ * La caja del regalo: un título, una línea y un botón. La línea dice cuántos sorteos trae (`lista`) o que hoy ya se
+ * entregaron y que se pueden recibir más tarde (`llena`, también con el regalo cerrado a propósito). La principal es
+ * «Activar mi cuenta» en los dos casos: con `llena` la cuenta se activa igual, y el regalo se puede recibir después.
+ * «Tengo un cupón» queda como salida chica. Con un error, el motivo en lugar de la
+ * línea y la principal según lo que lo arregla (sin red, la misma: probar de nuevo).
+ */
+function regaloActual(e: EntradaVista, base: CajaVista, b: NonNullable<AccesoEnLaVista["bienvenida"]>): Armado {
+  const a = accesoDe(e);
+  const reclamando = e.corre === "reclamando";
+  const error = a.error ? [a.error] : null;
+  // Con `llena`, la misma línea dice que el regalo se puede recibir más tarde: la cuenta se activa igual ahora.
+  const llena: Texto = { clave: "altaBienvenidaLlena", luego: { clave: "altaBienvenidaMasTarde" } };
+  const linea: Texto = b.estado === "lista" ? { clave: "altaBienvenida", vars: { n: String(b.sorteos) } } : llena;
+  const activar = boton("reclamar", "clActivarBoton", e.corre !== null);
+  return {
+    caja: {
+      ...base,
+      estado: reclamando ? "haciendo" : error ? "no-salio" : "falta",
+      // Sola: la línea del regalo se ve aunque falte proteger, como la del cupón en mano.
+      sola: true,
+      textos: error ? [] : [linea],
+      error,
+      ocupada: reclamando,
+      secundarios: [{ ...boton("tengo-cupon", "altaTengoCupon", reclamando), forma: "texto" }],
+    },
+    principal: reclamando ? ocupado("reclamar", "clActivarHaciendo") : principalDelArreglo(e, a.arreglo, activar),
+  };
+}
+
+/**
+ * La línea del final cuando la cuenta quedó lista con el regalo: cuántos sorteos oficiales quedan y, si se sabe, cuándo
+ * vencen, con las mismas claves y las mismas reglas del singular que la línea del cupo (`cupo-oficial.ts`).
+ */
+function lineaDelRegalo(s: NonNullable<AccesoEnLaVista["sorteosDelRegalo"]>): Texto {
+  const quedan: Texto = s.quedan === 1 ? { clave: "cupoOfQueda1" } : { clave: "cupoOfQuedan", vars: { n: String(s.quedan) } };
+  const v = s.vence;
+  if (!v || !(v.cuantos > 0) || !v.fecha) return quedan;
+  const todos = v.cuantos >= s.quedan;
+  const clave = todos ? (s.quedan === 1 ? "cupoOfVenceSolo" : "cupoOfVencenTodos") : v.cuantos === 1 ? "cupoOfVence1" : "cupoOfVencen";
+  return { ...quedan, luego: { clave, vars: { n: String(v.cuantos), fecha: v.fecha } } };
 }
 
 /**
@@ -897,6 +997,7 @@ function lineaDeEstado(e: EntradaVista): Texto | null {
   if (e.corre === "desbloqueo" && e.lento) return { clave: "clEsperandoDesbloqueo" };
   if (e.corre === "cerrando") return { clave: "clCerrando" };
   if (e.corre === "canjeando") return { clave: "altaRevisando" };
+  if (e.corre === "reclamando") return { clave: "clActivarHaciendo" };
   if (e.lento && (e.corre === "revisando" || accesoDe(e).estado === "revisando")) return { clave: "clActivarLento" };
   const pago = accesoDe(e).pago;
   if (pago?.buscando && pago.fase === "pagando" && faltaElAcceso(e)) return { clave: "pagoBuscando" };
@@ -958,7 +1059,18 @@ export function vistaDe(entrada: EntradaVista): Vista {
   if (final) {
     const conLista = e.para === "entrada-con-lista" || e.para === "sello";
     const p = comoEntrada(e.para) ? boton("seguir", "clSeguir") : e.para === "sorteo" ? boton("sortear", "draw") : boton("sellar", "freeze");
+    const delRegalo = accesoDe(e).sorteosDelRegalo;
+    // Con sorteos, cuántos quedan. La cuenta activada sin el regalo y sin sorteos lo dice, así no se entera al sellar, y
+    // que se pueden recibir más tarde. Mientras tanto, el enlace chico para practicar en Prueba.
+    const sinElRegalo = delRegalo?.lleno === true && delRegalo.quedan === 0;
+    const conSorteos = delRegalo && delRegalo.quedan > 0 ? lineaDelRegalo(delRegalo) : null;
+    const llena: Texto = { clave: "altaBienvenidaLlena", luego: { clave: "altaBienvenidaMasTarde" } };
+    const linea = premio || !delRegalo ? null : sinElRegalo ? llena : conSorteos;
+    // Con el nombre de «Se te acabaron», que lleva a lo mismo: «Practicar sin cuenta» diría lo contrario del título.
+    const practicar = !premio && sinElRegalo && e.puedePasarAPrueba ? boton("practicar", "pagoSortearEnPrueba", e.corre === "cerrando") : null;
     return {
+      ...(linea ? { linea } : {}),
+      ...(practicar ? { practicar } : {}),
       final: true,
       titulo: "clListaTitulo",
       // Con el premio, la línea dice para qué quedó lista. Para quien organiza, como siempre, sin línea propia.

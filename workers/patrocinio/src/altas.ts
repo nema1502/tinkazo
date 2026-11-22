@@ -69,6 +69,15 @@ export type AltaAMano = { ok: true; repetido: boolean; altaNueva: boolean } | { 
 /** Cómo terminó dar sorteos a mano a una cuenta del libro. */
 export type DadoAMano = { ok: true; repetido: boolean } | { ok: false; motivo: "fuera-del-libro" | "ref-usado" | "techo-sorteos" };
 
+/** Cómo terminó el acceso de quien organiza una campaña. `liberaEn` es cuándo se libera el lugar más viejo del tope del día. */
+export type AccesoOrganizadora =
+  | { ok: true; ya: boolean; altaNueva: boolean }
+  | { ok: false; motivo: "evento-usado" | MotivoFreno }
+  | { ok: false; motivo: "cupo"; liberaEn: number };
+
+/** El prefijo del `ref` de los sorteos de quien organiza: `campana:<evento>`. Con el evento, cada campaña da sus sorteos una sola vez. */
+export const REF_CAMPANA = "campana:";
+
 /** El día UTC de un instante, `AAAA-MM-DD`: la clave de los techos diarios. */
 const diaUtc = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
@@ -79,6 +88,33 @@ export type Canje =
   | { ok: true; repetido: boolean; sorteosSumados: number; lote: string; altaNueva: boolean }
   | { ok: false; motivo: "cupon-no-existe" | "cupon-anulado" | "cupon-usado" | "lote-usado" | "cuenta-de-otro" | MotivoFreno }
   | { ok: false; motivo: "cupon-vencido"; vence: number };
+
+/**
+ * Por qué no se dio el regalo de bienvenida aunque la cuenta quedó activada: un freno puesto a mano, el piso, el margen del
+ * regalo por encima del piso o Pollar sin saldo.
+ */
+export type CausaRegalo = "cerrado" | "dia" | "hora" | "conexion" | "piso" | "margen" | "creditos";
+
+/** Cómo terminó la bienvenida: `dado` (se sumaron los sorteos), `lleno` (activada, sin regalo) o `ya` (ya los había recibido). */
+export type Bienvenida =
+  | { ok: true; regalo: "dado" | "lleno" | "ya"; sorteosSumados: number; altaNueva: boolean; causa: CausaRegalo | null }
+  | { ok: false; motivo: "cuenta-de-otro" | "altas-pausadas" | "bienvenida-llena" };
+
+/**
+ * La referencia del regalo de una persona: la del derecho (única, así el regalo es uno por persona) y la del alta que nace por
+ * este camino. Nunca se anota: lleva el id de la persona.
+ */
+const PREFIJO_BIENVENIDA = "gratis:";
+export const refDeBienvenida = (usuario: string): string => `${PREFIJO_BIENVENIDA}${usuario}`;
+
+/** Un regalo de bienvenida, como lo mira el correo: nunca se anota, lleva el id de la persona. */
+export interface RegaloParaCorreo {
+  id: number;
+  usuario: string;
+  sorteos: number;
+  vence: number;
+  creado: number;
+}
 
 export interface EstadoLote {
   lote: string;
@@ -182,6 +218,107 @@ export class Altas {
     });
   }
 
+  /**
+   * La bienvenida de una persona que entró con su cuenta (`usuario`, el id que dio Pollar), con su cuenta si ya se sabe. Activar
+   * y regalar van separados, todo en una transacción y sin esperar a nadie:
+   *
+   * - Si ya recibió el regalo (existe el derecho `gratis:<usuario>`): `ya`, sin sumar nada; ata la cuenta si hace falta.
+   * - Con la pausa a mano, nada nuevo: `altas-pausadas`.
+   * - Activar: si no tiene alta (ni la suya ni la de su cuenta, `cuenta:G…`, la de un premio o un alta a mano), nace una con
+   *   el motivo de las altas a mano (`admin`, que el código de antes ya conoce) y la referencia `gratis:<usuario>`, que dice
+   *   que nació por acá. `activar` puede frenarla (el piso de créditos): `bienvenida-llena` sin escribir nada.
+   * - Regalar: `regalar` dice si el regalo no entra ahora (un freno o el piso, que ya cuenta el alta recién creada). Si entra,
+   *   los sorteos van al alta que vale (la nueva, la suya de antes o la de su cuenta) con la referencia `gratis:<usuario>`;
+   *   si no, `lleno` y la cuenta queda activada igual. No mira si tuvo sorteos de otro origen: es uno por persona.
+   * - La cuenta se ata al alta de la persona y entra al libro. Una cuenta que es de otra persona: `cuenta-de-otro`.
+   */
+  darBienvenida(
+    p: {
+      usuario: string;
+      cuenta: string | null;
+      sorteos: number;
+      dias: number;
+      pausada: boolean;
+      activar: () => boolean;
+      regalar: () => CausaRegalo | null;
+    },
+    ahora: number,
+  ): Bienvenida {
+    if (!texto(p.usuario, 200) || p.usuario.startsWith("cuenta:")) throw new Error("bienvenida-usuario");
+    if (p.cuenta !== null && !StrKey.isValidEd25519PublicKey(p.cuenta)) throw new Error("bienvenida-cuenta");
+    if (!entre(p.sorteos, 1, 1000) || !entre(p.dias, 1, 3650)) throw new Error("bienvenida-forma");
+    const { usuario, cuenta } = p;
+    const ref = refDeBienvenida(usuario);
+    return this.cupos.transaccion((): Bienvenida => {
+      if (cuenta && this.cupos.cuentaDeOtro(usuario, cuenta)) return { ok: false, motivo: "cuenta-de-otro" };
+      const suya = this.cupos.altaDe(usuario);
+      // Sin alta propia, la de su cuenta: la que le dio quien organizó un sorteo que ganó, o un alta a mano.
+      const deSuCuenta = !suya && cuenta ? this.cupos.altaDe(`cuenta:${cuenta}`) : null;
+      if (this.recibioBienvenida(usuario)) {
+        if (suya && cuenta && this.cupos.atar(usuario, cuenta, ahora) !== "ok") return { ok: false, motivo: "cuenta-de-otro" };
+        return { ok: true, regalo: "ya", sorteosSumados: 0, altaNueva: false, causa: null };
+      }
+      if (p.pausada) return { ok: false, motivo: "altas-pausadas" };
+      const altaNueva = !suya && !deSuCuenta;
+      if (altaNueva) {
+        if (!p.activar()) return { ok: false, motivo: "bienvenida-llena" };
+        this.sql.exec(
+          "INSERT INTO altas (usuario, motivo, ref, cuenta, pedido, estado, creada, actualizada) " +
+            "VALUES (?, 'admin', ?, NULL, NULL, 'autorizada', ?, ?)",
+          usuario,
+          ref,
+          ahora,
+          ahora,
+        );
+      }
+      const causa = p.regalar();
+      if (causa === null) {
+        // A la de su cuenta, con esa cuenta (como el alta a mano); a la suya, sin cuenta: la pone `atar`, enseguida.
+        const dueno = deSuCuenta ? { usuario: deSuCuenta.usuario, cuenta: deSuCuenta.cuenta ?? cuenta } : { usuario, cuenta: null };
+        this.cupos.otorgar({ ...dueno, origen: "gratis", ref, sorteos: p.sorteos, dias: p.dias }, ahora);
+      }
+      // Ya se comprobó que no choca: si igual no ata, se deshace todo.
+      if (!deSuCuenta && cuenta && this.cupos.atar(usuario, cuenta, ahora) !== "ok") throw new Error("bienvenida-atar");
+      if (causa !== null) return { ok: true, regalo: "lleno", sorteosSumados: 0, altaNueva, causa };
+      return { ok: true, regalo: "dado", sorteosSumados: p.sorteos, altaNueva, causa: null };
+    });
+  }
+
+  /** Si la persona ya recibió el regalo de bienvenida. Solo lee. */
+  recibioBienvenida(usuario: string): boolean {
+    return this.filas("SELECT 1 AS n FROM derechos WHERE ref = ?", refDeBienvenida(usuario)).length > 0;
+  }
+
+  /**
+   * Los regalos de bienvenida que siguen al derecho `despuesDe` (su id), en el orden en que se dieron y de a `cuantos`: los que
+   * mira el correo de bienvenida. De cada uno, solo lo que el correo necesita: la persona (sale de la referencia
+   * `gratis:<persona>`), sus sorteos, su vencimiento y cuándo se dio. Solo lee.
+   */
+  regalosParaCorreo(despuesDe: number, cuantos: number): RegaloParaCorreo[] {
+    const filas = this.filas(
+      "SELECT id, ref, sorteos, vence, creado FROM derechos WHERE origen = 'gratis' AND ref LIKE 'gratis:%' AND id > ? ORDER BY id LIMIT ?",
+      despuesDe,
+      cuantos,
+    );
+    return filas.map((f) => ({
+      id: Number(f.id),
+      usuario: String(f.ref).slice(PREFIJO_BIENVENIDA.length),
+      sorteos: Number(f.sorteos),
+      vence: Number(f.vence),
+      creado: Number(f.creado),
+    }));
+  }
+
+  /** El id del último regalo de bienvenida dado, o 0 si no hay ninguno: desde dónde empieza a mirar el correo al prenderse. */
+  ultimoRegalo(): number {
+    return Number(this.filas("SELECT COALESCE(MAX(id), 0) AS n FROM derechos WHERE origen = 'gratis' AND ref LIKE 'gratis:%'")[0]?.n ?? 0);
+  }
+
+  /** Cuántos regalos de bienvenida se dieron después de `desde` (ms): lo que miran los frenos por día y por hora. */
+  regalosDesde(desde: number): number {
+    return Number(this.filas("SELECT COUNT(*) AS n FROM derechos WHERE origen = 'gratis' AND ref LIKE 'gratis:%' AND creado > ?", desde)[0]?.n ?? 0);
+  }
+
   /** Cómo va un lote, para el informe. null si no existe. Sin códigos, personas ni cuentas: solo cifras. */
   estadoDelLote(lote: string): EstadoLote | null {
     const f = this.filas("SELECT COUNT(*) AS creados, COALESCE(MAX(vence), 0) AS vence, COALESCE(SUM(anulado), 0) AS anulados FROM cupones WHERE lote = ?", lote)[0];
@@ -242,6 +379,72 @@ export class Altas {
       if (altaNueva) this.cupos.fijarAjuste(`altas_dia:${dia}`, String(altasHoy + 1), ahora);
       this.cupos.fijarAjuste(`derechos_dia:${dia}`, String(sorteosHoy + p.sorteos), ahora);
       return { ok: true, repetido: false, altaNueva };
+    });
+  }
+
+  /**
+   * El acceso de quien organiza una campaña con la comisión pagada (`POST /v1/alta/organizadora`): mete su cuenta en el libro y le da
+   * `sorteos` sorteos oficiales por `dias` días, con `ref` `campana:<evento>`. Todo en una transacción y sin esperar a nadie. Es el
+   * mismo camino del alta a mano: si la cuenta ya es de un alta (de una persona con cupón, o de otra campaña), los sorteos van a esa
+   * alta; si no, nace un alta `cuenta:<G>` con motivo `admin` (el sitio solo entiende ese acceso, con sorteos para organizar), `abierta`
+   * si la cuenta ya existe en la red. Lo que distingue estos sorteos es su `ref` y su origen `campana`.
+   *
+   * - El mismo evento con la misma cuenta otra vez: `ya`, sin sumar nada y sin mirar topes ni freno. Con otra cuenta: `evento-usado`.
+   * - Tope del día: como mucho `topeDia` campañas nuevas en 24 horas entre todas las cuentas (`cupo`, con la hora en que se libera).
+   * - `freno` (el piso de créditos, la pausa a mano) puede parar el alta antes de escribir: no queda nada.
+   */
+  admitirOrganizadora(
+    p: {
+      cuenta: string;
+      evento: string;
+      sorteos: number;
+      dias: number;
+      topeDia: number;
+      abierta: boolean;
+      freno?: (c: { sorteos: number; altaNueva: boolean }) => MotivoFreno | null;
+    },
+    ahora: number,
+  ): AccesoOrganizadora {
+    if (!StrKey.isValidEd25519PublicKey(p.cuenta)) throw new Error("organizadora-cuenta");
+    if (!entre(p.sorteos, 1, 1000) || !entre(p.dias, 1, 3650) || !entre(p.topeDia, 1, 100_000) || !texto(p.evento, 64)) {
+      throw new Error("organizadora-forma");
+    }
+    const ref = `${REF_CAMPANA}${p.evento}`;
+    return this.cupos.transaccion((): AccesoOrganizadora => {
+      const previo = this.filas("SELECT cuenta FROM derechos WHERE ref = ?", ref)[0];
+      if (previo) {
+        if (previo.cuenta !== p.cuenta) return { ok: false, motivo: "evento-usado" };
+        this.cupos.admitir(p.cuenta, "admin", ahora);
+        return { ok: true, ya: true, altaNueva: false };
+      }
+      // Las campañas de las últimas 24 horas, por el rango de `ref` (`campana:` a `campana;`) para usar el índice de su clave única.
+      const hoy = this.filas(
+        "SELECT COUNT(*) AS n, MIN(creado) AS vieja FROM derechos WHERE ref >= 'campana:' AND ref < 'campana;' AND creado > ?",
+        ahora - DIA_MS,
+      )[0];
+      if (Number(hoy?.n ?? 0) >= p.topeDia) return { ok: false, motivo: "cupo", liberaEn: Number(hoy?.vieja ?? ahora) + DIA_MS };
+      const duena = this.cupos.altaDeCuenta(p.cuenta);
+      const altaNueva = duena === null;
+      const frenado = p.freno?.({ sorteos: p.sorteos, altaNueva }) ?? null;
+      if (frenado) return { ok: false, motivo: frenado };
+      const usuario = duena?.usuario ?? `cuenta:${p.cuenta}`;
+      if (!duena) {
+        this.sql.exec(
+          [
+            "INSERT INTO altas (usuario, motivo, ref, cuenta, pedido, estado, creada, actualizada)",
+            "VALUES (?, 'admin', ?, ?, NULL, ?, ?, ?) ON CONFLICT(usuario) DO NOTHING",
+          ].join(" "),
+          usuario,
+          ref,
+          p.cuenta,
+          p.abierta ? "abierta" : "autorizada",
+          ahora,
+          ahora,
+        );
+      } else if (p.abierta) this.cupos.marcarAbierta(duena.usuario, ahora);
+      this.cupos.admitir(p.cuenta, "admin", ahora);
+      this.cupos.otorgar({ usuario, cuenta: p.cuenta, origen: "campana", ref, sorteos: p.sorteos, dias: p.dias }, ahora);
+      return { ok: true, ya: false, altaNueva };
     });
   }
 

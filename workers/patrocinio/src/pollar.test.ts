@@ -1,7 +1,9 @@
 import { Keypair } from "@stellar/stellar-sdk/base";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  ESPERA_FICHA_MS,
   ESPERA_POLLAR_MS,
+  FICHA_PASAJERA,
   MEMORIA_CREDITOS_MS,
   MEMORIA_SESION_MS,
   Pollar,
@@ -388,5 +390,143 @@ describe("conocida: si Pollar ya dio este token por bueno", () => {
     expect(await p.conocida(TOKEN)).toBe(true);
     mover(2);
     expect(await p.conocida(TOKEN)).toBe(false);
+  });
+});
+
+describe("datosParaCorreo: la dirección sale de la ficha de la persona, nunca del navegador", () => {
+  /** Inventados: ni la dirección ni el nombre existen. */
+  const CORREO = "persona@correo.test";
+  const fila = (id: string, extra: Record<string, unknown> = {}) => ({ id, first_name: "Quinua", email: CORREO, wallets: [], ...extra });
+  const usuarios = (items: unknown[]) => ok({ items, total: items.length, page: 1, limit: 200, totalPages: 1, stats: {} }, "SERVER_SDK_USERS_LIST");
+  const datos = (items: unknown[]) => montar(() => usuarios(items)).p.datosParaCorreo(USUARIO);
+
+  it("busca por el id con la llave y toma la fila exacta aunque otra venga primero", async () => {
+    const { p, falso } = montar(() => usuarios([fila(`${USUARIO}9`, { email: "otra@correo.test" }), fila(USUARIO)]));
+    expect(await p.datosParaCorreo(USUARIO)).toEqual({ correo: CORREO, nombre: "Quinua", idioma: null });
+    const [l] = falso.llamadas;
+    const u = new URL(String(l?.url));
+    expect(u.origin + u.pathname).toBe(`${POLLAR_SERVIDOR}/v3/users`);
+    expect(u.searchParams.get("q")).toBe(USUARIO);
+    expect(new Headers(l?.init?.headers).get("x-pollar-api-key")).toBe(SECRETO);
+  });
+
+  it("con dos filas con ese id, o sin ninguna, no hay a quién escribirle", async () => {
+    const dos = montar(() => usuarios([fila(USUARIO), fila(USUARIO, { email: "otra@correo.test" })]));
+    expect(await dos.p.datosParaCorreo(USUARIO)).toBeNull();
+    expect(dos.anotado).toEqual([["correo-bienvenida", { codigo: "filas-repetidas" }]]);
+    const ninguna = montar(() => usuarios([fila(`${USUARIO}9`)]));
+    expect(await ninguna.p.datosParaCorreo(USUARIO)).toBeNull();
+    expect(ninguna.anotado).toEqual([["correo-bienvenida", { codigo: "sin-fila" }]]);
+  });
+
+  it("sin correo, o con uno que arma otro destinatario o una cabecera, es null", async () => {
+    const malos = [undefined, null, "", "a,b@correo.test", "a b@correo.test", "a@correo.test\nBcc: b@correo.test", "a@correo.test,b@correo.test", 7];
+    for (const email of malos) {
+      const m = montar(() => usuarios([fila(USUARIO, { email })]));
+      expect(await m.p.datosParaCorreo(USUARIO)).toBeNull();
+      expect(m.anotado).toEqual([["correo-bienvenida", { codigo: "sin-correo" }]]);
+    }
+  });
+
+  it("el idioma solo si la fila lo dice claro: en y en-US dan inglés, es-BO español, lo demás sin idioma", async () => {
+    const idioma = async (extra: Record<string, unknown>) => (await datos([fila(USUARIO, extra)]))?.idioma;
+    expect(await idioma({ language: "en" })).toBe("en");
+    expect(await idioma({ locale: "en-US" })).toBe("en");
+    expect(await idioma({ lang: "EN_gb" })).toBe("en");
+    expect(await idioma({ locale: "es-BO" })).toBe("es");
+    for (const extra of [{}, { language: "fr" }, { locale: "english" }, { lang: 3 }, { language: "en-US-x-algo" }]) {
+      expect(await idioma(extra)).toBeNull();
+    }
+  });
+
+  it("el nombre de pila sale limpio y a 40 caracteres, y sin nombre es null", async () => {
+    expect((await datos([fila(USUARIO, { first_name: " Qui​nua\r\nde\ttal " })]))?.nombre).toBe("Quinua de tal");
+    expect((await datos([fila(USUARIO, { first_name: "a".repeat(90) })]))?.nombre).toBe("a".repeat(40));
+    for (const first_name of [undefined, null, "", " ​ ", 12]) expect((await datos([fila(USUARIO, { first_name })]))?.nombre).toBeNull();
+  });
+
+  it("Pollar caído, con otro código o con una forma que no se entiende: null y un código", async () => {
+    const caso = async (responder: Parameters<typeof montar>[0]) => {
+      const m = montar(responder);
+      return { r: await m.p.datosParaCorreo(USUARIO), anotado: m.anotado };
+    };
+    const con = (codigo: string) => ({ r: null, anotado: [["correo-bienvenida", { codigo }]] });
+    expect(await caso(() => error(503, "DOWN"))).toEqual(con("estado"));
+    expect(await caso(() => ok({ items: [fila(USUARIO)] }, "OTRO_CODIGO"))).toEqual(con("forma"));
+    expect(await caso(() => ok({ filas: [] }, "SERVER_SDK_USERS_LIST"))).toEqual(con("forma"));
+    expect(await caso(() => new Response("no es json", { status: 200 }))).toEqual(con("forma"));
+    expect(await caso(() => Promise.reject(new TypeError("sin red")))).toEqual(con("red"));
+  });
+
+  it("Pollar lento: a los 6 segundos se deja de esperar, antes que las otras llamadas", async () => {
+    vi.useFakeTimers();
+    try {
+      const m = montar(() => new Promise<Response>(() => {}));
+      const r = m.p.datosParaCorreo(USUARIO);
+      await vi.advanceTimersByTimeAsync(ESPERA_FICHA_MS);
+      expect(await r).toBeNull();
+      expect(m.anotado).toEqual([["correo-bienvenida", { codigo: "tiempo" }]]);
+      expect(ESPERA_FICHA_MS).toBeLessThan(ESPERA_POLLAR_MS);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fichaParaCorreo dice aparte la falla pasajera: sin red, 429 o 5xx", async () => {
+    const caso = async (responder: Parameters<typeof montar>[0]) => {
+      const m = montar(responder);
+      return { r: await m.p.fichaParaCorreo(USUARIO), anotado: m.anotado };
+    };
+    const pasa = (codigo: string) => ({ r: FICHA_PASAJERA, anotado: [["correo-bienvenida", { codigo }]] });
+    expect(await caso(() => error(503, "DOWN"))).toEqual(pasa("estado"));
+    expect(await caso(() => error(500, "ERROR"))).toEqual(pasa("estado"));
+    expect(await caso(() => error(429, "RATE_LIMIT"))).toEqual(pasa("estado"));
+    expect(await caso(() => Promise.reject(new TypeError("sin red")))).toEqual(pasa("red"));
+  });
+
+  it("fichaParaCorreo: lo que no se arregla esperando sigue siendo null", async () => {
+    const caso = async (responder: Parameters<typeof montar>[0]) => {
+      const m = montar(responder);
+      return { r: await m.p.fichaParaCorreo(USUARIO), anotado: m.anotado };
+    };
+    const con = (codigo: string) => ({ r: null, anotado: [["correo-bienvenida", { codigo }]] });
+    expect(await caso(() => error(401, "SDK_AUTH_INVALID_KEY"))).toEqual(con("estado"));
+    expect(await caso(() => error(404, "NOT_FOUND"))).toEqual(con("estado"));
+    expect(await caso(() => ok({ filas: [] }, "SERVER_SDK_USERS_LIST"))).toEqual(con("forma"));
+    expect(await caso(() => usuarios([fila(`${USUARIO}9`)]))).toEqual(con("sin-fila"));
+    expect(await caso(() => usuarios([fila(USUARIO, { email: "" })]))).toEqual(con("sin-correo"));
+    expect(await caso(() => usuarios([fila(USUARIO)]))).toEqual({ r: { correo: CORREO, nombre: "Quinua", idioma: null }, anotado: [] });
+  });
+
+  it("fichaParaCorreo: Pollar lento a los 6 segundos es pasajero", async () => {
+    vi.useFakeTimers();
+    try {
+      const m = montar(() => new Promise<Response>(() => {}));
+      const r = m.p.fichaParaCorreo(USUARIO);
+      await vi.advanceTimersByTimeAsync(ESPERA_FICHA_MS);
+      expect(await r).toBe(FICHA_PASAJERA);
+      expect(m.anotado).toEqual([["correo-bienvenida", { codigo: "tiempo" }]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("un id sin forma de id no se busca", async () => {
+    const m = montar(() => usuarios([fila(USUARIO)]));
+    for (const u of ["", "con espacio", "a".repeat(201), "x\ny"]) expect(await m.p.datosParaCorreo(u)).toBeNull();
+    expect(m.falso.llamadas).toHaveLength(0);
+  });
+
+  it("el registro nunca lleva la dirección, el nombre ni el id, salga bien o mal", async () => {
+    const bien = montar(() => usuarios([fila(USUARIO)]));
+    expect(await bien.p.datosParaCorreo(USUARIO)).not.toBeNull();
+    expect(bien.anotado).toEqual([]);
+    const mal = montar(() => usuarios([fila(USUARIO), fila(USUARIO)]));
+    await mal.p.datosParaCorreo(USUARIO);
+    for (const dicho of [JSON.stringify(bien.anotado), JSON.stringify(mal.anotado)]) {
+      expect(dicho).not.toContain(CORREO);
+      expect(dicho).not.toContain("Quinua");
+      expect(dicho).not.toContain(USUARIO);
+    }
   });
 });

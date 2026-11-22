@@ -593,6 +593,34 @@ describe("sin un monto claro en el texto del premio", () => {
   });
 });
 
+describe("con un premio por lugar", () => {
+  // La fila de las pruebas es la del puesto 2: el 3.er lugar.
+  it("la fila ofrece el monto fijo de su lugar y paga ese, no el del primero", async () => {
+    const dep = armar();
+    const { caja, form } = abrir(dep, { premio: "1.er premio: 50 USDC, 2.º premio: 20 USDC, 3.er premio: 10 USDC" });
+    await lista(caja);
+    expect(texto(caja, ".gan-monto-grande")).toBe("10 dólares digitales");
+    enviar(form);
+    await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
+    expect(dep.pagar.mock.calls[0]?.[1].monto).toBe("10.0000000");
+  });
+
+  it("si su lugar no trae un monto, no hay monto fijo: se elige con el contador", async () => {
+    const { caja } = abrir(armar(), { premio: "1.er premio: 50 USDC, 2.º premio: 20 USDC, 3.er premio: Una polera" });
+    await lista(caja);
+    expect(visible(q(caja, ".gan-contador"))).toBe(true);
+    expect(contador(caja)).toBe("1 dólares digitales");
+    expect(visible(q(caja, ".gan-monto-grande"))).toBe(false);
+  });
+
+  it("si su lugar quedó sin premio, tampoco toma el monto de otro lugar", async () => {
+    const { caja } = abrir(armar(), { premio: "1.er premio: 50 USDC, 2.º premio: 20 USDC" });
+    await lista(caja);
+    expect(visible(q(caja, ".gan-contador"))).toBe(true);
+    expect(visible(q(caja, ".gan-monto-grande"))).toBe(false);
+  });
+});
+
 describe("Otro monto", () => {
   it("pasa del monto fijo al contador, desde los dólares enteros del monto, por si el texto del premio se leyó mal", async () => {
     const dep = armar();

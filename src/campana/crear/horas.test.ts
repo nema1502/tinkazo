@@ -69,13 +69,30 @@ describe("revisarHoras", () => {
     expect(revisarHoras({ ...dia, cierra: "10:00" }, AHORA)).toEqual({ problema: "cierra-antes", donde: "ccp-cierra" });
   });
 
-  it("un cierre de la mañana siguiente que queda a más de 12 horas dice que cierra lejos y no que cierra antes", () => {
-    expect(revisarHoras({ ...dia, cierra: "09:00" }, AHORA)).toEqual({ problema: "cierra-lejos", donde: "ccp-cierra" });
+  it("un cierre escrito antes de abrir que, pasado al día siguiente, queda a más de 12 horas dice que va después de abrir", () => {
+    expect(revisarHoras({ ...dia, cierra: "09:00" }, AHORA)).toEqual({ problema: "cierra-antes", donde: "ccp-cierra" });
   });
 
-  it("abrir a las 20:00 y cerrar a las 18:00 del día siguiente son 22 horas: cierra lejos", () => {
+  it("abrir a las 19:50 y cerrar a las 19:10 no es el día siguiente: el cierre va después de abrir", () => {
+    const tarde = { ...dia, abre: "19:50", cierra: "19:10", sorteo: "20:20" };
+    expect(revisarHoras(tarde, AHORA)).toEqual({ problema: "cierra-antes", donde: "ccp-cierra" });
     const noche = { ...dia, abre: "20:00", cierra: "18:00", sorteo: "18:30" };
-    expect(revisarHoras(noche, AHORA)).toEqual({ problema: "cierra-lejos", donde: "ccp-cierra" });
+    expect(revisarHoras(noche, AHORA)).toEqual({ problema: "cierra-antes", donde: "ccp-cierra" });
+  });
+
+  it("un cierre a la mañana siguiente a más de 12 horas (abre 20:00 y cierra 09:00) queda lejos, no antes de abrir", () => {
+    expect(revisarHoras({ ...dia, abre: "20:00", cierra: "09:00", sorteo: "09:30" }, AHORA)).toEqual({ problema: "cierra-lejos", donde: "ccp-cierra" });
+    // Seis horas antes de abrir en el reloj todavía se lee como escrito antes de abrir.
+    expect(revisarHoras({ ...dia, abre: "20:00", cierra: "14:00", sorteo: "14:30" }, AHORA)).toEqual({ problema: "cierra-antes", donde: "ccp-cierra" });
+    expect(revisarHoras({ ...dia, abre: "20:00", cierra: "13:55", sorteo: "14:30" }, AHORA)).toEqual({ problema: "cierra-lejos", donde: "ccp-cierra" });
+  });
+
+  it("una noche corta sigue valiendo: abre 22:00 y cierra 01:00 del día siguiente", () => {
+    expect(revisarHoras({ ...dia, abre: "22:00", cierra: "01:00", sorteo: "01:30" }, AHORA)).toBeNull();
+  });
+
+  it("un cierre del mismo día a más de 12 horas de abrir sí queda lejos", () => {
+    expect(revisarHoras({ ...dia, abre: "08:00", cierra: "21:00", sorteo: "21:30" }, AHORA)).toEqual({ problema: "cierra-lejos", donde: "ccp-cierra" });
   });
 
   it("un sorteo antes del cierre pide corregir la del sorteo", () => {

@@ -10,9 +10,12 @@ import {
   ponerRechazo,
   registrarAcciones,
 } from "../campana/puente";
-import { dolaresEnTexto, esDeCentavosJustos } from "../campana/comision";
+import { borrarBorrador, leerBorrador } from "../campana/borrador";
+import { DOLAR, dolaresEnTexto, esDeCentavosJustos } from "../campana/comision";
 import { fechaTexto, horaTexto, premiosTexto } from "../campana/formato";
 import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
+import { reglaQueFalla } from "../campana/reglas-de-activar";
+import { ESPERA_TOKEN_MS } from "../campana/sesion";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
 import { descifrarEquipo, revisarEquipo } from "../equipos/datos";
 import type { DatosDeEquipo } from "../equipos/modelo";
@@ -26,11 +29,14 @@ import {
   type FaseDeSala,
   MOTIVOS,
   type MemoriaDeOrg,
+  type MotivoDeActivar,
   type MotivoDeSalida,
   type PaseDeSala,
   type QuitaPendiente,
   type RedDeCampana,
+  type ResultadoDeActivar,
   type SalaDeCampana,
+  activarCampana,
   borrarOrg,
   borrarSalaVacia,
   crearCampanaEnSala,
@@ -45,6 +51,7 @@ import {
   pedirPase,
   ponerFase,
   quitarConMotivo,
+  salaPuedeActivar,
   tokenDeEvento,
 } from "../sala/campana-org";
 import { generarClave } from "../sala/cifra";
@@ -53,10 +60,10 @@ import { network } from "../stellar/config";
 import { activeWallet } from "../stellar/wallet-lite";
 import { type PantallaGrande, crearPantallaGrande, rellenar } from "./campana-grande";
 import { type AccionDeComision, type ControlDeComision, type DepsDeComision, crearControlDeComision } from "./campana-comision";
-import { depsDeComisionReales } from "./campana-comision-real";
+import { cambiarDeCuentaReal, depsDeComisionReales } from "./campana-comision-real";
 import type { ContextoDelPaso } from "./campana-pasar";
 import { alCerrarReal, alOlvidarReal, alReabrirReal, listaPasadaReal, listaTrabadaReal } from "./campana-pasar-real";
-import { claveDeSellar, openPicker } from "./wallet-ui";
+import { claveDeSellar, entrar, openPicker } from "./wallet-ui";
 import { pintarQr } from "./qr";
 
 /**
@@ -147,10 +154,29 @@ export interface DepsDelPanelDeCampana {
   /** Abre la ventana para entrar con otra cuenta. */
   cambiarDeCuenta?: () => void;
   /**
+   * Entra con Google como el botón principal de la portada (`entrar` de `wallet-ui.ts`). Lo usa la campaña por activar sin
+   * sesión. Sin esto se abre la ventana de siempre (`cambiarDeCuenta`).
+   */
+  entrar?: () => void;
+  /**
    * Lo que cobra Tinkazo antes de abrir la inscripción (`campana-comision.ts`). Sin esto, o con `comision()` en `null`, el
    * panel es el de siempre: no mira nada y no cambia ninguna pantalla.
    */
   comision?: DepsDeComision;
+  /**
+   * Le pide a la sala que firme el borrador de una campaña (`POST /v1/activar`) con la sesión de quien organiza. Sin esto, o sin
+   * `sesion`, un borrador no se puede activar y el panel lo dice.
+   */
+  activar?: (pedido: { texto: string; sesion: string }) => Promise<ResultadoDeActivar>;
+  /**
+   * Si la sala puede activar ahora (ella y el portero, prendidos y con sus llaves). Se pregunta al tomar un borrador, antes de
+   * ofrecer el pago: con un no, no se cobra. Sin esto se da por sí.
+   */
+  salaLista?: () => Promise<boolean>;
+  /** El token de la sesión de Google de quien organiza, o `null` si no hay sesión. Se pide en cada activación y no se guarda. */
+  sesion?: () => Promise<string | null>;
+  /** Lleva a otra página: volver a armar la campaña. */
+  ir?: (direccion: string) => void;
 }
 
 const NOMBRE_DEL_CANAL = "tinkazo-campana-org";
@@ -202,8 +228,21 @@ export function depsReales(): DepsDelPanelDeCampana {
     // El sello que la sala no aceptó se suelta también con el show ya hecho (`soltarParaSellarDeNuevo`), sin cortar un juego en marcha.
     soltarElSello: () => import("./campana-resultado-real").then((m) => m.soltarParaSellarDeNuevo()),
     alRetomar: () => void import("./campana-resultado-real").then((m) => m.alRetomarReal()).catch(() => undefined),
-    cambiarDeCuenta: () => void openPicker(),
+    cambiarDeCuenta: () => void cambiarDeCuentaReal(openPicker),
+    entrar: () => void entrar(),
     comision: depsDeComisionReales(),
+    activar: (pedido) => activarCampana(pedido),
+    salaLista: () => salaPuedeActivar(),
+    // El token se pide cuando hace falta y de la misma billetera que usa el alta del celular: nada lo guarda ni lo escribe.
+    sesion: async () => {
+      try {
+        const m = await import("../stellar/wallet-pollar");
+        return await m.pollarWallet.tokenDeSesion(ESPERA_TOKEN_MS);
+      } catch {
+        return null;
+      }
+    },
+    ir: (direccion) => location.assign(direccion),
   };
 }
 
@@ -248,6 +287,43 @@ type Vista =
   | "cargando"
   | "sin-red"
   | "otra-pestana";
+
+/**
+ * Cómo va la activación de un borrador: todavía no se pidió, se está pidiendo, la sala dijo que no, ya se firmó, o se firmó
+ * pero falta para abrir y la sala se crea más cerca de la hora (`temprano`).
+ */
+type Activacion =
+  | { tipo: "esperando" }
+  | { tipo: "activando" }
+  | { tipo: "error"; motivo: MotivoDeActivar; campo?: string }
+  | { tipo: "hecha" }
+  | { tipo: "temprano"; abreMs: number; sorteoMs: number };
+
+/**
+ * Cuánto antes de abrir se crea la sala de un borrador activado. La sala vive 24 horas desde que se crea y del abrir al sorteo
+ * hay como mucho 12: creada 6 horas antes, llega al sorteo con margen. Activada antes, la campaña queda firmada y la sala espera.
+ */
+export const ANTICIPO_DE_LA_SALA_MS = 6 * 3_600_000;
+
+/** Lo que vive la sala desde que se crea, y lo que tiene que quedarle después del sorteo para avisar y pagar los premios. */
+const VIDA_DE_LA_SALA_MS = 24 * 3_600_000;
+export const MARGEN_TRAS_EL_SORTEO_MS = 6 * 3_600_000;
+
+/**
+ * Si una campaña activada antes de tiempo se puede abrir ya: el sorteo tiene que caer dentro de la vida de la sala creada
+ * ahora, con el mismo margen que le deja la espera de siempre. Con el sorteo más lejos, abrir ya la dejaría sin lista.
+ */
+export const cabeAbrirYa = (sorteoMs: number, ahora: number): boolean => sorteoMs + MARGEN_TRAS_EL_SORTEO_MS <= ahora + VIDA_DE_LA_SALA_MS;
+
+/** El aviso de una campaña que cierra a más de una semana: no se activa todavía, y su borrador se guarda. */
+const MUY_LEJOS = "cpoAcMuyLejos";
+
+/** Lo que dice y hace la pantalla de un borrador pagado: un título, una línea y un botón. */
+interface PasoDeActivar {
+  titulo: string;
+  linea: string;
+  principal: { texto: string; accion: "activar" | "cargar" | "entrar" | "armar" | "preguntar" | "abrir-ya"; apagado: boolean };
+}
 
 const TEXTO_DE_FALLA_AL_CREAR: Record<FallaAlCrear, string> = {
   forma: "cpoNoEsCampana",
@@ -345,6 +421,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   const tituloEl = q("cpo-h");
   /** La marca de servicio pagado: se arma recién cuando hace falta, así con el cobro apagado el DOM es el de siempre. */
   let marcaEl: HTMLElement | null = null;
+  /** De quién es la campaña por activar, arriba del título, con la sesión puesta: el título ya es lo que falta. */
+  let deEl: HTMLElement | null = null;
   const lineaEl = q("cpo-linea");
   const avisoEl = q("cpo-aviso");
   const conexionEl = q("cpo-conexion");
@@ -374,6 +452,18 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   /** La cuenta que el archivo pide para sellar, si pide una. Al retomar una sala no se conoce y queda en `null`. */
   let pide: string | null = null;
   let sala: SalaDeCampana | null = null;
+  /**
+   * El borrador de una campaña sin firma: sale de crear-campana.html o de un archivo sin firma. No tiene sala hasta que se paga
+   * la comisión y la sala lo firma (`activar`): antes de cobrar no se crea nada. Son los datos sin cuenta, que se suma al activar.
+   */
+  let borrador: Record<string, unknown> | null = null;
+  let activacion: Activacion = { tipo: "esperando" };
+  /** Si la sala puede activar el borrador: se pregunta antes de ofrecer el pago, y con un no, no se cobra. */
+  let salaDeActivar: "preguntando" | "lista" | "no" = "lista";
+  /** Para la espera hasta la hora de crear la sala de un borrador activado antes de tiempo. */
+  let pararTemprano: (() => void) | null = null;
+  /** Quien organiza pidió abrir ya una campaña activada antes de tiempo. Vale hasta que se abre o cambia el borrador. */
+  let abrirYa = false;
   /** La fase en que la sala dijo que está: lo que se guarda para retomar. */
   let faseSala: FaseDeSala = "lista";
   let cierraMs = 0;
@@ -459,8 +549,13 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         pide: () => pide,
         cuenta: () => deps.cuenta(),
         enPrevia: () => vista === "previa",
-        crearSala: () => crearLaSala(),
-        alCambiar: () => pintar(),
+        // Un borrador no tiene sala todavía: se crea recién cuando la sala lo firma, después de cobrar.
+        crearSala: () => (borrador !== null && archivo === null ? Promise.resolve(null) : crearLaSala()),
+        alCambiar: () => {
+          pintar();
+          quizasActivar();
+        },
+        conBorrador: () => borrador !== null && archivo === null,
         aviso: (texto) => aviso(texto),
         tx,
         idioma: () => deps.idioma(),
@@ -741,6 +836,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (vista === "previa" && cm?.activo()) {
       const t = cm.estado().tipo;
       if (t === "sin-mirar" || t === "duda" || t === "falta-cargar" || t === "mirando") void cm.mirar();
+      // Con la compu dormida la espera no corre: si ya es la hora de crear la sala, se sigue.
+      if (activacion.tipo === "temprano") volverDeTemprano();
     }
     if (!sala) return;
     if (vista === "abierta" || vista === "confirmar") {
@@ -778,13 +875,299 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pintar();
   }
 
+  /* --- el borrador: una campaña sin firma que se activa sola al pagar --- */
+
+  /** ¿Es el JSON de una campaña sin firma (con su evento) y no un archivo firmado? */
+  function esBorrador(crudo: string): boolean {
+    try {
+      const x: unknown = JSON.parse(crudo);
+      return esObjeto(x) && typeof x.evento === "string" && x.texto === undefined && x.firma === undefined;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Deja el borrador: ya no se espera nada de él y no vuelve a aparecer al abrir la página. */
+  function soltarElBorrador(): void {
+    pararTemprano?.();
+    pararTemprano = null;
+    abrirYa = false;
+    if (borrador === null) return;
+    borrador = null;
+    activacion = { tipo: "esperando" };
+    borrarBorrador(deps.almacen);
+  }
+
+  /**
+   * Toma un borrador como la campaña de esta pantalla y empieza a mirar el cobro. `null` si quedó, y si no, qué se le dice a
+   * quien organiza. Lo que la sala va a exigir se comprueba acá, antes de cobrar: un borrador que no sirve no llega a pagarse.
+   * La cuenta de quien organiza no viaja en el borrador: se pone al activar, con la sesión de ese momento.
+   */
+  async function usarBorrador(crudo: string): Promise<string | null> {
+    let datos: unknown;
+    try {
+      datos = JSON.parse(crudo);
+    } catch {
+      return tx("cpoNoEsCampana");
+    }
+    if (!esObjeto(datos)) return tx("cpoNoEsCampana");
+    const limpio: Record<string, unknown> = { ...datos };
+    delete limpio.organizadora;
+    const texto = JSON.stringify(limpio);
+    const { lectura, red } = leerDelTexto(texto);
+    if (!lectura.ok) {
+      if (lectura.motivo === "otra-red") return fmt("cpoOtroModo", { modo: tx(nombreDeRed(red)) });
+      return fmt("cpoRevisaCampo", { campo: lectura.campo });
+    }
+    const c = lectura.campana;
+    const revisa = (campo: string): string => fmt("cpoRevisaCampo", { campo });
+    if (!c.premios.every((p) => p === c.premios[0])) return tx("cpoPremiosIguales");
+    if (c.premios.length > 10 || !c.premios.every((p) => esDeCentavosJustos(p) && p >= DOLAR && p <= 10_000n * DOLAR)) return revisa("premios");
+    // La red ya la comprobó el lector contra la del sitio, y el cobro solo existe en la red principal.
+    if (c.estado !== "abierta") return revisa("estado");
+    if (c.entrada !== "google") return revisa("entrada");
+    if (c.anotadas !== 0) return revisa("anotadas");
+    if (c.contrato !== null || c.promo !== null || c.comprobante !== null) return revisa("contrato");
+    // Las mismas reglas con que la sala firma, antes de cobrar: una campaña que la sala no activa no llega a pagarse.
+    const regla = reglaQueFalla({ premios: c.premios, cierraMs: c.cierraMs, sorteoMs: c.sorteoMs, nombre: c.empresa.nombre }, deps.ahora());
+    if (regla === "cierra_ms") return tx(MUY_LEJOS);
+    if (regla === "sorteo_ms") return tx("cpoAcSorteoLejos");
+    if (regla === "empresa.nombre") return tx("cpoAcNombre");
+    if (regla === "premios") return revisa("premios");
+    const v = await deps.validar(texto, deps.ahora());
+    if (!v.ok) return v.motivo === "vencida" ? tx("cpoVencida") : revisa(v.campo);
+    if (c.cierraMs <= deps.ahora()) return tx("cpoVencida");
+    archivo = null;
+    intento = null;
+    campana = c;
+    pide = null;
+    sala = null;
+    borrador = limpio;
+    activacion = { tipo: "esperando" };
+    abrirYa = false;
+    salaDeActivar = deps.salaLista ? "preguntando" : "lista";
+    cm?.reiniciar();
+    mensaje = "";
+    vista = "previa";
+    armarDespertar();
+    pintar();
+    void cm?.mirar();
+    if (salaDeActivar === "preguntando") void preguntarALaSala();
+    return null;
+  }
+
+  /**
+   * Antes de ofrecer el pago de un borrador, la sala dice si puede activarlo ahora. Con un no (apagada, sin sus llaves, sin el
+   * portero o sin respuesta) la pantalla lo dice y no ofrece pagar: nadie paga por una campaña que no se puede activar.
+   */
+  async function preguntarALaSala(): Promise<void> {
+    const b = borrador;
+    if (b === null || !deps.salaLista) return;
+    salaDeActivar = "preguntando";
+    pintar();
+    const lista = await deps.salaLista().catch(() => false);
+    if (borrador !== b) return;
+    salaDeActivar = lista ? "lista" : "no";
+    pintar();
+  }
+
+  /**
+   * Con el borrador ya pagado, le pide a la sala que lo firme y sigue el camino de siempre: crear la sala y abrir la inscripción.
+   * Mientras corre, nunca se ofrece pagar de nuevo. Si la sala dice que no, queda dicho en una línea y se puede probar otra vez.
+   */
+  async function activar(): Promise<void> {
+    const b = borrador;
+    if (b === null || archivo !== null || activacion.tipo === "activando" || trabajando) return;
+    const fallo = (motivo: MotivoDeActivar, campo?: string): void => {
+      activacion = campo === undefined ? { tipo: "error", motivo } : { tipo: "error", motivo, campo };
+      pintar();
+    };
+    const cuenta = deps.cuenta();
+    activacion = { tipo: "activando" };
+    mensaje = "";
+    pintar();
+    if (cuenta === null || !deps.activar || !deps.sesion) return fallo(cuenta === null ? "sesion" : "apagada");
+    const token = await deps.sesion();
+    if (borrador !== b) return;
+    if (token === null || token === "") return fallo("sesion");
+    const r = await deps.activar({ texto: JSON.stringify({ ...b, organizadora: cuenta }), sesion: token });
+    if (borrador !== b) return;
+    if (!r.ok) return fallo(r.motivo, r.campo);
+    // Lo que la sala firmó se lee con el mismo lector de siempre: si no se entiende, no se sigue.
+    const { lectura } = leerDelTexto(r.archivo.texto);
+    if (!lectura.ok) return fallo("forma", lectura.campo);
+    // La sala vive 24 horas desde que se crea: con la apertura lejos, queda activada (el acceso y el pago ya están vistos) y
+    // la sala se crea más cerca de la hora. Volver a activar ese día es gratis: la firma de un mismo texto es la misma.
+    const desde = lectura.campana.abreMs - ANTICIPO_DE_LA_SALA_MS;
+    // Quien organiza puede pedir abrirla ya: vale mientras el sorteo entre en la vida de la sala creada ahora.
+    const yaPedido = abrirYa && cabeAbrirYa(lectura.campana.sorteoMs, deps.ahora());
+    if (desde > deps.ahora() && !yaPedido) {
+      abrirYa = false;
+      activacion = { tipo: "temprano", abreMs: lectura.campana.abreMs, sorteoMs: lectura.campana.sorteoMs };
+      pararTemprano?.();
+      pararTemprano = deps.esperar(() => {
+        pararTemprano = null;
+        volverDeTemprano();
+      }, desde - deps.ahora());
+      pintar();
+      return;
+    }
+    abrirYa = false;
+    archivo = r.archivo;
+    intento = null;
+    campana = lectura.campana;
+    pide = r.organizadora;
+    activacion = { tipo: "hecha" };
+    pintar();
+    await abrirInscripcion();
+  }
+
+  /** Llegó la hora de crear la sala de un borrador activado antes de tiempo: se vuelve a activar y sigue el camino de siempre. */
+  function volverDeTemprano(): void {
+    if (borrador === null || activacion.tipo !== "temprano" || activacion.abreMs - ANTICIPO_DE_LA_SALA_MS > deps.ahora()) return;
+    activacion = { tipo: "esperando" };
+    pintar();
+    quizasActivar();
+  }
+
+  /**
+   * Quien organiza toca abrir ya una campaña activada antes de tiempo. Se vuelve a activar (gratis: la firma de un mismo texto
+   * es la misma) y sigue el camino de siempre: crear la sala y abrir la inscripción. Si la sala falla, el pedido se recuerda y
+   * probar de nuevo abre igual.
+   */
+  function abrirAntesDeTiempo(): void {
+    if (borrador === null || activacion.tipo !== "temprano" || !cabeAbrirYa(activacion.sorteoMs, deps.ahora())) return;
+    pararTemprano?.();
+    pararTemprano = null;
+    abrirYa = true;
+    activacion = { tipo: "esperando" };
+    pintar();
+    quizasActivar();
+  }
+
+  /** Cuando el cobro queda pagado y la campaña es un borrador, se activa sola: nadie de Tinkazo firma ni admite nada a mano. */
+  function quizasActivar(): void {
+    if (borrador !== null && archivo === null && vista === "previa" && activacion.tipo === "esperando" && cm?.estado().tipo === "pagada") {
+      void activar();
+    }
+  }
+
+  /** Un borrador de crear-campana.html en la vista previa, sin pagar y sin nadie adentro: lo que se ve antes de entrar con Google. */
+  function porActivarSinSesion(): boolean {
+    return borrador !== null && archivo === null && vista === "previa" && campana !== null && deps.cuenta() === null && pasoDeActivar() === null;
+  }
+
+  /** La pantalla de un borrador ya pagado, o `null` si no corresponde (no es un borrador, no se pagó, o ya tiene su archivo). */
+  function pasoDeActivar(): PasoDeActivar | null {
+    if (borrador === null || archivo !== null || vista !== "previa" || !cm?.activo()) return null;
+    const con = (t: string, l: string, texto: string, accion: PasoDeActivar["principal"]["accion"]): PasoDeActivar => ({
+      titulo: tx(t),
+      linea: tx(l),
+      principal: { texto: tx(texto), accion, apagado: false },
+    });
+    // Sin pagar todavía, el pago se ofrece solo si la sala dijo que puede activar. Mientras pregunta, un botón apagado.
+    if (cm.estado().tipo !== "pagada" && salaDeActivar !== "lista") {
+      if (salaDeActivar === "preguntando") return { titulo: tx("cpoCargando"), linea: "", principal: { texto: tx("cpoCargando"), accion: "preguntar", apagado: true } };
+      return con("cpoAcApagadaT", "cpoAcAntesL", "cpoReintentar", "preguntar");
+    }
+    if (cm.estado().tipo !== "pagada") return null;
+    const a = activacion;
+    if (a.tipo === "temprano") {
+      const desde = a.abreMs - ANTICIPO_DE_LA_SALA_MS;
+      const zona = campana?.zona ?? "UTC";
+      const idioma = deps.idioma();
+      // Mientras el sorteo entre en la vida de la sala, la inscripción se puede abrir ya con un toque, sin esperar la hora.
+      const ya = cabeAbrirYa(a.sorteoMs, deps.ahora());
+      return {
+        titulo: tx("cpoAcTempranoT"),
+        linea: fmt(ya ? "cpoAcTempranoYaL" : "cpoAcTempranoL", { fecha: fechaTexto(desde, zona, idioma), hora: horaTexto(desde, zona, idioma) }),
+        principal: ya ? { texto: tx("cpoAbrirYa"), accion: "abrir-ya", apagado: false } : { texto: tx("cpoAbrir"), accion: "activar", apagado: true },
+      };
+    }
+    if (a.tipo !== "error") {
+      return { ...con("cpoAcActivandoT", "cpoAcActivandoL", "cpoAcActivando", "activar"), principal: { texto: tx("cpoAcActivando"), accion: "activar", apagado: true } };
+    }
+    switch (a.motivo) {
+      case "no-pagada":
+        return con("cpoAcNoPagadaT", "cpoAcNoPagadaL", "cpoCmMirar", "activar");
+      case "sin-fondos":
+        return con("cpoAcFondosT", "cpoAcFondosL", "cpoCmCargar", "cargar");
+      case "sesion":
+      case "organizadora":
+        return con("cpoAcSesionT", "cpoAcSesionL", "cpoCmEntrar", "entrar");
+      case "no-google":
+        return con("cpoAcGoogleT", "cpoAcGoogleL", "cpoCmEntrar", "entrar");
+      case "forma":
+      case "red-principal": {
+        const p = con("cpoAcFormaT", a.motivo === "red-principal" ? "cpoAcRedPrincipalL" : "cpoAcFormaL", "cpoAcArmar", "armar");
+        return a.campo !== undefined ? { ...p, linea: fmt("cpoRevisaCampo", { campo: a.campo }) } : p;
+      }
+      case "limite":
+        return con("cpoAcLimiteT", "cpoAcLimiteL", "cpoReintentar", "activar");
+      case "apagada":
+      case "sin-llave":
+      case "sin-pollar":
+        return con("cpoAcApagadaT", "cpoAcApagadaL", "cpoReintentar", "activar");
+      case "sin-respuesta":
+        return con("cpoSinConexionT", "cpoAcRedL", "cpoReintentar", "activar");
+      case "red":
+      case "acceso":
+        return con("cpoAcRedT", "cpoAcRedL", "cpoReintentar", "activar");
+    }
+  }
+
+  function hacerDelPasoDeActivar(accion: PasoDeActivar["principal"]["accion"]): void {
+    if (accion === "activar") void activar();
+    else if (accion === "abrir-ya") abrirAntesDeTiempo();
+    else if (accion === "preguntar") void preguntarALaSala();
+    else if (accion === "cargar") cm?.cargar(() => void activar());
+    else if (accion === "entrar") deps.cambiarDeCuenta?.();
+    else {
+      // Armarla de nuevo: el borrador que no sirvió no se guarda, y lo armado queda en esa página para corregirlo.
+      soltarElBorrador();
+      deps.ir?.("/crear-campana.html");
+    }
+  }
+
+  /** El borrador de una campaña que ya tiene su sala cumplió: no se vuelve a ofrecer. Uno de otra campaña se queda. */
+  function quitarElBorradorDe(evento: string): void {
+    const crudo = leerBorrador(deps.almacen);
+    if (crudo === null) return;
+    try {
+      const x: unknown = JSON.parse(crudo);
+      if (esObjeto(x) && x.evento !== evento) return;
+    } catch {
+      /* un borrador que no se lee no sirve: se saca */
+    }
+    borrarBorrador(deps.almacen);
+  }
+
+  /** Al abrir la página con un borrador guardado (el que dejó crear-campana.html), se retoma donde quedó. */
+  async function retomarBorrador(): Promise<void> {
+    if (!cm?.activo() || deps.enStand() || deps.enEnsayo()) return;
+    const crudo = leerBorrador(deps.almacen);
+    if (crudo === null) return;
+    const dicho = await usarBorrador(crudo);
+    if (dicho === null) return;
+    // Una campaña que todavía está lejos sirve: se guarda para cuando falte una semana. Las demás se sacan.
+    if (dicho !== tx(MUY_LEJOS)) borrarBorrador(deps.almacen);
+    aviso(dicho);
+  }
+
   async function alElegir(f: File): Promise<void> {
     if (deps.enStand()) return aviso(tx("cpoSalStand"));
     if (deps.enEnsayo()) return aviso(tx("cpoSalEnsayo"));
     if (f.size > MAX_ARCHIVO) return aviso(tx("cpoNoEsCampana"));
     const crudo = await deps.leerArchivo(f).catch(() => "");
     const leido = archivoFirmado(crudo);
-    if (!leido) return aviso(tx("cpoNoEsCampana"));
+    if (!leido) {
+      // Con el cobro prendido, una campaña sin firma es un borrador: se activa sola cuando se paga.
+      if (cm?.activo() && esBorrador(crudo)) {
+        const dicho = await usarBorrador(crudo);
+        return dicho === null ? undefined : aviso(dicho);
+      }
+      return aviso(tx("cpoNoEsCampana"));
+    }
     const { lectura, red, organizadora } = leerDelTexto(leido.texto);
     if (!lectura.ok) {
       if (lectura.motivo === "otra-red") return aviso(fmt("cpoOtroModo", { modo: tx(nombreDeRed(red)) }));
@@ -799,6 +1182,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const v = await deps.validar(leido.texto, deps.ahora());
     if (!v.ok) return aviso(v.motivo === "vencida" ? tx("cpoVencida") : fmt("cpoRevisaCampo", { campo: v.campo }));
     if (c.cierraMs <= deps.ahora()) return aviso(tx("cpoVencida"));
+    soltarElBorrador();
     archivo = leido;
     intento = null;
     campana = c;
@@ -842,6 +1226,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // El token de la sala se guarda aparte: sin él, el mismo archivo no vuelve a abrir una sala que ya se cerró.
     guardarTokenDeEvento(deps.almacen, { evento: r.sala.evento, token: r.sala.token });
     olvidarIntentoDeArchivo(deps.almacen, campana.evento);
+    // Con la sala creada, la memoria de esta compu ya retoma la campaña: el borrador cumplió y no vuelve a aparecer.
+    soltarElBorrador();
     recordar();
     return null;
   }
@@ -1207,6 +1593,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     campana = null;
     pide = null;
     cm?.reiniciar();
+    soltarElBorrador();
     archivo = null;
     intento = null;
     pase = null;
@@ -1295,6 +1682,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       JSON.stringify(paso),
       listaTrabada(),
       vista === "previa" ? (cm?.firma() ?? "") : "",
+      vista === "previa" && borrador !== null ? `${archivo === null ? "b" : "f"}${JSON.stringify(activacion)}${salaDeActivar}` : "",
+      porActivarSinSesion(),
+      vista === "elegir" && borradorGuardado(),
     ].join("|");
     if (firma === firmaDeAcciones) return;
     firmaDeAcciones = firma;
@@ -1314,16 +1704,26 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       armar.href = "/crear-campana.html";
       armar.textContent = tx("cpoArmala");
       botones.push(armar);
+      // Un borrador guardado que el panel no tomó (todavía lejos, o en el stand): también se puede dejar desde acá.
+      if (borradorGuardado()) botones.push(boton(tx("cpoDejar"), "enlace", () => dejarLaCampana()));
     } else if (vista === "previa") {
       // Con el cobro prendido y sin pagar, el botón es el del estado del cobro en lugar de Abrir la inscripción.
       const d = cm?.activo() ? cm.descripcion() : null;
+      const deActivar = pasoDeActivar();
       const hacer = (accion: AccionDeComision): void => {
         if (accion === "cargar") cm?.cargar();
         else if (accion === "pagar") void cm?.pagar();
         else if (accion === "mirar") void cm?.mirar();
         else deps.cambiarDeCuenta?.();
       };
-      if (d?.principal) {
+      if (deActivar) {
+        // Un borrador pagado: un solo botón, el de lo que pasa ahora. Nunca se ofrece pagar de nuevo.
+        const { texto, accion, apagado } = deActivar.principal;
+        botones.push(principal(texto, () => hacerDelPasoDeActivar(accion), apagado));
+      } else if (d?.principal && d.principal.accion === "entrar" && porActivarSinSesion()) {
+        // La campaña por activar, sin sesión: un solo botón, el mismo ingreso que el botón principal de la portada.
+        botones.push(principal(d.principal.texto, () => (deps.entrar ?? deps.cambiarDeCuenta)?.()));
+      } else if (d?.principal) {
         const { texto, accion, apagado } = d.principal;
         botones.push(principal(texto, () => hacer(accion), apagado));
         if (d.secundario) {
@@ -1335,8 +1735,10 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       }
       // Mientras se paga o se duda de un pago no se deja la campaña: el pago ya salió con esta pantalla.
       const tipoDelCobro = cm?.estado().tipo;
-      if (tipoDelCobro !== "pagando" && tipoDelCobro !== "duda") {
-        botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (sala ? pedirOlvidar() : volverAElegir())));
+      if (tipoDelCobro !== "pagando" && tipoDelCobro !== "duda" && activacion.tipo !== "activando") {
+        // El borrador que dejó crear-campana.html no vino de un archivo: dejarlo se dice así, con o sin sesión.
+        const deCrear = borrador !== null && archivo === null;
+        botones.push(boton(tx(deCrear ? "cpoDejar" : "cpoOtroArchivo"), "enlace", () => (sala ? pedirOlvidar() : deCrear ? dejarLaCampana() : volverAElegir())));
       }
     } else if (vista === "abierta") {
       const abrirGrande = (b: HTMLButtonElement): void => grande.abrir(b);
@@ -1383,7 +1785,23 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     archivoEl.click();
   }
 
+  /** Si este navegador guarda una campaña por activar (la que dejó crear-campana.html), la haya tomado el panel o no. */
+  function borradorGuardado(): boolean {
+    return leerBorrador(deps.almacen) !== null;
+  }
+
+  /**
+   * Deja la campaña por activar: se borra el borrador y se vuelve a la portada de siempre. Quien la armó nunca tuvo un archivo
+   * firmado, así que la vista de elegirlo no le dice nada.
+   */
+  function dejarLaCampana(): void {
+    volverAElegir();
+    borrarBorrador(deps.almacen);
+    deps.ir?.("/");
+  }
+
   function volverAElegir(): void {
+    soltarElBorrador();
     archivo = null;
     intento = null;
     campana = null;
@@ -1426,14 +1844,35 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       const d = cm?.activo() ? cm.descripcion() : null;
       if (d?.titulo != null) titulo = d.titulo;
       if (d?.linea != null) linea = d.linea;
+      // La campaña por activar, sin sesión: el título la nombra, y la línea del cobro dice lo que sigue y lo que cuesta.
+      if (porActivarSinSesion()) titulo = fmt("cpoBorradorT", { empresa: campana.empresa.nombre });
+      // Con el borrador ya pagado, la pantalla dice cómo va la activación.
+      const deActivar = pasoDeActivar();
+      if (deActivar) {
+        titulo = deActivar.titulo;
+        linea = deActivar.linea;
+      }
     }
     if (campana && vista === "abierta") {
       titulo = pasoLaHora() ? tx("cpoHoraDeCerrar") : fmt("cpoAbiertaHasta", { hora: horaTexto(cierraMs, zona, idioma) });
     }
     tituloEl.textContent = titulo;
     lineaEl.textContent = linea;
+    const deQuien = campana !== null && vista === "previa" && borrador !== null && archivo === null && !porActivarSinSesion();
+    if (deQuien && !deEl) {
+      deEl = document.createElement("p");
+      deEl.id = "cpo-de";
+      deEl.className = "cpo-de";
+      tituloEl.before(deEl);
+    }
+    if (deEl) {
+      deEl.hidden = !deQuien;
+      deEl.textContent = campana ? fmt("cpoDeLaCampana", { empresa: campana.empresa.nombre }) : "";
+    }
     // Con el cobro prendido y pagado, el panel lo dice: sin la marca se vería igual al que nunca cobró.
-    const pagadaConCobro = raiz.dataset.comision === "pagada";
+    // Si la sala todavía no ve el pago de un borrador, la marca de pagado se contradice con el título: no se muestra.
+    const sinVerElPago = borrador !== null && archivo === null && activacion.tipo === "error" && activacion.motivo === "no-pagada";
+    const pagadaConCobro = raiz.dataset.comision === "pagada" && !sinVerElPago;
     if (pagadaConCobro && !marcaEl) {
       marcaEl = document.createElement("p");
       marcaEl.id = "cpo-marca";
@@ -1675,6 +2114,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   function pintar(): void {
     raiz.dataset.vista = vista;
+    // La campaña por activar (campana-sala.css): en su vista previa lo único en pantalla es el panel.
+    raiz.toggleAttribute("data-borrador", borrador !== null && archivo === null);
     // Solo con el cobro prendido: apagado, el panel no lleva este atributo.
     if (vista === "previa" && cm?.activo()) raiz.dataset.comision = cm.estado().tipo;
     else if (raiz.dataset.comision !== undefined) delete raiz.dataset.comision;
@@ -1746,7 +2187,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   const alCambiarLaSesion = (): void => {
     if (vista === "cerrada" && pasada) correrPaso();
     // Con otra cuenta cambia con qué se paga y cuánto hay cargado: el cobro se vuelve a mirar.
-    if (vista === "previa") void cm?.mirar();
+    if (vista === "previa") {
+      // Un borrador que no se pudo activar por la sesión se vuelve a intentar con la cuenta nueva.
+      if (borrador !== null && archivo === null && activacion.tipo === "error") activacion = { tipo: "esperando" };
+      void cm?.mirar();
+    }
   };
   document.addEventListener("tinkazo:sesion", alCambiarLaSesion);
   dejarLaSesion = () => document.removeEventListener("tinkazo:sesion", alCambiarLaSesion);
@@ -1761,17 +2206,22 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   const otra: RedDeCampana = deps.red() === "mainnet" ? "testnet" : "mainnet";
   if (guardada) {
     void retomar(guardada);
+    if (cm?.activo()) quitarElBorradorDe(guardada.sala.evento);
   } else if (leerOrg(deps.almacen, deps.ahora(), otra)) {
     // Su sala sigue en su modo y no estorba: acá se puede abrir otra campaña.
     mensaje = fmt("cpoOtroModoAbierta", { modo: tx(nombreDeRed(otra)) });
   }
   pintar();
+  // Un borrador que dejó crear-campana.html se retoma solo si no hay una sala para retomar: la sala guardada manda.
+  if (!guardada) void retomarBorrador();
 
   function detener(): void {
     dejarDeEscuchar();
     cm?.detener();
     marca++;
     pararDespertar?.();
+    pararTemprano?.();
+    pararTemprano = null;
     dejarElPuente?.();
     dejarLaSesion?.();
     grande.cerrar();

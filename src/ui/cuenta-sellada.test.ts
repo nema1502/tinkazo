@@ -139,6 +139,53 @@ describe("las bases de antes de sellar, sin los modos", () => {
   });
 });
 
+describe("las bases de un Amigo secreto", () => {
+  const CUATRO = ["Ana", "Beto", "Carla", "Diego"];
+  // En este modo nadie gana nada: las bases que se pegan en el grupo no pueden hablar de ganadores ni de premio.
+  const DE_GANAR = /ganador|ganan|premio|\bwinners?\b|\bprize\b/i;
+  const preparar = (lang: "es" | "en"): void => {
+    history.replaceState(null, "", `/?modo=turnos&lang=${lang}`);
+    h.nombres = CUATRO;
+    (document.getElementById("prize") as HTMLInputElement).value = lang === "es" ? "Amigo secreto" : "Secret Santa";
+    (document.getElementById("nw") as HTMLInputElement).value = "4";
+  };
+
+  it("antes de sellar dicen quién le regala a quién, sin ganadores ni premio", async () => {
+    preparar("es");
+    const { copyRulesPre } = await import("./freeze");
+    await copyRulesPre(boton());
+    expect(copiado).toContain("cada una le regala a la que sigue");
+    expect(copiado).not.toMatch(DE_GANAR);
+  });
+
+  it("después de sellar también", async () => {
+    preparar("es");
+    const { copyRules } = await sellada(CUATRO);
+    const { app } = await import("../state");
+    if (app.frozen) app.frozen.prize = "Amigo secreto";
+    await copyRules(boton());
+    expect(copiado).toContain("cada una le regala a la que sigue");
+    expect(copiado).toContain("ab".repeat(32));
+    expect(copiado).not.toMatch(DE_GANAR);
+  });
+
+  it("en inglés, antes y después de sellar", async () => {
+    preparar("en");
+    // Sin main.ts nadie lee el idioma de la dirección: se elige a mano, antes de cargar la herramienta.
+    const { setLang } = await import("../i18n");
+    setLang("en");
+    const { copyRulesPre, copyRules } = await sellada(CUATRO);
+    await copyRulesPre(boton());
+    expect(copiado).toContain("each one gives a gift to the next");
+    expect(copiado).not.toMatch(DE_GANAR);
+    const { app } = await import("../state");
+    if (app.frozen) app.frozen.prize = "Secret Santa";
+    await copyRules(boton());
+    expect(copiado).toContain("each one gives a gift to the next");
+    expect(copiado).not.toMatch(DE_GANAR);
+  });
+});
+
 describe("las bases de un orden de turnos repartido", () => {
   const preparar = (): void => {
     history.replaceState(null, "", "/?modo=turnos&lang=es");

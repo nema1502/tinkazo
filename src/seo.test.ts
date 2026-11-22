@@ -33,7 +33,7 @@ const PUBLICAS: Record<string, string> = {
 };
 
 /** Las de uso interno: no van al mapa del sitio y llevan noindex. */
-const INTERNAS = ["lista.html", "evento.html", "verificar.html", "c.html", "crear-campana.html"];
+const INTERNAS = ["lista.html", "evento.html", "verificar.html", "c.html", "crear-campana.html", "confirmar.html"];
 
 /** Las páginas nuevas, con el título y el h1 que se pidieron para cada una. */
 const NUEVAS: Record<string, { titulo: string; h1: string }> = {
@@ -768,9 +768,9 @@ describe("la página de precios, revisada con mirada de marketing (26 de octubre
     expect(leer("precios.html")).not.toMatch(/doble|double/i);
   });
 
-  it("abre diciendo que con el cupón de tu evento el modo Oficial es gratis, y que participar y comprobar lo es siempre", () => {
-    expect(T.es.prNote).toBe("El modo Prueba es gratis. El modo Oficial también, con el cupón de tu evento. Participar en un sorteo y comprobarlo es gratis, siempre.");
-    expect(T.en.prNote).toBe("Test mode is free. So is Live mode, with a coupon from your event. Joining a draw and checking it are always free.");
+  it("abre con los primeros 3 sorteos oficiales gratis, el cupón para más, y participar y comprobar gratis siempre", () => {
+    expect(T.es.prNote).toBe("Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. Participar y comprobar es gratis, siempre.");
+    expect(T.en.prNote).toBe("Run your first 3 Live draws for free. For more, use a coupon. Taking part and checking are always free.");
     // El HTML trae el mismo texto, que es lo que ven los buscadores y quien no tiene JavaScript.
     expect(leer("precios.html")).toContain(`data-i="prNote">${T.es.prNote as string}</p>`);
   });

@@ -11,14 +11,15 @@ export const TEXTOS_ALTA_SIN_PAGO: { es: Record<string, string>; en: Record<stri
     altaTexto: "Usá el cupón de tu evento.",
     altaYaActivada: "Usá el cupón de tu evento.",
     altaErrServicio: "Ahora no podemos revisar cupones, probá de nuevo en un momento.",
-    cupoOfCeroTexto: "Tu lista no se selló. Para sellar en modo Oficial, usá otro cupón. En Prueba seguís gratis.",
+    // La línea de «Se te acabaron» sin venta: al lado va Sortear en Prueba, y el cupón queda como enlace chico.
+    cupoOfCeroTexto: "En Prueba funciona igual, pero no cuenta y se borra el 16 de diciembre.",
     cupoOfVencidoTexto: "Tus sorteos oficiales vencieron el {fecha}. Usá otro cupón o seguí gratis en Prueba.",
   },
   en: {
     altaTexto: "Use your event's coupon.",
     altaYaActivada: "Use your event's coupon.",
     altaErrServicio: "We can't check coupons right now, try again in a moment.",
-    cupoOfCeroTexto: "Your list wasn't sealed. To seal in Live mode, use another coupon. Test mode is still free.",
+    cupoOfCeroTexto: "In Test it works the same, but it doesn't count and is wiped on December 16.",
     cupoOfVencidoTexto: "Your Live draws expired on {fecha}. Use another coupon or keep going for free in Test mode.",
   },
 };

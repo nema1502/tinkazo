@@ -13,7 +13,8 @@
  *
  * Solo medios automáticos: ningún texto manda a escribir para pagar ni promete un QR del banco, porque eso dependería de
  * que alguien confirme el pago a mano.
- * `i18n.ts` los suma al diccionario; con la compra de sorteos apagada (`altaPagoActivo()`) no se muestra ninguno.
+ * `i18n.ts` los suma al diccionario; con la compra de sorteos apagada (`altaPagoActivo()`) no se muestra ninguno, salvo los
+ * de «Se te acabaron» y del aviso de premios del final, que no ofrecen comprar y se ven con la venta abierta o cerrada.
  *
  * Reglas de escritura (las comprueban `alta-textos-pago.test.ts` y `ui/pago-poco-texto.test.ts`): las mismas de
  * `alta-textos.ts`, sin comillas angulares ni punto y coma, y además: nunca «token», «hash», «transacción» ni
@@ -33,6 +34,15 @@ export const TEXTOS_ALTA_PAGO: { es: Record<string, string>; en: Record<string, 
     pagoSorteo1: "1 sorteo oficial",
     pagoDolares: "{usdc} dólares",
     pagoUnDolar: "1 dólar",
+
+    // Por unidad (`ui/pago-paquete.ts`): la línea del precio por sorteo, el contador y el botón que pasa a pagar, que no
+    // cobra. `pagoUnidadDias` solo si el servidor dice otros días que un año. Las tres del contador no se ven: se oyen.
+    pagoUnidad: "Cada sorteo que organizás, {precio} en USDC. Valen un año.",
+    pagoUnidadDias: "Cada sorteo que organizás, {precio} en USDC. Valen {n} días.",
+    pagoSeguirTotal: "Seguir con {total}",
+    pagoCuantos: "Cuántos sorteos oficiales",
+    pagoMenos: "Menos sorteos",
+    pagoMas: "Más sorteos",
 
     // Antes de la orden: cómo pagar, solo si hay más de un medio (hoy hay uno y no se pregunta).
     pagoComoPagar: "¿Cómo querés pagar?",
@@ -62,11 +72,17 @@ export const TEXTOS_ALTA_PAGO: { es: Record<string, string>; en: Record<string, 
     pagoBuscando: "Buscando tu pago…",
     pagoNoLlego: "Todavía no vemos tu pago. Suele tardar menos de un minuto.",
     pagoTarda: "Algunas apps tardan más. Podés cerrar y volver a entrar más tarde.",
+    // Por unidad, el pago se mira solo (`ui/pago-paquete.ts`): pasados 30 minutos, que se puede cerrar, y el título de
+    // cuando llegó, con cuántos sorteos oficiales quedan debajo.
+    pagoTardaSolo: "Podés cerrar. Cuando llegue, se suma solo.",
+    pagoListoTitulo: "Recibimos tu pago",
     pagoNoLlegoBoton: "No llegó",
     pagoRedEquivocada: "Si no lo mandaste por Stellar, no va a llegar. Escribinos a hola@tinkazo.app.",
     pagoOtraMoneda: "¿Mandaste otra moneda? No se pierde: escribinos a hola@tinkazo.app y te la devolvemos.",
     pagoOtraNotaEnviada: "¿Mandaste sin la nota, o con otra? No se pierde: escribinos a hola@tinkazo.app y lo buscamos para asignarlo o devolverlo.",
     pagoFalta: "Llegaron {recibido} de {total} USDC. Mandá lo que falta con la misma nota.",
+    // Por unidad, lo que llegó ya dio sorteos aunque falte una parte: se dice cuántos y cuánto falta para el resto.
+    pagoFaltaDados: "Sumaste {dados} de {n} sorteos. Mandá {falta} más con la misma nota.",
     pagoListo: "Recibimos tu pago.",
     pagoListoQuedan: "Recibimos tu pago. Te quedan {n} sorteos oficiales.",
     pagoListoQueda1: "Recibimos tu pago. Te queda 1 sorteo oficial.",
@@ -95,6 +111,14 @@ export const TEXTOS_ALTA_PAGO: { es: Record<string, string>; en: Record<string, 
     pagoSaldoEt: "Con tu saldo",
     pagoSaldoCorto: "Tenés {tiene} dólares digitales, faltan {falta}",
     pagoSaldoCortoUno: "Tenés 1 dólar digital, faltan {falta}",
+
+    // «Se te acabaron» (`ui/sin-sorteos.ts`): el título de quien nunca tuvo sorteos oficiales y el botón que pasa a
+    // Prueba y entra solo con la cuenta de prueba. Llevan `pago` adelante porque viven en este archivo.
+    pagoNuncaTuvoTitulo: "Todavía no tenés sorteos oficiales",
+    pagoSortearEnPrueba: "Sortear en Prueba",
+    // Junto a Sellar, cuando los premios de a uno piden más sorteos oficiales de los que quedan (`cupo-oficial.ts`).
+    pagoFaltanPremios: "Tu sorteo tiene {p} premios y te quedan {n}.",
+    pagoFaltanPremios1: "Tu sorteo tiene {p} premios y te queda 1.",
   },
   en: {
     pagoNoALaVenta: "This pack isn't on sale right now. What you already bought is still yours.",
@@ -106,6 +130,13 @@ export const TEXTOS_ALTA_PAGO: { es: Record<string, string>; en: Record<string, 
     pagoSorteo1: "1 Live draw",
     pagoDolares: "US${usdc}",
     pagoUnDolar: "US$1",
+
+    pagoUnidad: "Each draw you run, {precio} in USDC. Valid for a year.",
+    pagoUnidadDias: "Each draw you run, {precio} in USDC. Valid for {n} days.",
+    pagoSeguirTotal: "Continue with {total}",
+    pagoCuantos: "How many Live draws",
+    pagoMenos: "Fewer draws",
+    pagoMas: "More draws",
 
     pagoComoPagar: "How do you want to pay?",
     pagoMedioApp: "From a payments app",
@@ -131,11 +162,14 @@ export const TEXTOS_ALTA_PAGO: { es: Record<string, string>; en: Record<string, 
     pagoBuscando: "Looking for your payment…",
     pagoNoLlego: "We don't see your payment yet. It usually takes under a minute.",
     pagoTarda: "Some apps take longer. You can close this and come back later.",
+    pagoTardaSolo: "You can close this. When it arrives, it's added automatically.",
+    pagoListoTitulo: "We got your payment",
     pagoNoLlegoBoton: "It didn't arrive",
     pagoRedEquivocada: "If you didn't send it on Stellar, it won't arrive. Email us at hola@tinkazo.app.",
     pagoOtraMoneda: "Sent another currency? It's not lost: email us at hola@tinkazo.app and we'll send it back.",
     pagoOtraNotaEnviada: "Sent it without the memo, or with a different one? It's not lost: email us at hola@tinkazo.app and we'll trace it to assign it or send it back.",
     pagoFalta: "{recibido} of {total} USDC arrived. Send the rest with the same memo.",
+    pagoFaltaDados: "You've added {dados} of {n} Live draws. Send {falta} more with the same memo.",
     pagoListo: "We got your payment.",
     pagoListoQuedan: "We got your payment. You have {n} Live draws left.",
     pagoListoQueda1: "We got your payment. You have 1 Live draw left.",
@@ -162,5 +196,10 @@ export const TEXTOS_ALTA_PAGO: { es: Record<string, string>; en: Record<string, 
     pagoSaldoEt: "With your balance",
     pagoSaldoCorto: "You have {tiene} digital dollars, {falta} short",
     pagoSaldoCortoUno: "You have 1 digital dollar, {falta} short",
+
+    pagoNuncaTuvoTitulo: "You don't have Live draws yet",
+    pagoSortearEnPrueba: "Run it in Test",
+    pagoFaltanPremios: "Your draw has {p} prizes and you have {n} left.",
+    pagoFaltanPremios1: "Your draw has {p} prizes and you have 1 left.",
   },
 };

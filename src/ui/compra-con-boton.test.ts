@@ -43,7 +43,7 @@ vi.mock("./cuenta-lista-flujo", () => ({ abrirSumarSorteos: (...a: unknown[]) =>
 vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false, enPractica: () => false }));
 vi.mock("../stellar/cobro-oficial", () => ({ cobroPorUso: () => true, redPrincipalConPollar: () => true, esCuentaDePollar: () => true }));
 vi.mock("./wallet-ui", () => ({ currentSession: () => ({ kind: "external", address: CUENTA }) }));
-vi.mock("./modo-ui", () => ({ pasarAModo: vi.fn(), puedeCambiarDeModo: () => true, textoCuentaAlCambiar: () => "" }));
+vi.mock("./modo-ui", () => ({ pasarAModo: vi.fn(), practicarEnPrueba: vi.fn(), puedeCambiarDeModo: () => true, textoCuentaAlCambiar: () => "" }));
 vi.mock("./red", () => ({ mostrarSinPatrocinio: vi.fn(async () => undefined) }));
 vi.mock("../stellar/patrocinador", async (orig) => ({
   ...(await orig<typeof import("../stellar/patrocinador")>()),
@@ -198,7 +198,7 @@ describe("con la compra prendida, todo texto que ofrece comprar tiene su botón,
     }
   });
 
-  it("«Se te acabaron»: con un paquete a la venta, el texto que ofrece sumar va con su botón secundario, que abre la compra", async () => {
+  it("«Se te acabaron»: con un paquete a la venta, el texto que ofrece sumar va con «Sumar sorteos» como principal, que abre la compra", async () => {
     const m = await cargar(true);
     h.oferta = { alta: null, paquetes: [P10] };
     const fin = m.sinSorteos.alQuedarseSinSorteos();
@@ -206,10 +206,14 @@ describe("con la compra prendida, todo texto que ofrece comprar tiene su botón,
     const dlg = document.querySelector(".sin-sorteos") as HTMLElement;
     expect(ofrecen(dlg).length).toBeGreaterThan(0);
     const [comprar] = botonesDeComprar(dlg);
-    expect(comprar?.textContent).toBe("Organizá 10 sorteos oficiales por 9 dólares");
-    // La principal sigue siendo el cupón: comprar nunca es la principal frente a la sala.
-    expect(dlg.querySelector(".dlg-main")?.textContent).toBe(m.i18n.t("cupoOfUsarCupon"));
-    expect(comprar?.classList.contains("dlg-main")).toBe(false);
+    // «Sumar sorteos» no cobra: abre la ventana de los paquetes, donde se elige. Por eso puede ser la principal.
+    expect(comprar?.textContent).toBe(m.i18n.t("cupoOfSumar"));
+    expect(comprar?.classList.contains("dlg-main")).toBe(true);
+    expect(dlg.querySelectorAll(".dlg-main")).toHaveLength(1);
+    // Sin precio a la vista: el precio se ve recién en la ventana de los paquetes.
+    expect(dlg.textContent).not.toMatch(/dólares|US\$/);
+    // Sortear en Prueba sigue a la vista como segunda.
+    expect(dlg.querySelector('[data-accion="prueba"]')?.textContent).toBe(m.i18n.t("pagoSortearEnPrueba"));
     (comprar as HTMLButtonElement).click();
     await fin;
     expect(h.sumar).toHaveBeenCalledTimes(1);
@@ -344,6 +348,10 @@ describe("el diccionario de los textos del cobro", () => {
     cupoOfSumarPaquete: "es el botón",
     pagoDolares: "una pieza del botón",
     pagoUnDolar: "una pieza del botón",
+    // Por unidad, en «Sumar sorteos»: la línea del precio va solo eligiendo cuántos, con el contador y «Seguir con» al
+    // lado (`pago-paquete.test.ts`, el contador del producto por unidad).
+    pagoUnidad: "«Sumar sorteos» por unidad, con el contador y Seguir con el total al lado",
+    pagoUnidadDias: "«Sumar sorteos» por unidad, con el contador y Seguir con el total al lado",
     // Pagar con el saldo de la cuenta: solo dentro de la compra ya empezada (después de tocar su botón), y dicen el
     // saldo o el monto de la orden, cada uno junto a su principal.
     pagoSaldoTenes: "cómo pagar con el saldo, con Pagar con mi saldo al lado",

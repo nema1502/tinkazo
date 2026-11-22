@@ -99,26 +99,33 @@ export async function cerrarSala(s: Sala, dep: Dependencias = {}): Promise<boole
 /**
  * La pantalla comparte la ronda que decide (la del sello, o la de ejemplo del stand) y la huella de
  * la lista sellada: con eso cada celular calcula su resultado personal. Se puede volver a mandar:
- * la última es la que vale. `true` si la sala la guardó.
+ * la última es la que vale. `true` si la sala la guardó, `"no-existe"` si contestó 404 (la sala ya no está o el
+ * servicio no conoce esa ruta: volver a probar no cambia nada) y `false` ante cualquier otro fallo.
  */
-export async function compartirRonda(s: Sala, ronda: RondaDeSala, dep: Dependencias = {}): Promise<boolean> {
+export async function compartirRonda(s: Sala, ronda: RondaDeSala, dep: Dependencias = {}): Promise<boolean | "no-existe"> {
   try {
     const r = await (dep.fetch ?? fetch)(`${s.servicio}/v1/sala/${s.id}/ronda`, {
       method: "PUT",
       headers: { ...auth(s), "Content-Type": "application/json" },
       body: JSON.stringify(ronda),
     });
+    if (r.status === 404) return "no-existe";
     return r.status === 204;
   } catch {
     return false;
   }
 }
 
-/** Quien organizó cierra la lista desde la pantalla: no entra nadie más. `true` si quedó cerrada (o ya lo estaba). */
-export async function cerrarListaEnSala(s: Sala, dep: Dependencias = {}): Promise<boolean> {
+/**
+ * Quien organizó cierra la lista desde la pantalla: no entra nadie más. `true` solo si la sala contestó que quedó
+ * cerrada (o ya lo estaba). Un 404 no es una lista cerrada: la sala ya no está o el servicio no conoce esa ruta, y
+ * vuelve como `"no-existe"` para decirlo. `false` ante cualquier otro fallo.
+ */
+export async function cerrarListaEnSala(s: Sala, dep: Dependencias = {}): Promise<boolean | "no-existe"> {
   try {
     const r = await (dep.fetch ?? fetch)(`${s.servicio}/v1/sala/${s.id}/cierre`, { method: "POST", headers: auth(s) });
-    return r.status === 204 || r.status === 404;
+    if (r.status === 404) return "no-existe";
+    return r.status === 204;
   } catch {
     return false;
   }

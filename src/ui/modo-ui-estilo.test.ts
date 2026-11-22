@@ -102,15 +102,17 @@ beforeEach(() => {
 });
 
 describe("el botón para pasar de modo se ve como un botón del sitio", () => {
-  for (const [red, texto] of [
-    ["testnet", T.es.modeSwitchToOfficial],
-    ["mainnet", T.es.modeSwitchToTest],
+  // El principal es solo el de pasar a Oficial. Pasar a Prueba es la acción secundaria de la hoja (20 de noviembre de 2026).
+  for (const [red, texto, clase] of [
+    ["testnet", T.es.modeSwitchToOfficial, "primary"],
+    ["mainnet", T.es.modeSwitchToTest, "ghost"],
   ] as const) {
     describe(`desde ${red}, «${texto}»`, () => {
-      it("nace con la clase del botón principal y con la suya, no con `solid` a secas", () => {
+      it(`nace con la clase ${clase} y con la suya, no con \`solid\` a secas`, () => {
         const { boton } = abrir(red);
         expect(boton.textContent).toBe(texto);
-        expect(boton.classList.contains("primary")).toBe(true);
+        expect(boton.classList.contains(clase)).toBe(true);
+        expect(boton.classList.contains(clase === "primary" ? "ghost" : "primary")).toBe(false);
         expect(boton.classList.contains("modo-cambiar")).toBe(true);
         expect(boton.classList.contains("solid")).toBe(false);
       });
@@ -120,9 +122,15 @@ describe("el botón para pasar de modo se ve como un botón del sitio", () => {
         const cuerpos = alcanzan(boton).filter((r) => r.medias.length === 0).map((r) => r.cuerpo);
         const todo = cuerpos.join(";");
         expect(cuerpos.length).toBeGreaterThan(0);
-        expect(valor(todo, "background")).toBe("var(--magenta)");
-        expect(valor(todo, "color")).toBe("var(--on-accent)");
-        expect(valor(todo, "border")).toMatch(/^var\(--bw\) solid var\(--ink\)$/);
+        if (clase === "primary") {
+          expect(valor(todo, "background")).toBe("var(--magenta)");
+          expect(valor(todo, "color")).toBe("var(--on-accent)");
+          expect(valor(todo, "border")).toMatch(/^var\(--bw\) solid var\(--ink\)$/);
+        } else {
+          expect(valor(todo, "background")).toBe("var(--card)");
+          expect(valor(todo, "color")).toBe("var(--ink)");
+          expect(valor(todo, "border")).toBe("2px solid var(--ink)");
+        }
         expect(valor(todo, "box-shadow")).toBe("var(--sh-sm)");
       });
 
@@ -144,10 +152,10 @@ describe("el botón para pasar de modo se ve como un botón del sitio", () => {
         expect(alcanzadas.filter((r) => valor(r.cuerpo, "height") !== null).map((r) => r.selector)).toEqual([]);
       });
 
-      it("se distingue de «Cerrar», que es la acción secundaria", () => {
+      it(clase === "primary" ? "se distingue de «Cerrar», que es la acción secundaria" : "es secundaria, como «Cerrar»", () => {
         const { boton, cerrar } = abrir(red);
         const fondo = (el: Element) => alcanzan(el).filter((r) => r.medias.length === 0).map((r) => valor(r.cuerpo, "background")).filter(Boolean).pop();
-        expect(fondo(boton)).toBe("var(--magenta)");
+        expect(fondo(boton)).toBe(clase === "primary" ? "var(--magenta)" : "var(--card)");
         expect(fondo(cerrar)).toBe("var(--card)");
       });
     });

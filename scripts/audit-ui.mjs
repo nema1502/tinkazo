@@ -42,7 +42,7 @@ import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
 import { BOTON_APAGADO_JS } from "./lib/juegos.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
+import { ABRIR_OTRAS_FORMAS_JS, HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { CUENTA_FALSA, freighterFalsa } from "./lib/freighter-falsa.mjs";
 import { UMBRALES, sondaTexto } from "./lib/texto-minimo.mjs";
 
@@ -309,6 +309,8 @@ async function connect(page, p, tema) {
     v.texto.slice(0, 3).map((x) => `"${x.t}" ${x.r}<${x.need}`).join(" | "),
   );
   await page.screenshot(join(outDir, `ui-ingreso-${etiqueta}-${tema}.png`));
+  // La cuenta de prueba está detrás de Otras formas de entrar: se despliega antes de buscarla.
+  await page.eval(ABRIR_OTRAS_FORMAS_JS);
   const i = await page.eval(
     `String([...document.querySelectorAll('.login-opt')].findIndex(e => /prueba|Test account/.test(e.textContent)))`,
   );
@@ -341,6 +343,8 @@ async function pasoDeFondos(browser, p, tema) {
     await page.eval(TOCAR_ENTRAR_JS);
     await page.waitFor(`document.querySelector('.login-opt')`, 15000);
     await sleep(500);
+    // La billetera está detrás de Otras formas de entrar, salvo que este navegador ya la use.
+    await page.eval(ABRIR_OTRAS_FORMAS_JS);
     const i = await page.eval(
       `String([...document.querySelectorAll('.login-opt')].findIndex(e => /Varial/.test(e.textContent) && !/instalar|install/.test(e.textContent)))`,
     );
@@ -897,7 +901,7 @@ async function run() {
             screenWidth: p.w, screenHeight: p.h,
           });
           await sinSesionGuardada(sinCuenta);
-          await sinCuenta.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
+          await sinCuenta.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba#sortear` });
           await sinCuenta.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
           await sinCuenta.waitFor(`${HAY_BOTON_ENTRAR_JS} && !!document.getElementById('btn-sample')`, 20000);
           await sinCuenta.eval(`document.getElementById('btn-sample').click(); true`);
@@ -1111,7 +1115,7 @@ async function run() {
         try {
           await z.send("Emulation.setDeviceMetricsOverride", { width: 681, height: 316, deviceScaleFactor: 2, mobile: false, screenWidth: 681, screenHeight: 316 });
           await sinSesionGuardada(z);
-          await z.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
+          await z.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba#sortear` });
           await z.waitFor("document.readyState === 'complete' && !!document.getElementById('btn-sample')", 20000);
           await z.eval("document.getElementById('btn-sample').click(); true");
           await sleep(900);

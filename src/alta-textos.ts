@@ -61,8 +61,8 @@ export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, strin
     cupoOfSumar: "Sumar sorteos",
     cupoOfCeroTitulo: "Se te acabaron los sorteos oficiales",
     // Solo en «Se te acabaron», junto al botón de sumar (sin un paquete a la venta va `cupoOfCeroTextoSinVenta`). Corto:
-    // Pasar a Prueba ya está al lado.
-    cupoOfCeroTexto: "Tu lista no se selló. Usá un cupón o sumá sorteos para sellarla.",
+    // Sortear en Prueba ya está al lado.
+    cupoOfCeroTexto: "Sumá más para que este cuente. En Prueba no cuenta.",
     cupoOfVencidoTexto: "Tus sorteos oficiales vencieron el {fecha}. Usá un cupón o sumá sorteos. En Prueba seguís gratis.",
     cupoOfSumarPaquete: "Organizá {sorteos} por {precio}",
     cupoOfCeroSumar: "Se te acabaron los sorteos oficiales. Usá un cupón o sumá sorteos.",
@@ -115,7 +115,7 @@ export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, strin
     cupoOfDoble: "With more than 50 winners, this draw uses 2.",
     cupoOfSumar: "Add draws",
     cupoOfCeroTitulo: "You're out of Live draws",
-    cupoOfCeroTexto: "Your list wasn't sealed. Use a coupon or add draws to seal it.",
+    cupoOfCeroTexto: "Add more so this one counts. In Test it doesn't count.",
     cupoOfVencidoTexto: "Your Live draws expired on {fecha}. Use a coupon or add draws. Test mode is still free.",
     cupoOfSumarPaquete: "Run {sorteos} for {precio}",
     cupoOfCeroSumar: "You're out of Live draws. Use a coupon or add draws.",
