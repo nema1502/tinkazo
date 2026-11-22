@@ -11,6 +11,7 @@ import { generarPiezas } from "./marca/piezas.mjs";
 import { generarColeccion } from "./marca/coleccion.mjs";
 import { EVENTOS_QR } from "./marca/eventos.mjs";
 import { generarQrClave } from "./marca/qr-clave.mjs";
+import { zipLogos } from "./marca/logos-fondo.mjs";
 const destino = new URL("../public/marca/", import.meta.url);
 mkdirSync(destino, { recursive: true });
 // `node scripts/generar-marca.mjs --solo qr` regenera únicamente los QR clave (public/marca/qr/) y su ZIP, sin tocar nada más:
@@ -253,6 +254,9 @@ writeFileSync(new URL("tinkazo-kit-impresos.zip", destino), zip(entradasImpresos
 // El kit liviano para quien nos pone de sponsor: lo que necesita en un minuto, sin los impresos ni los stickers.
 const entradasSponsor = sponsor.map(([ruta, nombre]) => [`tinkazo-kit-sponsor/${ruta}`, leerPublico(nombre)]);
 writeFileSync(new URL("tinkazo-kit-sponsor.zip", destino), zip(entradasSponsor));
+// El paquete liviano de logos: fotos de perfil, cuadrados y horizontales con fondo, los transparentes y los vectores.
+const logos = zipLogos(leerPublico);
+writeFileSync(new URL("tinkazo-logos.zip", destino), logos.bytes);
 
 // La colección de stickers con personaje va aparte, con su propio ZIP: public/marca/coleccion/.
 const coleccion = generarColeccion(new URL("coleccion/", destino));
@@ -260,4 +264,4 @@ const coleccion = generarColeccion(new URL("coleccion/", destino));
 const qrClave = generarQrClave(new URL("qr/", destino));
 console.log("QR clave: tinkazo-qr.zip con " + qrClave.archivos + " archivos (" + (qrClave.zip / 1048576).toFixed(2) + " MB).");
 console.log(`Colección: ${coleccion.stickers} stickers, tinkazo-stickers.zip con ${coleccion.archivosZip} archivos y tinkazo-stickers-png.zip con ${coleccion.archivosPng}; la letra más chica a 5 cm mide ${coleccion.capMin[1].toFixed(2)} mm (${coleccion.capMin[0]}) y la de tinkazo.app, ${coleccion.capSello.toFixed(2)} mm.`);
-console.log(`Marca: llama, 4 logos (SVG y PNG de 2048), 2 sellos en trazos, 6 stickers (SVG y PDF), ${piezas.length} piezas nuevas (logos con dirección, stickers, hojas, redes, afiches, portada, impresos y sponsors), tinkazo-kit-marca.zip con ${entradas.length} archivos y tinkazo-kit-sponsor.zip con ${entradasSponsor.length} y tinkazo-kit-impresos.zip con ${entradasImpresos.length}.`);
+console.log(`Marca: llama, 4 logos (SVG y PNG de 2048), 2 sellos en trazos, 6 stickers (SVG y PDF), ${piezas.length} piezas nuevas (logos con dirección, stickers, hojas, redes, afiches, portada, impresos y sponsors), tinkazo-kit-marca.zip con ${entradas.length} archivos y tinkazo-kit-sponsor.zip con ${entradasSponsor.length}, tinkazo-logos.zip con ${logos.archivos} y tinkazo-kit-impresos.zip con ${entradasImpresos.length}.`);
