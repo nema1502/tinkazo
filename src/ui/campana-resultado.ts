@@ -80,6 +80,14 @@ export interface DepsDelResultado {
   billeteraPendiente?: () => boolean;
   /** Avisa cada vez que cambia la sesión de la página. Devuelve cómo dejar de escuchar. */
   alLlegarLaSesion?: (f: () => void) => () => void;
+  /**
+   * Hay una sala guardada en esta compu que esta cuenta todavía no puede mover: no hay sesión, o es una memoria de antes que no
+   * dice de quién es y falta completarla. Con otra cuenta conectada no cuenta: esa sala no es de esta cuenta. Sin esta función,
+   * nunca.
+   */
+  sinPoderMoverLaSala?: () => boolean;
+  /** Completa la memoria de antes con la organizadora de la sala (con sesión) y vuelve cuando terminó, sirvió o no. */
+  completarLaCuenta?: () => Promise<void>;
   /** Arranca el aviso de las cuentas ganadoras al servicio que da el acceso (después de que la sala dio su sí). */
   iniciarAltas: (sorteo: string, ganadoras: string[], alCambiar: () => void) => void;
   altasDe: () => Record<string, import("../campana/en-curso").EstadoDeAltaPremio>;
@@ -88,6 +96,9 @@ export interface DepsDelResultado {
 
 /* ------------------------------------------------------------ los tiempos */
 
+/** Tras guardar el resultado, cuántas veces se vuelve a leer si la lectura dice que todavía no hay, y cuánto se espera entre una y otra. */
+const REINTENTOS_TRAS_GUARDAR = 4;
+const ESPERA_TRAS_GUARDAR_MS = 1_500;
 /** Lo que se espera después de un fallo que llegó enseguida (la red caída): no se martilla. */
 const ESPERA_TRAS_FALLO_MS = 2_000;
 /** Si un pedido no contestó en tanto, sale otro del mismo sorteo sin cortar el anterior: la sala los ordena. */
@@ -131,6 +142,8 @@ interface AvisoEnCurso {
 const avisando = new Map<string, AvisoEnCurso>();
 let generacionDelResultado = 0;
 let enviandoResultado: string | null = null;
+/** El sello llegó a la red pero la cuenta no podía mover la sala: se avisa apenas pueda (al llegar la sesión o completarse). */
+let selloSinAvisar = false;
 const avisadasPorCelular = new Set<string>();
 /** Vuelve a dibujar a las ganadoras con lo último que se sabe de cada una. */
 let repintarGanadoras: (() => void) | null = null;
@@ -138,6 +151,7 @@ let repintarGanadoras: (() => void) | null = null;
 /** Para las pruebas: vuelve todo a como estaba. */
 export function reiniciarElResultado(): void {
   avisando.clear();
+  selloSinAvisar = false;
   generacionDelResultado = 0;
   enviandoResultado = null;
   avisadasPorCelular.clear();
@@ -163,6 +177,12 @@ export function publicarSellada(d: DepsDelResultado): void {
   const s = d.sala();
   const e = d.entrada();
   const f = d.sellado();
+  if (!s && e && f && f.raffleId !== undefined && !f.sinSello && d.sinPoderMoverLaSala?.()) {
+    // El sello quedó en la red y la sala no lo sabe: no se calla. Se dice que hace falta entrar, y se retoma al llegar la cuenta.
+    selloSinAvisar = true;
+    pedirLaCuenta(d, () => publicarSellada(d));
+    return;
+  }
   if (!s || !e || !f || f.raffleId === undefined || f.sinSello) return;
   if (d.faseDeLaSala() !== "cerrada" || e.evento !== s.evento || e.red !== s.red || e.contrato !== (d.contrato() ?? "")) return;
   const sorteo = String(f.raffleId);
@@ -189,6 +209,19 @@ export function publicarSellada(d: DepsDelResultado): void {
   if (!guardada) return;
   ponerPaso({ paso: "avisando" });
   void avisarHastaLaRonda(d, s, sorteo, f.round, true);
+}
+
+/**
+ * Hay una sala en esta compu que esta cuenta todavía no puede mover (sin sesión, o una memoria de antes sin completar): se dice
+ * en el panel, y mientras tanto se intenta completarla con la sesión. Con la cuenta ya completa se sigue con `seguir`.
+ */
+function pedirLaCuenta(d: DepsDelResultado, seguir: () => void): void {
+  ponerPaso({ paso: "entrar-para-seguir" });
+  void Promise.resolve(d.completarLaCuenta?.())
+    .catch(() => undefined)
+    .then(() => {
+      if (d.sala()) seguir();
+    });
 }
 
 type Resolucion = "hecho" | "rechazado" | "seguir";
@@ -303,7 +336,7 @@ async function resolver(d: DepsDelResultado, s: SalaDeCampana, sorteo: string, r
   if (r === "fase") {
     // Un aviso repetido que ya había entrado también contesta fase: se pregunta en qué fase quedó la sala.
     const est = await d.estado(s);
-    if (typeof est === "string") return est === "no-existe" ? rechazar(d, sorteo, "no-existe") : "seguir";
+    if (typeof est === "string") return est === "no-existe" || est === "token" ? rechazar(d, sorteo, est) : "seguir";
     if (est.fase === "sellada" || est.fase === "sorteada") {
       await quedoSellada(d, s, sorteo);
       return "hecho";
@@ -345,7 +378,9 @@ async function rechazar(d: DepsDelResultado, sorteo: string, motivo: MotivoDeRec
           ? { paso: "ganadoras", n: e?.premios ?? 1 }
           : motivo === "organizador-distinto"
             ? { paso: "otra-cuenta", fin: e?.organizadora?.slice(-4) ?? "" }
-            : { paso: "sala-borrada" };
+            : motivo === "token"
+              ? { paso: "tomada" }
+              : { paso: "sala-borrada" };
   // Respuesta definitiva de la sala para este sorteo: ya no cuenta como mandado sin respuesta.
   cambiarLaEntrada(d, (x) => {
     const nueva: SorteoDeCampana = { ...x, duda: false, mandados: (x.mandados ?? []).filter((m) => m !== sorteo) };
@@ -379,8 +414,8 @@ async function alVencerElPlazo(d: DepsDelResultado, s: SalaDeCampana, sorteo: st
       await rechazar(d, sorteo, est.fase === "cerrada" ? "ronda-pasada" : "lista-distinta");
       return;
     }
-    if (est === "no-existe") {
-      await rechazar(d, sorteo, "no-existe");
+    if (est === "no-existe" || est === "token") {
+      await rechazar(d, sorteo, est);
       return;
     }
     // No contestó: no se toma como cerrada. Queda en duda, guardada, y se vuelve a preguntar.
@@ -437,7 +472,11 @@ export async function alRevelar(enlace: Promise<string>, d: DepsDelResultado): P
 
 /** Manda el resultado con reintentos cada 10 segundos durante 2 minutos, y después ofrece el botón. */
 async function mandarResultado(d: DepsDelResultado, sala: SalaDeCampana | null, sorteo: string): Promise<void> {
-  if (!sala) return;
+  if (!sala) {
+    // El resultado queda guardado como pendiente y sale solo cuando la cuenta pueda mover la sala: mientras tanto se dice.
+    if (d.sinPoderMoverLaSala?.()) pedirLaCuenta(d, () => retomarAlArrancar(d));
+    return;
+  }
   const miGeneracion = ++generacionDelResultado;
   enviandoResultado = sorteo;
   const empezo = d.ahora();
@@ -449,7 +488,8 @@ async function mandarResultado(d: DepsDelResultado, sala: SalaDeCampana | null, 
     const r = await d.guardarResultado(sala, sorteo, comprobante);
     if (miGeneracion !== generacionDelResultado) return;
     if (r === "ok") return void (await resultadoHecho(d, sala, sorteo, e));
-    if (r === "no-existe" || r === "token") return ponerPaso({ paso: "sala-borrada" });
+    if (r === "token") return ponerPaso({ paso: "tomada" });
+    if (r === "no-existe") return ponerPaso({ paso: "sala-borrada" });
     if (r === "distinto" || (r === "fase" && e.duda === true)) {
       // La sala quedó atada a otro sorteo de esta lista: este no es el que vale.
       return ponerPaso({ paso: "otro-sorteo" });
@@ -468,12 +508,17 @@ async function resultadoHecho(d: DepsDelResultado, sala: SalaDeCampana, sorteo: 
   enviandoResultado = null;
   d.guardar({ ...e, resultado: "hecho" });
   d.fijarFase("sorteada");
-  await mostrarGanadoras(d, sala, sorteo);
+  // La sala acaba de decir que guardó el resultado: si la lectura todavía dice que no hay, es un resto pasajero y se vuelve a mirar.
+  await mostrarGanadoras(d, sala, sorteo, REINTENTOS_TRAS_GUARDAR);
 }
 
 /** Lee las ganadoras de la sala, las dibuja y, si coinciden con lo que se calculó acá, arranca el aviso al acceso. */
-async function mostrarGanadoras(d: DepsDelResultado, sala: SalaDeCampana, sorteo: string): Promise<void> {
-  const leido = await d.resultado(sala);
+async function mostrarGanadoras(d: DepsDelResultado, sala: SalaDeCampana, sorteo: string, reintentos = 0): Promise<void> {
+  let leido = await d.resultado(sala);
+  for (let i = 0; i < reintentos && leido === "sin-resultado"; i++) {
+    await d.esperar(ESPERA_TRAS_GUARDAR_MS);
+    leido = await d.resultado(sala);
+  }
   if (typeof leido === "string") return ponerPaso({ paso: "boton-resultado" });
   // Tras una recarga la sesión de Google se retoma aparte: hasta que llegue (o pase el tope) no se dice que es otra billetera.
   let esperandoLaSesion = d.otraBilletera() && (d.billeteraPendiente?.() ?? false);
@@ -536,6 +581,7 @@ export function registrarLasAcciones(d: DepsDelResultado): void {
       const s = d.sala();
       if (!s) return;
       void d.avisar(s, cuenta).then((r) => {
+        if (r === "token") return ponerPaso({ paso: "tomada" });
         if (r !== "ok") return;
         avisadasPorCelular.add(cuenta);
         repintarGanadoras?.();
@@ -568,6 +614,12 @@ export function retomarAlArrancar(d: DepsDelResultado): void {
   const s = d.sala();
   const e = d.entrada();
   if (!s || !e || e.evento !== s.evento || e.red !== s.red || d.sinGrabar()) return;
+  // El sello que no se pudo avisar por falta de cuenta sale ahora que la sala se puede mover.
+  if (selloSinAvisar) {
+    selloSinAvisar = false;
+    publicarSellada(d);
+    return;
+  }
   if (e.aviso === "pendiente" && e.sorteo !== undefined && e.ronda !== undefined) {
     if (!avisando.has(s.evento)) {
       ponerPaso({ paso: "avisando" });

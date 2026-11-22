@@ -27,6 +27,10 @@ export type PasoDelPuente =
   | { paso: "version-distinta" }
   | { paso: "sin-conexion" }
   | { paso: "avisando" | "no-avisamos" | "comprobando" | "avisada" | "sala-borrada" | "otro-sorteo" | "sorteo-pendiente" }
+  /** La sala ya no acepta el token de esta compu: otra compu tomó la campaña con la misma cuenta. */
+  | { paso: "tomada" }
+  /** Hay una sala en esta compu pero todavía no se sabe que esta cuenta la mueve (sin sesión, o sin completar): hace falta entrar. */
+  | { paso: "entrar-para-seguir" }
   | { paso: "no-comprobo" | "aviso-roto" }
   | { paso: "sello-por-confirmar" }
   | { paso: "tarde" | "lista-cambio" | "otra-lista" }
@@ -143,6 +147,10 @@ export function lineaDelPaso(p: PasoDelPuente): LineaDelPaso | null {
       return sin("cpoCelularesSellada");
     case "sala-borrada":
       return sin("cpoSeBorro");
+    case "tomada":
+      return sin("cpoTomadaL");
+    case "entrar-para-seguir":
+      return sin("cpoEntrarParaSeguir");
     case "otro-sorteo":
       return sin("cpoOtroSorteo");
     case "sorteo-pendiente":
@@ -178,6 +186,8 @@ export function botonDelPaso(p: PasoDelPuente): { clave: string; accion: AccionS
       return { clave: "cpoReintentar", accion: "reintentarPaso" };
     case "otra-cuenta":
       return { clave: "cpoCambiarCuenta", accion: "cambiarDeCuenta" };
+    case "entrar-para-seguir":
+      return { clave: "cpoCmEntrar", accion: "cambiarDeCuenta" };
     case "lista-sellada":
       return p.soltable ? { clave: "cpoPasar", accion: "soltarYPasar" } : null;
     // Un sello que la sala no aceptó: se suelta (si el show ya pasó, también) y la lista se vuelve a pasar para sellar de nuevo.

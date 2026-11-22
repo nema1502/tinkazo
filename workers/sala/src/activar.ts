@@ -5,7 +5,8 @@
  *
  * Esta parte no depende de Cloudflare: la usan `index.ts` y las pruebas en Node. Lee la red (Horizon, solo lectura, sin llave)
  * y nunca firma con la duda: si Horizon no contesta, o hay más pagos de los que se alcanzan a mirar, contesta 502 y no firma.
- * Las cuentas de quienes organizan no se guardan en claro: los topes por cuenta guardan una huella con sal del día.
+ * Los topes diarios por cuenta guardan una huella con sal del día. La lista de Tus campañas guarda la cuenta en claro junto con el
+ * texto firmado de su campaña, hasta 30 días después del sorteo (ver `activar-cupos.ts`).
  */
 import {
   CENTAVO,
@@ -17,8 +18,11 @@ import {
 import { reglaQueFalla } from "../../../src/campana/reglas-de-activar";
 import { leerMinimo, leerPb, minimoPosible } from "../../../src/stellar/comision-config";
 import { leerElCosto, leerLaCuenta } from "../../../src/stellar/retiro-config";
+import { formaDeToken } from "../../patrocinio/src/pollar";
 import type { Pollar } from "../../patrocinio/src/pollar";
-import { leerTextoDeCampana, viaPermitida } from "./campana";
+import type { AntesDeActivar, CampanaParaGuardar, TipoDeTope } from "./activar-cupos";
+import { leerDatosDeLista, leerTextoDeCampana, viaPermitida } from "./campana";
+import type { LecturaDeLista } from "./campana";
 import { firmarConLlaveAuto, llavePublicaAuto } from "./firma";
 import type { VariablesDeLlaveAuto } from "./firma";
 
@@ -28,6 +32,15 @@ export const MAX_CUERPO_ACTIVAR = 24_000;
 export const ACTIVACIONES_POR_DIA = 5;
 /** Pedidos de activación por conexión y por ventana de 10 minutos: cada uno cuesta una mirada a la red. */
 export const ACTIVAR_POR_CONEXION = 60;
+/**
+ * Pedidos de las rutas de Tus campañas (listar y usar en otra compu) por conexión y por ventana de 10 minutos, en un grupo
+ * propio que no gasta el de activar. Alcanza para un recinto con 20 empresas y 3 compus cada una, con un listado, una toma y
+ * dos reintentos por compu (240).
+ */
+export const CUENTA_POR_CONEXION = 300;
+/** Listados y tomas por cuenta y por ventana de 10 minutos, contados después de verificar la sesión. */
+export const LISTADOS_POR_CUENTA = 30;
+export const TOMAS_POR_CUENTA = 10;
 /** El emisor del dólar digital de Circle (USDC) en la red principal. Una prueba lo compara con el del sitio. */
 export const EMISOR_USDC = "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN";
 /** Horizon de la red principal: se lee sin llave y sin guardar nada. */
@@ -97,6 +110,10 @@ export interface CampanaParaActivar {
   evento: string;
   organizadora: string;
   premios: bigint[];
+  cierraMs: number;
+  sorteoMs: number;
+  /** Lo que Tus campañas necesita del texto. Si falta algo, la campaña se firma igual y solo no aparece en la lista. */
+  lista: LecturaDeLista;
 }
 
 export type LecturaParaActivar =
@@ -137,7 +154,17 @@ export function leerParaActivar(texto: string, ahora: number): LecturaParaActiva
   const nombre = esObjeto(empresa) ? empresa.nombre : null;
   const falla = reglaQueFalla({ premios: montos, cierraMs: base.cierraMs, sorteoMs: base.sorteoMs, nombre }, ahora);
   if (falla !== null) return forma(falla);
-  return { ok: true, compacto: JSON.stringify(c), evento: base.evento, organizadora, premios: montos };
+  const compacto = JSON.stringify(c);
+  return {
+    ok: true,
+    compacto,
+    evento: base.evento,
+    organizadora,
+    premios: montos,
+    cierraMs: base.cierraMs,
+    sorteoMs: base.sorteoMs,
+    lista: leerDatosDeLista(compacto),
+  };
 }
 
 /* ---------------------------------------------------------------- la mirada a la red */
@@ -328,12 +355,16 @@ export async function porteroAtiende(f: Pedir, o: { portero: string; secreto: st
 
 /** Lo que `POST /v1/activar` le pide a los topes por conexión y por cuenta (viven en el objeto `Cupos`). */
 export interface TopesDeActivar {
-  antes(ip: string, ficha: string): Promise<{ ok: true } | { ok: false; motivo: "rechazos" | "cupo-conexion"; esperaS: number }>;
+  antes(ip: string, ficha: string): Promise<AntesDeActivar>;
   rechazo(ip: string, ficha: string): Promise<void>;
   cuenta(cuenta: string, evento: string): Promise<{ ok: true } | { ok: false; esperaS: number }>;
   anotar(cuenta: string, evento: string): Promise<void>;
   /** Toma la nota de la comisión para este evento: `false` si ya es de otro evento (ver `tomarNota`). */
   nota(nota: string, evento: string): Promise<boolean>;
+  /** Si este evento no tiene otra dueña. Antes de esto se mira, si hace falta, las salas anteriores a la dueña. */
+  eventoLibre(cuenta: string, evento: string): Promise<boolean>;
+  /** Guarda la campaña de la cuenta para Tus campañas. Dice `ajeno` si el evento ya es de otra cuenta. */
+  guardarCampana(campana: Omit<CampanaParaGuardar, "ahora">): Promise<{ ok: true } | { ok: false; motivo: "ajeno" }>;
 }
 
 export interface DepsDeActivar {
@@ -344,6 +375,8 @@ export interface DepsDeActivar {
   /** El proveedor de cuentas de la sala (el mismo del alta), o null si no está configurado. */
   proveedor: Pick<Pollar, "verificar" | "billeteraDe"> | null;
   topes: TopesDeActivar;
+  /** Deja un código fijo en el registro: nunca una cuenta, una sesión ni un nombre. */
+  registrar?: (evento: string, datos?: Record<string, string | number>) => void;
 }
 
 /** Lo que contesta la activación: el estado, el cuerpo y, en un 429, cuánto esperar. */
@@ -357,6 +390,96 @@ const error = (estado: number, codigo: string, extra: Record<string, unknown> = 
   estado,
   cuerpo: { error: codigo, ...extra },
 });
+
+/** Lo que hace falta para saber quién es quien organiza: la conexión, el proveedor de cuentas y los topes de antes y de rechazos. */
+export interface DepsDeVerificar {
+  ip: string;
+  /** El proveedor de cuentas de la sala (el mismo del alta), o null si no está configurado. */
+  proveedor: Pick<Pollar, "verificar" | "billeteraDe"> | null;
+  topes: { antes: TopesDeActivar["antes"]; rechazo: TopesDeActivar["rechazo"] };
+}
+
+/**
+ * Quién es la cuenta de esta sesión: `cuenta` es null si la sesión no trae cuenta y el proveedor no tiene una billetera para
+ * ella. Quien llama decide qué responder en ese caso, porque no es lo mismo al activar que al listar.
+ */
+export type QuienOrganiza = { ok: true; cuenta: string | null } | { ok: false; respuesta: RespuestaDeActivar };
+
+/**
+ * Verifica la sesión de quien organiza, en el orden en que cuesta menos: los topes de la conexión y de la ficha antes de llamar
+ * a nadie, el proveedor configurado (503 sin-pollar), la sesión (502 red si el proveedor falla, 401 sesion y un rechazo
+ * contado si no la reconoce), solo Google y siempre en modo estricto (403 no-google y un rechazo) y, por último, la cuenta de la
+ * sesión o la billetera del usuario (502 red si el proveedor falla). La cuenta sale siempre del proveedor, nunca del pedido.
+ */
+export async function verificarQuienOrganiza(sesion: string, d: DepsDeVerificar): Promise<QuienOrganiza> {
+  // Antes de llamar al proveedor: los topes de rechazos y de pedidos de esta conexión y de esta sesión.
+  const antes = await d.topes.antes(d.ip, sesion);
+  if (!antes.ok) return { ok: false, respuesta: { ...error(429, antes.motivo), esperaS: antes.esperaS } };
+  if (d.proveedor === null) return { ok: false, respuesta: error(503, "sin-pollar") };
+  const verificada = await d.proveedor.verificar(sesion);
+  if (!verificada.ok) {
+    if (verificada.motivo === "pollar") return { ok: false, respuesta: error(502, "red") };
+    await d.topes.rechazo(d.ip, sesion);
+    return { ok: false, respuesta: error(401, "sesion") };
+  }
+  // Solo Google y siempre en modo estricto, aunque la lista de la sala esté en modo suave: una sesión que no dice por dónde
+  // entró no firma campañas ni recibe acceso en el portero.
+  const via = viaPermitida(verificada.via, "estricto");
+  if (!via.ok) {
+    await d.topes.rechazo(d.ip, sesion);
+    return { ok: false, respuesta: error(403, "no-google") };
+  }
+  let cuenta = verificada.cuenta;
+  if (cuenta === null) {
+    const billetera = await d.proveedor.billeteraDe(verificada.usuario);
+    if (!billetera.ok) return { ok: false, respuesta: error(502, "red") };
+    cuenta = billetera.cuenta;
+  }
+  return { ok: true, cuenta };
+}
+
+/** Los topes propios de las rutas de Tus campañas (viven en el objeto `Cupos`). */
+export interface TopesDeCuenta {
+  /** Rechazos de la conexión y de la ficha, y el ritmo del grupo propio de la conexión (una sesión conocida no lo suma). */
+  antes(ip: string, ficha: string, conocida: boolean): Promise<AntesDeActivar>;
+  /** Una sesión que el proveedor rechazó: las mismas tablas de rechazos que usa activar. */
+  rechazo(ip: string, ficha: string): Promise<void>;
+  /** Los listados y las tomas por cuenta, ya verificada la sesión. */
+  tope(cuenta: string, tipo: TipoDeTope): Promise<{ ok: true } | { ok: false; esperaS: number }>;
+}
+
+export interface DepsDeCuenta {
+  ip: string;
+  ahora: number;
+  proveedor: Pick<Pollar, "verificar" | "billeteraDe" | "conocida"> | null;
+  topes: TopesDeCuenta;
+}
+
+/**
+ * La cuenta de quien pide listar o usar una campaña en otra compu. Es la verificación de activar con tres cosas más, en este
+ * orden: sin forma de token no se cuenta nada ni se llama a nadie (401 sesion), el ritmo de la conexión tiene su grupo propio y
+ * una sesión que el proveedor ya dio por buena no lo suma, y después de verificar hay un tope por cuenta (429 cupo-cuenta).
+ * Sin cuenta, 409 sin-billetera. Una cuenta sin campañas y una que nunca existió reciben lo mismo: eso lo decide quien llama.
+ */
+export async function verificarCuentaDeCampanas(
+  sesion: unknown,
+  tipo: TipoDeTope,
+  d: DepsDeCuenta,
+): Promise<{ ok: true; cuenta: string } | { ok: false; respuesta: RespuestaDeActivar }> {
+  if (typeof sesion !== "string" || !formaDeToken(sesion, d.ahora)) return { ok: false, respuesta: error(401, "sesion") };
+  if (d.proveedor === null) return { ok: false, respuesta: error(503, "sin-pollar") };
+  const conocida = await d.proveedor.conocida(sesion);
+  const quien = await verificarQuienOrganiza(sesion, {
+    ip: d.ip,
+    proveedor: d.proveedor,
+    topes: { antes: (ip, ficha) => d.topes.antes(ip, ficha, conocida), rechazo: (ip, ficha) => d.topes.rechazo(ip, ficha) },
+  });
+  if (!quien.ok) return quien;
+  if (quien.cuenta === null) return { ok: false, respuesta: error(409, "sin-billetera") };
+  const cupo = await d.topes.tope(quien.cuenta, tipo);
+  if (!cupo.ok) return { ok: false, respuesta: { ...error(429, "cupo-cuenta"), esperaS: cupo.esperaS } };
+  return { ok: true, cuenta: quien.cuenta };
+}
 
 /**
  * Activa una campaña: comprueba la sesión, el texto, el pago de la comisión y los fondos, le da acceso a quien organiza en el
@@ -383,30 +506,14 @@ export async function activarCampana(cuerpo: unknown, d: DepsDeActivar): Promise
   const campana = leerParaActivar(texto, d.ahora);
   if (!campana.ok) return error(400, campana.error, { campo: campana.campo });
 
-  // Antes de llamar al proveedor: los topes de rechazos y de pedidos de esta conexión y de esta sesión.
-  const antes = await d.topes.antes(d.ip, sesion);
-  if (!antes.ok) return { ...error(429, antes.motivo), esperaS: antes.esperaS };
-  if (d.proveedor === null) return error(503, "sin-pollar");
-  const verificada = await d.proveedor.verificar(sesion);
-  if (!verificada.ok) {
-    if (verificada.motivo === "pollar") return error(502, "red");
-    await d.topes.rechazo(d.ip, sesion);
-    return error(401, "sesion");
-  }
-  // Solo Google y siempre en modo estricto, aunque la lista de la sala esté en modo suave: una sesión que no dice por dónde
-  // entró no firma campañas ni recibe acceso en el portero.
-  const via = viaPermitida(verificada.via, "estricto");
-  if (!via.ok) {
-    await d.topes.rechazo(d.ip, sesion);
-    return error(403, "no-google");
-  }
-  let cuenta = verificada.cuenta;
-  if (cuenta === null) {
-    const billetera = await d.proveedor.billeteraDe(verificada.usuario);
-    if (!billetera.ok) return error(502, "red");
-    cuenta = billetera.cuenta;
-  }
+  // La sesión de quien organiza: topes, proveedor, vía de Google y cuenta, en este orden y con las mismas respuestas de siempre.
+  const quien = await verificarQuienOrganiza(sesion, d);
+  if (!quien.ok) return quien.respuesta;
+  const cuenta = quien.cuenta;
   if (cuenta === null || cuenta !== campana.organizadora) return error(403, "organizadora");
+
+  // Un evento tiene una sola dueña: si ya es de otra cuenta, ni se mira la red. Con la misma respuesta aunque la sala no exista.
+  if (!(await d.topes.eventoLibre(cuenta, campana.evento))) return error(409, "evento-ajeno");
 
   const cupo = await d.topes.cuenta(cuenta, campana.evento);
   if (!cupo.ok) return { ...error(429, "cupo-cuenta"), esperaS: cupo.esperaS };
@@ -440,6 +547,30 @@ export async function activarCampana(cuerpo: unknown, d: DepsDeActivar): Promise
 
   const firma = firmarConLlaveAuto(d.env, campana.compacto);
   if (firma === null) return error(503, "sin-llave");
+  // La campaña queda guardada para Tus campañas. Si el texto no trae algo de lo que la lista necesita, se firma igual y solo no
+  // aparece en ella. Si la escritura falla, el panel reintenta: activar de nuevo es gratis.
+  if (campana.lista.ok) {
+    let guardada: { ok: true } | { ok: false; motivo: "ajeno" } | null = null;
+    try {
+      guardada = await d.topes.guardarCampana({
+        cuenta,
+        evento: campana.evento,
+        texto: campana.compacto,
+        firma,
+        empresa: campana.lista.empresa,
+        zona: campana.lista.zona,
+        abreMs: campana.lista.abreMs,
+        cierraMs: campana.cierraMs,
+        sorteoMs: campana.sorteoMs,
+      });
+    } catch {
+      guardada = null;
+    }
+    if (guardada === null) return error(503, "ocupado");
+    if (!guardada.ok) return error(409, "evento-ajeno");
+  } else {
+    d.registrar?.("activar-sin-lista", { codigo: campana.lista.campo.slice(0, 40) });
+  }
   await d.topes.anotar(cuenta, campana.evento);
   return { estado: 200, cuerpo: { texto: campana.compacto, firma, evento: campana.evento, organizadora: cuenta } };
 }

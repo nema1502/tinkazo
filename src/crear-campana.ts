@@ -95,6 +95,8 @@ function depsReales(): DepsDelCreador {
     // Activar solo se ofrece con lo que cobra Tinkazo configurado: es el mismo cobro que después pide el panel. Sin eso, la
     // página es la de siempre y solo baja la campaña.
     activar: cobro === null ? undefined : activarEnElPanel,
+    // Tus campañas se ofrece solo si la sala de afuera la tiene: se le pregunta una vez, sin gastar nada. La demostración no la ofrece.
+    tusDisponible: demo ? () => Promise.resolve(false) : () => import("./sala/campana-org").then((m) => m.salaTieneTusCampanas()),
     // El resumen dice el servicio y el total a poner antes de pedir nada, calculados para esta campaña.
     comision: comisionDelArmado(cobro),
     origen: location.origin,

@@ -43,6 +43,23 @@ SOLO_GOOGLE = "estricto"
 # habilitado para el envío.
 CORREO_GANADORAS = "1"
 CORREO_DE = "hola@tinkazo.app"
+# La versión del correo a quien gana. "1" es la que es cierta siempre: pide abrir el enlace en el mismo navegador donde se anotó. "2"
+# promete que se puede abrir desde cualquier aparato (otro aparato pide un código al correo): solo se prende cuando anotarse deje
+# la cuenta protegida para todas las personas y no quede ninguna campaña viva con gente anotada antes de ese cambio.
+CORREO_VERSION = "1"
+# La marca de correo confirmado que manda el celular (POST campana/yo con "c"). Nace apagada: con "0" se ignora y a cada cuenta le
+# sale la versión que dice CORREO_VERSION. Con "1", quien confirmó su correo recibe la versión 2 aunque la general sea la 1.
+CORREO_MARCA = "0"
+
+# Tus campañas (POST /v1/mis-campanas y POST /v1/campana/recuperar, ver README.md): quien organiza ve sus campañas desde cualquier
+# navegador y usa una en esta compu. Solo con "1" atienden, y cambiarlo es publicar otra vez con el mismo corte de sockets: no es un
+# botón para usar en pleno evento.
+TUS_CAMPANAS = "1"
+# El correo a quien organiza cada vez que su campaña se abre en otra compu (uno por campaña cada 10 minutos). Es la defensa de quien
+# perdió su sesión de Google: va PRENDIDO junto con TUS_CAMPANAS, en la misma publicación, y además pide todo lo que pide el correo a
+# quien gana. Sin él, quien robe una sesión puede tomar una campaña sin que su dueña se entere: si no se aprobó mandar ese correo, las
+# dos variables van en "0" y se prenden juntas después (cada cambio es publicar otra vez, con el mismo corte de sockets).
+CORREO_TOMA = "1"
 
 # La activación al pagar (POST /v1/activar, ver README.md): la sala firma sola el archivo de una campaña cuando comprueba en la red
 # que la comisión del evento se pagó desde la cuenta de Google de quien organiza. Solo con "1" está prendida.

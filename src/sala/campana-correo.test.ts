@@ -384,6 +384,135 @@ describe("el aviso por correo a quien gana", () => {
     const delCorreo = eventos.filter((e) => e.evento.startsWith("correo-"));
     expect(delCorreo).toEqual([{ evento: "correo-fin", datos: { cuentas: 2, enviados: 2, intentadas: 2 } }]);
   });
+
+  describe("la versión del correo: la A es cierta siempre y la B está escrita y apagada", () => {
+    const PIDE_EL_MISMO_NAVEGADOR = "en el mismo navegador, donde te anotaste";
+    const PIDE_CUALQUIER_APARATO = "abrí este enlace desde cualquier celular o compu";
+    const AYUDA_A = "Si no podés abrirlo ahí, respondé este correo.";
+    const AYUDA_B = "Si entrás desde otro lado, te llega un código a este correo para confirmar que sos vos.";
+
+    /** La marca de correo confirmado, como la manda el celular: la consulta propia con la llave y `c`. */
+    const mandarMarca = (p: PersonaDePrueba, extra: Record<string, unknown> = { c: true }, origen?: string): Promise<Response> =>
+      pedir(`/v1/sala/${sala.id}/campana/yo`, {
+        cuerpo: { cuenta: p.cuenta, llave: p.llave, ...extra },
+        ...(origen === undefined ? {} : { cabeceras: { Origin: origen } }),
+      });
+    const marcas = (): number =>
+      Number(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM sala WHERE k LIKE 'confirmo:%'")[0]?.c ?? 0);
+    const paraCorreo = (correo: string): Mensaje => enviados.find((m) => m.to === correo) as Mensaje;
+
+    it("por defecto sale la versión A, que no promete nada que no sea cierto", async () => {
+      expect((await guardarResultado()).status).toBe(204);
+      await mundo.esperarSegundoPlano();
+      expect(enviados).toHaveLength(2);
+      for (const m of enviados) {
+        expect(m.text).toContain(PIDE_EL_MISMO_NAVEGADOR);
+        expect(m.text).toContain(AYUDA_A);
+        expect(m.text).not.toContain(PIDE_CUALQUIER_APARATO);
+      }
+    });
+
+    it("con la variable en 2, todas salen con la versión B", async () => {
+      mundo.env.CORREO_VERSION = "2";
+      expect((await guardarResultado()).status).toBe(204);
+      await mundo.esperarSegundoPlano();
+      expect(enviados).toHaveLength(2);
+      for (const m of enviados) {
+        expect(m.text).toContain(PIDE_CUALQUIER_APARATO);
+        expect(m.text).toContain(AYUDA_B);
+        expect(m.html).toContain(AYUDA_B);
+        expect(m.text).not.toContain(PIDE_EL_MISMO_NAVEGADOR);
+      }
+    });
+
+    it("con la variable rota o con otro valor, sigue la A", async () => {
+      mundo.env.CORREO_VERSION = "dos";
+      await guardarResultado();
+      await mundo.esperarSegundoPlano();
+      expect(enviados.every((m) => m.text.includes(AYUDA_A))).toBe(true);
+    });
+
+    it("la marca de correo confirmado se ignora mientras esté apagada: no da error y no escribe", async () => {
+      const [primera] = ganadoras as [PersonaDePrueba];
+      const r = await mandarMarca(primera);
+      expect(r.status).toBe(200);
+      expect(marcas()).toBe(0);
+      await guardarResultado();
+      await mundo.esperarSegundoPlano();
+      expect(paraCorreo(CORREO_ANA).text).toContain(AYUDA_A);
+    });
+
+    it("prendida, quien manda su marca con su llave recibe la versión B y las demás la A", async () => {
+      mundo.env.CORREO_MARCA = "1";
+      const [primera] = ganadoras as [PersonaDePrueba];
+      expect((await mandarMarca(primera)).status).toBe(200);
+      expect(marcas()).toBe(1);
+      await guardarResultado();
+      await mundo.esperarSegundoPlano();
+      expect(paraCorreo(CORREO_ANA).text).toContain(AYUDA_B);
+      expect(paraCorreo(CORREO_ANA).text).toContain(PIDE_CUALQUIER_APARATO);
+      expect(paraCorreo(CORREO_NORA).text).toContain(AYUDA_A);
+      expect(paraCorreo(CORREO_NORA).text).toContain(PIDE_EL_MISMO_NAVEGADOR);
+    });
+
+    it("prendida, la marca de una persona anotada se guarda una sola vez aunque la repita", async () => {
+      mundo.env.CORREO_MARCA = "1";
+      const [primera] = ganadoras as [PersonaDePrueba];
+      for (let i = 0; i < 5; i++) expect((await mandarMarca(primera)).status).toBe(200);
+      expect(marcas()).toBe(1);
+    });
+
+    it("prendida, sin la llave correcta o sin estar anotada no se guarda nada", async () => {
+      mundo.env.CORREO_MARCA = "1";
+      const [primera] = ganadoras as [PersonaDePrueba];
+      const conOtraLlave = await mandarMarca({ ...primera, llave: "otra".padEnd(22, "z") });
+      expect(conOtraLlave.status).toBe(200);
+      const ajena = personaDePrueba(mundo, 90);
+      expect((await mandarMarca(ajena)).status).toBe(200);
+      expect(marcas()).toBe(0);
+    });
+
+    it("prendida, quien no es de la lista no puede dar la versión B a otra cuenta", async () => {
+      mundo.env.CORREO_MARCA = "1";
+      const [primera] = ganadoras as [PersonaDePrueba];
+      // La perdedora manda su marca con SU llave, pero con la cuenta de una ganadora: no coincide y no se guarda.
+      await mandarMarca({ ...primera, llave: perdedora.llave });
+      expect(marcas()).toBe(0);
+      await guardarResultado();
+      await mundo.esperarSegundoPlano();
+      expect(paraCorreo(CORREO_ANA).text).toContain(AYUDA_A);
+    });
+
+    it("prendida, la marca pide un origen del sitio y una forma exacta", async () => {
+      mundo.env.CORREO_MARCA = "1";
+      const [primera] = ganadoras as [PersonaDePrueba];
+      expect((await mandarMarca(primera, { c: true }, "https://otro-sitio.example")).status).toBe(403);
+      expect((await mandarMarca(primera, { c: false })).status).toBe(400);
+      expect((await mandarMarca(primera, { c: "true" })).status).toBe(400);
+      expect(marcas()).toBe(0);
+      // La consulta de siempre, sin la marca, sigue siendo una lectura que no pide origen.
+      expect((await mandarMarca(primera, {}, "https://otro-sitio.example")).status).toBe(200);
+    });
+
+    it("la marca no cambia lo que contesta la consulta propia, ni deja rastro en el registro", async () => {
+      mundo.env.CORREO_MARCA = "1";
+      const [primera] = ganadoras as [PersonaDePrueba];
+      const sin = await (await mandarMarca(primera, {})).json();
+      const con = await (await mandarMarca(primera)).json();
+      expect(con).toEqual(sin);
+      expect(todoLoVisible()).not.toContain("confirmo");
+    });
+
+    it("si la marca se apaga después, lo ya guardado no cambia el correo", async () => {
+      mundo.env.CORREO_MARCA = "1";
+      const [primera] = ganadoras as [PersonaDePrueba];
+      await mandarMarca(primera);
+      mundo.env.CORREO_MARCA = "0";
+      await guardarResultado();
+      await mundo.esperarSegundoPlano();
+      expect(paraCorreo(CORREO_ANA).text).toContain(AYUDA_A);
+    });
+  });
 });
 
 describe("reservar las cuentas a las que se les avisa", () => {

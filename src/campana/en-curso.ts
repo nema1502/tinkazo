@@ -8,11 +8,15 @@
  * la herramienta se comporta exactamente como siempre. No guarda tokens ni nombres.
  */
 import { network } from "../stellar/config";
+import { activeWallet } from "../stellar/wallet-lite";
 import { campanasActivo } from "./bandera";
+import { seVeDesde } from "./de-quien";
 
 export const CLAVE_SORTEOS = "tinkazo.campana.sorteos";
 /** La clave de la sala de quien organiza (`sala/campana-org.ts`). Una prueba comprueba que sigan siendo la misma. */
 export const CLAVE_DE_LA_SALA = "tinkazo.campana.org";
+/** Dónde, dentro de esa misma clave, quedan las salas de otras cuentas de cada red (`CLAVE_DE_LAS_OTRAS_SALAS` de `sala/campana-org.ts`). */
+export const CLAVE_DE_LAS_OTRAS = "otras";
 /** Hasta cuántos eventos se recuerdan, el más nuevo primero. */
 export const MAX_SORTEOS = 5;
 /** Lo que vive una lista pasada sin sorteo: lo mismo que una sala de campaña. */
@@ -104,8 +108,16 @@ function leerEntrada(x: unknown): SorteoDeCampana | null {
   return e;
 }
 
-/** Todo lo recordado, el más nuevo primero. Lo que no se entiende se descarta; sin almacenamiento, nada. */
-export function leerSorteosDeCampana(a: Almacen | null = almacenLocal()): SorteoDeCampana[] {
+/**
+ * La cuenta con que se entró, o `null` si no hay sesión. Es con la que se decide qué campaña se ve desde esta compu: lo que
+ * guardó otra cuenta no se ofrece ni se mueve (`de-quien.ts`).
+ */
+export function cuentaConectada(): string | null {
+  return activeWallet()?.address ?? null;
+}
+
+/** Todo lo recordado, de cualquier cuenta, el más nuevo primero. Es lo que se reescribe: lo de otra cuenta se conserva. */
+function leerTodasLasEntradas(a: Almacen | null): SorteoDeCampana[] {
   if (!a) return [];
   try {
     const x: unknown = JSON.parse(a.getItem(CLAVE_SORTEOS) ?? "[]");
@@ -116,20 +128,36 @@ export function leerSorteosDeCampana(a: Almacen | null = almacenLocal()): Sorteo
   }
 }
 
-/** Guarda la entrada de su red y su evento, reemplazando la anterior. Hasta cinco, la más nueva primero. */
+/**
+ * Lo recordado que se ve desde la cuenta conectada, el más nuevo primero. Lo que no se entiende se descarta; sin
+ * almacenamiento, nada. Lo de otra cuenta no sale, pero sigue guardado.
+ */
+export function leerSorteosDeCampana(a: Almacen | null = almacenLocal(), cuenta: string | null = cuentaConectada()): SorteoDeCampana[] {
+  return leerTodasLasEntradas(a).filter((e) => seVeDesde(e.organizadora, cuenta));
+}
+
+/**
+ * Guarda la entrada de su red y su evento, reemplazando la anterior. Hasta cinco, la más nueva primero. Las de otras cuentas
+ * no se tocan.
+ */
 export function guardarSorteoDeCampana(e: SorteoDeCampana, a: Almacen | null = almacenLocal()): void {
   if (!a) return;
   try {
-    const otras = leerSorteosDeCampana(a).filter((x) => !(x.red === e.red && x.evento === e.evento));
+    const otras = leerTodasLasEntradas(a).filter((x) => !(x.red === e.red && x.evento === e.evento));
     a.setItem(CLAVE_SORTEOS, JSON.stringify([e, ...otras].slice(0, MAX_SORTEOS)));
   } catch {
     /* sin lugar o bloqueado: la campaña anda igual, solo que no retoma */
   }
 }
 
-/** La entrada de ese evento en esa red, o `null`. */
-export function entradaDelEvento(red: RedDeCampana, evento: string, a: Almacen | null = almacenLocal()): SorteoDeCampana | null {
-  return leerSorteosDeCampana(a).find((x) => x.red === red && x.evento === evento) ?? null;
+/** La entrada de ese evento en esa red que se ve desde la cuenta conectada, o `null`. */
+export function entradaDelEvento(
+  red: RedDeCampana,
+  evento: string,
+  a: Almacen | null = almacenLocal(),
+  cuenta: string | null = cuentaConectada(),
+): SorteoDeCampana | null {
+  return leerSorteosDeCampana(a, cuenta).find((x) => x.red === red && x.evento === evento) ?? null;
 }
 
 /** Si la entrada tiene algún sorteo que salió hacia la sala sin una respuesta definitiva. */
@@ -139,30 +167,39 @@ const FASES_ACTIVAS: readonly string[] = ["abierta", "cerrada", "sellada", "sort
 
 /**
  * La sala de campaña que esta compu tiene viva en esa red: su evento y su fase. Es lo que hace que haya una campaña
- * activa (sin ella, la herramienta no se entera de nada). Lee la memoria de quien organiza sin traer su módulo.
+ * activa (sin ella, la herramienta no se entera de nada). Lee la memoria de quien organiza sin traer su módulo. La sala de
+ * otra cuenta no cuenta como activa desde esta (y no se borra).
  */
 export function salaDeCampanaActiva(
   red: RedDeCampana,
   ahora: number = Date.now(),
   a: Almacen | null = almacenLocal(),
+  cuenta: string | null = cuentaConectada(),
 ): { evento: string; fase: string } | null {
   if (!a) return null;
   try {
     const todo: unknown = JSON.parse(a.getItem(CLAVE_DE_LA_SALA) ?? "{}");
-    const memoria = esObjeto(todo) ? todo[red] : undefined;
-    if (!esObjeto(memoria) || !esObjeto(memoria.sala)) return null;
-    const { evento, vence } = memoria.sala;
-    if (!esTexto(evento) || typeof vence !== "number" || vence <= ahora) return null;
-    if (!esTexto(memoria.fase) || !FASES_ACTIVAS.includes(memoria.fase)) return null;
-    return { evento, fase: memoria.fase };
+    if (!esObjeto(todo)) return null;
+    // La sala en curso y, si no es de esta cuenta, las de otras cuentas que quedaron a un costado (`sala/campana-org.ts`).
+    const otras = esObjeto(todo[CLAVE_DE_LAS_OTRAS]) ? todo[CLAVE_DE_LAS_OTRAS][red] : undefined;
+    const candidatas: unknown[] = [todo[red], ...(Array.isArray(otras) ? otras : [])];
+    for (const memoria of candidatas) {
+      if (!esObjeto(memoria) || !esObjeto(memoria.sala)) continue;
+      const { evento, vence } = memoria.sala;
+      if (!esTexto(evento) || typeof vence !== "number" || vence <= ahora) continue;
+      if (!esTexto(memoria.fase) || !FASES_ACTIVAS.includes(memoria.fase)) continue;
+      if (!seVeDesde(esTexto(memoria.cuenta) ? memoria.cuenta : null, cuenta)) continue;
+      return { evento, fase: memoria.fase };
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
-/** Si hay una sala de campaña activa en la red de esta pestaña. */
-export function hayCampanaActiva(ahora: number = Date.now(), a: Almacen | null = almacenLocal()): boolean {
-  return campanasActivo() && salaDeCampanaActiva(network.name, ahora, a) !== null;
+/** Si hay una sala de campaña activa en la red de esta pestaña, y se ve desde la cuenta conectada. */
+export function hayCampanaActiva(ahora: number = Date.now(), a: Almacen | null = almacenLocal(), cuenta: string | null = cuentaConectada()): boolean {
+  return campanasActivo() && salaDeCampanaActiva(network.name, ahora, a, cuenta) !== null;
 }
 
 const contratoDeAhora = (): string => network.contractId ?? "";
@@ -224,14 +261,45 @@ export function listaCambiadaDeLaCampana(hash: string, ahora: number = Date.now(
 }
 
 /**
+ * La entrada de un sorteo que ya se hizo en otra compu, armada con lo que la sala publica del resultado (el número del sorteo,
+ * las ganadoras en orden y el comprobante). Con ella, la compu que toma la campaña (Usar en esta compu) retoma el paso de las
+ * ganadoras: Avisar y el comprobante andan igual que en la compu donde se sorteó. No trae la huella de la lista ni la ronda,
+ * porque esta compu nunca selló nada: sin la huella, ningún sello de acá se confunde con el de la campaña.
+ */
+export function entradaDeUnSorteoRecuperado(a: {
+  evento: string;
+  red: RedDeCampana;
+  contrato: string;
+  organizadora: string | null;
+  ahora: number;
+  resultado: { sorteo: string; ganadoras: readonly string[]; comprobante: string };
+}): SorteoDeCampana {
+  const { sorteo, ganadoras, comprobante } = a.resultado;
+  return {
+    evento: a.evento,
+    red: a.red,
+    contrato: a.contrato,
+    huella: "",
+    premios: ganadoras.length,
+    organizadora: a.organizadora,
+    pasadaEn: a.ahora,
+    sorteo,
+    aviso: "hecho",
+    resultado: "hecho",
+    comprobante,
+    ganadoras: [...ganadoras],
+  };
+}
+
+/**
  * Si el sorteo es de una campaña de empresa: alguna entrada de esta red y este contrato lo tiene entre los que salieron
  * hacia la sala. Sin la bandera, sin entradas o con un almacenamiento que lanza, falso.
  */
-export function esSorteoDeCampana(raffleId: bigint | undefined, a: Almacen | null = almacenLocal()): boolean {
+export function esSorteoDeCampana(raffleId: bigint | undefined, a: Almacen | null = almacenLocal(), cuenta: string | null = cuentaConectada()): boolean {
   if (raffleId === undefined || !campanasActivo()) return false;
   try {
     const id = String(raffleId);
-    return leerSorteosDeCampana(a).some(
+    return leerSorteosDeCampana(a, cuenta).some(
       (e) => e.red === network.name && e.contrato === contratoDeAhora() && (e.sorteo === id || (e.mandados ?? []).includes(id)),
     );
   } catch {

@@ -156,11 +156,18 @@ export function pagoInicial(idioma: "es" | "en", alta: ProductoALaVenta | null, 
   return { idioma, alta, medios, fase: "ofrecer", orden: null, falta: null, buscando: false, noVisto: false, tarda: false, noLlego: false, vencida: false, error: null, arreglo: "probar" };
 }
 
-/** Para qué se abrió el paso: al entrar, al entrar con una lista lista, antes de sellar, antes de sortear o para recibir un premio. */
-export type Para = "entrada" | "entrada-con-lista" | "sello" | "sorteo" | "premio";
+/**
+ * Para qué se abrió el paso: al entrar, al entrar con una lista lista, antes de sellar, antes de sortear, para recibir un
+ * premio o antes de pagar el servicio de una campaña de empresa.
+ */
+export type Para = "entrada" | "entrada-con-lista" | "sello" | "sorteo" | "premio" | "pago";
 
-/** El paso del premio se porta como el de la entrada (Seguir al final, sin Volver, sin cupón) y cambia solo lo que dice. */
-export const comoEntrada = (p: Para): boolean => p === "entrada" || p === "premio";
+/**
+ * El paso del premio y el del pago se portan como el de la entrada (Seguir al final, sin Volver) y cambian solo lo que dicen.
+ * El del pago no muestra la línea de los sorteos del regalo ni la del primer sello: lo único que dice al final es que ya se
+ * puede pagar desde esta compu.
+ */
+export const comoEntrada = (p: Para): boolean => p === "entrada" || p === "premio" || p === "pago";
 
 export type Parte = "activar" | "proteger";
 
@@ -1047,9 +1054,11 @@ function parte1Actual(e: EntradaVista, caja: CajaVista): Armado {
 
 /** La vista del paso para lo que se sabe ahora. */
 export function vistaDe(entrada: EntradaVista): Vista {
-  // Quien vino a recibir un premio no tiene nada que hacer en Prueba: ninguna caja lo ofrece y no hay salida a Prueba.
+  // Quien vino a recibir un premio, o a pagar el servicio de una campaña oficial, no tiene nada que hacer en Prueba: ninguna caja
+  // lo ofrece y no hay salida a Prueba. Sin forma de dejar la cuenta lista en esta compu, queda la explicación y Cerrar sesión.
   const premio = entrada.para === "premio";
-  const e: EntradaVista = premio ? { ...entrada, puedePasarAPrueba: false } : entrada;
+  const pago = entrada.para === "pago";
+  const e: EntradaVista = premio || pago ? { ...entrada, puedePasarAPrueba: false } : entrada;
   const orden = ordenDe(e);
   const final = listaLa(e, "activar") && listaLa(e, "proteger");
   const actual = orden.find((p) => !listaLa(e, p)) ?? null;
@@ -1079,16 +1088,17 @@ export function vistaDe(entrada: EntradaVista): Vista {
     // La cuenta que ya estaba activada: lo que dijo el servidor al abrir el paso.
     const delCupo = !delRegalo && acceso.cupo && acceso.cupo.quedan > 0 ? lineaDelRegalo(acceso.cupo) : null;
     const llena: Texto = { clave: "altaBienvenidaLlena", luego: { clave: "altaBienvenidaMasTarde" } };
-    const linea = premio ? null : !delRegalo ? delCupo : sinElRegalo ? llena : conSorteos;
+    // El paso del pago no dice los sorteos: lo único que dice al final es que ya se puede pagar desde esta compu.
+    const linea = premio || pago ? null : !delRegalo ? delCupo : sinElRegalo ? llena : conSorteos;
     // Con el nombre de «Se te acabaron», que lleva a lo mismo: «Practicar sin cuenta» diría lo contrario del título.
-    const practicar = !premio && sinElRegalo && e.puedePasarAPrueba ? boton("practicar", "pagoSortearEnPrueba", e.corre === "cerrando") : null;
+    const practicar = !premio && !pago && sinElRegalo && e.puedePasarAPrueba ? boton("practicar", "pagoSortearEnPrueba", e.corre === "cerrando") : null;
     return {
       ...(linea ? { linea } : {}),
       ...(practicar ? { practicar } : {}),
       final: true,
       titulo: "clListaTitulo",
       // Con el premio, la línea dice para qué quedó lista. Para quien organiza, como siempre, sin línea propia.
-      bajada: premio ? "clPremioListo" : "",
+      bajada: premio ? "clPremioListo" : pago ? "clPagoListo" : "",
       cajas,
       principal: e.corre === "cerrando" ? { ...p, apagado: true } : p,
       volver: comoEntrada(e.para) ? null : boton("volver", "clVolver"),
@@ -1103,7 +1113,7 @@ export function vistaDe(entrada: EntradaVista): Vista {
   // Cerrando sesión, la principal espera: la salida ya está en marcha.
   const p = principal as Boton | null;
   const principalFinal = p && e.corre === "cerrando" ? { ...p, apagado: true } : p;
-  const notas: string[] = e.puedePasarAPrueba || premio ? [] : ["modeSwitchBlocked"];
+  const notas: string[] = e.puedePasarAPrueba || premio || pago ? [] : ["modeSwitchBlocked"];
   return {
     final: false,
     titulo: "clTitulo",
@@ -1115,7 +1125,7 @@ export function vistaDe(entrada: EntradaVista): Vista {
     estado: lineaDeEstado(e),
     notas,
     salidas: {
-      prueba: premio || principalFinal?.accion === "pasar-a-prueba" ? null : { apagado: !e.puedePasarAPrueba },
+      prueba: premio || pago || principalFinal?.accion === "pasar-a-prueba" ? null : { apagado: !e.puedePasarAPrueba },
       cerrar: { apagado: e.corre === "cerrando" },
     },
   };

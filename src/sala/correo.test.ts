@@ -11,9 +11,11 @@ import {
   esCorreo,
   limpiarTexto,
   llamarAlProveedor,
+  marcaDeCorreoPrendida,
   mensajeroDeCloudflare,
   premioDelPuesto,
   textoDelCorreo,
+  versionDelCorreo,
   type EnlaceDeCorreo,
   type Llamar,
   type Mensajero,
@@ -220,6 +222,28 @@ describe("el pedido al proveedor de cuentas", () => {
   });
 });
 
+/**
+ * Los textos del pedido y la ayuda, escritos otra vez a mano acá: si alguien cambia el correo, esta prueba lo avisa. La versión A
+ * es la que es cierta siempre (la cuenta reconoce el navegador y no el aparato). La B es cierta solo si la cuenta quedó protegida
+ * y el correo es el de la sesión. Son los de la sección 4.4 del diseño del celular.
+ */
+const PEDIDO_A = {
+  es: "Para recibirlo, abrí este enlace en el mismo celular o compu, y en el mismo navegador, donde te anotaste. Entrá con la misma cuenta de Google:",
+  en: "To receive it, open this link on the same phone or computer, and in the same browser, where you signed up. Sign in with the same Google account:",
+};
+const AYUDA_A = {
+  es: "Si no podés abrirlo ahí, respondé este correo.",
+  en: "If you can't open it there, reply to this email.",
+};
+const PEDIDO_B = {
+  es: "Para recibirlo, abrí este enlace desde cualquier celular o compu y entrá con la misma cuenta de Google con la que te anotaste:",
+  en: "To receive it, open this link on any phone or computer and sign in with the same Google account you signed up with:",
+};
+const AYUDA_B = {
+  es: "Si entrás desde otro lado, te llega un código a este correo para confirmar que sos vos.",
+  en: "If it's a different one, a code will come to this email to confirm it's you.",
+};
+
 describe("el texto del correo", () => {
   const datos = { nombre: "Ana", premio: "400 dólares digitales", empresa: "Empresa de ejemplo", enlace: ENLACE };
 
@@ -232,12 +256,67 @@ describe("el texto del correo", () => {
         "",
         "Ganaste 400 dólares digitales en el sorteo de Empresa de ejemplo.",
         "",
-        "Para recibirlo, abrí este enlace y entrá con la misma cuenta de Google con la que te anotaste:",
+        PEDIDO_A.es,
         ENLACE,
+        "",
+        AYUDA_A.es,
         "",
         "Recibir tu premio es gratis. Tinkazo nunca te pide una contraseña ni un pago.",
       ].join("\n"),
     );
+  });
+
+  it("la versión B, con el correo confirmado, cambia el pedido y la ayuda y nada más", () => {
+    for (const idioma of ["es", "en"] as const) {
+      const a = textoDelCorreo(idioma, datos);
+      const b = textoDelCorreo(idioma, { ...datos, confirmo: true });
+      expect(b.texto).toBe(a.texto.replace(PEDIDO_A[idioma], PEDIDO_B[idioma]).replace(AYUDA_A[idioma], AYUDA_B[idioma]));
+      expect(b.texto).toContain(PEDIDO_B[idioma]);
+      expect(b.texto).toContain(AYUDA_B[idioma]);
+      expect(b.texto).not.toContain(PEDIDO_A[idioma]);
+      expect(b.texto).not.toContain(AYUDA_A[idioma]);
+      expect(b.asunto).toBe(a.asunto);
+    }
+  });
+
+  it("sin la marca, o con ella en falso, sale la versión A, que es cierta siempre", () => {
+    for (const confirmo of [undefined, false]) {
+      const c = textoDelCorreo("es", { ...datos, ...(confirmo === undefined ? {} : { confirmo }) });
+      expect(c.texto).toContain(PEDIDO_A.es);
+      expect(c.texto).toContain(AYUDA_A.es);
+    }
+  });
+
+  it("la ayuda va entre el enlace y el cierre, en el texto plano y en el HTML, en las dos versiones", () => {
+    for (const idioma of ["es", "en"] as const) {
+      for (const confirmo of [false, true]) {
+        const c = textoDelCorreo(idioma, { ...datos, confirmo });
+        const ayuda = (confirmo ? AYUDA_B : AYUDA_A)[idioma];
+        const cierre = idioma === "es" ? "Recibir tu premio es gratis." : "Receiving your prize is free.";
+        const plano = c.texto;
+        expect(plano.indexOf(ENLACE)).toBeLessThan(plano.indexOf(ayuda));
+        expect(plano.indexOf(ayuda)).toBeLessThan(plano.indexOf(cierre));
+        expect(plano).toContain([ENLACE, "", ayuda, "", cierre].join("\n"));
+        const html = c.html.replaceAll("&#39;", "'");
+        expect(html.indexOf(`>${ENLACE_HTML}</a>`)).toBeLessThan(html.indexOf(ayuda));
+        expect(html.indexOf(ayuda)).toBeLessThan(html.indexOf(cierre));
+        // La ayuda es un párrafo chico aparte, con el mismo estilo del enlace en texto.
+        expect(html).toContain(`<p style="font-size:14px;line-height:1.5;margin:0 0 16px;">${ayuda}</p>`);
+      }
+    }
+  });
+
+  it("las dos versiones no llevan punto y coma, comillas angulares, rayas largas, flechas, punto medio ni direcciones escritas", () => {
+    for (const idioma of ["es", "en"] as const) {
+      for (const confirmo of [false, true]) {
+        const c = textoDelCorreo(idioma, { ...datos, nombre: null, confirmo });
+        const fijo = [c.asunto, c.texto].join("\n");
+        expect(fijo).not.toMatch(/[;!¡«»—–→←·<>]/u);
+        // "Respondé este correo" llega a la casilla de contacto: no se escribe ninguna dirección en el texto.
+        expect(fijo.replace(ENLACE, "")).not.toMatch(/@/u);
+        expect(fijo).not.toMatch(/(?:rifa|loter|raffle|ticket|boleto|apuesta)/iu);
+      }
+    }
   });
 
   it("en español sin nombre empieza con Hola", () => {
@@ -254,8 +333,10 @@ describe("el texto del correo", () => {
         "",
         "You won 400 digital dollars in the Empresa de ejemplo draw.",
         "",
-        "To receive it, open this link and sign in with the same Google account you signed up with:",
+        PEDIDO_A.en,
         ENLACE,
+        "",
+        AYUDA_A.en,
         "",
         "Receiving your prize is free. Tinkazo never asks you for a password or a payment.",
       ].join("\n"),
@@ -413,6 +494,27 @@ describe("el mensajero de Cloudflare", () => {
       "sorteos@example.org",
     );
     expect(await m.mandar("ana@example.org", contenido)).toBe(false);
+  });
+});
+
+describe("qué versión del correo se manda", () => {
+  const enlace: EnlaceDeCorreo = { send: async () => ({}) };
+  const base = { CORREO: enlace, CORREO_DE: "sorteos@example.org", CORREO_GANADORAS: "1", POLLAR_SECRETO: "sec_mainnet_prueba_inventada_0000000000" };
+
+  it("solo el valor exacto 2 elige la B: sin la variable o con cualquier otro valor sale la A", () => {
+    expect(versionDelCorreo({ CORREO_VERSION: "2" })).toBe("2");
+    for (const valor of [undefined, "1", "0", "", "B", "true", " 2", "2 ", "22"]) {
+      expect(versionDelCorreo(valor === undefined ? {} : { CORREO_VERSION: valor }), String(valor)).toBe("1");
+    }
+  });
+
+  it("la marca de correo confirmado nace apagada y pide todo lo que pide el correo", () => {
+    expect(marcaDeCorreoPrendida(base)).toBe(false);
+    expect(marcaDeCorreoPrendida({ ...base, CORREO_MARCA: "0" })).toBe(false);
+    expect(marcaDeCorreoPrendida({ ...base, CORREO_MARCA: "true" })).toBe(false);
+    expect(marcaDeCorreoPrendida({ ...base, CORREO_MARCA: "1" })).toBe(true);
+    expect(marcaDeCorreoPrendida({ ...base, CORREO_MARCA: "1", CORREO_GANADORAS: "0" })).toBe(false);
+    expect(marcaDeCorreoPrendida({ ...base, CORREO_MARCA: "1", CORREO: undefined })).toBe(false);
   });
 });
 

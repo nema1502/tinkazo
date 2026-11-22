@@ -1,3 +1,4 @@
+import { Keypair } from "@stellar/stellar-sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { campanaDeEjemplo } from "../campana/ejemplo";
 import {
@@ -19,6 +20,7 @@ import {
   olvidarIntentoDeArchivo,
   pedirPase,
   ponerFase,
+  puedeMoverLaSala,
   quitarConMotivo,
   tokenDeEvento,
 } from "./campana-org";
@@ -159,9 +161,11 @@ describe("el pase", () => {
     expect(r).toEqual({ p: "AbCdEfGhIjKl", hasta: AHORA + 60_000 });
   });
 
-  it("distingue la sala que no está, el rechazo y la falta de conexión", async () => {
+  it("distingue la sala que no está, el token que ya no vale, el rechazo y la falta de conexión", async () => {
     expect(await pedirPase(SALA, { fetch: conRespuesta(404, { error: "no-existe" }).fetch })).toBe("no-existe");
-    expect(await pedirPase(SALA, { fetch: conRespuesta(403, { error: "token" }).fetch })).toBe("rechazo");
+    // Un 403 con el motivo token ya no es un rechazo común: la campaña la tomó otra compu (pantalla Tu campaña sigue en otra compu).
+    expect(await pedirPase(SALA, { fetch: conRespuesta(403, { error: "token" }).fetch })).toBe("token");
+    expect(await pedirPase(SALA, { fetch: conRespuesta(403, { error: "origen" }).fetch })).toBe("rechazo");
     expect(await pedirPase(SALA, { fetch: conRespuesta(200, { p: "corto", hasta: AHORA }).fetch })).toBe("red");
     expect(await pedirPase(SALA, { fetch: conRespuesta(502).fetch })).toBe("red");
   });
@@ -254,82 +258,82 @@ describe("lo que recuerda la compu", () => {
   it("guarda, lee y borra", () => {
     const m: MemoriaDeOrg = { sala: SALA, fase: "abierta", mostradas: [2, 5], pendientes: [{ n: 4, motivo: "evento" }] };
     guardarOrg(a, m);
-    expect(leerOrg(a, AHORA, "testnet")).toEqual(m);
+    expect(leerOrg(a, AHORA, "testnet", null)).toEqual(m);
     borrarOrg(a, "testnet");
-    expect(leerOrg(a, AHORA, "testnet")).toBeNull();
+    expect(leerOrg(a, AHORA, "testnet", null)).toBeNull();
     expect(a.getItem(CLAVE_ORG)).toBeNull();
   });
 
   it("sin almacén no hace nada y no lanza", () => {
     expect(() => guardarOrg(null, { sala: SALA, fase: "lista" })).not.toThrow();
     expect(() => borrarOrg(null, "testnet")).not.toThrow();
-    expect(leerOrg(null, AHORA, "testnet")).toBeNull();
+    expect(leerOrg(null, AHORA, "testnet", null)).toBeNull();
   });
 
   it("guarda una sala por red y borrar una no toca la otra", () => {
     guardarOrg(a, { sala: SALA, fase: "abierta" });
     guardarOrg(a, { sala: OTRA, fase: "cerrada" });
-    expect(leerOrg(a, AHORA, "testnet")?.sala.id).toBe("AbCd1234");
-    expect(leerOrg(a, AHORA, "mainnet")?.sala.id).toBe("ZyXw9876");
+    expect(leerOrg(a, AHORA, "testnet", null)?.sala.id).toBe("AbCd1234");
+    expect(leerOrg(a, AHORA, "mainnet", null)?.sala.id).toBe("ZyXw9876");
     borrarOrg(a, "testnet");
-    expect(leerOrg(a, AHORA, "testnet")).toBeNull();
-    expect(leerOrg(a, AHORA, "mainnet")?.fase).toBe("cerrada");
+    expect(leerOrg(a, AHORA, "testnet", null)).toBeNull();
+    expect(leerOrg(a, AHORA, "mainnet", null)?.fase).toBe("cerrada");
   });
 
   it("la memoria vencida se borra y la de la otra red queda", () => {
     guardarOrg(a, { sala: { ...SALA, vence: AHORA - 1 }, fase: "abierta" });
     guardarOrg(a, { sala: OTRA, fase: "abierta" });
-    expect(leerOrg(a, AHORA, "testnet")).toBeNull();
+    expect(leerOrg(a, AHORA, "testnet", null)).toBeNull();
     expect(JSON.parse(a.getItem(CLAVE_ORG) ?? "{}")).not.toHaveProperty("testnet");
-    expect(leerOrg(a, AHORA, "mainnet")).not.toBeNull();
+    expect(leerOrg(a, AHORA, "mainnet", null)).not.toBeNull();
   });
 
   it("un JSON roto o una sala con campos que no valen dan nada", () => {
     a.setItem(CLAVE_ORG, "{no es json");
-    expect(leerOrg(a, AHORA, "testnet")).toBeNull();
+    expect(leerOrg(a, AHORA, "testnet", null)).toBeNull();
     guardarOrg(a, { sala: { ...SALA, token: "corto" }, fase: "abierta" });
-    expect(leerOrg(a, AHORA, "testnet")).toBeNull();
+    expect(leerOrg(a, AHORA, "testnet", null)).toBeNull();
     guardarOrg(a, { sala: { ...SALA, servicio: "https://otro.example.org" }, fase: "abierta" });
-    expect(leerOrg(a, AHORA, "testnet")).toBeNull();
+    expect(leerOrg(a, AHORA, "testnet", null)).toBeNull();
   });
 
   it("recuerda el token de cada evento, hasta cinco, y borrar la sala no lo borra", () => {
     guardarOrg(a, { sala: SALA, fase: "abierta" });
     guardarTokenDeEvento(a, { evento: SALA.evento, token: SALA.token });
     borrarOrg(a, "testnet");
-    expect(tokenDeEvento(a, SALA.evento)).toBe(TOKEN);
-    expect(tokenDeEvento(a, "otro-evento")).toBeNull();
+    expect(tokenDeEvento(a, SALA.evento, null)).toBe(TOKEN);
+    expect(tokenDeEvento(a, "otro-evento", null)).toBeNull();
     for (let i = 0; i < 6; i++) guardarTokenDeEvento(a, { evento: `evento-${i}x`, token: String(i).repeat(22) });
     expect(JSON.parse(a.getItem(CLAVE_EVENTOS_ORG) ?? "[]")).toHaveLength(5);
-    expect(tokenDeEvento(a, SALA.evento)).toBeNull();
-    expect(tokenDeEvento(a, "evento-5x")).toBe("5".repeat(22));
+    expect(tokenDeEvento(a, SALA.evento, null)).toBeNull();
+    expect(tokenDeEvento(a, "evento-5x", null)).toBe("5".repeat(22));
   });
 
   it("recuerda el intento de cada archivo, solo uno por evento, y lo olvida", () => {
     const firma = "S".repeat(86);
     guardarIntentoDeArchivo(a, { evento: SALA.evento, firma, intento: TOKEN });
-    expect(intentoDeArchivo(a, SALA.evento, firma)).toBe(TOKEN);
+    expect(intentoDeArchivo(a, SALA.evento, firma, null)).toBe(TOKEN);
     // Otro archivo del mismo evento, otra firma: no es el mismo intento.
-    expect(intentoDeArchivo(a, SALA.evento, "T".repeat(86))).toBeNull();
-    expect(intentoDeArchivo(a, "otro-evento", firma)).toBeNull();
+    expect(intentoDeArchivo(a, SALA.evento, "T".repeat(86), null)).toBeNull();
+    expect(intentoDeArchivo(a, "otro-evento", firma, null)).toBeNull();
     guardarIntentoDeArchivo(a, { evento: SALA.evento, firma: "T".repeat(86), intento: "N".repeat(22) });
     expect(JSON.parse(a.getItem(CLAVE_INTENTOS_ORG) ?? "[]")).toHaveLength(1);
-    expect(intentoDeArchivo(a, SALA.evento, firma)).toBeNull();
+    expect(intentoDeArchivo(a, SALA.evento, firma, null)).toBeNull();
     olvidarIntentoDeArchivo(a, SALA.evento);
     expect(a.getItem(CLAVE_INTENTOS_ORG)).toBeNull();
   });
 
   it("un intento guardado que no se entiende se ignora", () => {
     a.setItem(CLAVE_INTENTOS_ORG, JSON.stringify([{ evento: SALA.evento, firma: "S", intento: "corto" }, 7, null]));
-    expect(intentoDeArchivo(a, SALA.evento, "S")).toBeNull();
+    expect(intentoDeArchivo(a, SALA.evento, "S", null)).toBeNull();
     a.setItem(CLAVE_INTENTOS_ORG, "no es json");
-    expect(intentoDeArchivo(a, SALA.evento, "S")).toBeNull();
+    expect(intentoDeArchivo(a, SALA.evento, "S", null)).toBeNull();
   });
 
   it("el token de un evento se reemplaza por el de la sala nueva", () => {
     guardarTokenDeEvento(a, { evento: SALA.evento, token: TOKEN });
     guardarTokenDeEvento(a, { evento: SALA.evento, token: "N".repeat(22) });
-    expect(tokenDeEvento(a, SALA.evento)).toBe("N".repeat(22));
+    expect(tokenDeEvento(a, SALA.evento, null)).toBe("N".repeat(22));
     expect(JSON.parse(a.getItem(CLAVE_EVENTOS_ORG) ?? "[]")).toHaveLength(1);
   });
 
@@ -344,7 +348,147 @@ describe("lo que recuerda la compu", () => {
       removeItem: () => undefined,
     };
     expect(() => guardarOrg(roto, { sala: SALA, fase: "lista" })).not.toThrow();
-    expect(leerOrg(roto, AHORA, "testnet")).toBeNull();
-    expect(tokenDeEvento(roto, "evento-uno")).toBeNull();
+    expect(leerOrg(roto, AHORA, "testnet", null)).toBeNull();
+    expect(tokenDeEvento(roto, "evento-uno", null)).toBeNull();
+  });
+});
+
+describe("de quién es lo que recuerda la compu", () => {
+  let a: Storage;
+  const CUENTA_A = Keypair.random().publicKey();
+  const CUENTA_B = Keypair.random().publicKey();
+  beforeEach(() => {
+    a = almacen();
+  });
+
+  it("la sala de una cuenta no se ve desde otra, pero sigue guardada", () => {
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "abierta" });
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.cuenta).toBe(CUENTA_A);
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_B)).toBeNull();
+    expect(a.getItem(CLAVE_ORG)).toContain(TOKEN);
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.sala.token).toBe(TOKEN);
+  });
+
+  it("si otra cuenta crea o toma una campaña en la misma compu, la de la primera no se pisa y vuelve al retomarla", () => {
+    const DE_B: SalaDeCampana = { ...SALA, id: "BbBb1234", token: "B".repeat(22), evento: "evento-de-b" };
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "sellada" });
+    guardarOrg(a, { sala: DE_B, cuenta: CUENTA_B, fase: "lista" });
+    // Cada cuenta ve la suya, con su token y su clave.
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_B)?.sala).toEqual(DE_B);
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)).toMatchObject({ sala: SALA, fase: "sellada", cuenta: CUENTA_A });
+    // Cuando la primera cuenta vuelve a guardar la suya, la de la segunda pasa al costado y tampoco se pierde.
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "sorteada" });
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.fase).toBe("sorteada");
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_B)?.sala).toEqual(DE_B);
+    // La de la otra red sigue donde estaba.
+    guardarOrg(a, { sala: OTRA, cuenta: CUENTA_B, fase: "abierta" });
+    expect(leerOrg(a, AHORA, "mainnet", CUENTA_B)?.sala).toEqual(OTRA);
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.fase).toBe("sorteada");
+  });
+
+  it("una cuenta recuerda una sala por red aunque pase por ella otra: guardar la misma cuenta la reemplaza", () => {
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "lista" });
+    guardarOrg(a, { sala: { ...SALA, token: "N".repeat(22) }, cuenta: CUENTA_A, fase: "abierta" });
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.sala.token).toBe("N".repeat(22));
+    expect(JSON.parse(a.getItem(CLAVE_ORG) ?? "{}")).not.toHaveProperty("otras");
+  });
+
+  it("borrar la sala de una cuenta no toca la que otra cuenta dejó al costado, y al revés", () => {
+    const DE_B: SalaDeCampana = { ...SALA, id: "BbBb1234", token: "B".repeat(22), evento: "evento-de-b" };
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "abierta" });
+    guardarOrg(a, { sala: DE_B, cuenta: CUENTA_B, fase: "abierta" });
+    borrarOrg(a, "testnet", CUENTA_A);
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)).toBeNull();
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_B)?.sala).toEqual(DE_B);
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "abierta" });
+    borrarOrg(a, "testnet", CUENTA_B);
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_B)).toBeNull();
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.sala).toEqual(SALA);
+  });
+
+  it("sin sesión se ve la sala de cualquier cuenta, para mirarla", () => {
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "abierta" });
+    expect(leerOrg(a, AHORA, "testnet", null)?.sala.id).toBe(SALA.id);
+  });
+
+  it("una memoria de antes, sin cuenta, la ve cualquiera, y una campaña sin organizadora guarda null", () => {
+    guardarOrg(a, { sala: SALA, fase: "abierta" });
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_B)?.cuenta).toBeUndefined();
+    guardarOrg(a, { sala: SALA, cuenta: null, fase: "abierta" });
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_B)?.cuenta).toBeNull();
+  });
+
+  it("una cuenta que no es una cuenta se descarta al leer y queda como memoria de antes", () => {
+    a.setItem(CLAVE_ORG, JSON.stringify({ testnet: { sala: SALA, fase: "abierta", cuenta: "no-es-una-cuenta" } }));
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.cuenta).toBeUndefined();
+  });
+
+  it("solo la cuenta dueña mueve la sala: sin cuenta guardada no se mueve nada, sin organizadora sí", () => {
+    expect(puedeMoverLaSala(CUENTA_A, CUENTA_A)).toBe(true);
+    expect(puedeMoverLaSala(CUENTA_A, CUENTA_B)).toBe(false);
+    expect(puedeMoverLaSala(CUENTA_A, null)).toBe(false);
+    expect(puedeMoverLaSala(null, null)).toBe(true);
+    expect(puedeMoverLaSala(null, CUENTA_B)).toBe(true);
+    expect(puedeMoverLaSala(undefined, CUENTA_A)).toBe(false);
+    expect(puedeMoverLaSala(undefined, null)).toBe(false);
+  });
+
+  it("el token de un evento es de la cuenta que lo creó y el de otra no se pisa", () => {
+    guardarTokenDeEvento(a, { evento: SALA.evento, token: TOKEN, cuenta: CUENTA_A });
+    expect(tokenDeEvento(a, SALA.evento, CUENTA_A)).toBe(TOKEN);
+    expect(tokenDeEvento(a, SALA.evento, CUENTA_B)).toBeNull();
+    // Sin sesión tampoco se ofrece: el token da el control de una sala.
+    expect(tokenDeEvento(a, SALA.evento, null)).toBeNull();
+    guardarTokenDeEvento(a, { evento: SALA.evento, token: "N".repeat(22), cuenta: CUENTA_B });
+    expect(tokenDeEvento(a, SALA.evento, CUENTA_A)).toBe(TOKEN);
+    expect(tokenDeEvento(a, SALA.evento, CUENTA_B)).toBe("N".repeat(22));
+    expect(JSON.parse(a.getItem(CLAVE_EVENTOS_ORG) ?? "[]")).toHaveLength(2);
+  });
+
+  it("un token de antes, sin cuenta, lo usa cualquiera", () => {
+    guardarTokenDeEvento(a, { evento: SALA.evento, token: TOKEN });
+    expect(tokenDeEvento(a, SALA.evento, CUENTA_B)).toBe(TOKEN);
+    expect(tokenDeEvento(a, SALA.evento, null)).toBe(TOKEN);
+  });
+
+  it("el intento de un archivo es de la cuenta que lo guardó y olvidar el de una no toca el de la otra", () => {
+    const firma = "S".repeat(86);
+    guardarIntentoDeArchivo(a, { evento: SALA.evento, firma, intento: TOKEN, cuenta: CUENTA_A });
+    expect(intentoDeArchivo(a, SALA.evento, firma, CUENTA_A)).toBe(TOKEN);
+    expect(intentoDeArchivo(a, SALA.evento, firma, CUENTA_B)).toBeNull();
+    guardarIntentoDeArchivo(a, { evento: SALA.evento, firma, intento: "N".repeat(22), cuenta: CUENTA_B });
+    expect(intentoDeArchivo(a, SALA.evento, firma, CUENTA_A)).toBe(TOKEN);
+    expect(intentoDeArchivo(a, SALA.evento, firma, CUENTA_B)).toBe("N".repeat(22));
+    olvidarIntentoDeArchivo(a, SALA.evento, CUENTA_B);
+    expect(intentoDeArchivo(a, SALA.evento, firma, CUENTA_A)).toBe(TOKEN);
+    expect(intentoDeArchivo(a, SALA.evento, firma, CUENTA_B)).toBeNull();
+  });
+});
+
+describe("la sala que ya no acepta el token", () => {
+  const SIN_TOKEN = (): ReturnType<typeof conRespuesta> => conRespuesta(403, { error: "token" });
+
+  it("un 403 con el motivo token es otra falla, aparte del rechazo común y de la caída", async () => {
+    expect(await pedirPase(SALA, { fetch: SIN_TOKEN().fetch })).toBe("token");
+    expect(await ponerFase(SALA, "cerrada", null, { fetch: SIN_TOKEN().fetch })).toBe("token");
+    expect(await quitarConMotivo(SALA, 3, "otro", { fetch: SIN_TOKEN().fetch })).toBe("token");
+    expect(await estadoConToken(SALA, { fetch: SIN_TOKEN().fetch })).toBe("token");
+    expect(await leerCampanaDeSala(SALA, { fetch: SIN_TOKEN().fetch })).toBe("token");
+  });
+
+  it("otro 403 sigue siendo un rechazo, y un 500 una caída", async () => {
+    expect(await pedirPase(SALA, { fetch: conRespuesta(403, { error: "origen" }).fetch })).toBe("rechazo");
+    expect(await ponerFase(SALA, "abierta", null, { fetch: conRespuesta(409, { error: "fase" }).fetch })).toBe("rechazo");
+    expect(await pedirPase(SALA, { fetch: conRespuesta(500, { error: "token" }).fetch })).toBe("red");
+  });
+
+  it("el estado dice si el token es el vigente cuando la sala lo sabe decir, y no inventa nada si no", async () => {
+    const base = { fase: "abierta", total: 3, cierraMs: AHORA };
+    expect(await estadoConToken(SALA, { fetch: conRespuesta(200, { ...base, tuya: true }).fetch })).toMatchObject({ tuya: true });
+    expect(await estadoConToken(SALA, { fetch: conRespuesta(200, { ...base, tuya: false }).fetch })).toMatchObject({ tuya: false });
+    const sin = await estadoConToken(SALA, { fetch: conRespuesta(200, base).fetch });
+    expect(sin).not.toHaveProperty("tuya");
+    const raro = await estadoConToken(SALA, { fetch: conRespuesta(200, { ...base, tuya: "si" }).fetch });
+    expect(raro).not.toHaveProperty("tuya");
   });
 });

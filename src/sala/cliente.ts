@@ -153,6 +153,12 @@ export interface Escucha {
   /** La sala se cerró o venció: no hay más que escuchar. */
   alCerrada?: () => void;
   /**
+   * La sala ya no acepta el token de esta pantalla: otra compu tomó la campaña (la sala cierra el socket con 4001, o con 4401
+   * si el token no vale al presentarse) o contesta 403 al sondeo. No hay nada más que escuchar. Sin esto, un cierre así se
+   * trata como una caída y se vuelve a intentar.
+   */
+  alTomada?: () => void;
+  /**
    * Un equipo nuevo, o uno que cambió (sus datos o su estado). Cada versión `v` se avisa una sola vez. Solo se pide
    * a la sala si se pasa esto: el modo stand de los nombres no lo usa.
    */
@@ -217,6 +223,18 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
     parar();
     e.alCerrada?.();
   };
+  const tomada = (): void => {
+    if (parado) return;
+    parar();
+    e.alTomada?.();
+  };
+  /** Un 403 con el motivo `token`: la sala no reconoce el token de esta pantalla. Solo cuenta si alguien lo está escuchando. */
+  const sinToken = async (r: Response): Promise<boolean> => {
+    if (!e.alTomada || r.status !== 403) return false;
+    const x = typeof r.json === "function" ? ((await r.json().catch(() => null)) as { error?: unknown } | null) : null;
+    // Solo el motivo `token` de la sala cuenta: un 403 sin cuerpo que se entienda (una regla del borde, un proxy) no dice nada de la campaña.
+    return x !== null && x.error === "token";
+  };
   /**
    * Lo más nuevo que trajo una consulta: la sala manda solo lo que cambió desde esa versión. Los mensajes del
    * socket no la mueven: uno que llega antes que la primera consulta no puede tapar a los equipos anteriores.
@@ -236,11 +254,13 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
     try {
       const r = await f(`${s.servicio}/v1/sala/${s.id}/nombres?desde=${ultimo}`, { headers: auth(s) });
       if (r.status === 404) return cerrada();
+      if (await sinToken(r)) return tomada();
       if (!r.ok) return;
       for (const x of (await r.json()) as { n: number; d: string; r?: number[] }[]) recibir(x.n, x.d, x.r);
       if (e.alEquipo) {
         const q = await f(`${s.servicio}/v1/sala/${s.id}/equipos?desde=${desdeV}`, { headers: auth(s) });
         if (q.status === 404) return cerrada();
+        if (await sinToken(q)) return tomada();
         if (q.ok) {
           for (const x of (await q.json()) as EquipoDeSala[]) {
             desdeV = Math.max(desdeV, x.v);
@@ -326,6 +346,8 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
         sondear();
         return;
       }
+      // 4001: otra compu tomó la campaña. 4401: la sala no reconoció el token al presentarse. Con quien lo escucha, no se reintenta.
+      if ((ev.code === 4001 || ev.code === 4401) && e.alTomada) return tomada();
       caer();
     });
     socket.addEventListener("error", () => undefined);

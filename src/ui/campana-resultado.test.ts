@@ -298,6 +298,15 @@ describe("lo que dice la sala al aviso", () => {
     expect(m.pedidos).toHaveLength(1);
   });
 
+  it("si la sala ya no acepta el token porque otra compu tomó la campaña, lo dice aparte y no suelta el sello ni reintenta", async () => {
+    m.respuestasAlSello = ["token"];
+    sellar();
+    await m.avanzar(10_000);
+    expect(pasoDelPuente()).toEqual({ paso: "tomada" });
+    expect(m.soltadas).toBe(0);
+    expect(m.pedidos).toHaveLength(1);
+  });
+
   it("un rechazo cuando hay un juego en marcha o la pantalla grande abierta solo muestra la línea", async () => {
     m.puedeSoltar = false;
     m.respuestasAlSello = ["ronda-pasada"];
@@ -420,6 +429,29 @@ describe("el resultado", () => {
     ]);
   });
 
+  it("si la lectura que sigue al sí todavía dice sin-resultado, vuelve a mirar unos segundos y muestra a las ganadoras", async () => {
+    conAvisoHecho();
+    const leida = m.leidoDeLaSala;
+    m.leidoDeLaSala = "sin-resultado";
+    await alRevelar(Promise.resolve(enlace), m.d);
+    await suelta();
+    // Mientras tanto no se ofrece ningún botón: todavía se está leyendo.
+    expect(pasoDelPuente().paso).not.toBe("boton-resultado");
+    expect(pasoDelPuente().paso).not.toBe("resultado");
+    m.leidoDeLaSala = leida;
+    await m.avanzar(3_000);
+    expect(m.fases).toEqual(["sorteada"]);
+    expect(pasoDelPuente()).toMatchObject({ paso: "resultado" });
+  });
+
+  it("si la sala sigue sin tener el resultado después de decir que sí, recién ahí ofrece mandarlo a mano", async () => {
+    conAvisoHecho();
+    m.leidoDeLaSala = "sin-resultado";
+    await alRevelar(Promise.resolve(enlace), m.d);
+    await m.avanzar(10_000);
+    expect(pasoDelPuente()).toEqual({ paso: "boton-resultado" });
+  });
+
   it("con sin-resultado reintenta cada 10 segundos hasta 2 minutos y después ofrece mandar a mano", async () => {
     conAvisoHecho();
     m.sorteado = { guardado: true, ganadoras: null };
@@ -502,6 +534,26 @@ describe("el resultado", () => {
     const paso = pasoDelPuente();
     expect(paso.paso === "resultado" ? paso.filas.find((f) => f.cuenta === "GA")?.avisada : null).toBe(true);
     expect(paso.paso === "resultado" ? paso.filas.find((f) => f.cuenta === "GB")?.avisada : null).toBe(false);
+  });
+
+  it("si al mandar el resultado la sala ya no acepta el token, dice que la campaña sigue en otra compu", async () => {
+    conAvisoHecho({ comprobante: "/verificar.html#x", resultado: "pendiente" });
+    m.respuestasAlResultado = ["token"];
+    retomarAlArrancar(m.d);
+    await suelta();
+    expect(pasoDelPuente()).toEqual({ paso: "tomada" });
+    expect(m.resultados).toHaveLength(1);
+  });
+
+  it("si al avisar a una ganadora la sala ya no acepta el token, dice que la campaña sigue en otra compu", async () => {
+    registrarLasAcciones(m.d);
+    conAvisoHecho();
+    await alRevelar(Promise.resolve(enlace), m.d);
+    await suelta();
+    m.respuestaAlAviso = "token";
+    accionesDelPuente().avisarA?.("GA");
+    await suelta();
+    expect(pasoDelPuente()).toEqual({ paso: "tomada" });
   });
 
   it("el botón de mandar el resultado vuelve a empezar", async () => {
@@ -656,5 +708,75 @@ describe("el camino del comprobante", () => {
 describe("la lista de la campaña y la huella", () => {
   it("la huella de la prueba es la de la entrada", () => {
     expect(m.entrada?.huella).toBe(HUELLA);
+  });
+});
+
+describe("una sala que esta cuenta todavía no puede mover: no se calla", () => {
+  /** La sala no se puede mover hasta que `listo` sea verdadero (la cuenta se completó o llegó la sesión). */
+  function conLaCuentaPendiente(alCompletar?: () => void): { listo: () => boolean; completar: () => void } {
+    let listo = false;
+    m.d = {
+      ...m.d,
+      sala: () => (listo ? m.sala : null),
+      sinPoderMoverLaSala: () => !listo,
+      completarLaCuenta: async () => alCompletar?.(),
+    };
+    quitar();
+    quitar = escucharSellos(m.d);
+    return { listo: () => listo, completar: () => void (listo = true) };
+  }
+
+  it("el sello que llega sin la cuenta dueña dice que hay que entrar y se avisa apenas la cuenta se completa", async () => {
+    const c = conLaCuentaPendiente();
+    m.respuestasAlSello = ["ok"];
+    sellar();
+    expect(pasoDelPuente()).toEqual({ paso: "entrar-para-seguir" });
+    expect(m.pedidos).toHaveLength(0);
+    c.completar();
+    // La memoria se completó (con la sesión): el panel retoma y el sello sale.
+    retomarAlArrancar(m.d);
+    expect(m.pedidos).toHaveLength(1);
+    expect(pasoDelPuente().paso).toBe("avisando");
+  });
+
+  it("si completar la cuenta alcanza, el sello sale solo, sin esperar otro aviso", async () => {
+    let c: { listo: () => boolean; completar: () => void } | null = null;
+    c = conLaCuentaPendiente(() => c?.completar());
+    m.respuestasAlSello = ["ok"];
+    sellar();
+    expect(pasoDelPuente()).toEqual({ paso: "entrar-para-seguir" });
+    await suelta(5);
+    expect(m.pedidos).toHaveLength(1);
+  });
+
+  it("sin sesión el paso queda a la vista y no sale ningún pedido", async () => {
+    conLaCuentaPendiente();
+    sellar();
+    await suelta(5);
+    expect(pasoDelPuente()).toEqual({ paso: "entrar-para-seguir" });
+    expect(m.pedidos).toHaveLength(0);
+  });
+
+  it("con otra cuenta conectada, que no es la dueña, no hay nada que decir", () => {
+    m.d = { ...m.d, sala: () => null, sinPoderMoverLaSala: () => false };
+    quitar();
+    quitar = escucharSellos(m.d);
+    sellar();
+    expect(pasoDelPuente()).toEqual({ paso: "nada" });
+    expect(m.pedidos).toHaveLength(0);
+  });
+
+  it("el resultado que no puede salir por falta de cuenta se dice, y sale solo cuando la cuenta pueda", async () => {
+    conAvisoHecho();
+    const enlace = "https://tinkazo.app/verificar.html?c=1#lista";
+    const c = conLaCuentaPendiente();
+    await alRevelar(Promise.resolve(enlace), m.d);
+    await suelta(5);
+    expect(pasoDelPuente()).toEqual({ paso: "entrar-para-seguir" });
+    expect(m.resultados).toHaveLength(0);
+    c.completar();
+    retomarAlArrancar(m.d);
+    await suelta(5);
+    expect(m.resultados).toHaveLength(1);
   });
 });

@@ -725,6 +725,9 @@ describe("un pago sirve a un solo evento", () => {
           tomadas.push(nota);
           return duena === null || duena === evento;
         },
+        // Estos topes de mentira no hablan de la lista de Tus campañas: el evento es libre y guardarla siempre sale bien.
+        eventoLibre: async () => true,
+        guardarCampana: async () => ({ ok: true }),
       },
     });
     return { ...r, tomadas };
