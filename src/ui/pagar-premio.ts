@@ -1059,9 +1059,14 @@ export function pagarPremioEn(ctx: ContextoDePago): ManejadorDePagar {
   return manejador;
 }
 
-/** Abre «Tus dólares digitales» directo en la dirección para cargar. `alCerrar` avisa cuando se cierra. */
-export function cargarEnSaldo(cuenta: string, alCerrar: () => void): void {
-  void import("./saldo").then((m) => m.abrirSaldo({ address: cuenta }, {}, { vista: "traer", alCerrar }));
+/**
+ * Abre «Tus dólares digitales» directo en la dirección para cargar. `alCerrar` avisa cuando se cierra. Con `falta` (el
+ * monto ya escrito) la ventana dice cuánto mandar. Mira sola si llegó, sin esperar a que toquen Ya lo mandé.
+ */
+export function cargarEnSaldo(cuenta: string, alCerrar: () => void, falta?: string): void {
+  void import("./saldo").then((m) =>
+    m.abrirSaldo({ address: cuenta }, {}, { vista: "traer", alCerrar, vigilar: true, ...(falta ? { falta } : {}) }),
+  );
 }
 
 /** Las dependencias de verdad: la red de Stellar y la billetera activa. */

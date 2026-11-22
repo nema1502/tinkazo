@@ -108,7 +108,7 @@ export function depsDeComisionReales(): DepsDeComision {
       // Llegó, y entonces solo se vuelve a ofrecer si el listado consistente de la cuenta no muestra el pago.
       return (await pruebaDeSecuencia(origen, ahora, nota)).tipo === "al-dia";
     },
-    cargar: (cuenta, alCerrar) => void import("./pagar-premio").then((m) => m.cargarEnSaldo(cuenta, alCerrar)),
+    cargar: (cuenta, alCerrar, falta) => void import("./pagar-premio").then((m) => m.cargarEnSaldo(cuenta, alCerrar, falta)),
     candado: async (nombre, f) => {
       const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
       return locks ? locks.request(nombre, { mode: "exclusive" }, f) : f();
