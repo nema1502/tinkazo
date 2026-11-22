@@ -1,0 +1,197 @@
+# Auditores con navegador, a pedido.
+#
+# La revisión de cada pedido (ci.yml) corre las pruebas y unas pocas comprobaciones. Los
+# auditores de `scripts/` abren el sitio construido en un Chrome de verdad y tardan mucho más:
+# acá se lanzan a mano, desde la pestaña Actions («Run workflow») o con
+# `gh workflow run auditores.yml`. Esta corrida NO es una de las comprobaciones que exige la
+# rama principal y no las toca: no bloquea nada.
+#
+# Se construye el sitio una sola vez (`construir`) y cada auditor corre en su propia máquina,
+# a la vez que los demás, sirviendo ese mismo `dist/` con `pnpm preview` en el puerto 4173 (el
+# que los guiones esperan por defecto). Como cada trabajo es una máquina distinta, los puertos
+# de Chrome y del servidor no chocan.
+#
+# Qué entra y qué no. Entran los que se pueden correr en una máquina de GitHub: sin cuenta con
+# fondos y sin placa de video. Quedan afuera los que sellan en la red de pruebas con una cuenta
+# (`audit-flujo.mjs`, `audit-modos.mjs`, `audit-detalles.mjs`) y los que miden fluidez, sonido o
+# física con la placa de video (`audit-rigor.mjs`, `audit-emocion.mjs`, `audit-tacto.mjs`,
+# `audit-sound.mjs`, `audit-mezcla.mjs`, `audit-choques.mjs`, `audit-fisica.mjs`): esos se
+# siguen corriendo en la máquina de quien desarrolla (ver CLAUDE.md y docs/juegos.md).
+#
+# Dos grupos:
+#   - Los de siempre cuentan: si fallan, la corrida queda en rojo. Son las palabras que el
+#     sitio no puede decir (sin navegador), las páginas de lectura (las mismas que ya mira la
+#     revisión de cada pedido) y la prueba de humo de cada juego del selector, que carga la
+#     demostración con la ronda real de drand y exige que aparezca la tarjeta del ganador.
+#   - Los EXPERIMENTALES (`experimental: true`) pueden fallar sin poner la corrida en rojo
+#     (`continue-on-error`): la máquina de GitHub no tiene placa de video, Chrome dibuja con
+#     WebGL por software, y las tipografías de Linux miden distinto a las de la máquina donde
+#     se calibraron las reglas. Fallan por la máquina tanto como por el sitio, así que su
+#     resultado se lee, pero no se toma como veredicto. Cuando uno pase varias corridas
+#     seguidas, se le saca la marca.
+#
+# Para ver andar este archivo antes de que esté en la rama principal, se dispara también en
+# un pedido que lo cambie (el botón «Run workflow» solo aparece cuando el archivo ya está en
+# la rama por defecto). Las acciones van fijadas por SHA (ver el encabezado de ci.yml).
+name: Auditores a pedido
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/auditores.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  construir:
+    name: Construir el sitio
+    # Un pedido que viene de una bifurcación no corre la matriz: son quince máquinas. El trabajo
+    # que audita depende de este, así que tampoco corre.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sitio-dist
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+
+  auditar:
+    name: Auditar ${{ matrix.nombre }}${{ matrix.experimental && ' (experimental)' || '' }}
+    needs: construir
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: palabras
+            nombre: las palabras prohibidas
+            comando: 'node scripts/audit-palabras.mjs'
+            navegador: false
+            experimental: false
+          - id: paginas
+            nombre: las páginas de lectura
+            comando: 'node scripts/check-paginas.mjs --base http://localhost:4173'
+            navegador: true
+            experimental: false
+          - id: humo-race
+            nombre: prueba de humo de race
+            comando: 'node scripts/smoke.mjs "http://localhost:4173/?demo=race&instant=1&lead=3" --timeout 120000'
+            navegador: true
+            experimental: false
+          - id: humo-sapo
+            nombre: prueba de humo de sapo
+            comando: 'node scripts/smoke.mjs "http://localhost:4173/?demo=sapo&instant=1&lead=3" --timeout 120000'
+            navegador: true
+            experimental: false
+          - id: humo-trompo
+            nombre: prueba de humo de trompo
+            comando: 'node scripts/smoke.mjs "http://localhost:4173/?demo=trompo&instant=1&lead=3" --timeout 120000'
+            navegador: true
+            experimental: false
+          - id: humo-chovena
+            nombre: prueba de humo de chovena
+            comando: 'node scripts/smoke.mjs "http://localhost:4173/?demo=chovena&instant=1&lead=3" --timeout 120000'
+            navegador: true
+            experimental: false
+          - id: humo-pinata
+            nombre: prueba de humo de pinata
+            comando: 'node scripts/smoke.mjs "http://localhost:4173/?demo=pinata&instant=1&lead=3" --timeout 120000'
+            navegador: true
+            experimental: false
+          - id: humo-wheel
+            nombre: prueba de humo de wheel
+            comando: 'node scripts/smoke.mjs "http://localhost:4173/?demo=wheel&instant=1&lead=3" --timeout 120000'
+            navegador: true
+            experimental: false
+          - id: humo-teleferico
+            nombre: prueba de humo de teleferico
+            comando: 'node scripts/smoke.mjs "http://localhost:4173/?demo=teleferico&instant=1&lead=3" --timeout 120000'
+            navegador: true
+            experimental: false
+          - id: humo-oruro
+            nombre: prueba de humo de oruro
+            comando: 'node scripts/smoke.mjs "http://localhost:4173/?demo=oruro&instant=1&lead=3" --timeout 120000'
+            navegador: true
+            experimental: false
+          - id: humo-guajojo
+            nombre: prueba de humo de guajojo
+            comando: 'node scripts/smoke.mjs "http://localhost:4173/?demo=guajojo&instant=1&lead=3" --timeout 120000'
+            navegador: true
+            experimental: false
+          - id: humo-toborochi
+            nombre: prueba de humo de toborochi
+            comando: 'node scripts/smoke.mjs "http://localhost:4173/?demo=toborochi&instant=1&lead=3" --timeout 120000'
+            navegador: true
+            experimental: false
+          - id: interfaz
+            nombre: la interfaz
+            comando: 'node scripts/audit-ui.mjs --base http://localhost:4173 --sin-juegos --out capturas'
+            navegador: true
+            experimental: true
+          - id: letra
+            nombre: la letra de las páginas
+            comando: 'node scripts/audit-legible.mjs --paginas --base http://localhost:4173 --out capturas'
+            navegador: true
+            experimental: true
+          - id: juego-wheel
+            nombre: las 20 comprobaciones de la ruleta
+            comando: 'node scripts/audit-game.mjs wheel --base http://localhost:4173 --out capturas'
+            navegador: true
+            experimental: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: ${{ matrix.navegador }}
+        with:
+          name: sitio-dist
+          path: dist
+      - name: Auditar
+        env:
+          NAVEGADOR: ${{ matrix.navegador }}
+          COMANDO: ${{ matrix.comando }}
+        run: |
+          if [ "$NAVEGADOR" = "true" ]; then
+            pnpm preview --port 4173 &
+            npx wait-on@9.5.1 http://localhost:4173 --timeout 60000
+          fi
+          bash -c "$COMANDO"
+      - name: Aviso de experimental
+        if: ${{ failure() && matrix.experimental }}
+        run: |
+          echo "::warning::${{ matrix.nombre }} es experimental y falló. Se lee, pero no cuenta como veredicto del sitio."
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: ${{ always() && matrix.navegador }}
+        with:
+          name: capturas-${{ matrix.id }}
+          path: capturas
+          if-no-files-found: ignore
+          retention-days: 7

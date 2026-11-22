@@ -6,12 +6,37 @@
 # comentario. dtolnay/rust-toolchain no tiene etiqueta `stable`: es una rama, y el SHA
 # es su punta del 26 de octubre de 2026. La única excepción es la acción de
 # StellarExpert de release.yml, que tiene que ir con @main (ver ahí por qué).
+#
+# Cómo está repartido el sitio. La revisión entera en una sola máquina tardaba entre 15 y
+# 24 minutos, así que se divide en trabajos que corren a la vez:
+#   - `pruebas`: la batería de Vitest en partes (`--shard=i/n`), una máquina por parte. La
+#     cantidad de partes es el largo de la lista `parte`; el `n` sale de `strategy.job-total`,
+#     así que cambiar la cantidad es agregar o quitar un número ahí. Una parte que falla no
+#     corta a las demás (`fail-fast: false`): se ven todas las fallas en una sola corrida.
+#   - `calidad`: tipos, construcción y las tres comprobaciones (fuentes de las tarjetas,
+#     español neutral y páginas de lectura).
+#   - `web`, «Sitio (Vite + TypeScript)»: el único nombre que exige la rama principal. No
+#     hace nada propio: da verde solo si `pruebas` y `calidad` terminaron en `success`.
+#     Corre siempre (`if: always()`) porque un trabajo salteado cuenta como aprobado para
+#     GitHub: sin eso, una parte que falla dejaría a este saltearse y la rama principal
+#     lo daría por bueno.
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+
+# Solo hace falta leer el contenido del repositorio.
+permissions:
+  contents: read
+
+# Una corrida nueva del mismo pedido cancela la anterior, que ya no sirve: se mira el último
+# commit. En la rama principal nunca se cancela nada: cada commit conserva su revisión
+# completa (el grupo lleva el SHA, así que dos subidas seguidas no se pisan).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   contracts:
@@ -31,9 +56,34 @@ jobs:
       - name: Tamaño del contrato
         run: ls -la target/wasm32v1-none/release/*.wasm
 
-  web:
-    name: Sitio (Vite + TypeScript)
+  # La batería de pruebas, repartida. Vitest ordena los archivos por el hash de su ruta y le da
+  # a cada parte un tramo contiguo de esa lista: cada archivo cae en una sola parte, en
+  # cualquier máquina. Cada parte instala por su cuenta (con la caché de pnpm es poco).
+  pruebas:
+    name: Pruebas, parte ${{ matrix.parte }} de ${{ strategy.job-total }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        parte: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test --shard=${{ matrix.parte }}/${{ strategy.job-total }}
+
+  # Todo lo que no son las pruebas, en una máquina aparte y a la vez que ellas.
+  calidad:
+    name: Tipos, construcción y comprobaciones
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
@@ -45,7 +95,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm test
       - run: pnpm build
       # Las tarjetas de historia afirman hechos con fuente primaria. Una fuente
       # caída es un dato inventado a los seis meses, así que se comprueba acá.
@@ -60,5 +109,28 @@ jobs:
       - name: Páginas de lectura
         run: |
           pnpm preview --port 4173 &
-          npx wait-on http://localhost:4173 --timeout 60000
+          npx wait-on@9.5.1 http://localhost:4173 --timeout 60000
           node scripts/check-paginas.mjs --base http://localhost:4173
+
+  # La comprobación que exige la rama principal con este nombre exacto. Resume a las otras
+  # dos: solo da verde si las pruebas (todas sus partes) y la calidad terminaron bien.
+  # `needs.<trabajo>.result` de un trabajo con matriz es `success` solo si TODAS sus partes
+  # lo fueron; si alguna falló, se canceló o se salteó, es otra cosa y esto falla.
+  web:
+    name: Sitio (Vite + TypeScript)
+    needs: [pruebas, calidad]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Comprobar que todo terminó bien
+        env:
+          PRUEBAS: ${{ needs.pruebas.result }}
+          CALIDAD: ${{ needs.calidad.result }}
+        run: |
+          echo "Pruebas (todas las partes): $PRUEBAS"
+          echo "Tipos, construcción y comprobaciones: $CALIDAD"
+          if [ "$PRUEBAS" != "success" ] || [ "$CALIDAD" != "success" ]; then
+            echo "::error::El sitio no está en verde: alguna parte no terminó bien."
+            exit 1
+          fi
