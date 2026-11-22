@@ -14,14 +14,28 @@ import { cuentaCorta } from "./modelo";
 /** La clave de este navegador donde quedan las etiquetas (`[[cuenta, nombre], …]`): la escribe el registro de equipos y la leen el show, el resultado y el panel de ganadores. */
 export const CLAVE_ETIQUETAS = "tinkazo.equipos.etiquetas";
 
-let etiquetas = new Map<string, string>();
+/** La clave de la pestaña donde queda de qué son las etiquetas, solo cuando son de personas (las de una campaña). */
+export const CLAVE_PALABRA_ETIQUETAS = "tinkazo.equipos.palabra";
 
-/** Pone las etiquetas de ahora (las de un sorteo anterior se van) y las recuerda en esta pestaña. */
-export function ponerEtiquetas(nuevas: ReadonlyMap<string, string>): void {
+/** De qué son las etiquetas: de equipos (el registro de equipos) o de personas (los nombres de una campaña de empresa). */
+export type PalabraDeEtiquetas = "equipos" | "personas";
+
+let etiquetas = new Map<string, string>();
+let palabra: PalabraDeEtiquetas = "equipos";
+
+/**
+ * Pone las etiquetas de ahora (las de un sorteo anterior se van) y las recuerda en esta pestaña. Con `personas`, que es lo
+ * de una campaña de empresa, la lista no es de equipos: los textos que cuentan la lista dicen personas aunque cada línea tenga
+ * su etiqueta. Sin segundo parámetro son de equipos, como siempre.
+ */
+export function ponerEtiquetas(nuevas: ReadonlyMap<string, string>, de: PalabraDeEtiquetas = "equipos"): void {
   etiquetas = new Map(nuevas);
+  palabra = etiquetas.size ? de : "equipos";
   try {
     if (etiquetas.size) sessionStorage.setItem(CLAVE_ETIQUETAS, JSON.stringify([...etiquetas]));
     else sessionStorage.removeItem(CLAVE_ETIQUETAS);
+    if (palabra === "personas") sessionStorage.setItem(CLAVE_PALABRA_ETIQUETAS, palabra);
+    else sessionStorage.removeItem(CLAVE_PALABRA_ETIQUETAS);
   } catch {
     /* sin almacenamiento, duran lo que la página */
   }
@@ -43,7 +57,13 @@ function leerDeLaPestana(): Map<string, string> {
 /** Repone las de esta pestaña, si la página se recargó. */
 export function reponerEtiquetas(): void {
   const m = leerDeLaPestana();
-  if (m.size) etiquetas = m;
+  if (!m.size) return;
+  etiquetas = m;
+  try {
+    palabra = sessionStorage.getItem(CLAVE_PALABRA_ETIQUETAS) === "personas" ? "personas" : "equipos";
+  } catch {
+    palabra = "equipos";
+  }
 }
 
 /**
@@ -61,9 +81,10 @@ export const hayEtiquetas = (): boolean => etiquetas.size > 0;
  * Si una lista es de equipos: no está vacía y cada línea es la cuenta de un equipo que este navegador conoce. Una sola
  * línea que no lo sea (una persona, o un equipo de otro día) la vuelve una lista de personas. Es lo que decide la palabra
  * de los textos que cuentan la lista: tener etiquetas en memoria no alcanza, porque después de sortear con equipos
- * pueden quedar ahí mientras se pega otra lista.
+ * pueden quedar ahí mientras se pega otra lista. Las etiquetas de una campaña (`personas`) nunca la vuelven de equipos.
  */
-export const esListaDeEquipos = (lineas: readonly string[]): boolean => lineas.length > 0 && lineas.every((l) => etiquetas.has(l));
+export const esListaDeEquipos = (lineas: readonly string[]): boolean =>
+  palabra === "equipos" && lineas.length > 0 && lineas.every((l) => etiquetas.has(l));
 
 /** La lista que está en el cuadro de la herramienta. Vacía en una página que no lo tiene. */
 function lineasDelCuadro(): string[] {

@@ -122,7 +122,8 @@ export interface DepsDelPanelDeCampana {
   borrarVacia: (s: SalaDeCampana) => Promise<boolean>;
   escuchar: (s: SalaDeCampana, e: Escucha) => { parar: () => void; consultar: () => Promise<void> };
   descifrar: (clave: string, d: string) => Promise<DatosDeEquipo | null>;
-  qr: (img: HTMLImageElement, texto: string, ancho: number) => Promise<boolean>;
+  /** Con `fijo`, el QR mide siempre lo mismo en pantalla y se vuelve a dibujar nítido cuando cambia la densidad (qr.ts). */
+  qr: (img: HTMLImageElement, texto: string, ancho: number, fijo?: boolean) => Promise<boolean>;
   almacen: Almacen | null;
   /** Corre `f` dentro de `ms` y devuelve cómo cancelarlo. En las pruebas, un reloj de mentira. */
   esperar: (f: () => void, ms: number) => () => void;
@@ -209,7 +210,7 @@ export function depsReales(): DepsDelPanelDeCampana {
     borrarVacia: (s) => borrarSalaVacia(s),
     escuchar: (s, e) => escucharSala(s, e),
     descifrar: descifrarEquipo,
-    qr: (img, texto, ancho) => pintarQr(img, texto, ancho),
+    qr: (img, texto, ancho, fijo) => pintarQr(img, texto, ancho, fijo),
     almacen: almacenDelNavegador(),
     esperar: (f, ms) => {
       const id = setTimeout(f, ms);
@@ -367,6 +368,8 @@ const DESHACER_MS = 5_000;
 const REINTENTO_QUITA_MS = 3_000;
 /** Si el pase no llega, se prueba otra vez a los 10 s y el QR de antes sigue. */
 const REINTENTO_PASE_MS = 10_000;
+/** Cuánto se espera, tras un cambio de tamaño o de zoom, para dibujar de nuevo el QR: un solo dibujo por cambio. */
+const REDIBUJO_DEL_QR_MS = 200;
 /** Nunca se pide un pase nuevo antes de 5 s ni se espera más de lo que dura una ventana de la sala. */
 const PISO_PASE_MS = 5_000;
 const VENTANA_DEL_PASE_MS = 120_000;
@@ -779,15 +782,52 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     return `${deps.origen()}/participar.html?${p.toString()}#${sala.clave}`;
   }
 
+  /** El QR se dibuja en `pintarBloques`, cuando su recuadro está a la vista: ahí se puede medir el lugar que tiene. */
   function pintarQrs(): void {
-    const enlace = enlaceDelQr();
-    if (enlace && enlace !== ultimoEnlace) {
-      ultimoEnlace = enlace;
-      void deps.qr(qrImg, enlace, 300);
-    }
     pintar();
     grande.pintar();
   }
+
+  /**
+   * El QR del panel mide lo mismo en pantalla pero se dibuja para la densidad de ahora: con otro zoom, otra ventana o
+   * otro proyector hay que dibujarlo de nuevo, no esperar al próximo pase (que llega cada dos minutos).
+   */
+  let pararRedibujoDelQr: (() => void) | null = null;
+  let vigilaResolucion: MediaQueryList | null = null;
+  const redibujarElQr = (): void => {
+    pararRedibujoDelQr?.();
+    pararRedibujoDelQr = deps.esperar(() => {
+      pararRedibujoDelQr = null;
+      // Con el recuadro escondido no hay dónde medir: se dibuja de nuevo cuando vuelva a verse (`pintarBloques`).
+      if (qrBloque.hidden) {
+        ultimoEnlace = "";
+        return;
+      }
+      const enlace = enlaceDelQr();
+      if (!enlace || qrImg.hidden) return;
+      ultimoEnlace = enlace;
+      void deps.qr(qrImg, enlace, 300, true);
+    }, REDIBUJO_DEL_QR_MS);
+  };
+  const alCambiarLaResolucion = (): void => {
+    redibujarElQr();
+    vigilarLaResolucion();
+  };
+  /** El navegador avisa una sola vez cuando la densidad deja de ser la de ahora: se vuelve a pedir el aviso con la nueva. */
+  function vigilarLaResolucion(): void {
+    vigilaResolucion?.removeEventListener("change", alCambiarLaResolucion);
+    vigilaResolucion = typeof matchMedia === "function" ? matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`) : null;
+    vigilaResolucion?.addEventListener("change", alCambiarLaResolucion, { once: true });
+  }
+  addEventListener("resize", redibujarElQr);
+  vigilarLaResolucion();
+  const dejarElQr = (): void => {
+    removeEventListener("resize", redibujarElQr);
+    vigilaResolucion?.removeEventListener("change", alCambiarLaResolucion);
+    vigilaResolucion = null;
+    pararRedibujoDelQr?.();
+    pararRedibujoDelQr = null;
+  };
 
   const conPase = (): boolean => vista === "abierta" || vista === "confirmar";
 
@@ -2024,6 +2064,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const enlace = enlaceDelQr();
     qrImg.hidden = enlace === null;
     qrImg.alt = tx("cpoQrAlt");
+    // Solo con el recuadro a la vista: dibujado escondido no se puede medir, y el QR saldría de otro tamaño al mostrarse.
+    if (enlace !== null && !qrBloque.hidden && enlace !== ultimoEnlace) {
+      ultimoEnlace = enlace;
+      void deps.qr(qrImg, enlace, 300, true);
+    }
     // Solo se dice algo cuando el pase dejó de renovarse: con el sondeo andando solo no hay nada que hacer.
     conexionEl.hidden = !(enAbierta && (paseCaido || paseRechazado || (pase !== null && !qrVigente())));
     // Con el QR a la vista se avisa que puede vencer. Sin QR no hay nada que pueda vencer: se dice que se reconecta.
@@ -2309,6 +2354,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pararTemprano = null;
     dejarElPuente?.();
     dejarLaSesion?.();
+    dejarElQr();
     grande.cerrar();
     canal?.cerrar();
   }

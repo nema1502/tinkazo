@@ -121,6 +121,17 @@ describe("el panel de quien organiza", () => {
     expect(qr).toContain("height: auto !important");
   });
 
+  it("el lugar del QR queda reservado y la imagen no se reescala", () => {
+    const lugar = regla(".cpo-panel > .cpo-qr");
+    expect(lugar).toContain("width: min(300px, 100%)");
+    expect(lugar).toContain("aspect-ratio: 1 / 1");
+    const qr = regla(".cpo-qr img");
+    // El borde va afuera del tamaño que pone qr.ts: si no, la imagen se achica y pierde módulos.
+    expect(qr).toContain("box-sizing: content-box");
+    expect(qr).toContain("image-rendering: pixelated");
+    expect(css).toContain(".cpo-qr img:not([src]) { visibility: hidden; }");
+  });
+
   it("reparte todos los bloques de la grilla y deja la principal arriba del QR en el celular", () => {
     expect(css).toContain('grid-template-areas: "cab" "num" "acc" "qr" "lista";');
     expect(css).toContain('grid-template-areas: "qr cab" "qr num" "qr acc" "qr lista";');
@@ -134,7 +145,7 @@ describe("el panel de quien organiza", () => {
   });
 
   it("esconde el cuadro de la lista de siempre para que quede una sola acción principal", () => {
-    expect(css).toContain("body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta) { display: none !important; }");
+    expect(css).toContain("body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta, #lista-cuenta-nota) { display: none !important; }");
   });
 
   it("la barra de lo que sigue vuelve con la lista cerrada o sellada y sin botón principal en el panel", () => {
@@ -172,9 +183,78 @@ describe("el panel de quien organiza", () => {
     expect(css).toContain(".cpo-cab .cpo-marca {");
   });
 
-  it("en elegir, la vista previa y confirmar se esconde el editor de la lista de debajo del panel", () => {
+  it("en elegir, la vista previa, la inscripción abierta y confirmar se esconde el editor de la lista de debajo del panel", () => {
     expect(css).toContain("#btn-stand, #mas-opciones, #logo-fila, #ganadores-control, .sellar-acciones");
     expect(css).toContain("#sec-participants > .head");
+    expect(css).toContain(
+      'body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="abierta"], [data-vista="confirmar"],',
+    );
+  });
+
+  it("mientras el panel carga, no tiene red, pregunta si se olvida o la tiene otra pestaña tampoco se ve el editor de la lista", () => {
+    const vistas = ["cargando", "sin-red", "olvidar", "otra-pestana"];
+    for (const abre of [
+      'body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="abierta"], [data-vista="confirmar"],',
+      'body:has(#cpo-panel:is([data-vista="abierta"], [data-vista="confirmar"],',
+    ]) {
+      const inicio = css.indexOf(abre);
+      expect(inicio, abre).toBeGreaterThan(-1);
+      const selector = css.slice(inicio, css.indexOf(") :is(", inicio));
+      for (const v of vistas) expect(selector, v).toContain('[data-vista="' + v + '"]');
+    }
+  });
+
+  it("con la inscripción abierta o por confirmar tampoco se ven el ejemplo, los juegos interactivos ni la puerta de la cuenta", () => {
+    const inicio = css.indexOf('body:has(#cpo-panel:is([data-vista="abierta"], [data-vista="confirmar"],');
+    expect(inicio).toBeGreaterThan(-1);
+    const regla = css.slice(inicio, css.indexOf("}", inicio));
+    for (const id of ["#btn-ensayo", "#btn-interactivos", "#cupo-linea", "#primera-vez", "#gate", "#turnos-opcion", "#como-panel"]) {
+      expect(regla, id).toContain(id);
+    }
+    expect(regla).toContain("display: none !important");
+  });
+
+  it("al elegir el archivo y en la vista previa no se ven el ejemplo, los juegos interactivos, el selector de modo ni la primera vez", () => {
+    const inicio = css.indexOf('body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"])) :is(');
+    expect(inicio).toBeGreaterThan(-1);
+    const regla = css.slice(inicio, css.indexOf("}", inicio));
+    for (const id of ["#btn-ensayo", "#btn-interactivos", "#primera-vez", "#turnos-opcion", "#como-panel"]) expect(regla, id).toContain(id);
+    // La puerta de la cuenta es lo que deja entrar para abrir la inscripción: se queda.
+    expect(regla).not.toContain("#gate");
+    expect(regla).toContain("display: none !important");
+  });
+
+  it("con una campaña recordada el editor no se pinta antes de que exista el panel", () => {
+    const inicio = css.indexOf("html[data-campana] body:not(:has(#cpo-panel)) :is(");
+    expect(inicio).toBeGreaterThan(-1);
+    const regla = css.slice(inicio, css.indexOf("}", inicio));
+    for (const id of [
+      "#origenes", "#ta", "#lista-cuenta-nota", "#btn-stand", "#mas-opciones", "#ganadores-control", ".sellar-acciones", "#sellar-modo",
+      "#sec-participants > .head", "#btn-ensayo", "#btn-interactivos", "#primera-vez", "#gate", "#turnos-opcion", "#como-panel", "#siguiente",
+    ]) {
+      expect(regla, id).toContain(id);
+    }
+    expect(regla).toContain("display: none !important");
+  });
+
+  it("con la lista cerrada, sellada o sorteada queda el botón de sellar y lo que lleva los errores, sin el resto del cuadro", () => {
+    const inicio = css.indexOf('body:has(#cpo-panel:is([data-vista="cerrada"], [data-vista="sellada"], [data-vista="sorteada"])) :is(');
+    expect(inicio).toBeGreaterThan(-1);
+    const regla = css.slice(inicio, css.indexOf("}", inicio));
+    for (const id of [
+      "#btn-stand", "#mas-opciones", "#logo-fila", "#ganadores-control", "#btn-sala", "#btn-ensayo", "#btn-interactivos",
+      "#freeze-hint", "#sellar-sin-cuenta", "#names", "#rules-pre-row", "#turnos-opcion", "#primera-vez", "#btn-varias", "#como-panel",
+      "#sec-participants > .head",
+    ]) {
+      expect(regla, id).toContain(id);
+    }
+    // El botón de sellar, la aceptación de los términos y lo que muestra los errores del sello y del cobro se quedan a la vista.
+    for (const id of [
+      "#btn-freeze", ".sellar-acciones", "#free-rule", "#red-estado", "#cupo-linea", "#sellar-resumen", "#seal-status", "#fund-box", "#sellar-modo",
+    ]) {
+      expect(regla, id).not.toContain(id);
+    }
+    expect(regla).toContain("display: none !important");
   });
 
   it("cada bloque del panel tiene una clase igual a su id", () => {

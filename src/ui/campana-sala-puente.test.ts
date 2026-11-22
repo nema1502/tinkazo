@@ -197,14 +197,14 @@ describe("el panel y el paso de pasar la lista", () => {
     expect(principales(p)).toHaveLength(0);
   });
 
-  it("después de pasar dice cuántas personas hay y con qué botón seguir", async () => {
+  it("después de pasar dice cuántas personas hay, con qué botón seguir y que el show empieza en pantalla completa", async () => {
     const m = mundo();
     m.deps.botonDeSellar = () => "Sellar la lista";
     espiar(m);
     const p = nuevoPanel(m);
     await cerrarConDos(m, p);
     ponerPaso({ paso: "en-el-sorteo", n: 2 });
-    expect(texto(p, "#cpo-linea")).toBe("2 personas en el sorteo. Seguí con Sellar la lista.");
+    expect(texto(p, "#cpo-linea")).toBe("2 personas en el sorteo. Con Sellar la lista empieza el show en pantalla completa.");
   });
 });
 

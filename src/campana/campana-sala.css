@@ -9,15 +9,55 @@
 .campana-grande [hidden] { display: none !important; }
 
 /* Con el panel de la campaña en pantalla, el cuadro de la lista de siempre no estorba: queda solo el panel y su principal. */
-body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta) { display: none !important; }
+body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta, #lista-cuenta-nota) { display: none !important; }
 /* Sin el cuadro tampoco va Otro nombre, que baja de renglón en él. */
 body:has(#cpo-panel) #btn-otro-nombre { display: none !important; }
-/* Elegir, vista previa y confirmar: lo único que hay para tocar es el panel. Sin el editor de la lista debajo (stand, premio y CSV,
-   logo, cuántos ganan, sellar) ni el título Participantes encima, que competían con el botón principal y rodeaban el cobro de texto. */
-body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"])) :is(
+/* Elegir, vista previa, inscripción abierta y confirmar: lo único que hay para tocar es el panel. Sin el editor de la lista debajo
+   (stand, premio y CSV, logo, cuántos ganan, sellar) ni el título Participantes encima, que competían con el botón principal y
+   rodeaban el cobro de texto. Con la inscripción abierta el cuadro está vacío: un Sellar la lista ahí no haría nada. */
+body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="abierta"], [data-vista="confirmar"],
+    [data-vista="cargando"], [data-vista="sin-red"], [data-vista="olvidar"], [data-vista="otra-pestana"]
+  )) :is(
     #btn-stand, #mas-opciones, #logo-fila, #ganadores-control, .sellar-acciones, #sellar-modo, #freeze-hint, #free-rule,
     #sellar-sin-cuenta, #sec-participants > .head
   ) { display: none !important; }
+/* Con la inscripción abierta o por confirmar tampoco van los otros caminos de la herramienta: el ejemplo, los juegos interactivos
+   (otra sala, con su propio cierre y su propio sello), la puerta de la cuenta y las ayudas del primer sorteo. Lo mismo mientras el
+   panel carga, no tiene red, pregunta si se olvida la campaña o la tiene otra pestaña: el editor no aparece un instante ni se queda. */
+body:has(#cpo-panel:is([data-vista="abierta"], [data-vista="confirmar"],
+    [data-vista="cargando"], [data-vista="sin-red"], [data-vista="olvidar"], [data-vista="otra-pestana"]
+  )) :is(
+    #btn-ensayo, #btn-interactivos, #cupo-linea, #primera-vez, #gate, #turnos-opcion, #como-panel
+  ) {
+  display: none !important;
+}
+/* Elegir el archivo y la vista previa: el panel ya tiene su acción principal, así que tampoco van el ejemplo, los juegos interactivos,
+   el recuadro de primera vez, el selector de modo ni la ayuda de cómo se usa, que le ofrecían a quien organiza otros tres caminos.
+   La puerta de la cuenta se queda: es lo que deja entrar para abrir la inscripción. */
+body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"])) :is(
+    #btn-ensayo, #btn-interactivos, #primera-vez, #turnos-opcion, #como-panel
+  ) {
+  display: none !important;
+}
+/* Con una campaña recordada, el editor no se pinta ni un cuadro antes de que exista el panel: la página marca `data-campana` en
+   cuanto sabe que el panel se va a montar (`ui/campana-arranque.ts`) y lo saca cuando el panel ya está o no se pudo montar.
+   Es lo mismo que se esconde mientras el panel carga. */
+html[data-campana] body:not(:has(#cpo-panel)) :is(
+    #origenes, #pegar-ayuda, #ta, #lista-cuenta, #lista-cuenta-nota, #btn-otro-nombre, #btn-stand, #mas-opciones, #logo-fila,
+    #ganadores-control, .sellar-acciones, #sellar-modo, #freeze-hint, #free-rule, #sellar-sin-cuenta, #sec-participants > .head,
+    #btn-ensayo, #btn-interactivos, #cupo-linea, #primera-vez, #gate, #turnos-opcion, #como-panel, #siguiente
+  ) {
+  display: none !important;
+}
+/* Con la lista cerrada, sellada o sorteada, lo que queda del cuadro de la lista es el botón de sellar (y con él la red, el cobro, el
+   estado del sello y la aceptación de los términos, que llevan los errores). Sin los nombres, el stand, el ejemplo, los juegos
+   interactivos, la lista en grande, las bases, el selector de modo ni el título Participantes: la acción principal es una sola. */
+body:has(#cpo-panel:is([data-vista="cerrada"], [data-vista="sellada"], [data-vista="sorteada"])) :is(
+    #btn-stand, #mas-opciones, #logo-fila, #ganadores-control, #btn-sala, #btn-ensayo, #btn-interactivos, #freeze-hint,
+    #sellar-sin-cuenta, #names, #rules-pre-row, #turnos-opcion, #primera-vez, #btn-varias, #como-panel, #sec-participants > .head
+  ) {
+  display: none !important;
+}
 /* La campaña por activar que dejó crear-campana.html: sin el título Tu sorteo, los pasos, la puerta de la cuenta ni el
    selector de modos, que competían con su botón principal. Con o sin sesión, la acción es la del panel. */
 body:has(#cpo-panel[data-borrador][data-vista="previa"]) :is(
@@ -130,18 +170,24 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
 .cpo-panel > .cpo-cab { grid-area: cab; min-width: 0; }
 .cpo-panel > .cpo-numero { grid-area: num; }
 .cpo-panel > .cpo-acciones { grid-area: acc; }
-.cpo-panel > .cpo-qr { grid-area: qr; justify-self: center; text-align: center; max-width: 100%; }
+/* El lugar del QR queda reservado: un recuadro cuadrado de 300 px (o del ancho que haya) que no cambia si el QR se dibuja de nuevo. */
+.cpo-panel > .cpo-qr { grid-area: qr; justify-self: center; display: grid; place-items: center; width: min(300px, 100%); aspect-ratio: 1 / 1; text-align: center; max-width: 100%; }
 .cpo-panel > .cpo-lista { grid-area: lista; min-width: 0; }
 .cpo-numero { font-size: clamp(48px, 9vw, 96px); font-weight: 900; line-height: 1; margin: 0; }
 .cpo-n-etiqueta { font-size: clamp(18px, 2.4vw, 24px); font-weight: 800; }
+/* El tamaño lo pone qr.ts en px de CSS enteros por módulo, sin mirar el zoom: el borde va afuera para que la imagen no se reescale. */
 .cpo-qr img {
   display: block;
+  box-sizing: content-box;
+  aspect-ratio: 1 / 1;
   max-width: 100%;
   height: auto !important;
   background: #fff;
   border: var(--bw) solid var(--ink);
   image-rendering: pixelated;
 }
+/* Mientras el QR no se dibujó, el recuadro está y la imagen vacía no muestra borde. */
+.cpo-qr img:not([src]) { visibility: hidden; }
 @media (min-width: 900px) {
   .cpo-panel[data-vista="abierta"] {
     grid-template-columns: 320px minmax(0, 1fr);

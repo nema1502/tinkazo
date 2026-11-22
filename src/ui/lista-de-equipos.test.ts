@@ -185,3 +185,51 @@ describe("lo que se lee junto al cuadro cuando la lista es de equipos", () => {
     expect(nota().textContent).toBe("");
   });
 });
+
+describe("la lista de una campaña de empresa, con los nombres de las personas como etiquetas", () => {
+  it("el resumen, la cuenta y la barra de lo que sigue dicen personas y no equipos", async () => {
+    const { p, e, i } = await montar();
+    e.ponerEtiquetas(etiquetas(), "personas");
+    p.setList([CONDORES, VICUNAS, ZORROS].join("\n"));
+    expect(e.hayEtiquetas()).toBe(true);
+    expect(e.cuadroEsDeEquipos()).toBe(false);
+    expect(e.esListaDeEquipos([CONDORES, VICUNAS, ZORROS])).toBe(false);
+    expect(resumen()).toContain("3 personas, 1 ganador");
+    expect(resumen()).not.toContain("equipo");
+    expect(cuenta()).toBe("Lista de 3 personas");
+    expect(i.T.es.sigLista).toBe("lista de {n} personas");
+    i.setLang("en");
+    expect(resumen()).toContain("3 people, 1 winner");
+    expect(resumen()).not.toContain("team");
+    expect(i.T.en.sigLista).toBe("list of {n} people");
+  });
+
+  it("no queda la nota de que cada renglón es un equipo ni el cuadro en un renglón por cuenta", async () => {
+    const { p, e } = await montar();
+    e.ponerEtiquetas(etiquetas(), "personas");
+    p.setList([CONDORES, VICUNAS, ZORROS].join("\n"));
+    expect(cuadro().hasAttribute("wrap")).toBe(false);
+    expect(nota().style.display).toBe("none");
+    expect(nota().textContent).toBe("");
+  });
+
+  it("si la página se recarga, las etiquetas de la pestaña siguen siendo de personas", async () => {
+    const { e } = await montar();
+    e.ponerEtiquetas(etiquetas(), "personas");
+    vi.resetModules();
+    const otra = await import("../equipos/etiquetas");
+    otra.reponerEtiquetas();
+    expect(otra.hayEtiquetas()).toBe(true);
+    expect(otra.esListaDeEquipos([CONDORES, VICUNAS])).toBe(false);
+  });
+
+  it("después, las etiquetas de los equipos vuelven a decir equipos", async () => {
+    const { p, e } = await montar();
+    e.ponerEtiquetas(etiquetas(), "personas");
+    e.ponerEtiquetas(etiquetas());
+    p.setList([CONDORES, VICUNAS, ZORROS].join("\n"));
+    expect(cuenta()).toBe("Lista de 3 equipos");
+    e.ponerEtiquetas(new Map());
+    expect(e.esListaDeEquipos([CONDORES])).toBe(false);
+  });
+});

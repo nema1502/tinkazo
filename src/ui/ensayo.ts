@@ -6,6 +6,7 @@ import { guardarBorrador, renderNames, setList } from "./participants";
 import { MARCA_INGRESAR, currentSession, refrescarPuerta } from "./wallet-ui";
 import { actualizarPaso } from "./siguiente";
 import { elegirOtroJuegoParaVer } from "./draw";
+import { campanaNoSePisa } from "./campana-no-pisa";
 
 /**
  * El ensayo, en la página: probar Tinkazo con una lista de ejemplo, haciendo y
@@ -98,6 +99,8 @@ function guiar(clave = claveDelPaso): void {
 /** Entra al ensayo. Nunca con un sorteo sellado esperando, ni en la demo. */
 export function entrarAlEnsayo(): void {
   if (app.frozen || enEnsayo() || params.has("demo")) return;
+  // Con una campaña viva el cuadro es el suyo: el ejemplo lo pisaría (campana-no-pisa.ts).
+  if (campanaNoSePisa()) return;
   // Lo que se estaba armando queda guardado tal cual: vuelve al salir.
   guardarBorrador();
   marcarEnsayo(true);
