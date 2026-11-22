@@ -22,8 +22,8 @@ export type EstadoDeComision =
   | { tipo: "pagando" }
   /** La cuenta no tiene todavía los premios más lo que se cobra. `cargar` es el total y `falta` lo que le falta. */
   | { tipo: "falta-cargar"; cargar: bigint; saldo: bigint; falta: bigint; sale: bigint; monto: bigint }
-  /** Todo listo: `sale` es lo que de verdad sale de la cuenta con este pago. */
-  | { tipo: "lista"; sale: bigint }
+  /** Todo listo: `sale` es lo que de verdad sale de la cuenta con este pago, y `saldo` lo que tiene, para decírselo. */
+  | { tipo: "lista"; sale: bigint; saldo: bigint }
   /** Se paga desde otra billetera: `monto` es lo que se pide. Con `entrar`, el camino principal es entrar con Google. */
   | { tipo: "otra-billetera"; monto: bigint; entrar: boolean }
   /** La campaña pide sellar con otra cuenta que la de esta sesión. */
@@ -109,5 +109,5 @@ export function estadoDeComision(e: EntradaDeComision): EstadoDeComision {
   // tiene que alcanzar siempre.
   const falta = ((cargar - e.saldo + CENTAVO - 1n) / CENTAVO) * CENTAVO;
   if (e.saldo < cargar) return { tipo: "falta-cargar", cargar, saldo: e.saldo, falta, sale, monto };
-  return { tipo: "lista", sale };
+  return { tipo: "lista", sale, saldo: e.saldo };
 }

@@ -524,7 +524,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
       case "lista":
         return {
           titulo: fmt("cpoCmListaT", { c: montoTexto(e.sale, idioma) }),
-          linea: fmt("cpoCmListaL", { premios: montoTexto(n.premios, idioma) }),
+          linea: fmt("cpoCmListaL", { saldo: montoTexto(e.saldo, idioma), premios: montoTexto(n.premios, idioma) }),
           principal: { texto: fmt("cpoCmPagar", { c: montoTexto(e.sale, idioma) }), accion: "pagar", apagado: false },
           secundario: null,
           plegado: null,
