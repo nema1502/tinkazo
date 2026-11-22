@@ -52,3 +52,22 @@ describe("las claves de texto de participar.html", () => {
     expect(conPlantillas).toEqual([]);
   });
 });
+
+describe("las claves de la página que usa la tarjeta de confirmar el correo", () => {
+  it("existen y también las usa algún archivo de la página sin import(), así el armado las mete en el HTML", () => {
+    const delaTarjeta = ["confirmar.ts", "confirmar-estado.ts"].map((f) => readFileSync(`src/campana/${f}`, "utf8")).join("\n");
+    const claves = new Set([...delaTarjeta.matchAll(/["'](cp[A-Z][A-Za-z0-9]*)["']/gu)].map((m) => m[1] ?? ""));
+    expect(claves.size).toBeGreaterThan(0);
+    // La tarjeta se baja con import(): lo que se ve en el HTML es lo que usan los archivos de la página.
+    const delaPagina = archivosDeLaPagina().filter((f) => !/confirmar|sesion-confirmar/u.test(f)).map((f) => readFileSync(f, "utf8")).join("\n");
+    for (const clave of claves) {
+      expect(clave in TEXTOS_CAMPANA.es && clave in TEXTOS_CAMPANA.en, clave).toBe(true);
+      expect(delaPagina.includes(`"${clave}"`) || delaPagina.includes(`'${clave}'`), clave).toBe(true);
+    }
+  });
+
+  it("la tarjeta y sus archivos no están en lo que la página importa sin import()", () => {
+    const sueltos = archivosDeLaPagina().filter((f) => /confirmar/u.test(f));
+    expect(sueltos).toEqual([]);
+  });
+});

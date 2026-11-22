@@ -17,6 +17,7 @@ import {
 } from "../stellar/alta-api";
 import type { Oferta, ProductoALaVenta } from "../stellar/alta-oferta";
 import { network } from "../stellar/config";
+import { enlaceParaMandar } from "../campana/recibir";
 import { mostrar, normalizar } from "../stellar/cupon-codigo";
 import { esDeRed } from "../stellar/errores";
 import { TOPE_TOKEN_MS } from "../stellar/pollar-config";
@@ -136,6 +137,16 @@ export interface OpcionesDelPaso {
    * (`medio-de-pago.ts`, `medioDeEstaCuenta` con cambio) y con el camino del QR conectado.
    */
   alQr?: (() => void) | undefined;
+  /**
+   * El enlace del premio para llevarlo al otro navegador (la pared de quien ganó con una cuenta que se usó en otro lado).
+   * `compartir` abre el menú del navegador (null: no hay) y `copiar` escribe en el portapapeles (null: no hay). Sin decirlo,
+   * los del navegador. `origen` es la dirección del sitio: sin decirlo, la de esta página.
+   */
+  enlace?: {
+    compartir?: ((enlace: string) => Promise<void>) | null;
+    copiar?: ((enlace: string) => Promise<void>) | null;
+    origen?: string;
+  } | undefined;
 }
 
 /**
@@ -419,6 +430,10 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     codigo: null as { a: string; destino: string | null; desde: number } | null,
     codigoRecargado: false,
     sinPedidoVeces: 0,
+    /** El navegador no dejó compartir el enlace del premio: queda Copiar el enlace. */
+    noComparte: false,
+    /** Tampoco se pudo copiar: el enlace se muestra en un campo para copiarlo con la mano. */
+    enlaceAMano: false,
   };
 
   // El acceso al modo Oficial (W3): sin decir de dónde sale, en la red principal no se activa (salvo el plan B1).
@@ -596,6 +611,16 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   campoCodigo.className = "cl-codigo";
   campoCodigo.placeholder = "•••••••••";
   const limpio = (): string => campoCodigo.value.replace(/\s+/g, "");
+
+  /** El enlace del premio, solo para leerlo y copiarlo con la mano cuando el navegador no deja hacerlo solo. */
+  const campoEnlace = document.createElement("input");
+  campoEnlace.type = "text";
+  campoEnlace.id = "cl-enlace";
+  campoEnlace.readOnly = true;
+  campoEnlace.spellcheck = false;
+  campoEnlace.className = "cl-enlace";
+  campoEnlace.setAttribute("autocapitalize", "none");
+  campoEnlace.setAttribute("autocorrect", "off");
   // El cupón: letras y números en mayúsculas, sin autocompletar ni corrector, y los guiones se ponen solos.
   const campoCupon = document.createElement("input");
   campoCupon.type = "text";
@@ -642,6 +667,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     codigoRecargado: st.codigoRecargado,
     campoOk: st.codigo ? limpio().length >= 4 : mailOk(campoCorreo.value),
     sinPedidoVeces: st.sinPedidoVeces,
+    enlace: { puedeCompartir: !st.noComparte && puedeCompartirElEnlace(), aMano: st.enlaceAMano },
     puedePasarAPrueba: salidas.puedePasarAPrueba(),
     primerOficialPendiente: op.primerOficial?.pendiente() ?? false,
     acceso: {
@@ -828,10 +854,15 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
           form.className = "cl-form";
           form.noValidate = true;
           const etiqueta = document.createElement("label");
-          const campo = c.campo === "codigo" ? campoCodigo : c.campo === "cupon" ? campoCupon : campoCorreo;
+          const campo = c.campo === "codigo" ? campoCodigo : c.campo === "cupon" ? campoCupon : c.campo === "enlace" ? campoEnlace : campoCorreo;
           etiqueta.htmlFor = campo.id;
           etiqueta.className = "cl-etiqueta";
-          etiqueta.textContent = t(c.campo === "codigo" ? "clCodigoLabel" : c.campo === "cupon" ? "altaCuponLabel" : "protMailLabel");
+          // El enlace no lleva etiqueta a la vista: el título y la línea ya dicen qué es. Para quien lee la pantalla, su nombre.
+          if (c.campo === "enlace") {
+            etiqueta.classList.add("sr-only");
+            campoEnlace.value = enlaceDelPremio();
+          }
+          etiqueta.textContent = t(c.campo === "codigo" ? "clCodigoLabel" : c.campo === "cupon" ? "altaCuponLabel" : c.campo === "enlace" ? "clCopiarEnlace" : "protMailLabel");
           if (c.campo === "correo") campoCorreo.placeholder = t("protMailLabel");
           campo.disabled = c.ocupada;
           form.append(etiqueta, campo);
@@ -931,7 +962,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         : null;
       const de = reusado
         ? enfocado
-        : enfocado === campoCodigo || enfocado === campoCorreo || enfocado === campoCupon
+        : enfocado === campoCodigo || enfocado === campoCorreo || enfocado === campoCupon || enfocado === campoEnlace
           ? enfocado.isConnected && !(enfocado as HTMLInputElement).disabled
             ? enfocado
             : null
@@ -2014,6 +2045,47 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     if (y === "entrar" && !vencio) await Promise.resolve(salidas.entrarDeNuevo()).catch(() => undefined);
   }
 
+  /** El enlace entero de Recibir mi premio, para abrirlo en el otro navegador. */
+  const enlaceDelPremio = (): string => enlaceParaMandar(network.name, op.enlace?.origen ?? (typeof location === "undefined" ? "" : location.origin));
+
+  /** El navegador tiene el menú de compartir. Donde no, queda Copiar el enlace. */
+  function puedeCompartirElEnlace(): boolean {
+    if (op.enlace && "compartir" in op.enlace) return op.enlace.compartir != null;
+    return typeof navigator !== "undefined" && typeof navigator.share === "function";
+  }
+
+  /** Abre el menú de compartir con el enlace. Si la persona lo cierra, no pasa nada. Si el navegador no deja, queda copiar. */
+  async function mandarElEnlace(): Promise<void> {
+    const compartir = op.enlace && "compartir" in op.enlace ? op.enlace.compartir : (url: string) => navigator.share({ url });
+    if (!compartir) return copiarElEnlace();
+    try {
+      await compartir(enlaceDelPremio());
+    } catch (e) {
+      if ((e as { name?: unknown } | null)?.name === "AbortError") return;
+      st.noComparte = true;
+      return copiarElEnlace();
+    }
+  }
+
+  /** Copia el enlace. Sin portapapeles o sin permiso, lo deja a la vista en un campo ya elegido, para copiarlo con la mano. */
+  async function copiarElEnlace(): Promise<void> {
+    const copiar = op.enlace && "copiar" in op.enlace ? op.enlace.copiar : typeof navigator !== "undefined" && navigator.clipboard ? (url: string) => navigator.clipboard.writeText(url) : null;
+    st.aviso = null;
+    st.enlaceAMano = false;
+    try {
+      if (!copiar) throw new Error("sin-portapapeles");
+      await copiar(enlaceDelPremio());
+      st.aviso = "clEnlaceCopiado";
+    } catch {
+      st.enlaceAMano = true;
+    }
+    pintar();
+    if (st.enlaceAMano) {
+      campoEnlace.focus({ preventScroll: true });
+      campoEnlace.select();
+    }
+  }
+
   async function hacer(a: Accion): Promise<void> {
     if (cerrado) return;
     switch (a) {
@@ -2035,6 +2107,10 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
           if (!aparato() && correoSesion === "") return pintar();
           return mandar(aparato() ? null : correoSesion, aparato() ? ocultarCorreo(st.est.correoDeLaCuenta ?? "") || ocultarCorreo(correoSesion) : ocultarCorreo(correoSesion));
         }
+      case "mandar-enlace":
+        return mandarElEnlace();
+      case "copiar-enlace":
+        return copiarElEnlace();
       case "mandar-a-mano": {
         const dir = campoCorreo.value.trim();
         if (!mailOk(dir)) {

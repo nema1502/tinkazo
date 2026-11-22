@@ -233,6 +233,36 @@ describe("los avisos de cambio", () => {
     soltar();
   });
 
+  it("cada aviso dice de dónde viene: el canal, el kit, o la vista (volver a la pestaña o volver la conexión)", async () => {
+    await pollarWallet.estadoOficial();
+    const documento = Object.assign(new EventTarget(), { visibilityState: "visible" });
+    const ventana = new EventTarget();
+    vi.stubGlobal("document", documento);
+    vi.stubGlobal("window", ventana);
+    const cb = vi.fn();
+    const soltar = pollarWallet.alCambiarLaCuenta(cb, { armar: false });
+    try {
+      cb.mockClear();
+      documento.dispatchEvent(new Event("visibilitychange"));
+      expect(cb).toHaveBeenLastCalledWith("vista");
+      ventana.dispatchEvent(new Event("online"));
+      expect(cb).toHaveBeenLastCalledWith("vista");
+      for (const o of h.oyentes.billetera) o("READY");
+      expect(cb).toHaveBeenLastCalledWith("kit");
+      const emisor = new BroadcastChannel(CANAL_DE_LA_CUENTA);
+      emisor.postMessage({ tipo: "cambio" });
+      await vi.waitFor(() => expect(cb).toHaveBeenLastCalledWith("canal"));
+      emisor.close();
+      // Con la pestaña escondida, volver no avisa.
+      documento.visibilityState = "hidden";
+      cb.mockClear();
+      documento.dispatchEvent(new Event("visibilitychange"));
+      expect(cb).not.toHaveBeenCalled();
+    } finally {
+      soltar();
+    }
+  });
+
   it("un cambio de la billetera o de la co-firma llama al cb, y soltar corta todo", async () => {
     const cb = vi.fn();
     const soltar = pollarWallet.alCambiarLaCuenta(cb);

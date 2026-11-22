@@ -23,14 +23,20 @@ import {
   type SosiegoDelAlta,
 } from "../sala/campana";
 import type { NetworkName } from "../stellar/config";
+import type { LecturaDelCelular } from "../stellar/wallet-pollar";
 import { cargarCampana, type ResultadoDeCarga } from "./carga";
 import type { DepsDelCelular, EstadoPublico, MotivoDeAlta, ResultadoDelAlta, SesionDelCelular } from "./celular";
 import type { Campana } from "./modelo";
+import { MARCA_DE_CORREO_ENCENDIDA } from "./marca-de-correo";
+import { VENTANA_RAPIDA_ENCENDIDA } from "./ventana-rapida";
 import { leerMemoria } from "./memoria";
+import { destinoDeRecibir, enlaceParaMandar } from "./recibir";
 import type { SesionDeGoogle } from "./sesion";
 
 /** Lo que el celular consulta cada 15 segundos se estira a 30: 150 pestañas visibles suman 18.000 pedidos por hora. */
 export const CONSULTA_ESTIRADA_MS = 30_000;
+/** Un retraso corto al azar antes de leer la cuenta: 150 celulares que entran juntos no le pegan al servicio en el mismo segundo. */
+export const RETRASO_DE_LA_LECTURA_MS = 1_500;
 /** Cuánto se espera para repetir la primera carga o la primera consulta, si fallaron. */
 export const ESPERA_DE_LA_PRIMERA_MS = 3_000;
 
@@ -50,8 +56,6 @@ export function almacenEnMemoria(): Pick<Storage, "getItem" | "setItem"> {
   };
 }
 
-/** El destino de Recibir mi premio, según la red de esta página. */
-export const destinoDeRecibir = (red: NetworkName): string => (red === "mainnet" ? "/?red=oficial&premio=1" : "/?red=prueba&premio=1");
 
 /** Una huella corta del token para saber si es el mismo que ya se rechazó. El token en claro no se guarda. */
 async function huellaDe(token: string): Promise<string> {
@@ -104,6 +108,10 @@ export interface PiezasDelCelular {
   ir: (direccion: string) => void;
   /** El enlace de esta página, para Copiar el enlace. */
   enlace: () => string;
+  /** La dirección del sitio (con su esquema), para armar el enlace entero de Recibir mi premio. */
+  origen?: () => string;
+  /** Abre el menú de compartir del navegador con un enlace. Donde no hay menú, ausente. */
+  compartir?: (enlace: string) => Promise<void>;
   /** Un solo alta a la vez por celular, aunque haya dos pestañas. Sin esto, cada pestaña cuida solo la suya. */
   bloquear?: <T>(nombre: string, trabajo: () => Promise<T>) => Promise<T>;
   /** Para pedir sin la red de verdad. */
@@ -167,13 +175,18 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
     if (!p.enLinea()) return { ok: false, motivo: "red" };
     const token = await p.google.token();
     if (!token) {
+      // Si el servicio de cuentas frenó el pedido por límite, es eso lo que pasó: se dice con cuánto esperar.
+      const espera = (await p.google.segundosDeLimite?.()) ?? null;
+      if (espera !== null) return { ok: false, motivo: "limite", segundos: espera };
       // Con la sesión todavía en la página, lo que falta es que el proveedor la confirme: no es una sesión vencida.
       const sigue = cuenta !== null && (await p.google.sigueLaSesion(cuenta));
       return { ok: false, motivo: sigue ? "proveedor" : "sesion" };
     }
     const huella = await huellaDe(token);
     if (huellaRechazada !== null && huella === huellaRechazada) return { ok: false, motivo: "sesion" };
-    const d = await cifrarEquipo(p.clave, { nombre: nombre ?? "", integrantes: [] });
+    // Con el token ya en mano el perfil está completo: si el nombre llegó tarde y esta alta salió sin él, se lee ahora.
+    const nombreFinal = nombre ?? (await p.google.nombreTardio());
+    const d = await cifrarEquipo(p.clave, { nombre: nombreFinal ?? "", integrantes: [] });
     const r = await anotarmeEnCampana(
       p.servicio,
       p.sala,
@@ -213,10 +226,28 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
   return {
     ...p.base,
     // Las consultas de cada 15 segundos pasan a 30, y cada celular elige su propio ritmo: no pegan todos en el mismo segundo.
-    cada: (f, ms) => p.base.cada(f, Math.round((ms === 15_000 ? CONSULTA_ESTIRADA_MS : ms) * (0.8 + azar() * 0.4))),
+    // El del resultado (cada 8 o 15 segundos, con `azar`) ya viene con su ritmo y no se estira, y el reloj de la cuenta regresiva
+    // (`exacta`) late cada segundo sin azar.
+    cada: (f, ms, modo) => p.base.cada(f, modo === "exacta" ? ms : Math.round((modo === "azar" || ms !== 15_000 ? ms : CONSULTA_ESTIRADA_MS) * (0.8 + azar() * 0.4))),
     campana: p.campana,
     publico: consultarPublico,
     sesion: async () => recordar(await p.google.retomar()),
+    nombreTardio: () => p.google.nombreTardio(),
+    // Sin la lectura en la sesión (la demostración), la página no lee la cuenta ni cambia nada.
+    ...(p.google.estadoDeLaCuenta
+      ? {
+        cuenta: {
+          leer: async (cuenta): Promise<LecturaDelCelular> => {
+            await esperar(Math.round(azar() * RETRASO_DE_LA_LECTURA_MS));
+            return (p.google.estadoDeLaCuenta as (cuenta?: string) => Promise<LecturaDelCelular>)(cuenta);
+          },
+          // Para quien recarga ya anotada: antes de ir a recibir se compara la sesión de este navegador con su cuenta.
+          ...(p.google.laSesionEs ? { laSesionEs: p.google.laSesionEs } : {}),
+          // Sin esto no hay tarjeta de confirmar el correo: la cuenta se lee y nada más.
+          ...(p.google.accionesDeLaCuenta ? { confirmar: p.google.accionesDeLaCuenta } : {}),
+        },
+      }
+      : {}),
     entrar: async () => {
       olvidarRechazos();
       return recordar(await p.google.entrar());
@@ -224,17 +255,26 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
     // El toque se cuenta desde que este celular tiene el candado: esperar a que otra pestaña termine no gasta el tiempo del toque.
     anotar: (nombre, alReintentar) =>
       bloquear(`tinkazo.campana.alta.${p.sala}`, () => anotarEnLaSala(nombre, alReintentar, ahora())),
-    yo: async () => {
+    yo: async (marca) => {
       const cuenta = cuentaActual();
       if (cuenta === null) return "red";
-      return miEstado(p.servicio, p.sala, cuenta, llave(), dep);
+      // La marca de correo confirmado solo sale con la constante encendida, aunque la página la pida.
+      return miEstado(p.servicio, p.sala, cuenta, llave(), dep, MARCA_DE_CORREO_ENCENDIDA && marca === true);
     },
+    ...(MARCA_DE_CORREO_ENCENDIDA ? { marcaDeCorreo: true } : {}),
+    // La ventana rápida del resultado solo con su interruptor encendido, y con el azar que reparte el primer pedido de cada tramo.
+    ...(VENTANA_RAPIDA_ENCENDIDA ? { ventanaRapida: true } : {}),
+    azar,
     resultado: async () => {
       const r = await resultadoDeCampana(p.servicio, p.sala, dep);
       // El celular ya llega a Terminó por el estado y por `yo`: acá solo le sirve lo que se pudo leer.
       return r === "terminada" ? "red" : r;
     },
     recibir: () => p.ir(destinoDeRecibir(p.red)),
+    ...(p.origen ? { enlaceDelPremio: () => enlaceParaMandar(p.red, (p.origen as () => string)()) } : {}),
+    ...(p.compartir ? { compartir: p.compartir } : {}),
+    // Después de anotarse la página no le pide nada más al proveedor: suelta su cliente y lo vuelve a armar solo si hace falta.
+    ...(p.google.soltar ? { soltarSesion: () => void p.google.soltar?.() } : {}),
     salir: async () => {
       actual = null;
       olvidarRechazos();

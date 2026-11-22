@@ -338,6 +338,55 @@ describe("vistaDe: sin forma desde acá", () => {
   });
 });
 
+describe("vistaDe: la pared del premio con la cuenta usada en otro navegador", () => {
+  const pared = (o: Partial<EntradaVista> = {}) => v({ activacion: "lista", proteccion: "sin-forma", unicoNavegador: false, para: "premio", ...o });
+
+  it("quien ganó ve otro título y otro texto, con el contacto plegado, y no se le ofrece Pasar a Prueba", () => {
+    const vista = pared({ enlace: { puedeCompartir: true, aMano: false } });
+    expect(vista.cajas[0]?.titulo).toBe("clSinFormaPremioTitulo");
+    expect(vista.cajas[0]?.textos.map((x) => x.clave)).toEqual(["clSinFormaPremio"]);
+    expect(vista.cajas[0]?.detalles?.map((x) => x.clave)).toEqual(["clSinFormaPista", "clContacto"]);
+    expect(vista.cajas[0]?.campo).toBeNull();
+    expect(vista.salidas?.prueba).toBeNull();
+    expect(JSON.stringify(vista)).not.toContain("pasar-a-prueba");
+  });
+
+  it("la principal es Mandarme el enlace donde se puede compartir y Copiar el enlace donde no", () => {
+    expect(pared({ enlace: { puedeCompartir: true, aMano: false } }).principal).toMatchObject({ accion: "mandar-enlace", clave: "clMandarmeEnlace", apagado: false });
+    expect(pared({ enlace: { puedeCompartir: false, aMano: false } }).principal).toMatchObject({ accion: "copiar-enlace", clave: "clCopiarEnlace", apagado: false });
+    // Sin decir nada del navegador, lo seguro es copiar.
+    expect(pared().principal?.accion).toBe("copiar-enlace");
+  });
+
+  it("sin portapapeles el enlace se muestra en un campo", () => {
+    expect(pared({ enlace: { puedeCompartir: false, aMano: true } }).cajas[0]?.campo).toBe("enlace");
+    expect(pared({ enlace: { puedeCompartir: false, aMano: false } }).cajas[0]?.campo).toBeNull();
+  });
+
+  it("solo para quien ganó: quien organiza sigue con Pasar a Prueba", () => {
+    for (const para of ["entrada", "sello", "sorteo"] as const) {
+      const vista = pared({ para });
+      expect(vista.cajas[0]?.titulo, para).toBe("clSinFormaTitulo");
+      expect(vista.principal?.accion, para).toBe("pasar-a-prueba");
+    }
+  });
+});
+
+describe("vistaDe: el orden para quien ganó y tiene que confirmar", () => {
+  const falta = (o: Partial<EntradaVista> = {}) => v({ activacion: "lista", proteccion: "falta", celular: true, hayDesbloqueo: true, ...o });
+
+  it("con premio, la principal es el código al correo y el desbloqueo queda de texto", () => {
+    const vista = falta({ para: "premio" });
+    expect(vista.principal?.accion).toBe("mandar-codigo");
+    expect(vista.cajas.find((c) => c.parte === "proteger")?.secundarios.map((s) => [s.accion, s.forma])).toContainEqual(["desbloqueo", "texto"]);
+  });
+
+  it("quien organiza sigue con el desbloqueo primero", () => {
+    expect(falta({ para: "entrada" }).principal?.accion).toBe("desbloqueo");
+    expect(falta({ para: "sello" }).principal?.accion).toBe("desbloqueo");
+  });
+});
+
 describe("vistaDe: las salidas", () => {
   it("desde el sorteo, «Pasar a Prueba» a la vista pero apagado, con la nota de por qué", () => {
     const vista = v({ puedePasarAPrueba: false, para: "sorteo" });

@@ -3762,6 +3762,9 @@
   /* El cupón: como en la tarjeta, en tres grupos y en letra que no confunde la O con el 0. */
   .cl-form input.cl-cupon { text-align: center; letter-spacing: 0.12em; font-family: ui-monospace, Consolas, monospace; font-size: 20px; text-transform: uppercase; }
   .cl-form input.cl-cupon::placeholder { letter-spacing: 0.12em; }
+  /* El enlace del premio, a mano: se lee entero en la letra que no confunde, y se elige de un toque. */
+  .cl-form input.cl-enlace { font-family: ui-monospace, Consolas, monospace; font-size: 15px; text-overflow: ellipsis; }
+  .cl-form input.cl-enlace::selection { background: var(--magenta); color: var(--on-accent); }
   /* El cupón queda seleccionado tras un error («revisá las letras»): con los colores de la casa se lee, no en el gris del sistema. */
   .cl-form input.cl-codigo::selection { background: var(--magenta); color: var(--on-accent); }
   .cl-form input.cl-cupon::selection { background: var(--magenta); color: var(--on-accent); }

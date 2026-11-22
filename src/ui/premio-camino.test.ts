@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { destinoDeRecibir } from "../campana/conectar";
+import { destinoDeRecibir } from "../campana/recibir";
 import { CLAVE_INVITADA, CLAVE_VENTANA, marcarInvitada, marcarVentana } from "../campana/invitada";
 
 /**

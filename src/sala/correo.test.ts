@@ -1,6 +1,6 @@
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { destinoDeRecibir } from "../campana/conectar";
+import { destinoDeRecibir } from "../campana/recibir";
 import {
   avisarPorCorreo,
   correoDeLaCuenta,

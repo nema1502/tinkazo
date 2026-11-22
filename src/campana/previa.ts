@@ -40,6 +40,8 @@ const CLAVES_DE_ENTRADA: Record<FallaDeEntrada, string> = {
   cerrada: "cpErrCerrada",
   google: "cpErrGoogle",
   cuentas: "cpErrCuentas",
+  // El texto del límite vive en `limite.ts`, que se baja recién cuando pasa: si no baja, la línea de siempre alcanza.
+  limite: "cpErrGoogle",
 };
 
 export { sustituir };
@@ -140,6 +142,8 @@ export interface EstadoDeEntrada {
   desde: number | null;
   /** Cómo terminó la última entrada, si falló. */
   falla: FallaDeEntrada | null;
+  /** Si falló por el límite del servicio de cuentas: hasta cuándo no acepta (reloj de la página). El botón vuelve solo. */
+  libreHasta?: number | null;
 }
 
 /** Cuánto tarda en aparecer el aviso de volver a la pestaña después de tocar Entrar. */
@@ -147,9 +151,15 @@ const AVISO_TARDIO_MS = 6000;
 
 export function motivoDeEntrada(error: unknown): FallaDeEntrada {
   const motivo = error instanceof Error ? error.message : "";
-  return motivo === "ventana" || motivo === "cerrada" || motivo === "google" || motivo === "cuentas"
+  return motivo === "ventana" || motivo === "cerrada" || motivo === "google" || motivo === "cuentas" || motivo === "limite"
     ? motivo
     : "google";
+}
+
+/** Cuántos segundos hay que esperar según una falla de entrada por límite (al menos uno). Sin dato, una espera corta. */
+export function segundosDeLimite(error: unknown): number {
+  const s = (error as { segundos?: unknown } | null)?.segundos;
+  return typeof s === "number" && Number.isFinite(s) && s >= 1 ? Math.ceil(s) : 30;
 }
 
 /** Pinta la campaña abierta. La entrada con Google empieza únicamente con el toque del botón. */
@@ -245,9 +255,26 @@ export function pintarLaCampana(
   espera.hidden = true;
   const entrar = boton(accion, deps.tx("cpEntrar"), "primary", () => undefined);
   let avisoTardio: number | null = null;
+  /**
+   * El servicio de cuentas frenó el ingreso: la línea dice la verdad con la cuenta que baja, y el botón se apaga hasta que
+   * se libera y vuelve solo. Abrir la ventana de Google sigue pidiendo un toque: nada se abre solo. La cuenta que baja se
+   * baja recién ahora (`limite.ts`); si no baja, queda la línea de siempre y el botón a mano.
+   */
+  const contarElLimite = (hasta: number): void => {
+    entrar.disabled = true;
+    import("./limite").then(
+      (m) => m.contarElLimite({ error, entrar, ahora: deps.ahora, idioma: deps.idioma, programar }, hasta),
+      () => {
+        entrar.disabled = false;
+        error.textContent = deps.tx(CLAVES_DE_ENTRADA.limite);
+        error.hidden = false;
+      },
+    );
+  };
   entrar.addEventListener("click", () => {
     if (entrar.disabled) return;
     entrar.disabled = true;
+    entrar.setAttribute("aria-busy", "true");
     entrar.textContent = deps.tx("cpEntrando");
     error.hidden = true;
     avisoTardio = programar(() => {
@@ -259,8 +286,13 @@ export function pintarLaCampana(
     }).catch((falla: unknown) => {
       cancelar(avisoTardio);
       espera.hidden = true;
-      entrar.disabled = false;
+      entrar.removeAttribute("aria-busy");
       entrar.textContent = deps.tx("cpEntrar");
+      if (motivoDeEntrada(falla) === "limite") {
+        contarElLimite(deps.ahora() + segundosDeLimite(falla) * 1000);
+        return;
+      }
+      entrar.disabled = false;
       error.textContent = deps.tx(CLAVES_DE_ENTRADA[motivoDeEntrada(falla)]);
       error.hidden = false;
     });
@@ -269,13 +301,16 @@ export function pintarLaCampana(
   // siguen como estaban, y un error que ya llegó no se pierde.
   if (entrada.desde !== null) {
     entrar.disabled = true;
+    entrar.setAttribute("aria-busy", "true");
     entrar.textContent = deps.tx("cpEntrando");
     const falta = AVISO_TARDIO_MS - (deps.ahora() - entrada.desde);
     if (falta <= 0) espera.hidden = false;
     else avisoTardio = programar(() => {
       espera.hidden = false;
     }, falta);
-  } else if (entrada.falla !== null) {
+  } else if (entrada.falla === "limite" && typeof entrada.libreHasta === "number") {
+    contarElLimite(entrada.libreHasta);
+  } else if (entrada.falla !== null && entrada.falla !== "limite") {
     error.textContent = deps.tx(CLAVES_DE_ENTRADA[entrada.falla]);
     error.hidden = false;
   }

@@ -375,7 +375,7 @@ describe("anotarse y esperar", () => {
     expect(mundo.raiz.querySelector("#cmp-adentro .cmp-contador")?.textContent).toBe("1 persona en la lista");
   });
 
-  it("P3 es una espera sin acción principal", async () => {
+  it("P3 es una espera sin acción principal, salvo la tarjeta de confirmar el correo (celular-confirmar.test.ts)", async () => {
     const mundo = await preparar({ sesion: async () => SESION, yo: async () => propio() });
     expect(mundo.raiz.querySelector<HTMLElement>("#cmp-adentro")?.hidden).toBe(false);
     expect(principalesVisibles(mundo.raiz)).toHaveLength(0);
@@ -556,7 +556,7 @@ describe("visibilidad, memoria y accesibilidad", () => {
     expect(mundo.raiz.querySelector("#cmp-fase")?.textContent).toBe(TEXTOS_CAMPANA.es.cpSellada);
   });
 
-  it("con otra sesión borra la memoria y abre P2", async () => {
+  it("quien ya está anotada y recarga no retoma la sesión del proveedor: la espera sigue con lo que recuerda", async () => {
     const memoria = almacen();
     guardarMemoria(memoria, "evento-ejemplo", {
       cuenta: CUENTA,
@@ -564,6 +564,26 @@ describe("visibilidad, memoria y accesibilidad", () => {
       resultado: null,
       comprobante: null,
       guardado: AHORA,
+    });
+    const sesion = vi.fn(async () => ({ cuenta: OTRA_CUENTA, nombre: "Beto" }));
+    const yo = vi.fn(async () => propio("sellada"));
+    const mundo = await preparar({ memoria, sesion, yo });
+    // La comparación de cuentas se hace cuando haga falta (al tocar Entrar, al confirmar el correo o al ir a recibir), no en cada recarga.
+    expect(sesion).not.toHaveBeenCalled();
+    expect(yo).toHaveBeenCalled();
+    expect(mundo.raiz.querySelector("#cmp-fase")?.textContent).toBe(TEXTOS_CAMPANA.es.cpSellada);
+    expect(mundo.raiz.querySelector<HTMLElement>("#cmp-hola")?.hidden).toBe(true);
+    expect(memoria.getItem(claveDeMemoria("evento-ejemplo"))).not.toBeNull();
+  });
+
+  it("con un recuerdo vencido la sesión sí se retoma, y con otra cuenta abre P2", async () => {
+    const memoria = almacen();
+    guardarMemoria(memoria, "evento-ejemplo", {
+      cuenta: CUENTA,
+      fase: "abierta",
+      resultado: null,
+      comprobante: null,
+      guardado: AHORA - 8 * 24 * 3_600_000,
     });
     const mundo = await preparar({ memoria, sesion: async () => ({ cuenta: OTRA_CUENTA, nombre: "Beto" }) });
     expect(mundo.raiz.querySelector("#cmp-hola h1")?.textContent).toBe("Hola, Beto");
@@ -573,12 +593,13 @@ describe("visibilidad, memoria y accesibilidad", () => {
   it("No soy Ana cierra la sesión, borra la memoria y vuelve a P1", async () => {
     const salir = vi.fn(async () => undefined);
     const memoria = almacen();
+    // Un recuerdo vencido: el celular lo descarta y retoma la sesión, como quien llega por primera vez.
     guardarMemoria(memoria, "evento-ejemplo", {
       cuenta: CUENTA,
       fase: "abierta",
       resultado: null,
       comprobante: null,
-      guardado: AHORA,
+      guardado: AHORA - 8 * 24 * 3_600_000,
     });
     const mundo = await preparar({ memoria, sesion: async () => ({ cuenta: OTRA_CUENTA, nombre: "Ana P." }), salir });
     mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .cmp-hero .cmp-otra-cuenta")?.click();
@@ -732,5 +753,259 @@ describe("quien salió de la lista y vuelve sin recuerdo", () => {
       yo: async () => ({ ...propio(), anotada: false }),
     });
     expect(mundo.raiz.querySelector("#cmp-hola h1")?.textContent).toBe("Hola, Ana P.");
+  });
+});
+
+describe("el nombre que llega tarde", () => {
+  const SIN_NOMBRE = { cuenta: CUENTA, nombre: null };
+
+  it("Hola sale sin nombre y se repinta con el saludo cuando llega, sin tocar Anotando", async () => {
+    let llega: (nombre: string | null) => void = () => undefined;
+    const nombreTardio = vi.fn(() => new Promise<string | null>((resolver) => {
+      llega = resolver;
+    }));
+    const mundo = await preparar({ sesion: async () => SIN_NOMBRE, nombreTardio });
+    expect(mundo.raiz.querySelector("#cmp-hola h1")?.textContent).toBe("Hola");
+    llega("Ana P.");
+    await asentar();
+    expect(mundo.raiz.querySelector("#cmp-hola h1")?.textContent).toBe("Hola, Ana P.");
+    expect(mundo.raiz.querySelector("#cmp-hola .cmp-apoyo")?.textContent).toBe(TEXTOS_CAMPANA.es.cpRevisamosNombre);
+    expect(nombreTardio).toHaveBeenCalledTimes(1);
+  });
+
+  it("con Anotando en marcha y un error a la vista, el saludo nuevo no los apaga ni los borra", async () => {
+    let llega: (nombre: string | null) => void = () => undefined;
+    let reintentar: (motivo: "mucha" | "creando") => void = () => undefined;
+    const anotar = vi.fn((_nombre: string | null, alReintentar: (motivo: "mucha" | "creando") => void) => new Promise<never>(() => {
+      reintentar = alReintentar;
+    }));
+    const mundo = await preparar({
+      sesion: async () => SIN_NOMBRE,
+      anotar,
+      nombreTardio: () => new Promise<string | null>((resolver) => {
+        llega = resolver;
+      }),
+    });
+    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .primary")?.click();
+    await asentar();
+    reintentar("mucha");
+    await asentar();
+    expect(mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .primary")?.textContent).toBe(TEXTOS_CAMPANA.es.cpAnotando);
+    llega("Ana P.");
+    await asentar();
+    const boton = mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .primary");
+    expect(mundo.raiz.querySelector("#cmp-hola h1")?.textContent).toBe("Hola, Ana P.");
+    expect(boton?.textContent).toBe(TEXTOS_CAMPANA.es.cpAnotando);
+    expect(boton?.disabled).toBe(true);
+    expect(mundo.raiz.querySelector("#cmp-hola .cmp-error")?.textContent).toBe(TEXTOS_CAMPANA.es.cpErrMucha);
+  });
+
+  it("si el nombre llega cuando ya se está en la lista, no se repinta la espera ni se cambia de pantalla", async () => {
+    let llega: (nombre: string | null) => void = () => undefined;
+    const mundo = await preparar({
+      sesion: async () => SIN_NOMBRE,
+      nombreTardio: () => new Promise<string | null>((resolver) => {
+        llega = resolver;
+      }),
+    });
+    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .primary")?.click();
+    await asentar();
+    expect(mundo.raiz.querySelector("#cmp-adentro h1")?.textContent).toBe(TEXTOS_CAMPANA.es.cpAdentro);
+    const titulo = mundo.raiz.querySelector("#cmp-adentro h1");
+    llega("Ana P.");
+    await asentar();
+    expect(mundo.raiz.querySelector("#cmp-adentro h1")).toBe(titulo);
+    expect(mundo.raiz.querySelector<HTMLElement>("#cmp-hola")?.hidden).toBe(true);
+  });
+
+  it("si la persona cambia de cuenta antes de que llegue, el nombre no se pinta", async () => {
+    let llega: (nombre: string | null) => void = () => undefined;
+    const mundo = await preparar({
+      sesion: async () => SIN_NOMBRE,
+      nombreTardio: () => new Promise<string | null>((resolver) => {
+        llega = resolver;
+      }),
+    });
+    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .cmp-otra-cuenta")?.click();
+    await asentar();
+    expect(mundo.raiz.querySelector<HTMLElement>("#cmp-hola")?.hidden).toBe(true);
+    llega("Ana P.");
+    await asentar();
+    expect(mundo.raiz.querySelector<HTMLElement>("#cmp-hola")?.hidden).toBe(true);
+  });
+
+  it("si nunca llega, Hola queda como estaba", async () => {
+    const mundo = await preparar({ sesion: async () => SIN_NOMBRE, nombreTardio: async () => null });
+    expect(mundo.raiz.querySelector("#cmp-hola h1")?.textContent).toBe("Hola");
+    expect(mundo.raiz.querySelector("#cmp-hola .cmp-apoyo")?.textContent).toBe(TEXTOS_CAMPANA.es.cpRevisamosSinNombre);
+  });
+
+  it("si la sesión ya trae el nombre no lo pide", async () => {
+    const nombreTardio = vi.fn(async () => null);
+    await preparar({ sesion: async () => SESION, nombreTardio });
+    expect(nombreTardio).not.toHaveBeenCalled();
+  });
+
+  it("al entrar con Google sin nombre, también lo busca", async () => {
+    const nombreTardio = vi.fn(async () => "Ana P.");
+    const mundo = await preparar({ entrar: async () => SIN_NOMBRE, nombreTardio });
+    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-saber .primary")?.click();
+    await asentar();
+    expect(mundo.raiz.querySelector("#cmp-hola h1")?.textContent).toBe("Hola, Ana P.");
+  });
+});
+
+describe("Entrando y Anotando con la ruedita", () => {
+  it("Entrando lleva aria-busy mientras Google está abierto y lo pierde si falla", async () => {
+    const mundo = await preparar({ entrar: () => Promise.reject(new Error("google")) });
+    const boton = mundo.raiz.querySelector<HTMLButtonElement>("#cmp-saber .primary");
+    boton?.click();
+    expect(boton?.getAttribute("aria-busy")).toBe("true");
+    expect(boton?.textContent).toBe("Entrando…");
+    await asentar();
+    expect(boton?.hasAttribute("aria-busy")).toBe(false);
+    expect(boton?.disabled).toBe(false);
+  });
+
+  it("Anotando lleva aria-busy mientras la sala contesta", async () => {
+    const mundo = await preparar({ sesion: async () => SESION, anotar: () => new Promise(() => undefined) });
+    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .primary")?.click();
+    await asentar();
+    const boton = mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .primary");
+    expect(boton?.textContent).toBe(TEXTOS_CAMPANA.es.cpAnotando);
+    expect(boton?.getAttribute("aria-busy")).toBe("true");
+  });
+});
+
+describe("la espera quieta y viva", () => {
+  const AL_DIA = "#cmp-adentro .cmp-al-dia";
+
+  it("una respuesta igual no recrea la espera: el mismo nodo sigue y solo late la señal", async () => {
+    const mundo = await preparar({ sesion: async () => SESION, yo: async () => propio() });
+    const seccion = mundo.raiz.querySelector("#cmp-adentro") as HTMLElement;
+    const titulo = seccion.querySelector("h1");
+    const senal = seccion.querySelector(AL_DIA);
+    const fase = seccion.querySelector("#cmp-fase");
+    expect(senal).not.toBeNull();
+    expect(senal?.classList.contains("cmp-late")).toBe(false);
+    await mundo.disparar(15_000);
+    expect(seccion.querySelector("h1")).toBe(titulo);
+    expect(seccion.querySelector("#cmp-fase")).toBe(fase);
+    expect(seccion.querySelector(AL_DIA)).toBe(senal);
+    expect(senal?.classList.contains("cmp-late")).toBe(true);
+  });
+
+  it("otro número de personas cambia el número en su lugar y no repinta", async () => {
+    const mundo = await preparar({ sesion: async () => SESION, yo: async () => propio() });
+    const seccion = mundo.raiz.querySelector("#cmp-adentro") as HTMLElement;
+    const titulo = seccion.querySelector("h1");
+    mundo.deps.yo = async () => ({ ...propio(), total: 52 });
+    await mundo.disparar(15_000);
+    expect(seccion.querySelector(".cmp-numero")?.textContent).toBe("52");
+    expect(seccion.querySelector("h1")).toBe(titulo);
+    mundo.deps.yo = async () => ({ ...propio(), total: 52 });
+    await mundo.disparar(15_000);
+    expect(seccion.querySelector(".cmp-numero")?.textContent).toBe("52");
+  });
+
+  it("si cambia la fase se repinta y la línea de fase salta una vez", async () => {
+    const mundo = await preparar({ sesion: async () => SESION, yo: async () => propio() });
+    expect(mundo.raiz.querySelector("#cmp-fase")?.classList.contains("cmp-salta")).toBe(false);
+    mundo.deps.yo = async () => propio("cerrada");
+    await mundo.disparar(15_000);
+    expect(mundo.raiz.querySelector("#cmp-fase")?.textContent).toBe(TEXTOS_CAMPANA.es.cpYaCerro);
+    expect(mundo.raiz.querySelector("#cmp-fase")?.classList.contains("cmp-salta")).toBe(true);
+    mundo.deps.yo = async () => propio("cerrada");
+    await mundo.disparar(15_000);
+    expect(mundo.raiz.querySelector("#cmp-fase")?.classList.contains("cmp-salta")).toBe(true);
+  });
+
+  it("si cambia la hora de cierre se repinta pero la línea de fase no salta", async () => {
+    const mundo = await preparar({ sesion: async () => SESION, yo: async () => propio() });
+    const cierre = propio().cierraMs + 15 * 60_000;
+    mundo.deps.yo = async () => ({ ...propio(), cierraMs: cierre });
+    await mundo.disparar(15_000);
+    expect(mundo.raiz.querySelector("#cmp-fase")?.classList.contains("cmp-salta")).toBe(false);
+  });
+
+  it("la cadencia no cambia: una sola cuenta de 15 segundos y sin pedidos de más al responder", async () => {
+    const yo = vi.fn(async () => propio());
+    const cada = vi.fn();
+    const mundo = await preparar({
+      sesion: async () => SESION,
+      yo,
+      cada: (f, ms) => {
+        cada(ms);
+        return () => undefined;
+      },
+    });
+    const llamadasAlIniciar = yo.mock.calls.length;
+    expect(cada.mock.calls.filter(([ms]) => ms === 15_000)).toHaveLength(1);
+    expect(mundo.raiz.querySelector("#cmp-adentro .cmp-al-dia")).not.toBeNull();
+    expect(llamadasAlIniciar).toBeGreaterThan(0);
+    expect(cada.mock.calls.filter(([ms]) => ms !== 15_000).map(([ms]) => ms)).toEqual([5_000]);
+  });
+
+  it("con la sala sin contestar 75 segundos dice Buscando conexión, y con una respuesta vuelve a Al día", async () => {
+    let reloj = AHORA;
+    const yo = vi.fn(async (): Promise<EstadoPropio | "red"> => propio());
+    const mundo = await preparar({ sesion: async () => SESION, yo, ahora: () => reloj });
+    expect(mundo.raiz.querySelector<HTMLElement>(AL_DIA)?.dataset.estado).toBe("al-dia");
+    yo.mockResolvedValue("red");
+    reloj += 76_000;
+    await mundo.disparar(5_000);
+    expect(mundo.raiz.querySelector<HTMLElement>(AL_DIA)?.dataset.estado).toBe("buscando");
+    expect(mundo.raiz.querySelector(AL_DIA)?.textContent).toBe(TEXTOS_CAMPANA.es.cpBuscandoConexion);
+    yo.mockResolvedValue(propio());
+    await mundo.disparar(15_000);
+    expect(mundo.raiz.querySelector<HTMLElement>(AL_DIA)?.dataset.estado).toBe("al-dia");
+  });
+
+  it("con la sala contestando no pasa a buscar aunque pase mucho tiempo", async () => {
+    let reloj = AHORA;
+    const mundo = await preparar({ sesion: async () => SESION, yo: async () => propio(), ahora: () => reloj });
+    for (let vuelta = 0; vuelta < 6; vuelta += 1) {
+      reloj += 30_000;
+      await mundo.disparar(15_000);
+      await mundo.disparar(5_000);
+    }
+    expect(mundo.raiz.querySelector<HTMLElement>(AL_DIA)?.dataset.estado).toBe("al-dia");
+  });
+
+  it("el tiempo con la pestaña escondida no cuenta como falta de conexión", async () => {
+    let reloj = AHORA;
+    const yo = vi.fn(async (): Promise<EstadoPropio | "red"> => propio());
+    const mundo = await preparar({ sesion: async () => SESION, yo, ahora: () => reloj });
+    mundo.ponerVisible(false);
+    reloj += 10 * 60_000;
+    await mundo.disparar(5_000);
+    expect(mundo.raiz.querySelector<HTMLElement>(AL_DIA)?.dataset.estado).toBe("al-dia");
+    mundo.ponerVisible(true);
+    yo.mockResolvedValue("red");
+    await mundo.volver();
+    await mundo.disparar(5_000);
+    expect(mundo.raiz.querySelector<HTMLElement>(AL_DIA)?.dataset.estado).toBe("al-dia");
+    reloj += 76_000;
+    await mundo.disparar(5_000);
+    expect(mundo.raiz.querySelector<HTMLElement>(AL_DIA)?.dataset.estado).toBe("buscando");
+  });
+
+  it("al salir de la espera el reloj de la señal se apaga", async () => {
+    const registro = new Map<number, () => void>();
+    const mundo = await preparar({
+      sesion: async () => SESION,
+      yo: async () => propio(),
+      cada: (f, ms) => {
+        registro.set(ms, f);
+        return () => {
+          if (registro.get(ms) === f) registro.delete(ms);
+        };
+      },
+    });
+    expect(registro.has(5_000)).toBe(true);
+    mundo.deps.yo = async () => propio("sorteada");
+    registro.get(15_000)?.();
+    await asentar();
+    expect(registro.has(5_000)).toBe(false);
   });
 });

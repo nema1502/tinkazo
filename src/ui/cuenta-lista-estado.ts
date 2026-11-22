@@ -220,6 +220,10 @@ export type Accion =
   | "desbloqueo"
   | "mandar-codigo"
   | "mandar-a-mano"
+  /** «Mandarme el enlace»: el menú de compartir del navegador con el enlace del premio, para abrirlo en el otro navegador. */
+  | "mandar-enlace"
+  /** «Copiar el enlace»: donde no se puede compartir, el enlace del premio al portapapeles. */
+  | "copiar-enlace"
   | "confirmar-codigo"
   | "otro-codigo"
   | "otro-correo"
@@ -310,7 +314,7 @@ export interface CajaVista {
   /** El error de esta caja, con `role="alert"`. */
   error: Texto[] | null;
   /** El campo que va en la caja: el correo escrito a mano, el código o el cupón. */
-  campo: "correo" | "codigo" | "cupon" | null;
+  campo: "correo" | "codigo" | "cupon" | "enlace" | null;
   secundarios: Secundario[];
   /** Corre algo en esta caja (`aria-busy`). */
   ocupada: boolean;
@@ -428,6 +432,12 @@ export interface EntradaVista {
   primerOficialPendiente: boolean;
   /** El acceso al modo Oficial (el cobro por uso). Sin decirlo, `libre`: el paso de siempre. */
   acceso?: AccesoEnLaVista;
+  /**
+   * El enlace del premio para abrirlo en el otro navegador (la pared de quien ganó con una cuenta que se usó en otro lado).
+   * `puedeCompartir`: el navegador tiene el menú de compartir. `aMano`: no hubo portapapeles y el enlace se muestra en un
+   * campo, ya elegido, para copiarlo con la mano. Sin decirlo, no hay enlace que ofrecer.
+   */
+  enlace?: { puedeCompartir: boolean; aMano: boolean };
 }
 
 /** El acceso de siempre: activar no pide nada. */
@@ -862,6 +872,23 @@ function protegerActual(e: EntradaVista, caja: CajaVista): Armado {
   if (e.corre === "revisando") {
     return { caja: { ...base, estado: "revisando", abierta: false, ocupada: true }, principal: ocupado("leer", "clRevisando") };
   }
+  if (sinForma(e) && e.para === "premio") {
+    // Quien ganó con una cuenta que se usó en otro navegador no tiene nada que arreglar acá: se le dice dónde abrirlo y se le
+    // da el enlace para llevarlo. Nada de Pasar a Prueba (no hay nada que probar) ni de activar.
+    const aMano = e.enlace?.aMano === true;
+    return {
+      caja: {
+        ...base,
+        titulo: "clSinFormaPremioTitulo",
+        estado: "falta",
+        sola: true,
+        textos: textos(["clSinFormaPremio"]),
+        campo: aMano ? "enlace" : null,
+        detalles: textos(["clSinFormaPista", "clContacto"]),
+      },
+      principal: e.enlace?.puedeCompartir ? boton("mandar-enlace", "clMandarmeEnlace") : boton("copiar-enlace", "clCopiarEnlace"),
+    };
+  }
   if (sinForma(e)) {
     return {
       caja: {
@@ -975,7 +1002,9 @@ function protegerActual(e: EntradaVista, caja: CajaVista): Armado {
     ? ocupado("mandar-codigo", "protEnviando")
     : boton("mandar-codigo", "clMandarA", false, { mail: e.correoSesion }));
   const mandarAMano = (): Boton => (mandando ? ocupado("mandar-a-mano", "protEnviando") : boton("mandar-a-mano", "protMailGo", !e.campoOk));
-  const desbloqueoPrimero = e.celular && ofreceDesbloqueo && !e.desbloqueoFallo && !e.eligioCorreo && !e.codigoRecargado;
+  // Quien ganó queda con el correo confirmado, y con él puede entrar desde cualquier lado: el desbloqueo solo no deja entrar
+  // desde otro navegador. Para quien organiza, el desbloqueo sigue primero.
+  const desbloqueoPrimero = e.celular && ofreceDesbloqueo && !e.desbloqueoFallo && !e.eligioCorreo && !e.codigoRecargado && e.para !== "premio";
   if (desbloqueoPrimero) {
     const sec: Secundario[] = [aMano ? { ...mandarAMano(), forma: "texto" } : { ...mandarSesion(), forma: "texto" }];
     return {

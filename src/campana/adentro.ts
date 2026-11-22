@@ -6,6 +6,7 @@ import type { PasoDeCampana, TipoDePaso } from "./modelo";
 import { caja, conDestacado, llama, marcaDeTilde, rotulosChicos } from "./piezas";
 import { pintarReglas, sustituir } from "./previa";
 import type { DepsDelCelular, Fase, MotivoDeAlta, MotivoDeSalida } from "./celular";
+import type { VarianteDeGanaste } from "./premio";
 
 const CLAVES_DE_PASO: Record<TipoDePaso, string> = {
   instagram: "cpPasoInstagram",
@@ -26,6 +27,8 @@ const CLAVES_DE_ALTA: Record<Exclude<MotivoDeAlta, "quitada">, string> = {
   espera: "cpErrEspera",
   cuentas: "cpErrCuentas",
   proveedor: "cpErrGoogle",
+  // El texto del límite lo trae `limite.ts` (con los segundos); sin él, la línea de siempre.
+  limite: "cpErrGoogle",
   cerro: "cpCerro",
   pase: "cpErrPase",
   sesion: "cpErrSesion",
@@ -43,6 +46,8 @@ const CLAVES_DE_SALIDA: Record<MotivoDeSalida, string> = {
 
 export interface AccionesDeHola {
   alAnotar: () => void;
+  /** Anotarse aunque la cuenta ya se haya usado en otro navegador. Solo con el aviso a la vista y el botón principal cambiado. */
+  alAnotarIgual?: () => void;
   alSalir: () => void;
   anotando?: boolean;
   tardando?: boolean;
@@ -53,7 +58,7 @@ const ACCIONES_QUIETAS: AccionesDeHola = {
   alSalir: () => undefined,
 };
 
-function seccion(raiz: HTMLElement, selector: string, clase: string): HTMLElement | null {
+export function seccion(raiz: HTMLElement, selector: string, clase: string): HTMLElement | null {
   const encontrada = raiz.matches(selector) ? raiz : raiz.querySelector<HTMLElement>(selector);
   if (!encontrada) return null;
   encontrada.replaceChildren();
@@ -70,7 +75,7 @@ function parrafo(raiz: HTMLElement, texto: string, clase = ""): HTMLParagraphEle
   return p;
 }
 
-function titulo(raiz: HTMLElement, texto: string, nivel: "h1" | "h2" = "h1"): void {
+export function titulo(raiz: HTMLElement, texto: string, nivel: "h1" | "h2" = "h1"): void {
   const elemento = document.createElement(nivel);
   elemento.textContent = texto;
   raiz.append(elemento);
@@ -95,7 +100,9 @@ function enlaceComprobante(raiz: HTMLElement, deps: DepsDelCelular, url: string)
 }
 
 /** Traduce el motivo con claves completas para que el armado del sitio las incluya. */
-export function textoDeErrorDeAlta(deps: DepsDelCelular, motivo: MotivoDeAlta): string {
+export function textoDeErrorDeAlta(deps: DepsDelCelular, motivo: MotivoDeAlta, textoDelLimite?: string): string {
+  // El límite del servicio de cuentas dice cuánto hay que esperar.
+  if (motivo === "limite" && textoDelLimite) return textoDelLimite;
   return deps.tx(motivo === "quitada" ? "cpErrOtro" : CLAVES_DE_ALTA[motivo]);
 }
 
@@ -176,19 +183,38 @@ export const PEDIDOS_A_LA_VISTA = 3;
 export function pintarHola(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
-  datos: { nombre: string | null; error: MotivoDeAlta | null },
+  datos: {
+    nombre: string | null;
+    error: MotivoDeAlta | null;
+    /** Con el límite del servicio de cuentas, la línea con los segundos que faltan (ya escrita, de `limite.ts`). */
+    textoDelLimite?: string;
+    /**
+     * La cuenta ya se usó en otro navegador y desde acá no hay forma de entrar: se avisa arriba, antes de anotarse.
+     * `principal`: el botón principal ya pasó a ser Usar otra cuenta (no pasa mientras alguien toca la pantalla).
+     */
+    otroLado?: { principal: boolean } | null;
+  },
   acciones: AccionesDeHola = ACCIONES_QUIETAS,
 ): void {
   const raiz = seccion(raizPrincipal, "#cmp-hola", "cmp-hola cmp-dos");
   if (!raiz) return;
   const nombre = datos.nombre;
   const izq = caja("cmp-izq cmp-hero");
+  if (datos.otroLado) {
+    // El aviso entra arriba del saludo. Se anuncia solo (role status) y no cambia ningún botón de lugar.
+    const bloque = caja("cmp-otro-lado");
+    bloque.setAttribute("role", "status");
+    parrafo(bloque, deps.tx("cpOtroLadoT"), "cmp-otro-lado-t");
+    parrafo(bloque, deps.tx("cpOtroLado"));
+    izq.append(bloque);
+  }
   titulo(izq, nombre ? sustituir(deps.tx("cpHola"), { nombre }) : deps.tx("cpHolaSolo"));
   parrafo(izq, deps.tx(nombre ? "cpRevisamosNombre" : "cpRevisamosSinNombre"), "cmp-apoyo");
   // Cambiar de cuenta es un enlace chico arriba, lejos del pulgar y del botón: un toque corrido no cierra la sesión.
   // Con una cuenta que no sirve para este sorteo, cambiarla es lo único que ayuda: pasa a ser el botón principal.
   const cuentaNoSirve = datos.error === "solo-google" || datos.error === "sesion";
-  if (!cuentaNoSirve) {
+  const cambiarEsLoPrincipal = cuentaNoSirve || datos.otroLado?.principal === true;
+  if (!cambiarEsLoPrincipal) {
     const otraCuenta = nombre ? sustituir(deps.tx("cpNoSoy"), { nombre }) : deps.tx("cpOtraCuenta");
     const salir = boton(izq, otraCuenta, "cmp-otra-cuenta", acciones.alSalir);
     salir.disabled = acciones.anotando === true;
@@ -222,9 +248,11 @@ export function pintarHola(
   pintarReglas(raiz, deps);
   const accion = caja("cmp-accion");
   raiz.append(accion);
-  if (datos.error) parrafo(accion, textoDeErrorDeAlta(deps, datos.error), "cmp-error");
-  if (cuentaNoSirve) {
+  if (datos.error) parrafo(accion, textoDeErrorDeAlta(deps, datos.error, datos.textoDelLimite), "cmp-error");
+  if (cambiarEsLoPrincipal) {
     boton(accion, deps.tx("cpOtraCuenta"), "primary", acciones.alSalir);
+    // Con una cuenta usada en otro navegador, anotarse igual sigue a mano, del alto de un botón pero sin ser la principal.
+    if (!cuentaNoSirve) boton(accion, deps.tx("cpAnotarmeIgual"), "cmp-anotarme-igual", acciones.alAnotarIgual ?? acciones.alAnotar);
     return;
   }
   const acepto = boton(
@@ -234,17 +262,91 @@ export function pintarHola(
     acciones.alAnotar,
   );
   acepto.disabled = acciones.anotando === true;
+  // Anotando con la ruedita: el botón apagado no se confunde con uno que no responde.
+  if (acciones.anotando) acepto.setAttribute("aria-busy", "true");
   if (acciones.tardando) parrafo(accion, deps.tx("cpTerminandoDeEntrar"), "cmp-apoyo");
 }
 
-/** La espera dentro de la lista. Solo la línea de fase se anuncia cuando cambia. */
+/** Sin una respuesta buena de la sala en tanto tiempo, la señal deja de decir Al día y pasa a buscar la conexión. */
+export const SIN_RESPUESTA_MS = 75_000;
+/** Cada cuánto la señal mira si ya pasó ese tiempo. No consulta nada: solo compara horas. */
+export const REVISION_DE_LA_SENAL_MS = 5_000;
+/** Lo que dura el latido de la señal cada vez que la sala contesta. */
+const LATIDO_MS = 1_200;
+
+type EstadoDeLaSenal = "al-dia" | "buscando";
+
+/** Escribe lo que dice la señal. El texto va en su propio elemento y la señal entera queda fuera de los lectores de pantalla. */
+function ponerLaSenal(senal: HTMLElement, deps: DepsDelCelular, estado: EstadoDeLaSenal): void {
+  senal.dataset.estado = estado;
+  const texto = senal.querySelector<HTMLElement>(".cmp-al-dia-texto");
+  if (texto) texto.textContent = deps.tx(estado === "al-dia" ? "cpAlDia" : "cpBuscandoConexion");
+}
+
+/**
+ * La sala contestó bien: la señal vuelve a Al día y el punto late una vez. Con movimiento reducido no late (la hoja de
+ * estilos tampoco lo anima). No repinta nada y no toca el resto de la pantalla.
+ */
+export function latirAlDia(raizPrincipal: HTMLElement, deps: DepsDelCelular): void {
+  const senal = raizPrincipal.querySelector<HTMLElement>("#cmp-adentro .cmp-al-dia");
+  if (!senal) return;
+  ponerLaSenal(senal, deps, "al-dia");
+  if (deps.movimientoReducido()) return;
+  senal.classList.remove("cmp-late");
+  // Leer el alto fuerza al navegador a empezar la animación de nuevo aunque la clase ya estuviera puesta.
+  void senal.offsetWidth;
+  senal.classList.add("cmp-late");
+  window.setTimeout(() => senal.classList.remove("cmp-late"), LATIDO_MS);
+}
+
+/**
+ * El número de personas cambió y lo demás no: se escribe el número nuevo en el mismo lugar, sin repintar la pantalla, y
+ * sube una vez como en la pantalla de antes de anotarse. Devuelve si había contador a la vista.
+ */
+export function actualizarElContador(raizPrincipal: HTMLElement, deps: DepsDelCelular, total: number): boolean {
+  const contador = raizPrincipal.querySelector<HTMLElement>("#cmp-adentro .cmp-contador");
+  if (!contador) return false;
+  conDestacado(contador, deps.tx(total === 1 ? "cpEnLaLista1" : "cpEnLaListaN"), "n", String(total), "cmp-numero");
+  if (!deps.movimientoReducido()) {
+    contador.classList.remove("sube");
+    void contador.offsetWidth;
+    contador.classList.add("sube");
+    window.setTimeout(() => contador.classList.remove("sube"), 400);
+  }
+  return true;
+}
+
+/**
+ * La espera dentro de la lista. Solo la línea de fase se anuncia cuando cambia.
+ *
+ * Devuelve cómo apagar lo que dejó andando: el reloj de la señal de conexión.
+ * `respuestaDesde` dice desde cuándo la sala contesta bien (la última respuesta buena o la vuelta a la pestaña, lo que
+ * sea más nuevo): sin ella la señal siempre dice Al día. `salta` hace saltar la línea de fase una vez, porque cambió con
+ * la pantalla abierta. `libre` usa la línea de quien no tiene nada que hacer con su cuenta, y `otroLado` la de una cuenta
+ * que ya se usó en otro navegador.
+ */
 export function pintarAdentro(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
-  datos: { ya: boolean; total: number; fase: Fase; cierraMs: number },
-): void {
+  datos: {
+    ya: boolean;
+    total: number;
+    fase: Fase;
+    cierraMs: number;
+    libre?: boolean;
+    /** La cuenta ya se usó en otro navegador: la línea de apoyo lo dice y avisa que quizás haya que recibir el premio allá. */
+    otroLado?: boolean;
+    /**
+     * La tarjeta Confirmar mi correo está a la vista y dice su propia línea: la espera no pone la de apoyo, y las reglas
+     * del sorteo van en el pie, debajo de la tarjeta, para que la línea quede pegada a su botón.
+     */
+    conTarjeta?: boolean;
+    salta?: boolean;
+    respuestaDesde?: () => number;
+  },
+): () => void {
   const raiz = seccion(raizPrincipal, "#cmp-adentro", "cmp-adentro cmp-dos");
-  if (!raiz) return;
+  if (!raiz) return () => undefined;
   const idioma = deps.idioma();
   const izq = caja("cmp-izq cmp-hero");
   // Es la pantalla que queda abierta una hora: arriba dice de quién es el sorteo y qué se sortea.
@@ -263,19 +365,46 @@ export function pintarAdentro(
   conDestacado(fase, deps.tx(claveFase), "hora", horaTexto(datos.cierraMs, deps.campana.zona, idioma), "cmp-hora");
   fase.id = "cmp-fase";
   fase.setAttribute("aria-live", "polite");
+  // La línea de fase cambió con la pantalla abierta: salta una vez, como la tilde, para que se note sin anunciar de más.
+  if (datos.salta && !deps.movimientoReducido()) fase.classList.add("cmp-salta");
   const sorteo = parrafo(horas, "", "cmp-celda");
   conDestacado(sorteo, deps.tx("cpSorteoA"), "hora", horaTexto(deps.campana.sorteoMs, deps.campana.zona, idioma), "cmp-hora");
   der.append(horas);
-  parrafo(der, deps.tx("cpDejaAbierta"), "cmp-apoyo");
+  // La señal de que la página sigue al día con la sala. No se anuncia: la que se anuncia es la línea de fase.
+  const senal = document.createElement("p");
+  senal.className = "cmp-al-dia";
+  senal.setAttribute("aria-hidden", "true");
+  const punto = document.createElement("span");
+  punto.className = "cmp-punto";
+  const textoDeLaSenal = document.createElement("span");
+  textoDeLaSenal.className = "cmp-al-dia-texto";
+  senal.append(punto, textoDeLaSenal);
+  der.append(senal);
+  const sinRespuesta = (): boolean => datos.respuestaDesde !== undefined && deps.ahora() - datos.respuestaDesde() > SIN_RESPUESTA_MS;
+  ponerLaSenal(senal, deps, sinRespuesta() ? "buscando" : "al-dia");
+  if (!datos.conTarjeta) parrafo(der, deps.tx(datos.otroLado ? "cpOtroLadoAdentro" : datos.libre ? "cpDejaAbiertaLibre" : "cpDejaAbierta"), "cmp-apoyo");
   raiz.append(izq, der);
-  pintarReglas(raiz, deps);
+  const pie = datos.conTarjeta ? raizPrincipal.querySelector<HTMLElement>("#cmp-pie") : null;
+  if (pie) {
+    pie.replaceChildren();
+    pie.hidden = false;
+  }
+  pintarReglas(pie ?? raiz, deps);
+  // Con la pestaña escondida nadie la ve y la página no consulta: no se cambia nada hasta que vuelva.
+  return deps.cada(() => {
+    if (deps.visible() && sinRespuesta() && senal.dataset.estado !== "buscando") ponerLaSenal(senal, deps, "buscando");
+  }, REVISION_DE_LA_SENAL_MS);
 }
 
-/** El resultado favorable y el camino para recibir el primer premio. */
+/**
+ * El resultado favorable y el camino para recibir el primer premio. La línea de siempre pide dejar la cuenta lista; con la
+ * variante de `premio.ts` (cuando la cuenta de este navegador es de las que cambian algo) dice lo que de verdad corresponde, y
+ * con una cuenta que se usó en otro navegador la principal pasa a llevar el enlace allá y Recibir queda de texto.
+ */
 export function pintarGano(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
-  datos: { avisado: boolean; comprobante: string | null },
+  datos: { avisado: boolean; comprobante: string | null; variante?: VarianteDeGanaste | null },
 ): void {
   const raiz = seccion(raizPrincipal, "#cmp-estado", "cmp-estado cmp-gano cmp-dos");
   if (!raiz) return;
@@ -297,8 +426,14 @@ export function pintarGano(
   raiz.append(izq);
   const accion = caja("cmp-accion");
   raiz.append(accion);
-  parrafo(accion, deps.tx("cpParaRecibir"), "cmp-apoyo");
-  boton(accion, deps.tx("cpRecibir"), "primary", deps.recibir);
+  parrafo(accion, datos.variante?.linea ?? deps.tx("cpParaRecibir"), "cmp-apoyo");
+  const llevar = datos.variante?.llevar;
+  if (!llevar) {
+    boton(accion, deps.tx("cpRecibir"), "primary", deps.recibir);
+    return;
+  }
+  boton(accion, llevar.texto, "primary", () => llevar.alHacer(accion));
+  boton(accion, deps.tx("cpRecibir"), "cmp-de-texto", deps.recibir);
 }
 
 /** Las líneas de un aviso grande, con el botón de abajo cuando hay un comprobante para ver. */

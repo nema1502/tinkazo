@@ -13,6 +13,7 @@ import { type Campana, leerCampana } from "../campana/modelo";
 import { generarClave } from "./cifra";
 import { esCuentaValida } from "../../workers/sala/src/logica";
 import { type Dependencias, type EquipoDeSala, type Sala, servicioDeSala } from "./cliente";
+import { horaDeLaSala } from "./hora";
 
 export type { MotivoDeSalida };
 export { puedeMoverLaSala, seVeDesde } from "../campana/de-quien";
@@ -423,13 +424,6 @@ const DE_SELLADA: readonly RespuestaDeSellada[] = [
   "token",
   "forma",
 ];
-
-/** La hora de la sala según su cabecera `Date` (con un segundo de precisión), si el navegador la deja leer. */
-function horaDeLaSala(r: Response | null): number | null {
-  const crudo = r?.headers.get("Date");
-  const ms = crudo ? Date.parse(crudo) : Number.NaN;
-  return Number.isFinite(ms) ? ms : null;
-}
 
 /**
  * Le avisa a la sala el número del sorteo sellado. La sala comprueba todo en la red, así que el sitio no manda lista ni

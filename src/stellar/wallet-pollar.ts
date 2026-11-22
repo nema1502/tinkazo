@@ -177,6 +177,8 @@ interface PedidoMirado {
 }
 interface Mirador {
   onRequest(p: PedidoMirado): undefined;
+  /** Solo si quien mira también quiere saber de los rechazos por límite. */
+  onResponse?(p: RespuestaMirada): undefined;
 }
 
 /**
@@ -186,9 +188,10 @@ interface Mirador {
  * pedido sale recién cuando el servidor dice que la sesión está lista (`authenticate` en `@pollar/core`).
  *
  * Mira sin tocar: no cambia el pedido ni lo frena, y si algo falla al mirar, la entrada sigue igual. Si el SDK no deja
- * mirar (otra versión, sin `_api.use`), devuelve `null` y la entrada queda con la regla de siempre: 6 segundos.
+ * mirar (otra versión, sin `_api.use`), devuelve `null` y la entrada queda con la regla de siempre: 6 segundos. Con `alLimite`,
+ * el mismo mirador avisa también de cada rechazo por límite (un 429) que vea mientras se entra.
  */
-export function mirarPedidoDeIngreso(client: unknown, aviso: () => void): (() => void) | null {
+export function mirarPedidoDeIngreso(client: unknown, aviso: () => void, alLimite?: (segundos: number | null) => void): (() => void) | null {
   const api = (client as { _api?: { use?: (m: Mirador) => unknown; eject?: (m: Mirador) => unknown } } | null)?._api;
   if (!api || typeof api.use !== "function" || typeof api.eject !== "function") return null;
   const mirador: Mirador = {
@@ -200,7 +203,91 @@ export function mirarPedidoDeIngreso(client: unknown, aviso: () => void): (() =>
       }
       return undefined;
     },
+    // Con el mismo mirador, y sin sumar otro: un rechazo por límite durante la entrada queda anotado.
+    ...(alLimite ? { onResponse: alRechazoPorLimite(alLimite) } : {}),
   };
+  try {
+    api.use(mirador);
+  } catch {
+    return null;
+  }
+  return () => {
+    try {
+      api.eject?.(mirador);
+    } catch {
+      /* ya no estaba */
+    }
+  };
+}
+
+/** Lo que el SDK le pasa a quien mira sus respuestas: la respuesta cruda, con su estado y sus encabezados. */
+interface RespuestaMirada {
+  response?: { status?: number; headers?: { get?: (nombre: string) => string | null } };
+}
+interface MiradorDeRespuestas {
+  /** Sin nada que hacer con los pedidos: el cliente de la API los recorre a todos con este método. */
+  onRequest(): undefined;
+  onResponse(p: RespuestaMirada): undefined;
+}
+
+/** Cuánto se espera, sin encabezado que lo diga, a que el servicio de cuentas vuelva a aceptar pedidos de ingreso. */
+export const ESPERA_POR_LIMITE_MS = 30_000;
+/** Lo más que se espera por un límite: un encabezado raro no deja a nadie afuera más que esto. */
+export const TOPE_DE_ESPERA_POR_LIMITE_S = 120;
+
+/**
+ * Cuántos segundos faltan para que el servicio de cuentas acepte de nuevo, según los encabezados de un rechazo por límite
+ * (`Retry-After`, `RateLimit-Reset`, `X-RateLimit-Reset` y `RateLimit`), o null si no dicen nada que sirva. Un número grande
+ * se toma como una hora de reloj (segundos desde 1970) y se resta de ahora. Acotado entre 1 y 120 segundos.
+ */
+export function esperaDelLimite(leer: (nombre: string) => string | null, ahoraMs: number): number | null {
+  const comoSegundos = (crudo: string | null): number | null => {
+    if (crudo === null) return null;
+    const limpio = crudo.trim();
+    if (/^\d+(\.\d+)?$/.test(limpio)) {
+      const n = Number(limpio);
+      return n > 1e9 ? n - ahoraMs / 1000 : n;
+    }
+    const fecha = Date.parse(limpio);
+    return Number.isNaN(fecha) ? null : (fecha - ahoraMs) / 1000;
+  };
+  const candidatos: Array<number | null> = [
+    comoSegundos(leer("retry-after")),
+    comoSegundos(leer("ratelimit-reset")),
+    comoSegundos(leer("x-ratelimit-reset")),
+  ];
+  // `RateLimit: limit=20, remaining=0, reset=30`, o la forma con parámetros (`"default";r=0;t=30`).
+  const junto = leer("ratelimit");
+  const dentro = junto === null ? null : /(?:\breset=|;\s*t=)(\d+)/i.exec(junto)?.[1] ?? null;
+  candidatos.push(comoSegundos(dentro));
+  const primero = candidatos.find((s): s is number => s !== null && Number.isFinite(s));
+  if (primero === undefined) return null;
+  return Math.min(TOPE_DE_ESPERA_POR_LIMITE_S, Math.max(1, Math.ceil(primero)));
+}
+
+/** Lo que hace quien mira respuestas con un 429: avisa con los segundos que dicen sus encabezados, o null si no los deja leer. */
+function alRechazoPorLimite(aviso: (segundos: number | null) => void, ahora: () => number = () => Date.now()): (p: RespuestaMirada) => undefined {
+  return ({ response }) => {
+    try {
+      if (response?.status !== 429) return undefined;
+      const get = response.headers?.get;
+      aviso(typeof get === "function" ? esperaDelLimite((nombre) => get.call(response.headers, nombre), ahora()) : null);
+    } catch {
+      /* mirar nunca corta nada */
+    }
+    return undefined;
+  };
+}
+
+/**
+ * Avisa cada vez que el servicio de cuentas rechaza un pedido por límite (un 429), con los segundos que dicen sus
+ * encabezados, o null si no los dejan leer (desde otro origen solo se leen los que el servicio expone). Mira sin tocar: no
+ * cambia la respuesta ni la frena. Si el SDK no deja mirar, devuelve `null`.
+ */
+export function mirarLimites(client: unknown, aviso: (segundos: number | null) => void, ahora: () => number = () => Date.now()): (() => void) | null {
+  const api = (client as { _api?: { use?: (m: MiradorDeRespuestas) => unknown; eject?: (m: MiradorDeRespuestas) => unknown } } | null)?._api;
+  if (!api || typeof api.use !== "function" || typeof api.eject !== "function") return null;
+  const mirador: MiradorDeRespuestas = { onRequest: () => undefined, onResponse: alRechazoPorLimite(aviso, ahora) };
   try {
     api.use(mirador);
   } catch {
@@ -548,6 +635,13 @@ export const MARCAS_DE_LA_CUENTA = {
 
 /** El canal con que una pestaña avisa a las otras que la cuenta cambió. El mensaje es `{ tipo: "cambio" }`, sin la dirección. */
 export const CANAL_DE_LA_CUENTA = "tinkazo-cuenta-oficial";
+
+/**
+ * De dónde viene un aviso de que la cuenta pudo cambiar (`alCambiarLaCuenta`): del canal entre pestañas (otra pestaña hizo
+ * algo), del kit (cambió el estado de la billetera o de la co-firma) o de la vista (volvió la pestaña o volvió la conexión,
+ * que casi nunca cambian nada de la cuenta). Quien lee puede espaciar las lecturas por la vista, sin perder lo de las otras.
+ */
+export type OrigenDelAviso = "canal" | "kit" | "vista";
 
 function leerMarca(clave: string): string | null {
   try {
@@ -897,6 +991,100 @@ const NADA_SE_SABE: EstadoOficial = { activacion: "no-se-sabe", proteccion: "no-
 /** La llave de este navegador entre las de la cuenta. Las dos son hexadecimal: se comparan sin mayúsculas. */
 const mismaLlave = (a: string | null | undefined, b: string | null | undefined): boolean => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
+/* ------------------------------------------------ la cuenta, vista desde el celular de quien participa */
+
+/**
+ * Cómo está la cuenta para la página del celular de un sorteo. `lista`: no hay nada que hacer. `falta`: este navegador es de
+ * la cuenta y el correo no está confirmado. `otro-con-correo` y `otro-con-desbloqueo`: este navegador todavía no es de la
+ * cuenta, pero hay con qué entrar. `sin-forma`: la cuenta se usó en otro navegador y desde acá no hay cómo. `naciendo`: la
+ * billetera recién se está creando. `no-se-sabe`: no hubo respuesta, sesión o llave.
+ */
+export type CuentaDelCelular = "lista" | "falta" | "otro-con-correo" | "otro-con-desbloqueo" | "sin-forma" | "naciendo" | "no-se-sabe";
+
+export interface LecturaDelCelular {
+  estado: CuentaDelCelular;
+  /** La cuenta ya tiene alguna protección (`configured`). Solo elige textos. */
+  protegida: boolean;
+  /** El correo está confirmado y es el mismo de la sesión, sin distinguir mayúsculas. */
+  correoDeLaSesionConfirmado: boolean;
+  /** Se puede mandar el código: hay billetera, configuración del servicio de cuentas y correo en el perfil. */
+  puedeMandar: boolean;
+  /** El correo de la sesión, ya tapado para mostrar. Nunca entero. */
+  correoTapado: string | null;
+  /** El servicio de cuentas frenó el pedido por demasiados: quien lee espera más antes de probar otra vez. */
+  limite: boolean;
+}
+
+/** Lo que `recovery.status()` del kit le deja saber a esta lectura. Todo opcional: se lee con cuidado. */
+export interface RecuperacionLeida {
+  required?: boolean;
+  configured?: boolean;
+  subOrgId?: string | null;
+  endUserId?: string | null;
+  authProxyConfigId?: string | null;
+  email?: { address?: string | null; verified?: boolean } | null;
+  passkeys?: unknown[] | null;
+  devices?: Array<{ publicKey?: string | null }> | null;
+}
+
+const SIN_DATOS_DEL_CELULAR: LecturaDelCelular = { estado: "no-se-sabe", protegida: false, correoDeLaSesionConfirmado: false, puedeMandar: false, correoTapado: null, limite: false };
+
+/** `lucia@example.com` pasa a `l•••@example.com`. Lo que no es un correo da vacío. */
+function taparCorreoDelCelular(correo: string): string {
+  const c = correo.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c)) return "";
+  const arroba = c.indexOf("@");
+  return `${[...c.slice(0, arroba)][0] ?? ""}•••${c.slice(arroba)}`;
+}
+
+/**
+ * Clasifica lo que el kit dice de la cuenta, con la llave de este navegador, cómo va su billetera y el correo de la sesión.
+ * Pura: no lee nada ni guarda nada. Las dos reglas que no se rompen: `sin-forma` solo con aparatos en la lista (una cuenta
+ * recién creada todavía no muestra el suyo y eso es `naciendo`), y `required` falso no es `lista` mientras la billetera se
+ * está creando: con esta custodia quiere decir que todavía no hay billetera.
+ */
+export function clasificarParaElCelular(
+  s: RecuperacionLeida | null | undefined,
+  llave: string | null | undefined,
+  provisioning: string | null | undefined,
+  mailDeSesion: string | null | undefined,
+): LecturaDelCelular {
+  if (!s) return { ...SIN_DATOS_DEL_CELULAR };
+  const mail = (mailDeSesion ?? "").trim();
+  const direccion = (s.email?.address ?? "").trim();
+  const correoConfirmado = s.email?.verified === true && direccion !== "";
+  const base = {
+    protegida: s.configured === true,
+    correoDeLaSesionConfirmado: correoConfirmado && mail !== "" && direccion.toLowerCase() === mail.toLowerCase(),
+    puedeMandar: s.required === true && !!s.subOrgId && !!s.endUserId && !!s.authProxyConfigId && mail !== "",
+    correoTapado: taparCorreoDelCelular(mail) || null,
+    limite: false,
+  };
+  const con = (estado: CuentaDelCelular): LecturaDelCelular => ({ estado, ...base });
+  if (s.required !== true) {
+    if (provisioning === "READY") return con("lista");
+    return con(provisioning === "FAILED" ? "no-se-sabe" : "naciendo");
+  }
+  const devices = Array.isArray(s.devices) ? s.devices : [];
+  if (!s.subOrgId || devices.length === 0) return con("naciendo");
+  if (!llave) return con("no-se-sabe");
+  if (devices.some((d) => mismaLlave(d.publicKey, llave))) return con(correoConfirmado ? "lista" : "falta");
+  if (correoConfirmado) return con("otro-con-correo");
+  const conDesbloqueo = s.configured === true && Array.isArray(s.passkeys) && s.passkeys.length > 0;
+  return con(conDesbloqueo ? "otro-con-desbloqueo" : "sin-forma");
+}
+
+/** Si el servicio de cuentas frenó el pedido por límite: el kit pasa el código y el cuerpo del error, no los encabezados. */
+export function esLimiteDelServicio(error: unknown): boolean {
+  const e = error as { code?: unknown; status?: unknown; message?: unknown; body?: { code?: unknown; status?: unknown; message?: unknown; turnkeyStatus?: unknown } } | null;
+  const campos = [e?.code, e?.message, e?.body?.code, e?.body?.message];
+  if (campos.some((c) => typeof c === "string" && /RATE_LIMITED|too many requests/i.test(c))) return true;
+  return [e?.status, e?.body?.status, e?.body?.turnkeyStatus].some((n) => n === 429);
+}
+
+/** Cuánto espera la lectura del celular a la sesión y, después, a la respuesta del servicio de cuentas. */
+export const TOPE_LECTURA_CELULAR_MS = 8_000;
+
 /** Lo que haga `p`, o un error a los `ms`. El temporizador se suelta al terminar. */
 function conTope<T>(p: Promise<T>, ms: number): Promise<T> {
   let t: ReturnType<typeof setTimeout> | undefined;
@@ -1199,6 +1387,10 @@ class PollarWallet implements SubmittingWallet {
   #preparando: Promise<ResultadoDePreparar> | null = null;
   /** El último cierre de sesión no pudo sacar este navegador de la cuenta: la página lo avisa. */
   ultimoCierreDejoNavegador = false;
+  /** Hasta cuándo el servicio de cuentas dijo que no acepta pedidos (un 429), en milisegundos de reloj. 0: no dijo nada. */
+  #limiteHasta = 0;
+  /** Cómo dejar de mirar los rechazos por límite del cliente armado (`restore`). */
+  #sinMirarLimites: (() => void) | null = null;
   /**
    * El cliente armado vota a mano (issue 180): se pidió con la variable del build en la red principal y el kit lo tomó
    * (`_cosignManual`). Todo lo que se levanta con el voto por contenido mira esto, nunca la variable sola.
@@ -1772,7 +1964,7 @@ class PollarWallet implements SubmittingWallet {
     const dejarDeMirar = mirarPedidoDeIngreso(client, () => {
       enCamino = true;
       if (cerrada()) esperarAlIngreso();
-    });
+    }, (segundos) => this.anotarLimite(segundos));
     // Sin poder mirar (otra versión del SDK) vuelve la regla de los 6 segundos: se cuenta, para saberlo sin esperar quejas.
     if (!dejarDeMirar) contarVentana("no_api");
     const vigia = window.setInterval(() => {
@@ -1885,6 +2077,9 @@ class PollarWallet implements SubmittingWallet {
     // "1" es como se guardaba antes del correo: siempre era Google.
     this.#via = via === "email" ? "email" : "google";
     const client = await this.#ensureClient();
+    // Retomar la sesión son pedidos al servicio de cuentas (validarla, renovarla): un rechazo por límite queda anotado, así la
+    // página del celular lo dice con la verdad. El mirador vive lo que vive el cliente.
+    this.#sinMirarLimites ??= mirarLimites(client, (segundos) => this.anotarLimite(segundos));
     const listo = await Promise.race([client.ready().then(() => true, () => false), new Promise<boolean>((r) => setTimeout(() => r(false), LISTO_MS))]);
     const wallet = client.getWallet();
     this.address = wallet?.address ?? null;
@@ -1974,6 +2169,7 @@ class PollarWallet implements SubmittingWallet {
     } catch {
       /* la sesión ya podía estar cerrada */
     }
+    this.#sinMirarLimites = null;
     this.#client = null;
     this.#aMano = false;
     this.#listo = null;
@@ -3500,18 +3696,79 @@ class PollarWallet implements SubmittingWallet {
   }
 
   /**
+   * Cómo está la cuenta, para la página del celular de un sorteo: una lectura liviana (un pedido al servicio de cuentas y
+   * la llave de este navegador, que es local) sin armar nada ni activar nada. Espera la sesión verificada, porque sin ella
+   * el pedido no lleva token. Solo lee: nunca vota ni pide una firma. Fuera de la red principal todo está listo. Cualquier
+   * falla o falta de sesión es `no-se-sabe` (con `limite` si el servicio frenó el pedido): nada se inventa. La memoria de
+   * que la cuenta está protegida se escribe solo cuando está protegida de verdad en este navegador, y nunca con `naciendo`.
+   *
+   * Con `esperada` (la cuenta de la página: quien recarga ya anotada vive de lo que recordaba, sin haber retomado la sesión),
+   * una sesión de otra cuenta no se lee ni se le atribuye a la esperada: da `no-se-sabe` sin pedir nada. Es lo que pasa en un
+   * celular compartido, cuando otra persona entró con su cuenta en este mismo navegador.
+   */
+  async cuentaDelCelular(tope = TOPE_LECTURA_CELULAR_MS, esperada?: string): Promise<LecturaDelCelular> {
+    if (network.name !== "mainnet") return { estado: "lista", protegida: false, correoDeLaSesionConfirmado: false, puedeMandar: false, correoTapado: null, limite: false };
+    const dir = this.address;
+    if (esperada !== undefined && dir && dir !== esperada) return { ...SIN_DATOS_DEL_CELULAR };
+    if (!dir || (await this.tokenDeSesion(tope)) === null) return { ...SIN_DATOS_DEL_CELULAR };
+    const client = this.#client;
+    if (!client || this.address !== dir) return { ...SIN_DATOS_DEL_CELULAR };
+    let s: RecuperacionLeida;
+    let llave: string | null;
+    try {
+      [s, llave] = await conTope(Promise.all([client.cosign.recovery.status() as Promise<RecuperacionLeida>, client.cosign.publicKeyHex().catch(() => null)]), tope);
+    } catch (e) {
+      const limite = esLimiteDelServicio(e);
+      if (limite) this.anotarLimite(null);
+      return { ...SIN_DATOS_DEL_CELULAR, limite };
+    }
+    if (this.address !== dir) return { ...SIN_DATOS_DEL_CELULAR };
+    return this.#lecturaDelCelular(client, dir, s, llave);
+  }
+
+  /** Clasifica lo que dijo el servicio de cuentas, y recuerda la protección solo cuando está protegida de verdad en este navegador. */
+  #lecturaDelCelular(client: PollarClient, dir: string, s: RecuperacionLeida, llave: string | null): LecturaDelCelular {
+    const w = client.getWallet();
+    const lectura = clasificarParaElCelular(s, llave, cuentaCreada(w) ? "READY" : w?.provisioning, this.profile()?.mail);
+    // Protegida en este navegador: la misma condición de «lista» del paso Dejá tu cuenta lista, y nada más.
+    if (s.required === true && s.configured === true && !!llave && (s.devices ?? []).some((d) => mismaLlave(d.publicKey, llave))) this.#memoriaDe(dir).proteccion = true;
+    return lectura;
+  }
+
+  /**
+   * Confirma el correo de la sesión con el código que llegó, para la tarjeta del celular, y dice cómo quedó la cuenta con lo
+   * que contesta el propio servicio al confirmar (sin otro pedido). No alcanza con `configured`: una cuenta que ya tenía su
+   * desbloqueo está protegida aunque el correo no haya quedado, y decir que se confirmó sería falso. Avisa a las otras
+   * pestañas solo si el correo quedó confirmado. Un error del servicio sale tal cual, para entender por qué.
+   */
+  async confirmarCorreoDelCelular(code: string): Promise<LecturaDelCelular> {
+    const client = await this.#ensureClient();
+    const dir = this.address;
+    const s = (await client.cosign.recovery.confirmEmail(code)) as RecuperacionLeida;
+    const llave = await client.cosign.publicKeyHex().catch(() => null);
+    if (!dir || this.address !== dir) return { ...SIN_DATOS_DEL_CELULAR };
+    const lectura = this.#lecturaDelCelular(client, dir, s, llave);
+    if (lectura.correoDeLaSesionConfirmado) avisarCambioDeLaCuenta();
+    return lectura;
+  }
+
+  /**
    * Avisa a `cb` cada vez que algo de la cuenta puede haber cambiado: el estado de la billetera o de la co-firma en el kit,
    * otra pestaña (por `BroadcastChannel`), volver a la pestaña o volver la conexión. Solo llama a `cb`, que vuelve a
    * leer: ningún aviso vota ni pide nada. Devuelve con qué soltar todo. Fuera de la red principal no hace nada.
+   *
+   * Por defecto arma el cliente del kit para oír también sus avisos. Con `armar: false` (la página del celular de una campaña)
+   * no lo arma: solo se oye si ya estaba armado, y si no, quedan el canal entre pestañas y la vuelta a la pestaña. Armar el
+   * cliente es retomar la sesión, y eso son pedidos al servicio de cuentas.
    */
-  alCambiarLaCuenta(cb: () => void): () => void {
+  alCambiarLaCuenta(cb: (origen: OrigenDelAviso) => void, o: { armar?: boolean } = {}): () => void {
     if (network.name !== "mainnet") return () => undefined;
     let suelto = false;
     const sueltas: Array<() => void> = [];
-    const avisar = (): void => {
+    const avisar = (origen: OrigenDelAviso): void => {
       if (suelto) return;
       try {
-        cb();
+        cb(origen);
       } catch {
         /* lo que haga quien escucha no corta los avisos */
       }
@@ -3520,7 +3777,7 @@ class PollarWallet implements SubmittingWallet {
       if (typeof BroadcastChannel !== "undefined") {
         const canal = new BroadcastChannel(CANAL_DE_LA_CUENTA);
         canal.onmessage = (ev: MessageEvent) => {
-          if ((ev.data as { tipo?: unknown } | null)?.tipo === "cambio") avisar();
+          if ((ev.data as { tipo?: unknown } | null)?.tipo === "cambio") avisar("canal");
         };
         sueltas.push(() => canal.close());
       }
@@ -3529,34 +3786,35 @@ class PollarWallet implements SubmittingWallet {
     }
     if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
       const alVolver = (): void => {
-        if (document.visibilityState === "visible") avisar();
+        if (document.visibilityState === "visible") avisar("vista");
       };
       document.addEventListener("visibilitychange", alVolver);
       sueltas.push(() => document.removeEventListener("visibilitychange", alVolver));
     }
     if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-      window.addEventListener("online", avisar);
-      sueltas.push(() => window.removeEventListener("online", avisar));
+      const alConectar = (): void => avisar("vista");
+      window.addEventListener("online", alConectar);
+      sueltas.push(() => window.removeEventListener("online", alConectar));
     }
-    void this.#ensureClient().then(
-      (client) => {
-        if (suelto) return;
-        sueltas.push(client.onWalletStateChange(() => avisar()));
-        // El kit vuelve a avisar la co-firma cada vez que se leen los pendientes, aunque nada haya cambiado. Como avisar
-        // hace leer, eso sería un bucle de lecturas a Pollar mientras el pedido de activar espera: se avisa solo si
-        // cambió el conjunto de pedidos (o el último resuelto).
-        let ultima: string | null = null;
-        sueltas.push(
-          client.onCosignStateChange((s) => {
-            const f = firmaDeLaCofirma(s);
-            if (f === ultima) return;
-            ultima = f;
-            avisar();
-          }),
-        );
-      },
-      () => undefined,
-    );
+    const oirAlKit = (client: PollarClient): void => {
+      if (suelto) return;
+      sueltas.push(client.onWalletStateChange(() => avisar("kit")));
+      // El kit vuelve a avisar la co-firma cada vez que se leen los pendientes, aunque nada haya cambiado. Como avisar
+      // hace leer, eso sería un bucle de lecturas a Pollar mientras el pedido de activar espera: se avisa solo si
+      // cambió el conjunto de pedidos (o el último resuelto).
+      let ultima: string | null = null;
+      sueltas.push(
+        client.onCosignStateChange((s) => {
+          const f = firmaDeLaCofirma(s);
+          if (f === ultima) return;
+          ultima = f;
+          avisar("kit");
+        }),
+      );
+    };
+    if (o.armar === false) {
+      if (this.#client) oirAlKit(this.#client);
+    } else void this.#ensureClient().then(oirAlKit, () => undefined);
     return () => {
       suelto = true;
       for (const soltar of sueltas.splice(0)) {
@@ -3567,6 +3825,54 @@ class PollarWallet implements SubmittingWallet {
         }
       }
     };
+  }
+
+  /**
+   * El servicio de cuentas rechazó un pedido por límite (un 429): se anota hasta cuándo, con los segundos que dijo o, si no
+   * dejó leerlos, una espera corta. Mientras dure, la página del celular no le pide entrar a nadie y lo dice con la verdad.
+   */
+  anotarLimite(segundos: number | null): void {
+    const espera = segundos ?? ESPERA_POR_LIMITE_MS / 1000;
+    this.#limiteHasta = Math.max(this.#limiteHasta, Date.now() + espera * 1000);
+  }
+
+  /** Cuántos segundos faltan para que el servicio de cuentas acepte pedidos de nuevo, o null si no hay un límite vigente. */
+  segundosDeLimite(): number | null {
+    const falta = this.#limiteHasta - Date.now();
+    return falta > 0 ? Math.ceil(falta / 1000) : null;
+  }
+
+  /**
+   * Suelta el cliente del kit sin cerrar la sesión: paran sus relojes (la renovación de la sesión, la espera a que la cuenta
+   * nazca, la validación al volver a la pestaña) y deja de preguntarle nada al servicio de cuentas. La sesión guardada y la
+   * llave del navegador quedan: `asegurarLaSesion` lo vuelve a armar cuando hace falta. No suelta nada si hay una entrada o
+   * una confirmación en curso. Dice si lo soltó.
+   */
+  soltarElCliente(): boolean {
+    const client = this.#client;
+    if (!client || this.#entrando || this.#confirmacion) return false;
+    this.#dejarDeAtender?.();
+    this.#dejarDeAtender = null;
+    this.#sinMirarLimites?.();
+    this.#sinMirarLimites = null;
+    this.#client = null;
+    this.#listo = null;
+    this.#aMano = false;
+    try {
+      (client as unknown as { destroy?: () => void }).destroy?.();
+    } catch {
+      /* un cliente que no se deja soltar queda sin dueño: ya nadie lo usa */
+    }
+    return true;
+  }
+
+  /**
+   * Con el cliente soltado (o sin armar), lo arma y retoma la sesión guardada. Devuelve la cuenta, o null si no hay sesión
+   * que retomar. Con el cliente armado no pide nada.
+   */
+  async asegurarLaSesion(): Promise<string | null> {
+    if (this.#client && this.address) return this.address;
+    return this.restore();
   }
 
   /** ¿Sigue abierta la sesión de Pollar? Si el kit la cerró por su cuenta (venció), el paso pide entrar de nuevo. */

@@ -18,7 +18,7 @@ const PROHIBIDAS_EN = ["turnkey", "pollar", "signature", "wallet", "transaction"
 
 describe("los textos de «Dejá tu cuenta lista»", () => {
   it("son los de la tabla y están en los dos idiomas", () => {
-    expect(claves.length).toBe(65);
+    expect(claves.length).toBe(70);
     for (const k of claves) {
       expect(typeof T.es[k], k).toBe("string");
       expect(typeof T.en[k], k).toBe("string");

@@ -1,5 +1,6 @@
 import type { EstadoPropio, EstadoPublico, Fase, MotivoDeAlta, MotivoDeSalida } from "../campana/celular";
 import type { Dependencias } from "./cliente";
+import { horaDeLaSala } from "./hora";
 
 /**
  * La sala de una campaña, vista desde el celular de quien participa. Lo que cuenta es lo que contesta el servicio
@@ -90,11 +91,32 @@ const esFase = (x: unknown): x is Fase => typeof x === "string" && FASES.include
 const esTotal = (x: unknown): x is number => typeof x === "number" && Number.isSafeInteger(x) && x >= 0;
 const esHora = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
 
+/** Una ronda de drand: un entero seguro de 1 en adelante. */
+const esRonda = (x: unknown): x is number => typeof x === "number" && Number.isSafeInteger(x) && x >= 1;
+/** El número del sorteo viaja como texto, de 1 a 20 cifras: es un entero grande y JSON no lo escribe. */
+const esSorteo = (x: unknown): x is string => typeof x === "string" && /^[0-9]{1,20}$/u.test(x);
+
 interface Respuesta {
   estado: number;
   cuerpo: unknown;
   /** Lo que dice `Retry-After`, si el navegador deja leerlo (desde otro origen solo se lee si la sala lo expone, y lo hace). */
   espera: string | null;
+  /** La hora de la sala según la cabecera `Date`, si el navegador la deja leer. */
+  horaSala: number | null;
+}
+
+/**
+ * Lo que la sala suma desde que se sella la lista: la ronda de la semilla y el número del sorteo. Las salas de antes no lo
+ * mandan, y un valor que no tiene la forma se descarta sin romper nada: sin la ronda el celular hace lo de siempre. Con la
+ * ronda viaja también la hora de la sala, para que la cuenta regresiva no dependa del reloj del celular.
+ */
+function datosDeLaRonda(c: Record<string, unknown>, fase: Fase, horaSala: number | null): { ronda?: number; sorteo?: string; horaSala?: number } {
+  if ((fase !== "sellada" && fase !== "sorteada") || !esRonda(c.ronda)) return {};
+  return {
+    ronda: c.ronda,
+    ...(esSorteo(c.sorteo) ? { sorteo: c.sorteo } : {}),
+    ...(horaSala !== null ? { horaSala } : {}),
+  };
 }
 
 /** Un pedido con su tope, cuerpo incluido. Da `null` si no hubo respuesta completa. Nunca escribe nada en la consola. */
@@ -119,7 +141,7 @@ async function pedir(dep: Dependencias, url: string, init: RequestInit, tope: nu
     } catch {
       espera = null;
     }
-    return { estado: r.status, cuerpo, espera };
+    return { estado: r.status, cuerpo, espera, horaSala: horaDeLaSala(r) };
   } catch {
     return null;
   } finally {
@@ -147,24 +169,36 @@ export async function estadoPublico(
   if (!esFase(c.fase) || !esTotal(c.total) || !esHora(c.cierraMs)) return "red";
   if (typeof vigencia !== "string" || !PASES.includes(vigencia as EstadoPublico["pase"])) return "red";
   // Una sala vieja no manda `correo`: sin el campo, no se promete ningún aviso.
-  return { fase: c.fase, total: c.total, cierraMs: c.cierraMs, pase: vigencia as EstadoPublico["pase"], correo: c.correo === true };
+  return {
+    fase: c.fase,
+    total: c.total,
+    cierraMs: c.cierraMs,
+    pase: vigencia as EstadoPublico["pase"],
+    correo: c.correo === true,
+    ...datosDeLaRonda(c, c.fase, r.horaSala),
+  };
 }
 
-/** Lo que la sala sabe de este celular. Solo con la llave correcta suma si salió, si ganó y si le avisaron. */
+/**
+ * Lo que la sala sabe de este celular. Solo con la llave correcta suma si salió, si ganó y si le avisaron. Con `correoConfirmado`
+ * le avisa que el correo de la cuenta está confirmado (`c: true`): sin eso el cuerpo es el de siempre.
+ */
 export async function miEstado(
   servicio: string,
   sala: string,
   cuenta: string,
   llave: string,
   dep: Dependencias = {},
+  correoConfirmado = false,
 ): Promise<EstadoPropio | "red" | "terminada"> {
-  const r = await pedir(dep, direccionDe(servicio, sala, "/yo"), { method: "POST", body: JSON.stringify({ cuenta, llave }) }, TOPE_PEDIDO_MS);
+  const cuerpo = JSON.stringify(correoConfirmado ? { cuenta, llave, c: true } : { cuenta, llave });
+  const r = await pedir(dep, direccionDe(servicio, sala, "/yo"), { method: "POST", body: cuerpo }, TOPE_PEDIDO_MS);
   if (!r) return "red";
   if (r.estado === 404) return "terminada";
   const c = r.cuerpo;
   if (r.estado !== 200 || !esObjeto(c)) return "red";
   if (!esFase(c.fase) || !esTotal(c.total) || !esHora(c.cierraMs) || typeof c.anotada !== "boolean") return "red";
-  const propio: EstadoPropio = { fase: c.fase, total: c.total, cierraMs: c.cierraMs, anotada: c.anotada };
+  const propio: EstadoPropio = { fase: c.fase, total: c.total, cierraMs: c.cierraMs, anotada: c.anotada, ...datosDeLaRonda(c, c.fase, r.horaSala) };
   if (typeof c.quitada === "string" && MOTIVOS_DE_SALIDA.includes(c.quitada as MotivoDeSalida)) {
     propio.quitada = c.quitada as MotivoDeSalida;
   }
