@@ -7,12 +7,11 @@ import { cargaOpcional } from "./carga-opcional";
 import { enNavegadorDeApp } from "./navegador";
 import { getLang, initialLang, onLangChange, setLang, texto } from "./idioma";
 import { leerEnlaceDeCampana } from "./campana/enlace";
-import { campanaDeEjemplo } from "./campana/ejemplo";
 import { campanasActivo } from "./campana/bandera";
 import { montarCelular, type DepsDelCelular, type VistaDelCelular } from "./campana/celular";
-import { cargarConUnReintento, depsConectadas, destinoDeRecibir, type BaseDelCelular } from "./campana/conectar";
-import { depsDeDemostracion } from "./campana/demostracion";
+import { cargarConUnReintento, depsConectadas, type BaseDelCelular } from "./campana/conectar";
 import { leerMemoria } from "./campana/memoria";
+import { destinoDeRecibir } from "./campana/recibir";
 import { pintarAviso } from "./campana/piezas";
 import { pintarEstadoDeCarga, type EstadoDeCarga } from "./campana/previa";
 import { sesionDeGoogle } from "./campana/sesion";
@@ -35,6 +34,8 @@ const idioma = initialLang();
 setLang(idioma);
 
 let vista: VistaDelCelular | null = null;
+/** Cuántas veces se montó la vista: la demostración se baja con import() y no debe pisar a una vista montada después. */
+let montajes = 0;
 /** Cómo se pinta el aviso que está a la vista: se vuelve a llamar al cambiar el idioma. */
 let repintarAviso: (() => void) | null = null;
 
@@ -114,10 +115,14 @@ function montarVista(campana: Campana, esEjemplo: boolean, enlace: { sala: strin
   if (!raiz) return;
   repintarAviso = null;
   vista?.desmontar();
+  const montaje = ++montajes;
   const ejemploVisible = document.querySelector<HTMLElement>("#cmp-ejemplo");
   if (ejemploVisible) ejemploVisible.hidden = !esEjemplo;
   if (esEjemplo || !enlace) {
-    vista = montarCelular(raiz, depsDeDemostracion(base, campana, parametros.get("estado")));
+    // La demostración se baja recién acá: quien escanea el QR de un evento de verdad no baja nada de esto.
+    void import("./campana/demostracion").then(({ depsDeDemostracion }) => {
+      if (montaje === montajes) vista = montarCelular(raiz, depsDeDemostracion(base, campana, parametros.get("estado")));
+    });
     return;
   }
   // Recién acá, con la campaña cargada, se arma lo que habla con la sala y con Google.
@@ -157,6 +162,8 @@ function montarVista(campana: Campana, esEjemplo: boolean, enlace: { sala: strin
     enLinea: () => navigator.onLine !== false,
     ir: (direccion) => location.assign(direccion),
     enlace: () => location.href,
+    origen: () => location.origin,
+    ...(typeof navigator.share === "function" ? { compartir: (enlace: string) => navigator.share({ url: enlace }) } : {}),
     ...(typeof navigator.locks?.request === "function"
       ? { bloquear: <T>(nombre: string, trabajo: () => Promise<T>): Promise<T> => navigator.locks.request(nombre, trabajo) }
       : {}),
@@ -210,6 +217,7 @@ async function cargar(): Promise<void> {
     return;
   }
   if (ejemplo) {
+    const { campanaDeEjemplo } = await import("./campana/ejemplo");
     montarVista(campanaDeEjemplo(Date.now()), true, null);
     return;
   }

@@ -48,6 +48,8 @@ export interface EstadoPollarFalso {
   alConfirmar: ((pendientes: unknown[]) => void) | null;
   /** El kit toma `cosignManual` de la configuración, como 0.12.0. En falso, un kit que lo ignora. */
   kitTomaElVotoAMano: boolean;
+  /** Los que miran los pedidos y las respuestas del cliente de la API (`_api.use` y `_api.eject`), como en el kit. */
+  miradores: Array<{ onRequest?: (...a: any[]) => unknown; onResponse?: (...a: any[]) => unknown }>;
 }
 
 export const PASSPHRASE_MAINNET = "Public Global Stellar Network ; September 2015";
@@ -71,6 +73,7 @@ export function estadoPollarFalso(): EstadoPollarFalso {
     transaccion: null,
     alConfirmar: null,
     kitTomaElVotoAMano: true,
+    miradores: [],
   };
 }
 
@@ -97,6 +100,7 @@ export function reiniciar(h: EstadoPollarFalso): void {
   h.transaccion = null;
   h.alConfirmar = null;
   h.kitTomaElVotoAMano = true;
+  h.miradores.length = 0;
 }
 
 /** Lo que devuelve `getAuthState()`: el paso, si Pollar ya revalidó la sesión, y su token. */
@@ -157,6 +161,14 @@ export function clienteFalso(h: EstadoPollarFalso): new (config: Record<string, 
 
   return class ClienteDePollarFalso {
     apiKeyHash = "huella";
+    /** El cliente de la API del kit: solo se puede mirar lo que pasa por él (`use`) y dejar de mirar (`eject`). */
+    _api = {
+      use: (m: (typeof h.miradores)[number]): void => void h.miradores.push(m),
+      eject: (m: (typeof h.miradores)[number]): void => {
+        const i = h.miradores.indexOf(m);
+        if (i >= 0) h.miradores.splice(i, 1);
+      },
+    };
     /** Como el kit (`this._cosignManual = config.cosignManual === true`), salvo que la prueba diga que no lo toma. */
     _cosignManual?: boolean;
     constructor(config: Record<string, unknown>) {
@@ -207,6 +219,10 @@ export function clienteFalso(h: EstadoPollarFalso): new (config: Record<string, 
       return null;
     }
     logout = asincrono("logout", () => undefined);
+    /** Suelta el cliente sin cerrar la sesión, como el kit: se anota la llamada y nada más. */
+    destroy(): void {
+      h.llamadas.push("destroy");
+    }
     signAndSubmitTx = asincrono("signAndSubmitTx", () => ({ status: "success", hash: "deadbeef" }));
     signTx = asincrono("signTx", () => ({ status: "signed", signedXdr: "FIRMADA" }));
     // El desenlace del voto por contenido: cada prueba dice qué contesta la red.

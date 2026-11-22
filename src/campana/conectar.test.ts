@@ -4,12 +4,14 @@ import {
   almacenEnMemoria,
   cargarConUnReintento,
   depsConectadas,
-  destinoDeRecibir,
   type PiezasDelCelular,
 } from "./conectar";
+import { destinoDeRecibir } from "./recibir";
 import type { DepsDelCelular, SesionDelCelular } from "./celular";
 import { fetchFalso, type Llamada, type Paso } from "../sala/fetch-falso";
 import type { SesionDeGoogle } from "./sesion";
+import { descifrarEquipo } from "../equipos/datos";
+import type { LecturaDelCelular } from "../stellar/wallet-pollar";
 
 const CUENTA = `G${"A".repeat(55)}`;
 const OTRA = `G${"B".repeat(55)}`;
@@ -23,6 +25,8 @@ const YO_ANOTADA = { fase: "abierta", total: 5, cierraMs: AHORA + 3_600_000, ano
 const ALTA_OK: Paso = { estado: 201, cuerpo: { cuenta: CUENTA } };
 
 const error = (estado: number, motivo: string): Paso => ({ estado, cuerpo: { error: motivo } });
+
+const LECTURA_LISTA: LecturaDelCelular = { estado: "lista", protegida: true, correoDeLaSesionConfirmado: true, puedeMandar: true, correoTapado: "a•••@ejemplo.com", limite: false };
 
 /** Una página que guarda y lee del almacenamiento de mentira, para ver qué escribe. */
 function almacenFalso(): Storage {
@@ -50,6 +54,10 @@ function googleFalso(tokens: (string | null)[], sigue: boolean) {
     retomar: vi.fn(async (): Promise<SesionDelCelular | null> => null),
     entrar: vi.fn(async (): Promise<SesionDelCelular> => ({ cuenta: CUENTA, nombre: "Ana P." })),
     token: vi.fn(async (): Promise<string | null> => tokens[Math.min(n++, tokens.length - 1)] ?? null),
+    nombreTardio: vi.fn(async (): Promise<string | null> => null),
+    estadoDeLaCuenta: vi.fn(async (): Promise<LecturaDelCelular> => LECTURA_LISTA),
+    segundosDeLimite: vi.fn(async (): Promise<number | null> => null),
+    soltar: vi.fn(async () => undefined),
     sigueLaSesion: vi.fn(async (_cuenta: string) => sigue),
     salir: vi.fn(async () => undefined),
     renovar: vi.fn(() => undefined),
@@ -79,11 +87,23 @@ function montar(
     /** La configuración del build que dice el costo de retirar. */
     entorno?: Record<string, unknown>;
     idioma?: "es" | "en";
+    /** La sesión de Google no sabe leer la cuenta (la demostración). */
+    sinLectura?: boolean;
+    /** La dirección del sitio y el menú de compartir de esta página, para el enlace del premio. */
+    origen?: string;
+    compartir?: (enlace: string) => Promise<void>;
+    /** La sesión de Google no sabe soltarse ni decir el límite (la demostración). */
+    sinSoltar?: boolean;
+    /** La sesión de Google sabe decir si la sesión del navegador es de la cuenta (para ir a recibir). */
+    laSesionEs?: (cuenta: string) => Promise<"si" | "otra" | "no-se-sabe">;
   } = {},
 ): Montaje {
   const { f, llamadas } = fetchFalso(guion);
   const memoria = o.memoria ?? almacenFalso();
   const google = googleFalso(o.tokens ?? ["tok_" + "x".repeat(30)], o.sigue ?? false);
+  if (o.sinLectura) delete (google as { estadoDeLaCuenta?: unknown }).estadoDeLaCuenta;
+  if (o.sinSoltar) delete (google as { soltar?: unknown }).soltar;
+  if (o.laSesionEs) (google as { laSesionEs?: unknown }).laSesionEs = o.laSesionEs;
   const ir = vi.fn();
   const bloqueos: string[] = [];
   const bloquear = async <T>(nombre: string, trabajo: () => Promise<T>): Promise<T> => {
@@ -114,6 +134,8 @@ function montar(
     enLinea: () => o.enLinea ?? true,
     ir,
     enlace: () => "https://tinkazo.example.org/participar.html?c=x",
+    ...(o.origen ? { origen: () => o.origen as string } : {}),
+    ...(o.compartir ? { compartir: o.compartir } : {}),
     bloquear,
     dep: { fetch: f, azar: () => o.azar ?? 0.5 },
     ...(o.entorno ? { entorno: o.entorno } : {}),
@@ -216,7 +238,7 @@ describe("la consulta pública", () => {
 });
 
 describe("el ritmo de las consultas", () => {
-  const intervalo = (azar: number, ms: number): number => {
+  const intervalo = (azar: number, ms: number, modo?: "azar" | "exacta"): number => {
     const llamado: number[] = [];
     const { f } = fetchFalso({});
     const deps = depsConectadas({
@@ -243,6 +265,7 @@ describe("el ritmo de las consultas", () => {
         retomar: async () => null,
         entrar: async () => ({ cuenta: CUENTA, nombre: null }),
         token: async () => null,
+        nombreTardio: async () => null,
         sigueLaSesion: async () => false,
         salir: async () => undefined,
         renovar: () => undefined,
@@ -254,7 +277,7 @@ describe("el ritmo de las consultas", () => {
       enlace: () => "x",
       dep: { fetch: f, azar: () => azar },
     });
-    deps.cada(() => undefined, ms);
+    deps.cada(() => undefined, ms, modo);
     return llamado[0] ?? 0;
   };
 
@@ -270,6 +293,24 @@ describe("el ritmo de las consultas", () => {
   it("los 60 segundos de después del sorteo quedan en 60 con el mismo factor", () => {
     expect(intervalo(0.5, 60_000)).toBe(60_000);
     expect(intervalo(0, 60_000)).toBe(48_000);
+  });
+
+  it("el resultado se mira cada 8 segundos con un azar de 20 %, sin estirar", () => {
+    expect(intervalo(0.5, 8_000, "azar")).toBe(8_000);
+    expect(intervalo(0, 8_000, "azar")).toBe(6_400);
+    expect(intervalo(1, 8_000, "azar")).toBe(9_600);
+  });
+
+  it("y los 15 segundos de después de la ventana no se estiran a 30 con el modo azar", () => {
+    expect(intervalo(0.5, 15_000, "azar")).toBe(15_000);
+    expect(intervalo(0, 15_000, "azar")).toBe(12_000);
+    expect(intervalo(1, 15_000, "azar")).toBe(18_000);
+  });
+
+  it("el reloj de la cuenta regresiva late cada segundo, sin azar ni estiramiento", () => {
+    expect(intervalo(0, 1_000, "exacta")).toBe(1_000);
+    expect(intervalo(1, 1_000, "exacta")).toBe(1_000);
+    expect(intervalo(0.5, 15_000, "exacta")).toBe(15_000);
   });
 
   it("el peor caso son 150 celulares a 2 consultas por minuto: 18.000 por hora", () => {
@@ -288,6 +329,42 @@ describe("anotar", () => {
     expect(cuerpo.d).not.toContain("Ana");
     expect(String(m.llamadas[0]?.init.body)).not.toContain(CLAVE);
     expect(m.llamadas[0]?.url).not.toContain(CLAVE);
+  });
+
+  /** El nombre que viaja cifrado en el alta. */
+  async function nombreDelAlta(m: Montaje): Promise<string | undefined> {
+    const cuerpo = JSON.parse(String(m.llamadas[0]?.init.body)) as { d: string };
+    return (await descifrarEquipo(CLAVE, cuerpo.d))?.nombre;
+  }
+
+  it("si el nombre llegó tarde y el alta salió sin él, lo lee con el token en mano y lo cifra", async () => {
+    const m = montar({ alta: [ALTA_OK] });
+    m.google.nombreTardio.mockResolvedValue("Ana P.");
+    await conSesion(m);
+    await correr(m.deps.anotar(null, () => undefined));
+    expect(m.google.nombreTardio).toHaveBeenCalledTimes(1);
+    expect(await nombreDelAlta(m)).toBe("Ana P.");
+  });
+
+  it("si Google no tiene nombre el alta sale con el nombre vacío", async () => {
+    const m = montar({ alta: [ALTA_OK] });
+    await conSesion(m);
+    await correr(m.deps.anotar(null, () => undefined));
+    expect(await nombreDelAlta(m)).toBe("");
+  });
+
+  it("si el nombre ya estaba no se vuelve a pedir", async () => {
+    const m = montar({ alta: [ALTA_OK] });
+    await conSesion(m);
+    await alta(m);
+    expect(m.google.nombreTardio).not.toHaveBeenCalled();
+    expect(await nombreDelAlta(m)).toBe("Ana");
+  });
+
+  it("la dependencia del celular trae el nombre tardío de la sesión de Google", async () => {
+    const m = montar({});
+    m.google.nombreTardio.mockResolvedValue("Ana P.");
+    expect(await m.deps.nombreTardio?.()).toBe("Ana P.");
   });
 
   it("al anotarse con éxito renueva la marca de invitada", async () => {
@@ -337,6 +414,25 @@ describe("anotar", () => {
     await conSesion(m);
     expect(await alta(m)).toEqual({ ok: false, motivo: "proveedor" });
     expect(m.llamadas).toHaveLength(0);
+  });
+
+  it("sin token y con el servicio de cuentas frenando por límite, lo dice con los segundos", async () => {
+    const m = montar({ alta: [ALTA_OK] }, { tokens: [null], sigue: true });
+    m.google.segundosDeLimite.mockResolvedValue(25);
+    await conSesion(m);
+    expect(await alta(m)).toEqual({ ok: false, motivo: "limite", segundos: 25 });
+    expect(m.llamadas).toHaveLength(0);
+    // Pasado el límite, vuelve a ser lo de siempre.
+    m.google.segundosDeLimite.mockResolvedValue(null);
+    expect(await alta(m)).toEqual({ ok: false, motivo: "proveedor" });
+  });
+
+  it("con token, el límite del servicio de cuentas no se mira: la alta sigue su camino", async () => {
+    const m = montar({ alta: [ALTA_OK] });
+    m.google.segundosDeLimite.mockResolvedValue(25);
+    await conSesion(m);
+    expect(await alta(m)).toEqual({ ok: true, ya: false });
+    expect(m.google.segundosDeLimite).not.toHaveBeenCalled();
   });
 
   it("sin token y sin sesión devuelve sesion", async () => {
@@ -480,6 +576,14 @@ describe("la llave de este celular", () => {
     expect(cuerpo.llave).toMatch(/^[A-Za-z0-9_-]{22}$/u);
   });
 
+  it("la marca de correo confirmado está apagada: aunque la página la pida, el cuerpo de yo es el de siempre", async () => {
+    const m = montar({ yo: [{ estado: 200, cuerpo: YO_ANOTADA }] });
+    await conSesion(m);
+    expect(m.deps.marcaDeCorreo).toBeUndefined();
+    await correr(m.deps.yo(true));
+    expect(Object.keys(JSON.parse(String(m.llamadas[0]?.init.body)) as object).sort()).toEqual(["cuenta", "llave"]);
+  });
+
   it("yo sin cuenta da red sin preguntar", async () => {
     const m = montar({ yo: [{ estado: 200, cuerpo: YO_ANOTADA }] });
     expect(await correr(m.deps.yo())).toBe("red");
@@ -516,6 +620,28 @@ describe("el resto de las dependencias", () => {
     expect(m.ir).toHaveBeenCalledWith("/?red=prueba&premio=1");
     expect(destinoDeRecibir("mainnet")).toBe("/?red=oficial&premio=1");
     expect(destinoDeRecibir("testnet")).toBe("/?red=prueba&premio=1");
+  });
+
+  it("el enlace del premio es entero, con la dirección del sitio y la red de la página", () => {
+    const m = montar({}, { origen: "https://tinkazo.app" });
+    expect(m.deps.enlaceDelPremio?.()).toBe("https://tinkazo.app/?red=prueba&premio=1");
+    // Sin la dirección del sitio (la demostración) no se ofrece mandarlo.
+    expect(montar({}).deps.enlaceDelPremio).toBeUndefined();
+  });
+
+  it("el menú de compartir del navegador pasa tal cual, y sin él no hay", async () => {
+    const compartir = vi.fn(async () => undefined);
+    const m = montar({}, { compartir });
+    await m.deps.compartir?.("https://tinkazo.app/?x=1");
+    expect(compartir).toHaveBeenCalledWith("https://tinkazo.app/?x=1");
+    expect(montar({}).deps.compartir).toBeUndefined();
+  });
+
+  it("soltar la sesión del proveedor llega a la sesión de Google, y sin esa función no hay cómo soltar", async () => {
+    const m = montar({});
+    m.deps.soltarSesion?.();
+    expect(m.google.soltar).toHaveBeenCalledTimes(1);
+    expect(montar({}, { sinSoltar: true }).deps.soltarSesion).toBeUndefined();
   });
 
   it("salir cierra la sesión de Google", async () => {
@@ -578,5 +704,58 @@ describe("cargarConUnReintento", () => {
     const { f, llamadas } = fetchFalso(["corte"]);
     expect(await correr(cargarConUnReintento(f, SERVICIO, SALA, "evento-ejemplo"))).toEqual({ ok: false, estado: "sin-red" });
     expect(llamadas).toHaveLength(2);
+  });
+});
+
+describe("la ventana rápida del resultado", () => {
+  it("viene apagada: las dependencias no la piden, y traen el azar que reparte el primer pedido", () => {
+    const m = montar({});
+    expect(m.deps.ventanaRapida).toBeUndefined();
+    expect(typeof m.deps.azar).toBe("function");
+  });
+});
+
+describe("la lectura de la cuenta", () => {
+  it("lee con la sesión de Google y devuelve lo que ella dice", async () => {
+    const m = montar({});
+    const lectura = m.deps.cuenta?.leer(CUENTA);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(await lectura).toEqual(LECTURA_LISTA);
+    expect(m.google.estadoDeLaCuenta).toHaveBeenCalledTimes(1);
+    // Con la cuenta de la página: una sesión de otra persona no se le atribuye.
+    expect(m.google.estadoDeLaCuenta).toHaveBeenCalledWith(CUENTA);
+  });
+
+  it("para ir a recibir, la comparación de la sesión con la cuenta sale de la sesión de Google, si la tiene", () => {
+    expect(montar({}).deps.cuenta?.laSesionEs).toBeUndefined();
+    const laSesionEs = vi.fn(async () => "si" as const);
+    expect(montar({}, { laSesionEs }).deps.cuenta?.laSesionEs).toBe(laSesionEs);
+  });
+
+  it("espera un retraso corto al azar antes de leer: sin azar es inmediato y con el máximo, un segundo y medio", async () => {
+    const sin = montar({}, { azar: 0 });
+    void sin.deps.cuenta?.leer(CUENTA);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sin.google.estadoDeLaCuenta).toHaveBeenCalledTimes(1);
+
+    const con = montar({}, { azar: 0.999 });
+    void con.deps.cuenta?.leer(CUENTA);
+    await vi.advanceTimersByTimeAsync(1_400);
+    expect(con.google.estadoDeLaCuenta).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(con.google.estadoDeLaCuenta).toHaveBeenCalledTimes(1);
+  });
+
+  it("una sesión sin esa lectura no deja la dependencia: la página queda como estaba", () => {
+    expect(montar({}, { sinLectura: true }).deps.cuenta).toBeUndefined();
+    expect(montar({}).deps.cuenta).toBeDefined();
+  });
+
+  it("no toca la sala ni hace pedidos propios", async () => {
+    const m = montar({});
+    const lectura = m.deps.cuenta?.leer(CUENTA);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await lectura;
+    expect(m.llamadas).toHaveLength(0);
   });
 });

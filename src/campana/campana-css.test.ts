@@ -111,6 +111,22 @@ describe("la pantalla completa de la campaña", () => {
     expect(enlace).not.toMatch(/width:\s*100%/u);
   });
 
+  it("Acepto y me anoto igual tiene el alto de un botón de toque pero no el de la principal", () => {
+    const bloque = /\.cmp-anotarme-igual,\s*\.cmp-de-texto,\s*\.cmp-otra-cuenta\s*\{([^}]+)\}/u.exec(css)?.[1] ?? "";
+    expect(bloque).toMatch(/min-height:\s*44px\s*;/u);
+    expect(bloque).not.toMatch(/width:\s*100%/u);
+    expect(css).not.toMatch(/\.cmp-anotarme-igual[^{]*\{[^}]*min-height:\s*5\d/u);
+    // En la barra de abajo el fondo es el de la tarjeta, que cambia con el tema: la tinta también.
+    expect(/\.cmp-anotarme-igual,\s*\.cmp-de-texto\s*\{([^}]+)\}/u.exec(css)?.[1] ?? "").toMatch(/color:\s*var\(--ink\)\s*;/u);
+  });
+
+  it("el aviso de la cuenta usada en otro navegador usa la letra secundaria y el papel de la casa", () => {
+    const bloque = /\.cmp-otro-lado\s*\{([^}]+)\}/u.exec(css)?.[1] ?? "";
+    expect(bloque).toMatch(/font-size:\s*var\(--letra-sec\)\s*;/u);
+    expect(bloque).toMatch(/background:\s*var\(--paper\)\s*;/u);
+    expect(bloque).toMatch(/color:\s*var\(--ink\)\s*;/u);
+  });
+
   it("la acción queda fija abajo, de borde a borde", () => {
     const bloque = /\.cmp-accion\s*\{([^}]+)\}/u.exec(css)?.[1] ?? "";
     expect(bloque).toMatch(/position:\s*sticky\s*;/u);
@@ -159,5 +175,63 @@ describe("el premio y la cabecera de la campaña", () => {
     const regla = /\.pg-campana \.topnav,\s*\.pg-campana \.pg-auth\s*\{([^}]+)\}/u;
     const bloque = regla.exec(css)?.[1] ?? "";
     expect(bloque).toMatch(/display:\s*none\s*;/u);
+  });
+});
+
+describe("la espera viva", () => {
+  const sinMovimiento = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+
+  it("la ruedita de un botón apagado gira en la hoja de la campaña y no depende de la hoja del sitio", () => {
+    expect(css).toMatch(/@keyframes cmp-gira\s*\{\s*to\s*\{\s*transform:\s*rotate\(360deg\);\s*\}\s*\}/u);
+    const regla = /\.cmp button\[aria-busy="true"\]::before\s*\{([^}]+)\}/u.exec(css)?.[1] ?? "";
+    expect(regla).toMatch(/animation:\s*cmp-gira\s/u);
+    expect(regla).toMatch(/border-top-color:\s*currentColor/u);
+  });
+
+  it("con movimiento reducido no hay ruedita girando, ni latido, ni salto", () => {
+    expect(sinMovimiento).toMatch(/\.cmp button\[aria-busy="true"\]::before/u);
+    expect(sinMovimiento).toMatch(/\.cmp-al-dia\.cmp-late \.cmp-punto/u);
+    expect(sinMovimiento).toMatch(/\.cmp-celda\.cmp-salta/u);
+    const bloque = /\.cmp button\[aria-busy="true"\]::before,[^{]+\{([^}]+)\}/u.exec(sinMovimiento)?.[1] ?? "";
+    expect(bloque).toMatch(/animation:\s*none/u);
+  });
+
+  it("el punto de Al día late una vez y la señal no se anima si busca la conexión con movimiento reducido", () => {
+    expect(css).toMatch(/\.cmp-al-dia\.cmp-late \.cmp-punto\s*\{\s*animation:\s*cmp-late 1200ms/u);
+    expect(sinMovimiento).toMatch(/\.cmp-al-dia\[data-estado="buscando"\] \.cmp-punto/u);
+  });
+});
+
+describe("la tarjeta de confirmar el correo", () => {
+  it("con la tarjeta la espera deja de ocupar todo el alto, para que la tarjeta entre a la vista", () => {
+    expect(css).toMatch(/\.cmp-con-tarjeta > \.cmp-adentro\s*\{[^}]*min-height:\s*0\s*;/u);
+  });
+
+  it("achica la espera con la tarjeta y esconde todo menos lo de escribir con el teclado abierto", () => {
+    expect(css).toMatch(/\.cmp-con-tarjeta \.cmp-adentro \.cmp-rotulos,\s*\.cmp-con-tarjeta \.cmp-adentro \.cmp-marca\s*\{\s*display:\s*none/u);
+    expect(css).toMatch(/\.cmp\.cmp-teclado > \.cmp-adentro,[^{]*\{\s*display:\s*none/u);
+  });
+
+  it("con el teclado abierto el campo y el botón van en una sola fila, para que la barra no tape la línea del correo", () => {
+    expect(css).toMatch(/\.cmp\.cmp-teclado \.cmp-cuenta > \.cmp-accion\s*\{[^}]*flex-flow:\s*row nowrap/u);
+    const boton = /\.cmp\.cmp-teclado \.cmp-accion \.primary\s*\{([^}]+)\}/u.exec(css)?.[1] ?? "";
+    // El botón no se achica: solo deja de ocupar todo el ancho.
+    expect(boton).not.toMatch(/min-height/u);
+    expect(boton).toMatch(/width:\s*auto/u);
+    const campo = /\.cmp\.cmp-teclado \.cmp-accion \.cmp-cuenta-campo\s*\{([^}]+)\}/u.exec(css)?.[1] ?? "";
+    expect(campo).toMatch(/min-width:\s*0/u);
+  });
+
+  it("el campo del código es grande, para que no haga zoom en el celular, y el botón de texto mide lo de un toque", () => {
+    const campo = /\.cmp-accion \.cmp-cuenta-campo\s*\{([^}]+)\}/u.exec(css)?.[1] ?? "";
+    expect(campo).toMatch(/font-size:\s*(?:1[6-9]|[2-9]\d)px/u);
+    const otra = /\.cmp-cuenta-otra\s*\{([^}]+)\}/u.exec(css)?.[1] ?? "";
+    expect(otra).toMatch(/min-height:\s*(?:4[4-9]|[5-9]\d)px/u);
+  });
+
+  it("el aviso del servicio usa la letra secundaria de la casa", () => {
+    const inicio = css.indexOf(".cmp-error {");
+    expect(inicio).toBeGreaterThan(0);
+    expect(css.slice(inicio, css.indexOf("}", inicio))).toMatch(/font-size:\s*var\(--letra-sec\)\s*;/u);
   });
 });

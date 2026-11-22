@@ -1,5 +1,9 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+import { GENESIS_TIME, PERIOD, roundAt, roundTime } from "./quicknet-hora";
+
+// La cuenta de las rondas vive en `quicknet-hora.ts`, sin dependencias, para que la página del celular no cargue la curva.
+export { roundAt, roundTime };
 
 /**
  * drand quicknet sin la curva (docs/protocolo.md §2).
@@ -16,8 +20,8 @@ export const QUICKNET = {
   /** Clave pública en G2, comprimida (96 bytes). */
   publicKey:
     "83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a",
-  genesisTime: 1_692_803_367,
-  period: 3,
+  genesisTime: GENESIS_TIME,
+  period: PERIOD,
   scheme: "bls-unchained-g1-rfc9380",
   relays: [
     "https://api.drand.sh",
@@ -29,17 +33,6 @@ export const QUICKNET = {
 
 /** DST de RFC 9380 para firmas cortas en G1. */
 export const DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
-
-/** Instante (Unix, segundos) en que se publica una ronda. La ronda 1 nace en el génesis. */
-export function roundTime(round: number): number {
-  return QUICKNET.genesisTime + (Math.max(1, round) - 1) * QUICKNET.period;
-}
-
-/** Ronda vigente en un instante (Unix, segundos). */
-export function roundAt(timestamp: number): number {
-  if (timestamp < QUICKNET.genesisTime) return 1;
-  return Math.floor((timestamp - QUICKNET.genesisTime) / QUICKNET.period) + 1;
-}
 
 /** Primera ronda cuya publicación ocurre al menos `leadSeconds` después de `now`. */
 export function targetRound(nowSeconds: number, leadSeconds: number): number {

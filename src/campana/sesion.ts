@@ -9,11 +9,14 @@
 
 import { stripInvisibles } from "../invisibles";
 import { cuentaValida } from "../sala/campana";
-import type { FallaDeEntrada, SesionDelCelular } from "./celular";
+import type { AccionesDeLaCuenta, FallaDeEntrada, SesionDelCelular } from "./celular";
+import type { LecturaDelCelular } from "../stellar/wallet-pollar";
 import { marcarInvitada, marcarVentana, soltarVentana } from "./invitada";
 
 /** Lo máximo que se espera a que el proveedor retome una sesión guardada, para que la página no quede esperando. */
 export const ESPERA_RETOMAR_MS = 3_000;
+/** Cada cuánto se mira el nombre mientras se retoma la sesión, dentro de esos mismos 3 segundos. */
+export const MIRADA_DE_LA_RETOMADA_MS = 250;
 /** Cuánto se espera el token: con datos lentos la sesión tarda en quedar verificada, y decir que venció sería falso. */
 export const ESPERA_TOKEN_MS = 20_000;
 /** Desde acá un error de la entrada es que el proveedor no terminó de crear la cuenta: la ventana vence a los 120 segundos. */
@@ -31,6 +34,15 @@ export const FRENO_DE_ENTRADA_MS = 30_000;
 /** Una segunda falla de Google dentro de este tiempo se dice como falla de la cuenta: nadie insiste en un bucle. */
 export const VENTANA_DE_REPETICION_MS = 120_000;
 const LARGO_DEL_NOMBRE = 30;
+/** Lo que se dice de la cuenta cuando la lectura no pudo ni empezar: que no se sabe. */
+const SIN_DATOS_DE_LA_CUENTA: LecturaDelCelular = {
+  estado: "no-se-sabe",
+  protegida: false,
+  correoDeLaSesionConfirmado: false,
+  puedeMandar: false,
+  correoTapado: null,
+  limite: false,
+};
 
 /** El nombre con que sale una persona en la pantalla del stand: la primera palabra y la inicial de la última. */
 export function nombreParaLaPantalla(nombre: string | null | undefined): string | null {
@@ -51,6 +63,38 @@ export interface SesionDeGoogle {
   entrar: () => Promise<SesionDelCelular>;
   /** El token de la sesión, verificado por el proveedor, o null. Se pide cada vez y no se guarda. */
   token: () => Promise<string | null>;
+  /**
+   * El nombre corto del perfil cuando llegó después de la sesión: si ya está lo da, y si no espera la sesión verificada
+   * (hasta 20 segundos), porque el token y el perfil se completan juntos. Sin nombre o con una falla, null.
+   */
+  nombreTardio: () => Promise<string | null>;
+  /**
+   * Cómo está la cuenta de esta sesión (una lectura liviana, sin tocar nada). Con una falla, `no-se-sabe`. Es opcional: la
+   * demostración y la vista previa no la tienen, y la página se comporta como antes.
+   */
+  estadoDeLaCuenta?: (cuenta?: string) => Promise<LecturaDelCelular>;
+  /**
+   * Lo que la tarjeta Confirmar mi correo hace con la sesión de la cuenta que se le pide. Se baja a pedido (`sesion-confirmar`):
+   * la página no carga nada de eso si la cuenta no lo necesita. Opcional, como la lectura.
+   */
+  accionesDeLaCuenta?: (cuenta: string) => Promise<AccionesDeLaCuenta>;
+  /**
+   * Si la sesión de este navegador es de `cuenta`: retoma la sesión guardada (son pedidos al servicio de cuentas, por eso se
+   * pide solo cuando hace falta, al ir a recibir) y compara. `otra` es la de otra persona en un celular compartido. Sin sesión
+   * o con una falla, `no-se-sabe`. Opcional, como la lectura.
+   */
+  laSesionEs?: (cuenta: string) => Promise<"si" | "otra" | "no-se-sabe">;
+  /**
+   * Suelta el cliente del proveedor sin cerrar la sesión: dejan de correr sus relojes y de pedirse cosas al servicio de
+   * cuentas. La sesión guardada queda, y se vuelve a armar sola cuando algo la pide (el token, la lectura, la tarjeta).
+   * Opcional, como la lectura.
+   */
+  soltar?: () => Promise<void>;
+  /**
+   * Cuántos segundos faltan para que el servicio de cuentas acepte pedidos de nuevo (lo frenó por límite), o null si no hay un
+   * límite vigente. Opcional, como la lectura.
+   */
+  segundosDeLimite?: () => Promise<number | null>;
   /** Si la sesión de esta cuenta sigue abierta en esta página. */
   sigueLaSesion: (cuenta: string) => Promise<boolean>;
   salir: () => Promise<void>;
@@ -59,6 +103,14 @@ export interface SesionDeGoogle {
 }
 
 type ModuloDeGoogle = typeof import("../stellar/wallet-pollar");
+
+/** Cuántos segundos faltan para que el servicio de cuentas acepte pedidos de nuevo, según lo que vio la billetera, o null. */
+function limiteAhora(m: ModuloDeGoogle): number | null {
+  return m.pollarWallet.segundosDeLimite?.() ?? null;
+}
+
+/** La entrada frenada por el límite del servicio de cuentas: lleva cuánto esperar. No cuenta como falla de nadie. */
+const frenadaPorElLimite = (segundos: number): Error => Object.assign(new Error("limite"), { segundos });
 
 /** Una falla del proveedor. El mensaje se compara con las constantes del módulo y nunca se copia. */
 function fallaDeEntrada(error: unknown, duracionMs: number, m: ModuloDeGoogle): FallaDeEntrada {
@@ -168,6 +220,10 @@ export function sesionDeGoogle(o: {
       // Una sesión de correo de la herramienta no sirve para este sorteo: se cierra recién ahora que la persona tocó Entrar.
       await m.pollarWallet.disconnect();
     }
+    // El servicio de cuentas dijo que no acepta pedidos por un rato: no se abre la ventana ni se llama a nadie, y se dice con la
+    // verdad. Ni el freno de 30 segundos ni la regla de la segunda falla cuentan esto: no es una falla de Google ni de la cuenta.
+    const espera = limiteAhora(m);
+    if (espera !== null) throw frenadaPorElLimite(espera);
     // Las marcas van antes de `connect`: la ventana se abre adentro y copia el `sessionStorage` en ese instante.
     renovarInvitada();
     const pestana = o.pestana;
@@ -181,7 +237,11 @@ export function sesionDeGoogle(o: {
         if (pestana) soltarVentana(pestana);
       } });
     } catch (error) {
-      throw new Error(registrar(fallaDeEntrada(error, o.ahora() - empezo, m)));
+      const falla = fallaDeEntrada(error, o.ahora() - empezo, m);
+      // Una ventana frenada o cerrada por la persona se dice como es. Lo demás, con el límite a la vista, fue el límite.
+      const frenada = falla === "ventana" || falla === "cerrada" ? null : limiteAhora(m);
+      if (frenada !== null) throw frenadaPorElLimite(frenada);
+      throw new Error(registrar(falla));
     } finally {
       dejarDeAvisar();
       if (pestana) soltarVentana(pestana);
@@ -197,9 +257,15 @@ export function sesionDeGoogle(o: {
       // Sin la marca del proveedor no hay nada que retomar: no se baja la billetera ni se hace esperar a nadie.
       if (!hayLaMarca()) return null;
       let reloj: ReturnType<typeof setTimeout> | undefined;
+      let mirada: ReturnType<typeof setTimeout> | undefined;
       try {
+        // Los 3 segundos son de toda la retomada: la sesión y, si el perfil tarda, también el nombre. Nunca se pasan.
+        let vencio = false;
         const sinRespuesta = new Promise<null>((resolver) => {
-          reloj = setTimeout(() => resolver(null), ESPERA_RETOMAR_MS);
+          reloj = setTimeout(() => {
+            vencio = true;
+            resolver(null);
+          }, ESPERA_RETOMAR_MS);
         });
         const trabajo = import("../stellar/wallet-pollar").then(async (m) => ({
           m,
@@ -215,11 +281,23 @@ export function sesionDeGoogle(o: {
         if (listo.m.pollarWallet.label === "Email") return null;
         // Una sesión de Google que sigue viva sin pasar por `connect`: la marca de invitada se renueva acá.
         renovarInvitada();
-        return { cuenta: listo.cuenta, nombre: nombreParaLaPantalla(listo.m.pollarWallet.profile()?.name) };
+        // El perfil puede llegar un poco después de la sesión: se mira cada 250 ms hasta que se acaben los 3 segundos.
+        let nombre = nombreParaLaPantalla(listo.m.pollarWallet.profile()?.name);
+        while (nombre === null && !vencio) {
+          await Promise.race([
+            new Promise<void>((resolver) => {
+              mirada = setTimeout(resolver, MIRADA_DE_LA_RETOMADA_MS);
+            }),
+            sinRespuesta,
+          ]);
+          nombre = nombreParaLaPantalla(listo.m.pollarWallet.profile()?.name);
+        }
+        return { cuenta: listo.cuenta, nombre };
       } catch {
         return null;
       } finally {
         clearTimeout(reloj);
+        clearTimeout(mirada);
       }
     },
     entrar: () => {
@@ -233,11 +311,42 @@ export function sesionDeGoogle(o: {
     token: async () => {
       try {
         const m = await import("../stellar/wallet-pollar");
+        // Con el cliente soltado después de anotarse, se vuelve a armar acá: hace falta para pedir el token.
+        await m.pollarWallet.asegurarLaSesion?.();
         return await m.pollarWallet.tokenDeSesion(ESPERA_TOKEN_MS);
       } catch {
         return null;
       }
     },
+    nombreTardio: async () => {
+      try {
+        const m = await import("../stellar/wallet-pollar");
+        const ya = nombreParaLaPantalla(m.pollarWallet.profile()?.name);
+        if (ya !== null) return ya;
+        // El perfil llega junto con la sesión verificada: sin ella no hay nombre que leer.
+        if ((await m.pollarWallet.tokenDeSesion(ESPERA_TOKEN_MS)) === null) return null;
+        return nombreParaLaPantalla(m.pollarWallet.profile()?.name);
+      } catch {
+        return null;
+      }
+    },
+    estadoDeLaCuenta: async (cuenta) => {
+      try {
+        const m = await import("../stellar/wallet-pollar");
+        // La lectura necesita la sesión: si se soltó (después de anotarse, o al recargar), se retoma acá.
+        await m.pollarWallet.asegurarLaSesion?.();
+        // Con la cuenta de la página, la sesión de otra persona no se lee ni se le atribuye.
+        return await m.pollarWallet.cuentaDelCelular(undefined, cuenta);
+      } catch {
+        return { ...SIN_DATOS_DE_LA_CUENTA };
+      }
+    },
+    // Solo la usa quien recargó ya anotada y toca Recibir: se baja con la tarjeta, no con la página.
+    laSesionEs: (cuenta) => import("./sesion-confirmar").then((m) => m.laSesionEs(cuenta), () => "no-se-sabe" as const),
+    accionesDeLaCuenta: async (cuenta) => (await import("./sesion-confirmar")).accionesDeLaCuenta(cuenta),
+    // Sin soltar queda como estaba: la sesión sigue y nada se rompe.
+    soltar: () => import("../stellar/wallet-pollar").then((m) => void m.pollarWallet.soltarElCliente?.(), () => undefined),
+    segundosDeLimite: () => import("../stellar/wallet-pollar").then(limiteAhora, () => null),
     sigueLaSesion: async (cuenta) => {
       try {
         const m = await import("../stellar/wallet-pollar");

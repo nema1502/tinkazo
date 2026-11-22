@@ -2,9 +2,9 @@
 /** Pruebas de las filas de pedidos y de su lectura segura de direcciones. */
 
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLang, setLang, texto, usarTextos } from "../idioma";
-import { cuentaDeRed, pintarHola } from "./adentro";
+import { REVISION_DE_LA_SENAL_MS, SIN_RESPUESTA_MS, actualizarElContador, cuentaDeRed, latirAlDia, pintarAdentro, pintarHola } from "./adentro";
 import type { DepsDelCelular } from "./celular";
 import { depsDeDemostracion } from "./demostracion";
 import { campanaDeEjemplo } from "./ejemplo";
@@ -225,5 +225,304 @@ describe("las filas de los pedidos", () => {
     expect(listo?.hidden).toBe(false);
     expect(listo?.textContent).toContain("Listo");
     expect(segundo.raiz.querySelector(".primary")?.textContent).toBe("Acepto y me anoto");
+  });
+});
+
+describe("Anotando", () => {
+  it("el botón apagado lleva la ruedita y se la saca al terminar", () => {
+    const { raiz, deps } = preparar([]);
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: null }, { alAnotar: () => undefined, alSalir: () => undefined, anotando: true });
+    const boton = raiz.querySelector<HTMLButtonElement>(".cmp-accion .primary");
+    expect(boton?.textContent).toBe("Anotando…");
+    expect(boton?.disabled).toBe(true);
+    expect(boton?.getAttribute("aria-busy")).toBe("true");
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: null });
+    expect(raiz.querySelector(".cmp-accion .primary")?.hasAttribute("aria-busy")).toBe(false);
+  });
+});
+
+describe("la señal de que la espera está al día", () => {
+  const DATOS = { ya: false, total: 37, fase: "abierta" as const, cierraMs: AHORA + 3_600_000 };
+  let reloj = AHORA;
+  let visible = true;
+  let revisar: (() => void) | null = null;
+  let cancelada = false;
+
+  function montar(extra: Partial<Parameters<typeof pintarAdentro>[2]> = {}, movimientoReducido = false): { raiz: HTMLElement; deps: DepsDelCelular; limpiar: () => void } {
+    const { raiz, deps } = preparar([]);
+    const propias: DepsDelCelular = {
+      ...deps,
+      ahora: () => reloj,
+      visible: () => visible,
+      movimientoReducido: () => movimientoReducido,
+      cada: (f, ms) => {
+        expect(ms).toBe(REVISION_DE_LA_SENAL_MS);
+        revisar = f;
+        return () => {
+          cancelada = true;
+          revisar = null;
+        };
+      },
+    };
+    const limpiar = pintarAdentro(raiz, propias, { ...DATOS, ...extra });
+    return { raiz, deps: propias, limpiar };
+  }
+
+  const senal = (raiz: HTMLElement): HTMLElement => raiz.querySelector<HTMLElement>("#cmp-adentro .cmp-al-dia") as HTMLElement;
+
+  beforeEach(() => {
+    reloj = AHORA;
+    visible = true;
+    revisar = null;
+    cancelada = false;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("debajo de las horas dice Al día, no se anuncia y no suma una segunda línea que se anuncie", () => {
+    const { raiz } = montar();
+    const der = raiz.querySelector("#cmp-adentro .cmp-der") as HTMLElement;
+    const hijos = [...der.children].map((hijo) => hijo.className);
+    expect(hijos.slice(0, 2)).toEqual(["cmp-horas", "cmp-al-dia"]);
+    expect(senal(raiz).textContent).toBe("Al día");
+    expect(senal(raiz).getAttribute("aria-hidden")).toBe("true");
+    expect(raiz.querySelectorAll("#cmp-adentro [aria-live]")).toHaveLength(1);
+  });
+
+  it("en inglés dice Up to date", () => {
+    const { raiz, deps } = montar();
+    setLang("en");
+    pintarAdentro(raiz, deps, DATOS);
+    expect(senal(raiz).textContent).toBe("Up to date");
+  });
+
+  it("sin la hora de la última respuesta siempre dice Al día", () => {
+    const { raiz } = montar();
+    reloj += 10 * SIN_RESPUESTA_MS;
+    revisar?.();
+    expect(senal(raiz).dataset.estado).toBe("al-dia");
+  });
+
+  it("pasados 75 segundos sin respuesta buena y con la pestaña a la vista pasa a Buscando conexión", () => {
+    const { raiz } = montar({ respuestaDesde: () => AHORA });
+    reloj = AHORA + SIN_RESPUESTA_MS;
+    revisar?.();
+    expect(senal(raiz).dataset.estado).toBe("al-dia");
+    reloj = AHORA + SIN_RESPUESTA_MS + 1;
+    revisar?.();
+    expect(senal(raiz).dataset.estado).toBe("buscando");
+    expect(senal(raiz).textContent).toBe("Buscando conexión…");
+  });
+
+  it("con la pestaña escondida no cambia nada", () => {
+    const { raiz } = montar({ respuestaDesde: () => AHORA });
+    visible = false;
+    reloj = AHORA + 10 * SIN_RESPUESTA_MS;
+    revisar?.();
+    expect(senal(raiz).dataset.estado).toBe("al-dia");
+  });
+
+  it("si nació con la respuesta ya vieja, nace buscando", () => {
+    reloj = AHORA + 2 * SIN_RESPUESTA_MS;
+    const { raiz } = montar({ respuestaDesde: () => AHORA });
+    expect(senal(raiz).dataset.estado).toBe("buscando");
+  });
+
+  it("una respuesta buena la vuelve a Al día y hace latir el punto una vez", () => {
+    vi.useFakeTimers();
+    const { raiz, deps } = montar({ respuestaDesde: () => AHORA });
+    reloj = AHORA + 2 * SIN_RESPUESTA_MS;
+    revisar?.();
+    expect(senal(raiz).dataset.estado).toBe("buscando");
+    latirAlDia(raiz, deps);
+    expect(senal(raiz).dataset.estado).toBe("al-dia");
+    expect(senal(raiz).textContent).toBe("Al día");
+    expect(senal(raiz).classList.contains("cmp-late")).toBe(true);
+    vi.advanceTimersByTime(1_200);
+    expect(senal(raiz).classList.contains("cmp-late")).toBe(false);
+  });
+
+  it("con movimiento reducido no late, pero sí vuelve a Al día", () => {
+    const { raiz, deps } = montar({ respuestaDesde: () => AHORA }, true);
+    reloj = AHORA + 2 * SIN_RESPUESTA_MS;
+    revisar?.();
+    latirAlDia(raiz, deps);
+    expect(senal(raiz).dataset.estado).toBe("al-dia");
+    expect(senal(raiz).classList.contains("cmp-late")).toBe(false);
+  });
+
+  it("la limpieza que devuelve apaga el reloj de la señal", () => {
+    const { limpiar } = montar();
+    expect(cancelada).toBe(false);
+    limpiar();
+    expect(cancelada).toBe(true);
+  });
+
+  it("sin la espera pintada, latir no hace nada ni falla", () => {
+    const { raiz, deps } = preparar([]);
+    expect(() => latirAlDia(raiz, deps)).not.toThrow();
+  });
+});
+
+describe("el contador y la línea de fase de la espera", () => {
+  const DATOS = { ya: false, total: 37, fase: "abierta" as const, cierraMs: AHORA + 3_600_000 };
+
+  it("cambia el número en su lugar, con el singular, sin tocar el resto", () => {
+    const { raiz, deps } = preparar([]);
+    pintarAdentro(raiz, deps, DATOS);
+    const titulo = raiz.querySelector("#cmp-adentro h1");
+    const contador = raiz.querySelector("#cmp-adentro .cmp-contador") as HTMLElement;
+    expect(actualizarElContador(raiz, deps, 41)).toBe(true);
+    expect(raiz.querySelector("#cmp-adentro .cmp-numero")?.textContent).toBe("41");
+    expect(contador.textContent).toBe("41 personas en la lista");
+    expect(raiz.querySelector("#cmp-adentro .cmp-contador")).toBe(contador);
+    expect(raiz.querySelector("#cmp-adentro h1")).toBe(titulo);
+    actualizarElContador(raiz, deps, 1);
+    expect(contador.textContent).toBe("1 persona en la lista");
+  });
+
+  it("sube una vez y, con movimiento reducido, no", () => {
+    const { raiz, deps } = preparar([]);
+    pintarAdentro(raiz, deps, DATOS);
+    actualizarElContador(raiz, deps, 40);
+    expect(raiz.querySelector(".cmp-contador")?.classList.contains("sube")).toBe(true);
+    const quieto = preparar([]);
+    const reducidos: DepsDelCelular = { ...quieto.deps, movimientoReducido: () => true };
+    pintarAdentro(quieto.raiz, reducidos, DATOS);
+    actualizarElContador(quieto.raiz, reducidos, 40);
+    expect(quieto.raiz.querySelector(".cmp-contador")?.classList.contains("sube")).toBe(false);
+  });
+
+  it("sin la espera pintada no hay contador", () => {
+    const { raiz, deps } = preparar([]);
+    expect(actualizarElContador(raiz, deps, 3)).toBe(false);
+  });
+
+  it("la línea de fase salta solo cuando se pide y no con movimiento reducido", () => {
+    const una = preparar([]);
+    pintarAdentro(una.raiz, una.deps, { ...DATOS, salta: true });
+    expect(una.raiz.querySelector("#cmp-fase")?.classList.contains("cmp-salta")).toBe(true);
+    const otra = preparar([]);
+    pintarAdentro(otra.raiz, otra.deps, DATOS);
+    expect(otra.raiz.querySelector("#cmp-fase")?.classList.contains("cmp-salta")).toBe(false);
+    const quieta = preparar([]);
+    pintarAdentro(quieta.raiz, { ...quieta.deps, movimientoReducido: () => true }, { ...DATOS, salta: true });
+    expect(quieta.raiz.querySelector("#cmp-fase")?.classList.contains("cmp-salta")).toBe(false);
+  });
+
+  it("la línea de apoyo es la de siempre y, para quien no tiene nada que hacer, la libre", () => {
+    const { raiz, deps } = preparar([]);
+    pintarAdentro(raiz, deps, DATOS);
+    expect(raiz.querySelector("#cmp-adentro .cmp-der > .cmp-apoyo")?.textContent).toBe(TEXTOS_CAMPANA.es.cpDejaAbierta);
+    pintarAdentro(raiz, deps, { ...DATOS, libre: true });
+    expect(raiz.querySelector("#cmp-adentro .cmp-der > .cmp-apoyo")?.textContent).toBe(TEXTOS_CAMPANA.es.cpDejaAbiertaLibre);
+  });
+});
+
+describe("una cuenta usada en otro navegador", () => {
+  it("Hola pone el aviso arriba del saludo, con role status, y deja Acepto como principal si el botón todavía no cambió", () => {
+    const { raiz, deps } = preparar([]);
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: null, otroLado: { principal: false } });
+    const hero = raiz.querySelector(".cmp-hero") as HTMLElement;
+    const aviso = hero.querySelector<HTMLElement>(".cmp-otro-lado");
+    expect(aviso?.getAttribute("role")).toBe("status");
+    expect(aviso?.querySelector(".cmp-otro-lado-t")?.textContent).toBe(TEXTOS_CAMPANA.es.cpOtroLadoT);
+    expect(aviso?.textContent).toContain(TEXTOS_CAMPANA.es.cpOtroLado);
+    // Arriba de todo: antes del título.
+    expect(hero.firstElementChild).toBe(aviso);
+    expect(raiz.querySelector(".cmp-accion .primary")?.textContent).toBe("Acepto y me anoto");
+    expect(raiz.querySelector(".cmp-anotarme-igual")).toBeNull();
+    expect(raiz.querySelector(".cmp-hero > .cmp-otra-cuenta")).not.toBeNull();
+  });
+
+  it("con el botón cambiado la principal es Usar otra cuenta y Acepto y me anoto igual queda debajo, sin ser principal", () => {
+    const { raiz, deps } = preparar([]);
+    const alSalir = vi.fn();
+    const alAnotarIgual = vi.fn();
+    const alAnotar = vi.fn();
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: null, otroLado: { principal: true } }, { alAnotar, alAnotarIgual, alSalir });
+    const principales = raiz.querySelectorAll(".primary");
+    expect(principales).toHaveLength(1);
+    expect(principales[0]?.textContent).toBe("Usar otra cuenta");
+    const igual = raiz.querySelector<HTMLButtonElement>(".cmp-accion .cmp-anotarme-igual");
+    expect(igual?.textContent).toBe("Acepto y me anoto igual");
+    // El enlace chico de arriba sobra: cambiar de cuenta ya es la principal.
+    expect(raiz.querySelector(".cmp-hero > .cmp-otra-cuenta")).toBeNull();
+    (principales[0] as HTMLButtonElement).click();
+    igual?.click();
+    expect(alSalir).toHaveBeenCalledTimes(1);
+    expect(alAnotarIgual).toHaveBeenCalledTimes(1);
+    expect(alAnotar).not.toHaveBeenCalled();
+  });
+
+  it("en inglés el aviso y los botones están traducidos", () => {
+    const { raiz, deps } = preparar([]);
+    setLang("en");
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: null, otroLado: { principal: true } });
+    expect(raiz.querySelector(".cmp-otro-lado-t")?.textContent).toBe(TEXTOS_CAMPANA.en.cpOtroLadoT);
+    expect(raiz.querySelector(".cmp-anotarme-igual")?.textContent).toBe(TEXTOS_CAMPANA.en.cpAnotarmeIgual);
+  });
+
+  it("sin aviso Hola queda como siempre", () => {
+    const { raiz, deps } = preparar([]);
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: null, otroLado: null });
+    expect(raiz.querySelector(".cmp-otro-lado")).toBeNull();
+    expect(raiz.querySelector(".cmp-anotarme-igual")).toBeNull();
+    expect(raiz.querySelectorAll(".cmp-accion button")).toHaveLength(1);
+  });
+
+  it("una cuenta que no sirve para el sorteo no ofrece anotarse igual", () => {
+    const { raiz, deps } = preparar([]);
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: "solo-google", otroLado: { principal: true } });
+    expect(raiz.querySelector(".cmp-anotarme-igual")).toBeNull();
+    expect(raiz.querySelector(".cmp-accion .primary")?.textContent).toBe("Usar otra cuenta");
+  });
+
+  it("la espera dice que quizás haya que recibirlo en el otro navegador, y la línea del aviso gana a la libre", () => {
+    const { raiz, deps } = preparar([]);
+    pintarAdentro(raiz, deps, { ya: false, total: 3, fase: "abierta", cierraMs: AHORA + 3_600_000, otroLado: true, libre: true });
+    expect(raiz.querySelector("#cmp-adentro .cmp-der > .cmp-apoyo")?.textContent).toBe(TEXTOS_CAMPANA.es.cpOtroLadoAdentro);
+    // Sigue sin botón: una espera sin acción principal.
+    expect(raiz.querySelector("#cmp-adentro button")).toBeNull();
+  });
+
+  it("los textos nuevos están en español y en inglés", () => {
+    for (const clave of ["cpOtroLadoT", "cpOtroLado", "cpAnotarmeIgual", "cpOtroLadoAdentro"] as const) {
+      expect(TEXTOS_CAMPANA.es[clave], clave).toBeTruthy();
+      expect(TEXTOS_CAMPANA.en[clave], clave).toBeTruthy();
+    }
+  });
+});
+
+describe("la espera con la tarjeta de confirmar el correo a la vista", () => {
+  it("no pone su línea de apoyo (la dice la tarjeta) y deja las reglas en el pie, debajo de la tarjeta", () => {
+    const { raiz, deps } = preparar([]);
+    pintarAdentro(raiz, deps, { ya: false, total: 3, fase: "abierta", cierraMs: AHORA + 3_600_000, conTarjeta: true });
+    expect(raiz.querySelector("#cmp-adentro .cmp-apoyo")).toBeNull();
+    expect(raiz.querySelector("#cmp-adentro details")).toBeNull();
+    const pie = raiz.querySelector<HTMLElement>("#cmp-pie");
+    expect(pie?.hidden).toBe(false);
+    expect(pie?.querySelectorAll("details")).toHaveLength(1);
+    expect(pie?.querySelector("summary")?.textContent).toBe(TEXTOS_CAMPANA.es.cpReglas);
+    // Sigue sin botón: la acción principal es la de la tarjeta, que vive en su propia sección.
+    expect(raiz.querySelector("#cmp-adentro button")).toBeNull();
+  });
+
+  it("al repintar no duplica las reglas del pie", () => {
+    const { raiz, deps } = preparar([]);
+    const datos = { ya: false, total: 3, fase: "abierta" as const, cierraMs: AHORA + 3_600_000, conTarjeta: true };
+    pintarAdentro(raiz, deps, datos);
+    pintarAdentro(raiz, deps, { ...datos, total: 4 });
+    expect(raiz.querySelectorAll("#cmp-pie details")).toHaveLength(1);
+  });
+
+  it("sin la tarjeta las reglas siguen dentro de la espera y el pie queda vacío", () => {
+    const { raiz, deps } = preparar([]);
+    pintarAdentro(raiz, deps, { ya: false, total: 3, fase: "abierta", cierraMs: AHORA + 3_600_000 });
+    expect(raiz.querySelectorAll("#cmp-adentro details")).toHaveLength(1);
+    expect(raiz.querySelector("#cmp-pie")?.children).toHaveLength(0);
+    expect(raiz.querySelector("#cmp-adentro .cmp-der > .cmp-apoyo")).not.toBeNull();
   });
 });

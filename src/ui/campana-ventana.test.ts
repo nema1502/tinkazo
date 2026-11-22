@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLang, t } from "../i18n";
 import { CLAVE_VENTANA, esVentanaDeGoogle, marcarVentana } from "../campana/invitada";
-import { atenderVentanaDeGoogle, pintarCapa } from "./campana-ventana";
+import { atenderVentanaDeGoogle, esLaVentanaDeGoogleDeUnaCampana, LA_VENTANA_DE_GOOGLE_NO_RETOMA, pintarCapa } from "./campana-ventana";
 
 /**
  * La pestaña que deja la ventana de Google (`atenderVentanaDeGoogle`): con la marca de la ventana vigente dice que
@@ -89,5 +89,32 @@ describe("la pestaña que deja la ventana de Google", () => {
     pintarCapa(t("clVentanaLista"));
     expect(document.querySelector(".campana-ventana")?.textContent).toBe("Done. Go back to the draw tab.");
     setLang("es");
+  });
+});
+
+describe("reconocer la ventana de Google sin tocar nada", () => {
+  it("con la marca vigente y sin premio es la ventana de Google, y no suelta la marca ni pinta nada", () => {
+    const a = almacen();
+    marcarVentana(a, T0);
+    expect(esLaVentanaDeGoogleDeUnaCampana(deps(a))).toBe(true);
+    expect(esVentanaDeGoogle(a, T0)).toBe(true);
+    expect(document.querySelector(".campana-ventana")).toBeNull();
+  });
+
+  it("viene encendido, y con el interruptor apagado la herramienta arranca como siempre aunque la marca esté vigente", () => {
+    expect(LA_VENTANA_DE_GOOGLE_NO_RETOMA).toBe(true);
+    const a = almacen();
+    marcarVentana(a, T0);
+    expect(esLaVentanaDeGoogleDeUnaCampana(deps(a), true)).toBe(true);
+    expect(esLaVentanaDeGoogleDeUnaCampana(deps(a), false)).toBe(false);
+  });
+
+  it("sin marca, con la marca vencida, sin almacenamiento o con premio, no lo es", () => {
+    const a = almacen();
+    expect(esLaVentanaDeGoogleDeUnaCampana(deps(a))).toBe(false);
+    marcarVentana(a, T0);
+    expect(esLaVentanaDeGoogleDeUnaCampana(deps(a, { ahora: T0 + 11 * MINUTO }))).toBe(false);
+    expect(esLaVentanaDeGoogleDeUnaCampana(deps(null))).toBe(false);
+    expect(esLaVentanaDeGoogleDeUnaCampana(deps(a, { pideElPremio: true }))).toBe(false);
   });
 });

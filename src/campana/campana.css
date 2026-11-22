@@ -377,6 +377,80 @@
   white-space: nowrap;
 }
 
+/* La señal de que la página sigue al día con la sala: un punto y una palabra, debajo de las horas. Late una vez cuando la sala contesta. */
+.cmp-al-dia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--ink2);
+  font-size: var(--letra-sec);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.cmp-punto {
+  flex: none;
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  background: var(--cmp-verde);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+.cmp-al-dia.cmp-late .cmp-punto {
+  animation: cmp-late 1200ms ease-out;
+}
+
+@keyframes cmp-late {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 var(--cmp-verde); }
+  35% { transform: scale(1.4); box-shadow: 0 0 0 6px transparent; }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Sin respuesta de la sala el punto pasa a ser una ruedita: la página está buscando la conexión. */
+.cmp-al-dia[data-estado="buscando"] .cmp-punto {
+  background: transparent;
+  border-color: color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  animation: cmp-gira 0.8s linear infinite;
+}
+
+/* La línea de fase cambió con la pantalla abierta: salta una vez, más suave que la tilde. */
+.cmp-celda.cmp-salta {
+  animation: cmp-salta 700ms ease-out;
+}
+
+@keyframes cmp-salta {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-6px); }
+  100% { transform: translateY(0); }
+}
+
+/* La ruedita de un botón apagado porque está corriendo algo (Entrando, Anotando). */
+@keyframes cmp-gira {
+  to { transform: rotate(360deg); }
+}
+
+.cmp button[aria-busy="true"] {
+  cursor: progress;
+}
+
+.cmp button[aria-busy="true"]::before {
+  content: "";
+  flex: none;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 0.5em;
+  border: 3px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: cmp-gira 0.8s linear infinite;
+}
+
 /* El botón principal de cada pantalla: abajo, a todo el ancho y siempre a la vista. */
 .cmp-accion {
   position: sticky;
@@ -408,7 +482,32 @@
   background: var(--cmp-acento, var(--magenta));
 }
 
-/* Cambiar de cuenta es un enlace chico dentro del bloque de arriba, y responde solo en su texto. */
+/* El aviso de una cuenta usada en otro navegador: un bloque de papel arriba del saludo, que se lee de un vistazo. */
+.cmp-otro-lado {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  font-size: var(--letra-sec);
+  line-height: 1.35;
+  text-align: left;
+}
+
+.cmp-otro-lado p {
+  margin: 0;
+}
+
+.cmp-otro-lado-t {
+  font-weight: 900;
+}
+
+/* Cambiar de cuenta es un enlace chico dentro del bloque de arriba, y responde solo en su texto.
+   Anotarme igual es el otro camino del aviso: del alto de un botón, pero sin ser la principal. */
+.cmp-anotarme-igual,
+.cmp-de-texto,
 .cmp-otra-cuenta {
   align-self: center;
   min-height: 44px;
@@ -424,6 +523,14 @@
   cursor: pointer;
 }
 
+/* Vive en la barra de abajo, sobre el fondo de la tarjeta: la tinta de la página, no la fija del bloque de color. */
+.cmp-anotarme-igual,
+.cmp-de-texto {
+  color: var(--ink);
+}
+
+.cmp-anotarme-igual:disabled,
+.cmp-de-texto:disabled,
 .cmp-otra-cuenta:disabled {
   opacity: 0.5;
   cursor: default;
@@ -432,6 +539,152 @@
 .cmp-accion input {
   width: 100%;
   min-height: 48px;
+}
+
+/* La tarjeta Confirmar mi correo: vive debajo de la espera, con su propia barra de acción pegada al pie. Mientras está a
+   la vista la espera se achica (sin los rótulos ni la tilde) para que la línea de la tarjeta y su botón entren sin bajar. */
+.cmp-cuenta {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 0 12px;
+}
+
+.cmp-cuenta-cuerpo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.cmp-cuenta-t {
+  font-size: 24px;
+}
+
+.cmp-cuenta-nota {
+  align-self: stretch;
+  text-align: left;
+}
+
+.cmp-cuenta-aparte {
+  text-align: center;
+}
+
+/* Lo que se escribe es un código de letras y números: grande, centrado y con aire entre los caracteres. */
+.cmp-accion .cmp-cuenta-campo {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+.cmp-cuenta-otra {
+  min-height: 44px;
+  padding: 0 12px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  font-family: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cmp-con-tarjeta > .cmp-adentro {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+/* En pantallas anchas la columna del título deja de ocupar todo el alto: la tarjeta entra debajo, a la vista. */
+.cmp-con-tarjeta > .cmp-adentro > .cmp-izq {
+  min-height: 0;
+  position: static;
+}
+
+.cmp-con-tarjeta .cmp-adentro .cmp-rotulos,
+.cmp-con-tarjeta .cmp-adentro .cmp-marca {
+  display: none;
+}
+
+/* Con un código en juego, o con una nota de la tarjeta (la página se recargó, el código venció, algo falló), la espera queda
+   chica, en su título y el número de personas: lo demás es ruido y empujaría la acción de texto de la tarjeta fuera de la
+   vista en un celular de 640 px de alto. */
+.cmp-con-codigo .cmp-adentro .cmp-horas,
+.cmp-con-codigo .cmp-adentro .cmp-al-dia,
+.cmp-con-nota .cmp-adentro .cmp-horas,
+.cmp-con-nota .cmp-adentro .cmp-al-dia {
+  display: none;
+}
+
+.cmp-con-codigo .cmp-adentro .cmp-hero,
+.cmp-con-nota .cmp-adentro .cmp-hero {
+  gap: 2px;
+  padding: 10px 12px;
+  box-shadow: none;
+}
+
+.cmp-con-codigo .cmp-adentro .cmp-hero h1,
+.cmp-con-nota .cmp-adentro .cmp-hero h1 {
+  font-size: 22px;
+}
+
+.cmp-con-codigo .cmp-adentro .cmp-hero .cmp-contador,
+.cmp-con-codigo .cmp-adentro .cmp-hero .cmp-numero,
+.cmp-con-nota .cmp-adentro .cmp-hero .cmp-contador,
+.cmp-con-nota .cmp-adentro .cmp-hero .cmp-numero {
+  font-size: 18px;
+}
+
+/* Las reglas del sorteo, debajo de la tarjeta: se leen si se bajan y no empujan la tarjeta fuera de la vista. */
+.cmp-pie {
+  padding: 0 0 12px;
+}
+
+/* Con el teclado abierto (el campo enfocado) solo queda lo que se necesita para escribir y confirmar. */
+.cmp.cmp-teclado > .cmp-adentro,
+.cmp.cmp-teclado > .cmp-pie,
+.cmp.cmp-teclado .cmp-cuenta-aparte,
+.cmp.cmp-teclado .cmp-cuenta-otra {
+  display: none;
+}
+
+/* Sin la espera arriba, el título no se pega a la cabecera. */
+.cmp.cmp-teclado > .cmp-cuenta {
+  padding-top: 16px;
+}
+
+/* En una ventana muy baja (de 250 a 300 px, lo que deja un teclado en un celular de 640), la barra con el campo y el botón en
+   dos filas llegaba a 141 px y tapaba la línea que dice a qué correo salió el código. Con el teclado abierto van en una sola
+   fila, y el título y la línea se achican un poco. El botón conserva su alto. */
+.cmp.cmp-teclado .cmp-cuenta > .cmp-accion {
+  flex-flow: row nowrap;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.cmp.cmp-teclado .cmp-accion .cmp-cuenta-campo {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+}
+
+.cmp.cmp-teclado .cmp-accion .primary {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: none;
+  justify-content: center;
+  padding-inline: 16px;
+}
+
+.cmp.cmp-teclado .cmp-cuenta-t {
+  font-size: 20px;
+}
+
+.cmp.cmp-teclado .cmp-cuenta-linea {
+  font-size: 15px;
+  line-height: 1.3;
 }
 
 .cmp details {
@@ -903,6 +1156,7 @@ a.cmp-suave {
     font-size: 22px;
   }
 
+  .cmp-anotarme-igual,
   .cmp-otra-cuenta {
     font-size: 18px;
   }
@@ -1048,12 +1302,34 @@ a.cmp-suave {
     max-width: 360px;
   }
 
+  .cmp-accion .cmp-cuenta-campo {
+    flex: 1 1 200px;
+    width: auto;
+    max-width: 280px;
+  }
+
   .cmp-accion > .cmp-apoyo,
   .cmp-accion > .cmp-error,
   .cmp-accion > .cmp-vuelve {
     flex: 3 1 160px;
     min-width: 0;
     text-align: left;
+  }
+}
+
+/* En una pantalla ancha y alta la barra de la tarjeta no va pegada al pie, y no ocupa todo el ancho: un botón de un ancho
+   que se pueda mirar y tocar, centrado debajo de lo que explica. */
+@media (min-width: 900px) and (min-height: 601px), (orientation: landscape) and (min-width: 640px) and (min-height: 601px) {
+  .cmp-cuenta {
+    align-items: center;
+  }
+
+  .cmp-cuenta > .cmp-accion {
+    width: min(100%, 440px);
+  }
+
+  .cmp-cuenta-cuerpo {
+    max-width: 560px;
   }
 }
 
@@ -1071,5 +1347,93 @@ a.cmp-suave {
 
   .cmp-festejo .cmp-tilde {
     display: none;
+  }
+
+  /* Las esperas quedan quietas: la ruedita con su borde de arriba marcado, el punto sin latido y la línea sin salto. */
+  .cmp button[aria-busy="true"]::before,
+  .cmp-al-dia[data-estado="buscando"] .cmp-punto,
+  .cmp-al-dia.cmp-late .cmp-punto,
+  .cmp-celda.cmp-salta {
+    animation: none;
+  }
+}
+/* El sorteo está por empezar: con la lista sellada, un título, la cuenta regresiva y una línea. No hay nada para tocar. */
+/* Ocupa el alto que queda, y no más: las reglas del sorteo y el enlace de la tarjeta entran debajo sin bajar. */
+.cmp-regresiva {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.cmp-regresiva > .cmp-izq {
+  min-height: 0;
+  position: static;
+}
+
+.cmp-cuenta-regresiva {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  /* Los números ocupan lo mismo: la cuenta no baila al cambiar cada segundo. */
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-cuenta-regresiva .cmp-numero {
+  display: block;
+}
+
+/* Con un código de la tarjeta en juego la cuenta baja a un rótulo chico arriba y la tarjeta es lo principal. */
+.cmp-regresiva-chica > .cmp-izq {
+  flex: 0 0 auto;
+}
+
+.cmp-regresiva-chica .cmp-hero {
+  gap: 2px;
+  padding: 8px 12px;
+  box-shadow: none;
+}
+
+.cmp-regresiva-chica .cmp-cuenta-regresiva {
+  font-size: 17px;
+}
+
+/* Con la cuenta regresiva a la vista y sin un código en juego, Confirmar mi correo es un enlace de texto debajo: no pelea
+   con lo que se mira. La línea de la tarjeta, su título y sus avisos chicos se van: queda el enlace y, si algo falló, su nota. */
+.cmp.cmp-tarjeta-enlace > .cmp-cuenta {
+  flex: 0 0 auto;
+  padding: 0 0 12px;
+}
+
+.cmp.cmp-tarjeta-enlace .cmp-cuenta-cuerpo > :not(.cmp-cuenta-nota) {
+  display: none;
+}
+
+.cmp.cmp-tarjeta-enlace > .cmp-cuenta > .cmp-accion {
+  position: static;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.cmp.cmp-tarjeta-enlace > .cmp-cuenta .primary {
+  align-self: center;
+  width: auto;
+  min-height: 44px;
+  padding: 0 12px;
+  background: none;
+  color: var(--ink);
+  border: 0;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: var(--letra-sec);
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+@media (min-width: 900px) {
+  .cmp-regresiva {
+    width: min(100%, 880px);
+    margin-inline: auto;
   }
 }

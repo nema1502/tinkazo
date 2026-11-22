@@ -31,6 +31,7 @@ import { anunciarFranja, pintarFranja } from "./sin-cuenta-franja";
 import { esDeRed } from "../stellar/errores";
 import { CLASE_NO_CARGO, avisarQueNoCargo } from "./aviso-no-cargo";
 import { animarEntradaIngreso, animarSalidaIngreso } from "../estilos-atencion";
+import { esLaVentanaDeGoogleDeUnaCampana } from "./campana-ventana";
 
 /**
  * Identidad del organizador en la cabecera.
@@ -379,12 +380,28 @@ export function pedirEntrar(): void {
   })();
 }
 
+/** Esta pestaña es la ventana de Google que abrió la página de una campaña: la herramienta no es para usarla acá. */
+function esLaVentanaDeGoogle(): boolean {
+  try {
+    return esLaVentanaDeGoogleDeUnaCampana({
+      sesion: sessionStorage,
+      ahora: Date.now(),
+      pideElPremio: new URLSearchParams(location.search).get("premio") === "1",
+    });
+  } catch {
+    return false;
+  }
+}
+
 export function initWalletUI(): void {
+  // La ventana de Google de una campaña se cierra sola cuando Google termina: retomar acá la sesión del proveedor, o bajar
+  // su SDK, solo suma pedidos al servicio de cuentas por cada ingreso, en el mismo momento en que 150 celulares entran.
+  const ventanaDeGoogle = esLaVentanaDeGoogle();
   // Hay una sesión guardada (de Pollar, de la cuenta de prueba o de Freighter):
   // mientras vuelve, la línea de la cuenta dice "Retomando tu cuenta…" y no
   // ofrece entrar. Con Google eso tarda hasta 8 s, y antes se veía la caja de
   // conectar, como si hubiera que entrar otra vez (diseño del onboarding).
-  retomando = anchoringAvailable && haySesionGuardada();
+  retomando = anchoringAvailable && haySesionGuardada() && !ventanaDeGoogle;
   let terminarDeRetomar: () => void = () => undefined;
   retomaTerminada = retomando ? new Promise<void>((resolver) => (terminarDeRetomar = resolver)) : Promise.resolve();
   render();
@@ -401,7 +418,7 @@ export function initWalletUI(): void {
     render();
     terminarDeRetomar();
   };
-  void Promise.allSettled([restorePollar(), restoreSession()]).then(fin);
+  void Promise.allSettled(ventanaDeGoogle ? [] : [restorePollar(), restoreSession()]).then(fin);
   // Por si algo queda colgado: nunca más de 12 s diciendo que se retoma.
   setTimeout(fin, 12_000);
   // Llegó de Practicar en Prueba (modo-ui.ts): la marca se consume ahora, una sola vez, y al terminar de retomar entra con
@@ -414,7 +431,7 @@ export function initWalletUI(): void {
   // La ventana de ingreso, lista antes del clic: con la página quieta se baja
   // lo poco que necesita y se le pregunta a Freighter si está. Así abre sin
   // esperar a la red ni a los dos segundos de Freighter.
-  if (anchoringAvailable) {
+  if (anchoringAvailable && !ventanaDeGoogle) {
     const preparar = (): void => {
       // Nunca durante el sorteo: la librería de Freighter usa Math.random() y
       // el auditor exigente lo contaba dentro del juego (19 de octubre de 2026),

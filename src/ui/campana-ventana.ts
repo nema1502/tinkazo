@@ -20,6 +20,32 @@ export interface DepsDeLaVentana {
   tx: (clave: string) => string;
 }
 
+/**
+ * Si la ventana de Google de una campaña, al volver a la raíz del sitio, deja la herramienta quieta: no retoma la sesión del
+ * proveedor ni baja su SDK (cada retomada son pedidos al servicio de cuentas por cada ingreso, justo cuando 150 celulares
+ * entran juntos, y la ventana se cierra sola en cuanto Google termina).
+ *
+ * Eso no se pudo ver en un ingreso real: si el proveedor necesitara el SDK corriendo en la ventana de vuelta para cerrar el
+ * ingreso, el celular quedaría esperando después de elegir la cuenta. La prueba entera (Entrar con Google, volver, Hola,
+ * anotarse) se hace una vez con el sitio construido antes de publicar. Si falla, poner esto en `false` y la ventana vuelve a
+ * arrancar la herramienta como antes del cambio, sin tocar nada más.
+ */
+export const LA_VENTANA_DE_GOOGLE_NO_RETOMA: boolean = true;
+
+/**
+ * ¿Esta pestaña es la ventana de Google de una campaña? Sin soltar la marca ni pintar nada: solo mirar, para que la
+ * herramienta no retome en ella la sesión del proveedor (cada retomada son pedidos al servicio de cuentas, y la ventana se
+ * cierra sola en cuanto Google termina). Con `?premio=1` nunca: esa pestaña vino a recibir. Con el interruptor apagado
+ * (`LA_VENTANA_DE_GOOGLE_NO_RETOMA`) nunca: la herramienta arranca como siempre.
+ */
+export function esLaVentanaDeGoogleDeUnaCampana(
+  d: Pick<DepsDeLaVentana, "sesion" | "ahora" | "pideElPremio">,
+  noRetoma: boolean = LA_VENTANA_DE_GOOGLE_NO_RETOMA,
+): boolean {
+  if (!noRetoma || !d.sesion || d.pideElPremio) return false;
+  return esVentanaDeGoogle(d.sesion, d.ahora);
+}
+
 export function atenderVentanaDeGoogle(d: DepsDeLaVentana): boolean {
   if (!d.sesion) return false;
   if (d.pideElPremio) {
