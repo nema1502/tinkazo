@@ -308,6 +308,93 @@ describe("con pagar con Google", () => {
     expect(principal().textContent).toBe(t("saldoYaMande"));
   });
 
+  it("si quien la abre sabe cuánto falta, el título de la dirección lo dice", async () => {
+    await abrir(mundo(), { vista: "traer", falta: "1,50" });
+    expect(titulos()).toEqual(["Mandá 1,50 dólares digitales"]);
+    expect(document.querySelector('[data-saldo="dir"]')?.textContent).toBe(YO);
+    expect(principal().textContent).toBe(t("saldoYaMande"));
+    setLang("en");
+    document.body.innerHTML = "";
+    await abrir(mundo(), { vista: "traer", falta: "1.50" });
+    expect(titulos()).toEqual(["Send 1.50 digital dollars"]);
+  });
+
+  /** Una pausa que la prueba suelta a mano: cada vuelta de la mirada sola espera acá. */
+  const pausaAMano = (): { pausa: () => Promise<void>; soltar: () => void; esperando: () => number } => {
+    let pendientes: Array<() => void> = [];
+    return {
+      pausa: () => new Promise<void>((r) => void pendientes.push(r)),
+      soltar: () => {
+        const ps = pendientes;
+        pendientes = [];
+        for (const r of ps) r();
+      },
+      esperando: () => pendientes.length,
+    };
+  };
+
+  it("mirando sola, ve llegar los dólares sin que nadie toque Ya lo mandé", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    expect(estado()).toBe("");
+    m.lista = [pago(TX("b"), { monto: 15_000_000n }), pago(TX("a"))];
+    m.lectura = conUsdc("14.0000000");
+    reloj.soltar();
+    await vi.waitFor(() => expect(estado()).toBe("Llegaron 1,5 dólares digitales."));
+    expect(principal().textContent).toBe(t("acctClose"));
+    // Con la plata vista, deja de mirar: no queda ninguna vuelta esperando.
+    reloj.soltar();
+    await Promise.resolve();
+    expect(reloj.esperando()).toBe(0);
+  });
+
+  it("mirando sola, mientras no llega nada no dice nada ni cambia el botón", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    reloj.soltar();
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    expect(estado()).toBe("");
+    expect(principal().textContent).toBe(t("saldoYaMande"));
+    expect(principal().disabled).toBe(false);
+  });
+
+  it("mirando sola, una falla de la red no se dice: sigue esperando", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    m.pagos = vi.fn(async () => ({ ok: false as const }));
+    reloj.soltar();
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    expect(estado()).toBe("");
+    expect(principal().textContent).toBe(t("saldoYaMande"));
+  });
+
+  it("sin pedirlo, la ventana no mira sola: solo con Ya lo mandé", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer" });
+    await Promise.resolve();
+    expect(reloj.esperando()).toBe(0);
+  });
+
+  it("al cerrar la ventana, la mirada sola se detiene", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    document.querySelector<HTMLButtonElement>("[data-dlg='x']")?.click();
+    const llamadas = (m.pagos as ReturnType<typeof vi.fn>).mock.calls.length;
+    reloj.soltar();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect((m.pagos as ReturnType<typeof vi.fn>).mock.calls.length).toBe(llamadas);
+  });
+
   it("abierta directo en traer, sin la línea, primero prepara la cuenta", async () => {
     await abrir(mundo({ lectura: mirada() }), { vista: "traer" });
     expect(titulos()).toEqual([T.es.saldoPrepTitulo]);

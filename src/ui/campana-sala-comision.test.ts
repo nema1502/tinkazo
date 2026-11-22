@@ -58,6 +58,8 @@ interface Cobro {
   llamadas: string[];
   pedidos: PedidoDePagoDeComision[];
   cargas: string[];
+  /** Lo que el panel le dijo a la ventana de cargar que falta mandar, en cada toque. */
+  faltas: Array<string | undefined>;
   alCerrarLaCarga: (() => void) | null;
   deps: DepsDeComision;
 }
@@ -77,6 +79,7 @@ function cobro(m: Mundo, cambios: Partial<Cobro> = {}): Cobro {
     llamadas: [],
     pedidos: [],
     cargas: [],
+    faltas: [],
     alCerrarLaCarga: null,
     deps: undefined as never,
     ...cambios,
@@ -105,8 +108,9 @@ function cobro(m: Mundo, cambios: Partial<Cobro> = {}): Cobro {
     },
     confirmar: async () => c.confirmado,
     puedeVolverALista: async () => c.puedeVolver,
-    cargar: (cuenta, alCerrar) => {
+    cargar: (cuenta, alCerrar, falta) => {
       c.cargas.push(cuenta);
+      c.faltas.push(falta);
       c.alCerrarLaCarga = alCerrar;
     },
     // Un candado de mentira: lo que pide el mismo nombre corre de a uno, en orden.
@@ -186,6 +190,22 @@ describe("falta cargar", () => {
     await suelta(6);
     expect(c.llamadas.filter((x) => x === "red").length).toBe(antes + 1);
     expect(texto(p, "#cpo-h")).toBe("Pagá 2,40 a Tinkazo");
+  });
+
+  it("Cargar le dice a la ventana cuánto falta mandar: todo sin saldo, y solo la diferencia con algo cargado", async () => {
+    const sinNada = armar({ saldo: 0n });
+    const p1 = nuevoPanel(sinNada.m);
+    await eligiendo(sinNada.m, p1);
+    expect(texto(p1, "#cpo-h")).toBe("Cargá 122,40 dólares digitales");
+    boton(p1, "Cargar dólares digitales").click();
+    expect(sinNada.c.faltas).toEqual(["122,40"]);
+
+    const conAlgo = armar({ saldo: d(100) });
+    const p2 = nuevoPanel(conAlgo.m);
+    await eligiendo(conAlgo.m, p2, { premios: ["1000000000"] });
+    expect(texto(p2, "#cpo-h")).toBe("Cargá 2 dólares digitales más");
+    boton(p2, "Cargar dólares digitales").click();
+    expect(conAlgo.c.faltas).toEqual(["2"]);
   });
 
   it("deja abierto el pago desde otra billetera, plegado", async () => {

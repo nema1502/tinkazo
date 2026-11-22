@@ -68,7 +68,8 @@ export interface DepsDeComision {
   /** Con un pago que venció sin verse: ¿se puede ofrecer pagar de nuevo? Solo si la mirada es consistente y no lo muestra. */
   puedeVolverALista: (origen: string, secuencia: string, nota: string) => Promise<boolean>;
   /** Abre la ventana de los dólares para cargar. `alCerrar` avisa cuando se cierra. */
-  cargar: (cuenta: string, alCerrar: () => void) => void;
+  /** `falta` es lo que hay que mandar, ya escrito (por ejemplo 1,50): la ventana lo dice junto a la dirección. */
+  cargar: (cuenta: string, alCerrar: () => void, falta?: string) => void;
   /** Corre `f` con un candado entre pestañas. Sin candados en el navegador, corre `f` solo. */
   candado: <T>(nombre: string, f: () => Promise<T>) => Promise<T>;
 }
@@ -446,9 +447,16 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
   function cargar(despues?: () => void): void {
     const cuenta = ctx.cuenta();
     if (cuenta !== null) {
-      deps.cargar(cuenta, () => {
-        void mirar().then(() => despues?.());
-      });
+      // Lo que falta mandar, si ya se sabe: la ventana de la dirección lo dice en su título.
+      const e = estado();
+      const falta = e.tipo === "falta-cargar" ? montoTexto(e.falta, ctx.idioma()) : undefined;
+      deps.cargar(
+        cuenta,
+        () => {
+          void mirar().then(() => despues?.());
+        },
+        falta,
+      );
     }
   }
 
