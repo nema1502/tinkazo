@@ -60,10 +60,10 @@ import { network } from "../stellar/config";
 import { activeWallet } from "../stellar/wallet-lite";
 import { type PantallaGrande, crearPantallaGrande, rellenar } from "./campana-grande";
 import { type AccionDeComision, type ControlDeComision, type DepsDeComision, crearControlDeComision } from "./campana-comision";
-import { cambiarDeCuentaReal, depsDeComisionReales } from "./campana-comision-real";
+import { cambiarDeCuentaReal, depsDeComisionReales, entrarConGoogleReal } from "./campana-comision-real";
 import type { ContextoDelPaso } from "./campana-pasar";
 import { alCerrarReal, alOlvidarReal, alReabrirReal, listaPasadaReal, listaTrabadaReal } from "./campana-pasar-real";
-import { claveDeSellar, entrar, openPicker } from "./wallet-ui";
+import { claveDeSellar, entraConGoogle as entraConGoogleDeLaPagina, openPicker } from "./wallet-ui";
 import { pintarQr } from "./qr";
 
 /**
@@ -154,10 +154,13 @@ export interface DepsDelPanelDeCampana {
   /** Abre la ventana para entrar con otra cuenta. */
   cambiarDeCuenta?: () => void;
   /**
-   * Entra con Google como el botón principal de la portada (`entrar` de `wallet-ui.ts`). Lo usa la campaña por activar sin
-   * sesión. Sin esto se abre la ventana de siempre (`cambiarDeCuenta`).
+   * Entra con Google como el botón principal de la portada (`entrar` de `wallet-ui.ts`), sin ofrecer el correo: la campaña solo
+   * acepta Google. Lo usa la campaña por activar sin sesión y los avisos que piden entrar con Google. Sin esto se abre la
+   * ventana de siempre (`cambiarDeCuenta`).
    */
   entrar?: () => void;
+  /** Si entrar va directo a Google (hay llave del proveedor y no es el navegador de una app): el botón lleva la G. Sin esto, no. */
+  entraConGoogle?: () => boolean;
   /**
    * Lo que cobra Tinkazo antes de abrir la inscripción (`campana-comision.ts`). Sin esto, o con `comision()` en `null`, el
    * panel es el de siempre: no mira nada y no cambia ninguna pantalla.
@@ -229,7 +232,8 @@ export function depsReales(): DepsDelPanelDeCampana {
     soltarElSello: () => import("./campana-resultado-real").then((m) => m.soltarParaSellarDeNuevo()),
     alRetomar: () => void import("./campana-resultado-real").then((m) => m.alRetomarReal()).catch(() => undefined),
     cambiarDeCuenta: () => void cambiarDeCuentaReal(openPicker),
-    entrar: () => void entrar(),
+    entrar: () => void entrarConGoogleReal(),
+    entraConGoogle: () => entraConGoogleDeLaPagina(),
     comision: depsDeComisionReales(),
     activar: (pedido) => activarCampana(pedido),
     salaLista: () => salaPuedeActivar(),
@@ -314,6 +318,22 @@ export const MARGEN_TRAS_EL_SORTEO_MS = 6 * 3_600_000;
  * ahora, con el mismo margen que le deja la espera de siempre. Con el sorteo más lejos, abrir ya la dejaría sin lista.
  */
 export const cabeAbrirYa = (sorteoMs: number, ahora: number): boolean => sorteoMs + MARGEN_TRAS_EL_SORTEO_MS <= ahora + VIDA_DE_LA_SALA_MS;
+
+/**
+ * Cuándo una campaña activada antes de tiempo pasa a poder abrirse ya (`cabeAbrirYa`): faltan menos de lo que vive la sala
+ * creada ahora para el sorteo, con su margen. Es el instante en que el botón Abrir pasa de apagado a Abrir la inscripción ahora.
+ */
+const cuandoSePuedeAbrirYa = (sorteoMs: number): number => sorteoMs + MARGEN_TRAS_EL_SORTEO_MS - VIDA_DE_LA_SALA_MS;
+
+/** Las veces que la sala vuelve a probar sola activar una campaña que se pidió abrir ya, y lo menos que espera entre una y otra. */
+const REINTENTOS_AUTOMATICOS = 3;
+const ESPERA_MINIMA_DEL_REINTENTO_MS = 30_000;
+/**
+ * Los fallos de la activación que pueden pasar solos: la red o la sala sin contestar. Los que piden algo a la persona (entrar de
+ * nuevo, cargar dólares, armar la campaña otra vez) o que son de la sala misma (apagada, sin cupo) no se vuelven a probar solos:
+ * cada intento es un pedido a la sala, que lleva su cuenta de rechazos.
+ */
+const SE_REINTENTA_SOLO: ReadonlySet<MotivoDeActivar> = new Set<MotivoDeActivar>(["red", "acceso", "sin-respuesta"]);
 
 /** El aviso de una campaña que cierra a más de una semana: no se activa todavía, y su borrador se guarda. */
 const MUY_LEJOS = "cpoAcMuyLejos";
@@ -464,6 +484,10 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let pararTemprano: (() => void) | null = null;
   /** Quien organiza pidió abrir ya una campaña activada antes de tiempo. Vale hasta que se abre o cambia el borrador. */
   let abrirYa = false;
+  /** La campaña que se pidió abrir ya: de ahí sale la hora de volver a probar si la sala falla. Sin pedido, `null`. */
+  let temprana: { abreMs: number; sorteoMs: number } | null = null;
+  /** Cuántas veces se programó volver a probar sola la activación pedida con abrir ya. */
+  let reintentosAutomaticos = 0;
   /** La fase en que la sala dijo que está: lo que se guarda para retomar. */
   let faseSala: FaseDeSala = "lista";
   let cierraMs = 0;
@@ -837,7 +861,10 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       const t = cm.estado().tipo;
       if (t === "sin-mirar" || t === "duda" || t === "falta-cargar" || t === "mirando") void cm.mirar();
       // Con la compu dormida la espera no corre: si ya es la hora de crear la sala, se sigue.
-      if (activacion.tipo === "temprano") volverDeTemprano();
+      if (activacion.tipo === "temprano") {
+        volverDeTemprano();
+        pintar();
+      }
     }
     if (!sala) return;
     if (vista === "abierta" || vista === "confirmar") {
@@ -892,6 +919,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pararTemprano?.();
     pararTemprano = null;
     abrirYa = false;
+    temprana = null;
     if (borrador === null) return;
     borrador = null;
     activacion = { tipo: "esperando" };
@@ -945,6 +973,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     borrador = limpio;
     activacion = { tipo: "esperando" };
     abrirYa = false;
+    temprana = null;
     salaDeActivar = deps.salaLista ? "preguntando" : "lista";
     cm?.reiniciar();
     mensaje = "";
@@ -981,6 +1010,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const fallo = (motivo: MotivoDeActivar, campo?: string): void => {
       activacion = campo === undefined ? { tipo: "error", motivo } : { tipo: "error", motivo, campo };
       pintar();
+      volverAProbarSola(motivo);
     };
     const cuenta = deps.cuenta();
     activacion = { tipo: "activando" };
@@ -1003,16 +1033,28 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const yaPedido = abrirYa && cabeAbrirYa(lectura.campana.sorteoMs, deps.ahora());
     if (desde > deps.ahora() && !yaPedido) {
       abrirYa = false;
+      temprana = null;
       activacion = { tipo: "temprano", abreMs: lectura.campana.abreMs, sorteoMs: lectura.campana.sorteoMs };
       pararTemprano?.();
-      pararTemprano = deps.esperar(() => {
+      const pararLaHora = deps.esperar(() => {
         pararTemprano = null;
         volverDeTemprano();
       }, desde - deps.ahora());
+      // El botón Abrir pasa a Abrir la inscripción ahora al cruzar esa hora aunque nada más cambie: se repinta justo ahí.
+      const faltaParaAbrirYa = cuandoSePuedeAbrirYa(lectura.campana.sorteoMs) - deps.ahora();
+      const pararElAviso = faltaParaAbrirYa > 0 ? deps.esperar(() => pintar(), faltaParaAbrirYa) : (): void => undefined;
+      pararTemprano = () => {
+        pararLaHora();
+        pararElAviso();
+      };
       pintar();
       return;
     }
     abrirYa = false;
+    temprana = null;
+    reintentosAutomaticos = 0;
+    pararTemprano?.();
+    pararTemprano = null;
     archivo = r.archivo;
     intento = null;
     campana = lectura.campana;
@@ -1031,6 +1073,27 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   }
 
   /**
+   * Si la sala falló después de pedir abrir ya y el fallo puede pasar solo (la red, la sala sin contestar), vuelve a probar a la
+   * hora de abrir la inscripción, o a los 30 segundos si esa hora ya pasó: nadie tiene que acordarse de tocar Probar de nuevo.
+   * Son pocos intentos, y lo que pide algo a la persona (entrar, cargar) no se reintenta: ahí manda el botón.
+   */
+  function volverAProbarSola(motivo: MotivoDeActivar): void {
+    if (temprana === null || !SE_REINTENTA_SOLO.has(motivo) || reintentosAutomaticos >= REINTENTOS_AUTOMATICOS) return;
+    reintentosAutomaticos += 1;
+    const espera = Math.max(temprana.abreMs - ANTICIPO_DE_LA_SALA_MS - deps.ahora(), ESPERA_MINIMA_DEL_REINTENTO_MS);
+    pararTemprano?.();
+    const b = borrador;
+    pararTemprano = deps.esperar(() => {
+      pararTemprano = null;
+      // Si mientras tanto se probó a mano, se dejó la campaña o ya se abrió, no hay nada que repetir.
+      if (borrador === null || borrador !== b || archivo !== null || activacion.tipo !== "error") return;
+      activacion = { tipo: "esperando" };
+      pintar();
+      quizasActivar();
+    }, espera);
+  }
+
+  /**
    * Quien organiza toca abrir ya una campaña activada antes de tiempo. Se vuelve a activar (gratis: la firma de un mismo texto
    * es la misma) y sigue el camino de siempre: crear la sala y abrir la inscripción. Si la sala falla, el pedido se recuerda y
    * probar de nuevo abre igual.
@@ -1040,6 +1103,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pararTemprano?.();
     pararTemprano = null;
     abrirYa = true;
+    temprana = { abreMs: activacion.abreMs, sorteoMs: activacion.sorteoMs };
+    reintentosAutomaticos = 0;
     activacion = { tipo: "esperando" };
     pintar();
     quizasActivar();
@@ -1116,12 +1181,17 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     }
   }
 
+  /** Entrar con Google, sin ofrecer el correo; sin esa dependencia, la ventana de siempre. */
+  function entrarConGoogle(): void {
+    (deps.entrar ?? deps.cambiarDeCuenta)?.();
+  }
+
   function hacerDelPasoDeActivar(accion: PasoDeActivar["principal"]["accion"]): void {
     if (accion === "activar") void activar();
     else if (accion === "abrir-ya") abrirAntesDeTiempo();
     else if (accion === "preguntar") void preguntarALaSala();
     else if (accion === "cargar") cm?.cargar(() => void activar());
-    else if (accion === "entrar") deps.cambiarDeCuenta?.();
+    else if (accion === "entrar") entrarConGoogle();
     else {
       // Armarla de nuevo: el borrador que no sirvió no se guarda, y lo armado queda en esa página para corregirlo.
       soltarElBorrador();
@@ -1685,12 +1755,24 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       vista === "previa" && borrador !== null ? `${archivo === null ? "b" : "f"}${JSON.stringify(activacion)}${salaDeActivar}` : "",
       porActivarSinSesion(),
       vista === "elegir" && borradorGuardado(),
+      // El botón Abrir de una campaña activada antes de tiempo cambia solo al cruzar la hora en que ya cabe abrirla.
+      vista === "previa" && activacion.tipo === "temprano" ? cabeAbrirYa(activacion.sorteoMs, deps.ahora()) : "",
     ].join("|");
     if (firma === firmaDeAcciones) return;
     firmaDeAcciones = firma;
     const botones: HTMLElement[] = [];
-    const principal = (texto: string, alTocar: (b: HTMLButtonElement) => void, apagado = false): HTMLElement =>
-      boton(texto, "primary", alTocar, apagado);
+    const principal = (texto: string, alTocar: (b: HTMLButtonElement) => void, apagado = false, conG = false): HTMLElement => {
+      const b = boton(texto, "primary", alTocar, apagado);
+      // El botón que entra directo a Google lleva la G, como los de la portada.
+      if (conG && deps.entraConGoogle?.() === true) {
+        const g = document.createElement("span");
+        g.className = "g-ico";
+        g.setAttribute("aria-hidden", "true");
+        b.prepend(g);
+        b.classList.add("con-g");
+      }
+      return b;
+    };
     const otroArchivo = (): HTMLElement => boton(tx("cpoOtroArchivo"), "enlace", () => pedirOlvidar());
     // El botón principal que lleva el paso de la herramienta (reintentar la lectura, cambiar de cuenta, avisar a los celulares).
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? botonDelPaso(paso) : null;
@@ -1714,18 +1796,21 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         if (accion === "cargar") cm?.cargar();
         else if (accion === "pagar") void cm?.pagar();
         else if (accion === "mirar") void cm?.mirar();
+        // Con el correo abierto, la campaña pide Google: ahí no se ofrece el selector con el correo. Con otra billetera, sí.
+        else if (cm?.estado().tipo === "solo-google") entrarConGoogle();
         else deps.cambiarDeCuenta?.();
       };
       if (deActivar) {
         // Un borrador pagado: un solo botón, el de lo que pasa ahora. Nunca se ofrece pagar de nuevo.
         const { texto, accion, apagado } = deActivar.principal;
-        botones.push(principal(texto, () => hacerDelPasoDeActivar(accion), apagado));
+        botones.push(principal(texto, () => hacerDelPasoDeActivar(accion), apagado, accion === "entrar"));
       } else if (d?.principal && d.principal.accion === "entrar" && porActivarSinSesion()) {
         // La campaña por activar, sin sesión: un solo botón, el mismo ingreso que el botón principal de la portada.
-        botones.push(principal(d.principal.texto, () => (deps.entrar ?? deps.cambiarDeCuenta)?.()));
+        botones.push(principal(d.principal.texto, () => entrarConGoogle(), false, true));
       } else if (d?.principal) {
         const { texto, accion, apagado } = d.principal;
-        botones.push(principal(texto, () => hacer(accion), apagado));
+        // Solo cuando el botón va a Google: el de otra cuenta o el de otra billetera abre la ventana con todas las formas.
+        botones.push(principal(texto, () => hacer(accion), apagado, accion === "entrar" && cm?.estado().tipo === "solo-google"));
         if (d.secundario) {
           const { texto: textoDelOtro, accion: accionDelOtro } = d.secundario;
           botones.push(boton(textoDelOtro, "ghost", () => hacer(accionDelOtro)));

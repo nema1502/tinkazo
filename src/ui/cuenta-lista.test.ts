@@ -400,6 +400,30 @@ describe("proteger con el correo", () => {
     expect(T.en.clCodigoLabel).toBe("Code with letters and numbers");
   });
 
+  it("una sesión retomada trae el correo después de abrirse: ofrece mandar el código a ese correo y no pide escribirlo", async () => {
+    let correo: string | undefined;
+    const { llamadas } = await abrir({ activacion: "lista" }, { correo: () => correo });
+    // Todavía no llegó el perfil: no hay a quién mandar, y se puede escribir el correo.
+    expect(principal().textContent).toBe(t("protMailGo"));
+    expect(raiz()?.querySelector("#cl-correo")).not.toBeNull();
+    correo = "nora@gmail.com";
+    await pasa(2_000);
+    expect(principal().textContent).toBe(t("clMandarA").replace("{mail}", "n•••@gmail.com"));
+    expect(raiz()?.querySelector("#cl-correo")).toBeNull();
+    principal().click();
+    await pasa();
+    // El código va al correo que verificó el proveedor.
+    expect(llamadas).toContain("mandar:nora@gmail.com");
+  });
+
+  it("si el correo nunca llega, queda el campo y nada se manda a otra dirección", async () => {
+    const { llamadas } = await abrir({ activacion: "lista" }, { correo: () => undefined });
+    await pasa(20_000);
+    expect(principal().textContent).toBe(t("protMailGo"));
+    expect(principal().disabled).toBe(true);
+    expect(llamadas.some((x) => x.startsWith("mandar:"))).toBe(false);
+  });
+
   it("con otro correo escrito a mano, se muestra entero", async () => {
     const { llamadas } = await abrir({ activacion: "lista" });
     boton(t("clOtroCorreo")).click();

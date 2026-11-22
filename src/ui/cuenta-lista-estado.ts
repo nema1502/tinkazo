@@ -86,6 +86,12 @@ export interface AccesoEnLaVista {
    * servidor activó la cuenta pero el regalo no pasó: sin sorteos, el final lo dice (`altaBienvenidaLlena`).
    */
   sorteosDelRegalo?: { quedan: number; vence: { fecha: string; cuantos: number } | null; lleno?: boolean };
+  /**
+   * Los sorteos oficiales que el servidor dijo que tiene la cuenta al abrir el paso, con acceso: así el final de una cuenta
+   * ya activada (el regalo se recibió en otro momento) también dice cuántos le quedan. Sin esto, o con el regalo recibido acá
+   * (que manda), el final de siempre.
+   */
+  cupo?: { quedan: number; vence: { fecha: string; cuantos: number } | null };
 }
 
 /**
@@ -749,8 +755,11 @@ function regaloActual(e: EntradaVista, base: CajaVista, b: NonNullable<AccesoEnL
  * La línea del final cuando la cuenta quedó lista con el regalo: cuántos sorteos oficiales quedan y, si se sabe, cuándo
  * vencen, con las mismas claves y las mismas reglas del singular que la línea del cupo (`cupo-oficial.ts`).
  */
-function lineaDelRegalo(s: NonNullable<AccesoEnLaVista["sorteosDelRegalo"]>): Texto {
-  const quedan: Texto = s.quedan === 1 ? { clave: "cupoOfQueda1" } : { clave: "cupoOfQuedan", vars: { n: String(s.quedan) } };
+function lineaDelRegalo(s: NonNullable<AccesoEnLaVista["sorteosDelRegalo"]>, gratis = false): Texto {
+  // «Gratis» solo cuando todo lo que tiene la cuenta es el regalo recibido: con sorteos de antes no se sabe de cuáles se habla.
+  const quedan: Texto = gratis
+    ? s.quedan === 1 ? { clave: "cupoOfRegalo1" } : { clave: "cupoOfRegalo", vars: { n: String(s.quedan) } }
+    : s.quedan === 1 ? { clave: "cupoOfQueda1" } : { clave: "cupoOfQuedan", vars: { n: String(s.quedan) } };
   const v = s.vence;
   if (!v || !(v.cuantos > 0) || !v.fecha) return quedan;
   const todos = v.cuantos >= s.quedan;
@@ -1059,13 +1068,18 @@ export function vistaDe(entrada: EntradaVista): Vista {
   if (final) {
     const conLista = e.para === "entrada-con-lista" || e.para === "sello";
     const p = comoEntrada(e.para) ? boton("seguir", "clSeguir") : e.para === "sorteo" ? boton("sortear", "draw") : boton("sellar", "freeze");
-    const delRegalo = accesoDe(e).sorteosDelRegalo;
+    const acceso = accesoDe(e);
+    const delRegalo = acceso.sorteosDelRegalo;
+    // El regalo recibido en este paso, y nada más en la cuenta: eso son sorteos gratis.
+    const gratis = acceso.delRegalo === true && delRegalo !== undefined && acceso.canjeado !== null && acceso.canjeado === delRegalo.quedan;
     // Con sorteos, cuántos quedan. La cuenta activada sin el regalo y sin sorteos lo dice, así no se entera al sellar, y
     // que se pueden recibir más tarde. Mientras tanto, el enlace chico para practicar en Prueba.
     const sinElRegalo = delRegalo?.lleno === true && delRegalo.quedan === 0;
-    const conSorteos = delRegalo && delRegalo.quedan > 0 ? lineaDelRegalo(delRegalo) : null;
+    const conSorteos = delRegalo && delRegalo.quedan > 0 ? lineaDelRegalo(delRegalo, gratis) : null;
+    // La cuenta que ya estaba activada: lo que dijo el servidor al abrir el paso.
+    const delCupo = !delRegalo && acceso.cupo && acceso.cupo.quedan > 0 ? lineaDelRegalo(acceso.cupo) : null;
     const llena: Texto = { clave: "altaBienvenidaLlena", luego: { clave: "altaBienvenidaMasTarde" } };
-    const linea = premio || !delRegalo ? null : sinElRegalo ? llena : conSorteos;
+    const linea = premio ? null : !delRegalo ? delCupo : sinElRegalo ? llena : conSorteos;
     // Con el nombre de «Se te acabaron», que lleva a lo mismo: «Practicar sin cuenta» diría lo contrario del título.
     const practicar = !premio && sinElRegalo && e.puedePasarAPrueba ? boton("practicar", "pagoSortearEnPrueba", e.corre === "cerrando") : null;
     return {

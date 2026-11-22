@@ -23,7 +23,7 @@ Toda comunidad tiene algo que repartir: entradas, libros, licencias, becas, turn
 
 **Tinkazo hace que cualquiera pueda revisar el sorteo, desde su celular.** Quien organiza pega la lista, la lista se sella en Stellar, y el ganador sale de un número público que todavía no existía cuando se selló. Un contrato de Soroban verifica la firma de ese número dentro de la cadena. El resultado se cuenta en pantalla grande con un juego, y cualquiera rehace el sorteo entero en su navegador desde un enlace.
 
-**El contrato está en la red principal de Stellar desde el 11 de noviembre de 2026**, en [`CANQLUVT…VL3K`](https://stellar.expert/explorer/public/contract/CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K). El sitio abre en el modo Prueba, sobre la red de prueba de Stellar, y el modo Oficial se elige en la cabecera.
+**El contrato está en la red principal de Stellar desde el 11 de noviembre de 2026**, en [`CANQLUVT…VL3K`](https://stellar.expert/explorer/public/contract/CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K). El sitio publicado abre en el modo Oficial, sobre la red principal de Stellar, y el modo Prueba, sobre la red de prueba, se elige en la cabecera o con `?red=prueba`. En local, sin la variable `VITE_STELLAR_NETWORK`, abre en Prueba.
 
 Los participantes no necesitan nada: ni billetera, ni cuenta, ni aplicación. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.
 
@@ -86,7 +86,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 
 ## Qué está andando hoy
 
-**Dos modos.** El sitio abre en el modo **Prueba**, sobre la red de prueba de Stellar: funciona igual y cada sorteo se puede comprobar, pero Stellar borra esa red el 16 de diciembre de 2026. El modo **Oficial**, que se elige en la cabecera, sella en la red principal de Stellar, para los sorteos que cuentan. Un enlace con `?red=oficial` abre directo en el modo Oficial.
+**Dos modos.** El sitio publicado abre en el modo **Oficial**, que sella en la red principal de Stellar, para los sorteos que cuentan. El modo **Prueba**, que se elige en la cabecera o con `?red=prueba`, usa la red de prueba de Stellar: funciona igual y cada sorteo se puede comprobar, pero Stellar borra esa red el 16 de diciembre de 2026. En local, sin la variable `VITE_STELLAR_NETWORK`, el sitio abre en Prueba, y un enlace con `?red=oficial` abre directo en Oficial.
 
 <div align="center">
 <img src="docs/capturas/readme/modo-hoja-es.webp" alt="La hoja de los modos: Oficial, para los sorteos que cuentan, y Prueba, para probar con calma, que se borra el 16 de diciembre" width="392">
@@ -243,7 +243,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?red=prueba|oficial` (el modo Prueba u Oficial; el sitio abre en Prueba), `?demo=race|sapo|trompo|chovena|pinata|wheel|teleferico|oruro|guajojo|toborochi` (los que salieron del selector, entre ellos `quien` y `trueque`, siguen abriendo con su identificador, que está en [docs/juegos.md](docs/juegos.md)), `?instant=1`, `?pose=1`, `?motor=clasico` (el motor anterior) y `?grifo=0` (solo en el modo Prueba: apaga el grifo de XLM de prueba, para probar con una cuenta de verdad vacía; `?grifo=1` lo vuelve a prender).
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?red=prueba|oficial` (el modo Prueba u Oficial; el sitio publicado abre en Oficial), `?demo=race|sapo|trompo|chovena|pinata|wheel|teleferico|oruro|guajojo|toborochi` (los que salieron del selector, entre ellos `quien` y `trueque`, siguen abriendo con su identificador, que está en [docs/juegos.md](docs/juegos.md)), `?instant=1`, `?pose=1`, `?motor=clasico` (el motor anterior) y `?grifo=0` (solo en el modo Prueba: apaga el grifo de XLM de prueba, para probar con una cuenta de verdad vacía; `?grifo=1` lo vuelve a prender).
 
 ## El repositorio
 

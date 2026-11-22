@@ -41,6 +41,14 @@ describe("el aviso de la campaña por activar en Prueba", () => {
     expect(DIRECCION_DE_LA_CAMPANA).toBe("/?campana&red=oficial");
   });
 
+  it("el idioma y el tema de la página pasan a la campaña", () => {
+    localStorage.setItem(CLAVE_DEL_BORRADOR, BORRADOR);
+    const d = { ...deps(), consulta: "?lang=en&theme=light" };
+    pintarAvisoEnPrueba(document, d);
+    document.querySelector<HTMLButtonElement>("#cpo-pendiente button.primary")?.click();
+    expect(d.idas).toEqual(["/?campana&red=oficial&lang=en&theme=light"]);
+  });
+
   it("Dejar esta campaña borra el borrador, saca el aviso y devuelve la portada", () => {
     localStorage.setItem(CLAVE_DEL_BORRADOR, BORRADOR);
     pintarAvisoEnPrueba(document, deps());

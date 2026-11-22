@@ -22,6 +22,17 @@ export const SERVICIO = "https://s.tinkazo.app";
 export const SONDEO_MS = 3_000;
 /** Cada cuánto se intenta reabrir el WebSocket cuando se cortó. */
 export const REINTENTO_MS = 8_000;
+/**
+ * Cada cuánto se consulta de respaldo con el WebSocket «en vivo»: un socket que quedó medio muerto (un cambio de wifi, un
+ * celular que se durmió) no avisa que se cortó, y sin esto la lista no subía hasta que algo la repintara. Cada consulta son
+ * dos pedidos a la sala (nombres y equipos), por eso es lento y no se hace con la pestaña oculta. No bajarlo de 20 s.
+ */
+export const RESPALDO_MS = 20_000;
+/**
+ * Cada cuánto se consulta cuando otra pantalla de la misma sala se presentó con el token y esta quedó sin socket. No se vuelve
+ * a pelear por la sala (se sacarían una a la otra), pero la lista sigue al día, más despacio que con el socket caído.
+ */
+export const SONDEO_DE_OTRA_PANTALLA_MS = 10_000;
 
 /** El servicio que se usa: el de siempre, y en local (`localhost`) el que diga `?sala=` para probar con `wrangler dev`. */
 export function servicioDeSala(): string {
@@ -167,7 +178,10 @@ export interface EquipoDeSala {
 /**
  * Escucha la sala. Abre el WebSocket y, si se corta o no abre, consulta cada
  * 3 s lo que falta y vuelve a intentarlo cada 8 s. Al reconectar pide todo lo
- * que no vio, así que no se pierde ningún nombre. Devuelve cómo parar.
+ * que no vio, así que no se pierde ningún nombre. Con el socket en vivo consulta
+ * además cada 20 s, y con la pestaña oculta no: un socket medio muerto no avisa.
+ * Si otra pantalla de la misma sala toma el relevo (cierre 4000), no reabre el
+ * socket pero sigue consultando cada 10 s. Devuelve cómo parar.
  */
 export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos: Iterable<number> = []): { parar: () => void; consultar: () => Promise<void> } {
   const f = dep.fetch ?? fetch;
@@ -181,6 +195,9 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
   let ws: WebSocket | null = null;
   let sondeo: ReturnType<typeof setTimeout> | undefined;
   let reintento: ReturnType<typeof setTimeout> | undefined;
+  let respaldo: ReturnType<typeof setTimeout> | undefined;
+  /** Otra pantalla de esta sala tomó el relevo (cierre 4000): acá ya no se abre el socket, solo se consulta. */
+  let otraPantalla = false;
 
   const cambiar = (nuevo: EstadoDeConexion): void => {
     if (estado === nuevo) return;
@@ -239,8 +256,18 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
   const sondear = (): void => {
     if (parado || estado === "en-vivo") return;
     void consultar().finally(() => {
-      if (!parado && estado !== "en-vivo") sondeo = poner(sondear, SONDEO_MS);
+      if (!parado && estado !== "en-vivo") sondeo = poner(sondear, otraPantalla ? SONDEO_DE_OTRA_PANTALLA_MS : SONDEO_MS);
     });
+  };
+
+  /** Con el socket en vivo y la pestaña a la vista, una consulta cada tanto: si el socket se murió sin avisar, la lista igual sube. */
+  const respaldar = (): void => {
+    if (parado) return;
+    respaldo = poner(() => {
+      const oculta = typeof document !== "undefined" && document.visibilityState === "hidden";
+      if (!parado && estado === "en-vivo" && !oculta) void consultar();
+      respaldar();
+    }, RESPALDO_MS);
   };
 
   const conectar = (): void => {
@@ -292,7 +319,13 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
       if (ws !== socket) return;
       // 1000 es «cerrada» o «vencida»; 4000 es otra pantalla de la misma sala: esta no vuelve a pelear por ella.
       if (ev.code === 1000 && abierto) return cerrada();
-      if (ev.code === 4000) return cambiar("sondeo");
+      if (ev.code === 4000) {
+        otraPantalla = true;
+        cambiar("sondeo");
+        sacar(sondeo);
+        sondear();
+        return;
+      }
       caer();
     });
     socket.addEventListener("error", () => undefined);
@@ -312,6 +345,7 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
     parado = true;
     sacar(sondeo);
     sacar(reintento);
+    sacar(respaldo);
     try {
       ws?.close(1000, "listo");
     } catch {
@@ -321,5 +355,6 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
 
   void consultar();
   conectar();
+  respaldar();
   return { parar, consultar };
 }

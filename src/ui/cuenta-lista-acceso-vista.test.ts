@@ -491,6 +491,33 @@ describe("el regalo de quien entra con su cuenta", () => {
     expect(portadaDe(vista).linea).toEqual({ clave: "cupoOfQuedan", vars: { n: "3" }, luego: vence });
   });
 
+  it("con el regalo recibido y nada más en la cuenta, la línea del final dice que son gratis", () => {
+    const vista = v(
+      { activacion: "lista", proteccion: "lista" },
+      { estado: "con", por: "admin", delRegalo: true, canjeado: 3, sorteosDelRegalo: { quedan: 3, vence: null } },
+    );
+    expect(portadaDe(vista).linea).toEqual({ clave: "cupoOfRegalo", vars: { n: "3" } });
+    const uno = v(
+      { activacion: "lista", proteccion: "lista" },
+      { estado: "con", por: "admin", delRegalo: true, canjeado: 1, sorteosDelRegalo: { quedan: 1, vence: null } },
+    );
+    expect(portadaDe(uno).linea).toEqual({ clave: "cupoOfRegalo1" });
+    // Con sorteos de antes sumados al regalo no se sabe de cuáles se habla: no se dice gratis.
+    const mas = v(
+      { activacion: "lista", proteccion: "lista" },
+      { estado: "con", por: "admin", delRegalo: true, canjeado: 3, sorteosDelRegalo: { quedan: 5, vence: null } },
+    );
+    expect(portadaDe(mas).linea).toEqual({ clave: "cupoOfQuedan", vars: { n: "5" } });
+  });
+
+  it("la cuenta que ya estaba activada: el final dice cuántos sorteos tiene según el servidor, sin decir gratis", () => {
+    const vista = v({ activacion: "lista", proteccion: "lista" }, { estado: "con", por: "admin", cupo: { quedan: 3, vence: null } });
+    expect(vista.final).toBe(true);
+    expect(portadaDe(vista).linea).toEqual({ clave: "cupoOfQuedan", vars: { n: "3" } });
+    const cero = v({ activacion: "lista", proteccion: "lista" }, { estado: "con", por: "admin", cupo: { quedan: 0, vence: null } });
+    expect(portadaDe(cero).linea).toBeNull();
+  });
+
   it("la línea del final va en singular con un solo sorteo, y dice cuántos vencen si no son todos", () => {
     const uno = listaCon({ quedan: 1, vence: { fecha: "x", cuantos: 1 } });
     expect(portadaDe(uno).linea).toEqual({ clave: "cupoOfQueda1", luego: { clave: "cupoOfVenceSolo", vars: { n: "1", fecha: "x" } } });

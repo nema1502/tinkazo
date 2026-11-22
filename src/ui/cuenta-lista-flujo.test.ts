@@ -21,6 +21,8 @@ const h = vi.hoisted(() => ({
   pasoRoto: false,
   abrir: vi.fn(),
   billetera: null as unknown,
+  /** El correo de la sesión: una sesión retomada de Google lo trae después de la dirección. */
+  mail: "ana@mail.com" as string | undefined,
   local: { activacion: "lista", proteccion: "lista" } as { activacion: string; proteccion: string },
   estado: vi.fn(),
   soltar: vi.fn(),
@@ -55,7 +57,7 @@ vi.mock("./cuenta-lista", () => ({
 }));
 vi.mock("../stellar/wallet-pollar", () => ({ pollarWallet: { label: "Google" }, puedeUsarDesbloqueo: async () => false }));
 vi.mock("./wallet-ui", () => ({
-  currentSession: () => ({ address: "GAAA", mail: "ana@mail.com" }),
+  currentSession: () => ({ address: "GAAA", ...(h.mail ? { mail: h.mail } : {}) }),
   estadoDeLaCuenta: () => ({ estado: "dentro", via: "google", nombre: "Ana", inicial: "A", foto: "", direccion: "GAAA" }),
   cerrarSesion: async () => undefined,
   entrar: async () => undefined,
@@ -87,6 +89,7 @@ beforeEach(() => {
   h.estado.mockReset();
   h.estado.mockResolvedValue({ ...TODO });
   h.billetera = pollar({ activacion: "lista", proteccion: "lista" });
+  h.mail = "ana@mail.com";
   document.body.innerHTML = "";
   sessionStorage.clear();
 });
@@ -145,6 +148,21 @@ describe("el sello en modo Oficial", () => {
     expect(op.para).toBe("sello");
     expect(op.inicial.proteccion).toBe("falta");
     expect(op.volverA).toBe(volverA);
+  });
+
+  it("el correo de la sesión se lee cuando el paso lo necesita: una sesión retomada lo trae después de abrirse", async () => {
+    h.mail = undefined;
+    h.billetera = pollar({ activacion: "lista", proteccion: "no-se-sabe" });
+    h.estado.mockResolvedValue({ ...TODO, proteccion: "falta" });
+    h.abrir.mockResolvedValue(false);
+    const f = await flujo();
+    await f.cuentaListaParaGrabar("sello");
+    const op = h.abrir.mock.calls[0]?.[2] as { correo?: unknown };
+    const leer = (): unknown => (typeof op.correo === "function" ? (op.correo as () => unknown)() : op.correo);
+    expect(leer()).toBeUndefined();
+    // Llegó el perfil de la cuenta: el paso ya abierto tiene que ver el correo, sin que nadie lo escriba.
+    h.mail = "ana@mail.com";
+    expect(leer()).toBe("ana@mail.com");
   });
 
   it("si no se pudo saber en 4 segundos, abre el paso igual", async () => {

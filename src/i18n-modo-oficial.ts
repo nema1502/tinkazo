@@ -2,7 +2,7 @@ import deployments from "./stellar/deployments.json";
 
 /**
  * Los textos que cambian cuando existe el modo Oficial. Mientras `deployments.json` no tenga contrato en la red real
- * (`mainnet: null`, que es producción hoy) el sitio dice lo que decía: no hay otro modo del cual distinguir "Prueba", y
+ * (`mainnet: null`, como antes del 11 de noviembre de 2026) el sitio dice lo que decía: no hay otro modo del cual distinguir "Prueba", y
  * "En el modo Prueba, guardá…" le haría pensar a quien lee que existe uno. `i18n.ts` los pone encima del diccionario
  * solo si hay modo Oficial; las claves de este archivo son las que ya existían, con el texto de hoy en `i18n.ts`.
  * La excepción es `cuentaPideGoogle`: `i18n.ts` la aplica solo con Oficial activo, porque en Prueba sigue valiendo la frase común.

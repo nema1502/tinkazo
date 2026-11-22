@@ -3,6 +3,8 @@
     --paper: #fff6e9; --card: #ffffff; --ink: #191919; --ink2: #4b4437; --muted: #6b655b;
     /* Campos y bordes finos de la ventana de ingreso. */
     --field: #f6f4f0; --line: #e2ddd4;
+    /* La G de Google de los botones de entrar (la portada y el panel de la campaña). */
+    --g-de-google: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23EA4335' d='M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z'/%3E%3Cpath fill='%234285F4' d='M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z'/%3E%3Cpath fill='%23FBBC05' d='M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z'/%3E%3Cpath fill='%2334A853' d='M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z'/%3E%3C/svg%3E");
     --magenta: #e93d9c; --orange: #ff7a1a; --teal: #00a896; --yellow: #ffc629; --purple: #6c4ce0;
     /* Texto sobre un color plano. El blanco no se lee sobre estos tonos. */
     --on-accent: #191919; --on-purple: #ffffff;
@@ -1452,7 +1454,14 @@
   .cta-entrar .g-ico { display: none; }
   body[data-google="1"][data-sesion="no"] .cta-entrar .g-ico {
     display: inline-block; flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink);
-    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23EA4335' d='M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z'/%3E%3Cpath fill='%234285F4' d='M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z'/%3E%3Cpath fill='%23FBBC05' d='M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z'/%3E%3Cpath fill='%2334A853' d='M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+    background: #fff var(--g-de-google) center / 16px 16px no-repeat;
+  }
+  /* El botón de entrar del final de las páginas de lectura (cta-de-la-pagina.ts): la misma G, sin esperar a la herramienta. */
+  .cta-pagina { display: inline-flex; align-items: center; justify-content: center; gap: 10px; text-align: center; }
+  .cta-pagina .g-ico { display: none; }
+  .cta-pagina[data-g="1"] .g-ico {
+    display: inline-block; flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink);
+    background: #fff var(--g-de-google) center / 16px 16px no-repeat;
   }
   .hero-ctas button.ghost { min-height: 52px; font-size: 16px; padding: 0 22px; }
   .hero-otras { margin-top: 2px; }
@@ -1918,6 +1927,12 @@
   .portada-fin .hero-ctas { justify-content: center; margin-top: 16px; }
   .portada-fin-empresa { margin-top: 10px; }
   .portada-fin .ghost { background: var(--card); color: var(--ink); }
+  /* En el celular la tarjeta morada se come 46 px de ancho, y el botón de entrar de Cómo funciona quedaba en 3 o 4 renglones con la G
+     suelta. Con menos relleno entra en 2, como el de la portada. a.primary.cta.cta-pagina gana a la letra de a.primary. */
+  @media (max-width: 430px) {
+    .portada-fin { padding-inline: 10px; }
+    a.primary.cta.cta-pagina { padding-inline: 12px; gap: 8px; font-size: 18px; }
+  }
 
   /* La barra de la herramienta: el título y, debajo, los pasos. */
   .appbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 22px; }
@@ -3703,6 +3718,14 @@
   .cl-cabeza { display: flex; flex-direction: column; gap: 12px; }
   .cl-titulo { margin: 0; font-size: clamp(28px, 8vw, 32px); line-height: 1.2; font-weight: 900; text-wrap: balance; }
   .cuenta-lista .cl-titulo:focus, .cuenta-lista .cl-titulo:focus-visible { outline: none; box-shadow: none; }
+  /* La cuenta quedó lista: un tilde antes del título, sin sumar texto. Es solo dibujo: el título ya lo dice. */
+  .cuenta-lista.cl-final .cl-titulo::before {
+    content: "✓";
+    content: "✓" / "";
+    display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
+    width: 1.1em; height: 1.1em; margin-right: 0.35em; border: 2px solid var(--ink); border-radius: 50%;
+    background: var(--teal); color: var(--on-accent); font-size: 0.7em; line-height: 1; font-weight: 900;
+  }
   .cl-bajada { margin: 0; font-size: 18px; line-height: 1.5; color: var(--ink2); }
   .cl-bajada[hidden] { display: none; }
   .cl-pasos { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }

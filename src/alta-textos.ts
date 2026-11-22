@@ -53,6 +53,9 @@ export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, strin
     // El cupo, en Oficial.
     cupoOfQuedan: "Te quedan {n} sorteos oficiales.",
     cupoOfQueda1: "Te queda 1 sorteo oficial.",
+    // El final de la cuenta recién activada con el regalo: lo que recibió, dicho como lo que es.
+    cupoOfRegalo: "Tenés {n} sorteos oficiales gratis.",
+    cupoOfRegalo1: "Tenés 1 sorteo oficial gratis.",
     cupoOfVencen: "{n} vencen el {fecha}.",
     cupoOfVencenTodos: "Vencen el {fecha}.",
     cupoOfPocos: "Te quedan {n} sorteos oficiales. Sumá más antes de tu próximo evento.",
@@ -108,6 +111,8 @@ export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, strin
 
     cupoOfQuedan: "You have {n} Live draws left.",
     cupoOfQueda1: "You have 1 Live draw left.",
+    cupoOfRegalo: "You have {n} free Live draws.",
+    cupoOfRegalo1: "You have 1 free Live draw.",
     cupoOfVencen: "{n} expire on {fecha}.",
     cupoOfVencenTodos: "They expire on {fecha}.",
     cupoOfPocos: "You have {n} Live draws left. Add more before your next event.",

@@ -23,7 +23,7 @@ const DEL_DISENO = [
   "altaCuponListo", "altaActivarConCupon", "altaOtroCupon", "altaCuponLabel", "altaCuponAyuda", "altaRevisando",
   "altaCuponOk", "altaCuponOk1", "altaActivarCupon", "altaActivarPago", "altaYaActivada", "altaCuponGuardado",
   "altaErrForma", "altaErrNoExiste", "altaErrVencido", "altaErrAnulado", "altaErrUsado", "altaErrLote", "altaErrIntentos", "altaErrServicio",
-  "cupoOfQuedan", "cupoOfQueda1", "cupoOfVencen", "cupoOfVencenTodos", "cupoOfPocos", "cupoOfUnoPorPremio", "cupoOfDoble",
+  "cupoOfQuedan", "cupoOfQueda1", "cupoOfRegalo", "cupoOfRegalo1", "cupoOfVencen", "cupoOfVencenTodos", "cupoOfPocos", "cupoOfUnoPorPremio", "cupoOfDoble",
   "cupoOfSumar", "cupoOfCeroTitulo", "cupoOfCeroTexto", "cupoOfVencidoTexto", "cupoOfSumarPaquete", "cupoOfCeroSumar",
   "cupoOfUsarCupon", "cupoOfTopeMes", "errAnchor.porteroSinAlta", "errAnchor.porteroSinSorteos",
 ];
