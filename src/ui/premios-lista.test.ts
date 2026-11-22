@@ -1,0 +1,63 @@
+import { describe, expect, it } from "vitest";
+import { type VistaDeLosPremios } from "../campana/premios-de-la-cuenta";
+import { filasDeLosPremios } from "./premios-lista";
+
+/**
+ * La lista «Tus premios» de quien ganó, sin DOM ni red (`premios-lista.ts`): cada premio de la cuenta
+ * con su estado como texto y su monto como se ve. La fecha la escribe quien llama, para que no dependa
+ * de la zona ni del reloj.
+ */
+
+const fechaDeLaPrueba = (ms: number): string => (ms === 1_800_000_000_000 ? "16/12/2026" : String(ms));
+
+const lista = (premios: VistaDeLosPremios) => filasDeLosPremios({ premios, idioma: "es", fecha: fechaDeLaPrueba });
+
+describe("la lista de Tus premios", () => {
+  it("un premio recibido: Recibido, con su monto como se ve en pantalla", () => {
+    expect(lista({ ok: true, premios: [{ puesto: 0, monto: "100000000", estado: "recibido", hastaMs: null }] })).toEqual({
+      filas: [{ texto: { clave: "prEstadoRecibido" }, monto: "10" }],
+    });
+  });
+
+  it("un premio por recibir: Por recibir hasta la fecha de la campaña, con su monto", () => {
+    expect(lista({ ok: true, premios: [{ puesto: 1, monto: "5000000", estado: "por-recibir", hastaMs: 1_800_000_000_000 }] })).toEqual({
+      filas: [{ texto: { clave: "prEstadoPorRecibir", vars: { fecha: "16/12/2026" } }, monto: "0,5" }],
+    });
+  });
+
+  it("el premio que volvió a la empresa, y un premio sin monto se ve igual sin el número", () => {
+    expect(lista({ ok: true, premios: [{ puesto: 0, monto: "100000000", estado: "volvio", hastaMs: null }] })).toEqual({
+      filas: [{ texto: { clave: "prEstadoVolvio" }, monto: "10" }],
+    });
+    expect(lista({ ok: true, premios: [{ puesto: null, monto: null, estado: "por-recibir", hastaMs: 1_800_000_000_000 }] })).toEqual({
+      filas: [{ texto: { clave: "prEstadoPorRecibir", vars: { fecha: "16/12/2026" } }, monto: null }],
+    });
+  });
+
+  it("varios premios en el orden en que la promoción los guarda", () => {
+    const r = lista({
+      ok: true,
+      premios: [
+        { puesto: 3, monto: "100000000", estado: "recibido", hastaMs: null },
+        { puesto: 5, monto: "1000000", estado: "por-recibir", hastaMs: 1_800_000_000_000 },
+      ],
+    });
+    expect(r.filas.map((f) => f.texto.clave)).toEqual(["prEstadoRecibido", "prEstadoPorRecibir"]);
+    expect(r.filas[0]?.monto).toBe("10");
+    expect(r.filas[1]?.monto).toBe("0,1");
+  });
+
+  it("sin premios o sin promoción: la lista va vacía y no dice más", () => {
+    expect(lista({ ok: true, premios: [] })).toEqual({ filas: [] });
+    expect(lista({ ok: false, error: "red-caida" })).toEqual({ filas: [] });
+  });
+
+  it("el idioma: los montos con coma decimal y los mismos estados", () => {
+    const r = filasDeLosPremios({
+      premios: { ok: true, premios: [{ puesto: 1, monto: "5000000", estado: "por-recibir", hastaMs: 1_800_000_000_000 }] },
+      idioma: "en",
+      fecha: fechaDeLaPrueba,
+    });
+    expect(r.filas).toEqual([{ texto: { clave: "prEstadoPorRecibir", vars: { fecha: "16/12/2026" } }, monto: "0.5" }]);
+  });
+});
