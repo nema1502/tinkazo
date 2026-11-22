@@ -33,7 +33,12 @@ describe("el reingreso de quien ya está anotada", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(AHORA);
     mundo = await montarMundo();
-    sala = await campanaAbierta(mundo, AHORA);
+    sala = await campanaAbierta(mundo, AHORA, {
+      // Con la regla de «entre sus horas» del alta (#168), el salto de reloj de la prueba de reingreso
+      // (+1 h) debe quedar dentro de la campaña abierta: se abren 2 h y el sorteo a las 4 h.
+      cierra_ms: AHORA + 2 * 3_600_000,
+      sorteo_ms: AHORA + 4 * 3_600_000,
+    });
     anotada = personaDePrueba(mundo, 1);
     expect((await altaDe(mundo, sala.id, anotada)).status).toBe(201);
   });

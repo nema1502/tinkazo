@@ -142,6 +142,7 @@ import {
   vidaDeCampana,
 } from "./campana";
 import type { CampanaFirmada, EstadoDeCelular, Fase, MotivoDeSalida, ReemplazoDeSala, ReservaDeEvento } from "./campana";
+import { activacionesDeCampana, anotarAltaDeCampana } from "./vigilancia-campana";
 import { leerSorteoEnLaRed } from "./cadena";
 import {
   avisarPorCorreo,
@@ -694,7 +695,12 @@ export class Sala extends DurableObject<Env> {
     if (!r.ok && r.motivo === "quitada") this.fichasVerificadas.recordar(ficha, persona, ahora, alta.vence);
     if (!r.ok) return r;
     this.fichasVerificadas.recordar(ficha, persona, ahora, alta.vence);
-    if (!r.ya) this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta: r.cuenta, d: alta.d, estado: "aceptado" });
+    if (!r.ya) {
+      // La vigilancia de firmas: cada alta nueva es una activación explicada del día. Lo que se guarda es la cantidad,
+      // nunca el token, el id de la persona, la cuenta ni el nombre.
+      anotarAltaDeCampana(this.sql, diaUtc(ahora));
+      this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta: r.cuenta, d: alta.d, estado: "aceptado" });
+    }
     return r;
   }
 
@@ -720,6 +726,12 @@ export class Sala extends DurableObject<Env> {
     if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
     const huella = await huellaDeLlave(llave);
     return { ok: true, ...leerEstadoDeCelular(this.sql, cuenta, huella) };
+  }
+
+  /** Cuántas altas de campaña explican firmas, por día: solo cifras, sin ningún dato de persona. Lo lee la vigilancia. */
+  async activacionesDeCampana(): Promise<Resultado<Record<string, number>>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    return { ok: true, ...activacionesDeCampana(this.sql) };
   }
 
   /** El pase que la pantalla presenta al entrar con Google; solo lo renueva quien tiene el token. */

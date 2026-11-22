@@ -7,6 +7,7 @@ import { roundTime } from "../../../src/protocol/quicknet";
 import { diaUtc, esCuentaValida, grupoDeIp, iguales } from "./logica";
 import { crearTablasDeEquipos, siguienteVersion } from "./registro";
 import type { Ejecutar } from "./registro";
+import { crearTablasDeVigilancia } from "./vigilancia-campana";
 import { deHex, esPedidoLocal, verificarFirma } from "./firma";
 import type { VariablesDePrueba } from "./firma";
 import type { SelloEnLaRed } from "./cadena";
@@ -37,8 +38,20 @@ export const REINGRESOS_POR_PERSONA_POR_HORA = 6;
 export const MEMORIA_DE_FICHA_MS = 60_000;
 /** Cuánto vale un permiso de evento sin confirmar: pasado este tiempo se lo da por abandonado (hubo un corte). */
 export const ESPERA_RESERVA_MS = 60_000;
-/** Personas nuevas por conexión y por ventana: todo el recinto puede salir por una sola dirección. */
-export const ALTAS_CAMPANA_POR_CONEXION = 400;
+/**
+ * El margen sobre el cupo del evento para el tope de altas por conexión: cubre los reintentos del alta y las personas que
+ * prueban antes de entrar de verdad, así el tope nunca deja afuera a quien viene a anotarse.
+ */
+export const MARGEN_DE_ALTAS_CAMPANA = 100;
+/**
+ * El tope de altas nuevas por conexión y por ventana: el cupo del evento más un margen (issue #168). Todo el recinto
+ * puede salir por una sola dirección, así que el tope tiene que alcanzar para anotar al evento entero desde ella, y solo
+ * frenar a quien manda más que eso. Hoy el cupo del evento es `CAMPANA_MAX`; si la campaña llega a nombrar un cupo
+ * propio, la función queda lista para tomarlo (queda para el issue #182).
+ */
+export function altasDeCampanaPorConexion(cupo: number): number {
+  return cupo + MARGEN_DE_ALTAS_CAMPANA;
+}
 /** Envíos con sesión verificada por conexión y por ventana, incluidos los de quien ya estaba. */
 export const ENVIOS_CAMPANA_POR_CONEXION = 800;
 /** Altas por minuto en la sala. Solo cuentan las sesiones verificadas. */
@@ -443,6 +456,8 @@ export function soltarEventoSql(sql: Ejecutar, evento: string, reserva: string):
 /** Las tablas de una sala de campaña. Se crean al crearla, nunca al despertar. Los paquetes 4 y 6 suman las suyas acá. */
 export function crearTablasDeCampana(sql: Ejecutar): void {
   crearTablasDeEquipos(sql);
+  // La vigilancia de las altas: las activaciones explicadas de la ruta, por día.
+  crearTablasDeVigilancia(sql);
   // Una persona, una vez: la huella del id del proveedor con la sal de la sala, y con qué cuenta entró.
   sql("CREATE TABLE IF NOT EXISTS personas (persona TEXT PRIMARY KEY, cuenta TEXT NOT NULL UNIQUE)");
   // Las sesiones que el proveedor rechazó, por conexión y por ventana de 10 minutos.
@@ -538,6 +553,10 @@ export function antesDeVerificar(
 ): { ok: true } | { ok: false; motivo: "cerrada" | "pase" } | { ok: false; motivo: "rechazos"; esperaS: number } {
   const fase = sql<{ v: string }>("SELECT v FROM sala WHERE k = 'fase'")[0]?.v;
   if (fase !== "abierta") return { ok: false, motivo: "cerrada" };
+  // Entre las horas de la campaña: la fase puede seguir «abierta» después de la hora de cierre (nadie la cambió, o la
+  // la pantalla se quedó sin quien la maneje). Pasada la hora de cierre, el alta no entra y no pregunta nada a nadie.
+  const cierra = Number(sql<{ v: string }>("SELECT v FROM sala WHERE k = 'cierra'")[0]?.v ?? 0);
+  if (Number.isSafeInteger(cierra) && cierra > 0 && a.ahora >= cierra) return { ok: false, motivo: "cerrada" };
   if (!a.paseVale) return { ok: false, motivo: "pase" };
   const ventana = Math.floor(a.ahora / VENTANA_CAMPANA_MS);
   sql("DELETE FROM campana_rechazos_ficha WHERE ventana < ?", ventana);
@@ -768,7 +787,14 @@ export function anotarPersona(
 ): ResultadoDeAltaDePersona {
   const ritmo = ritmoDeCampana(sql, alta.grupo, alta.ahora);
   const fase = sql<{ v: string }>("SELECT v FROM sala WHERE k = 'fase'")[0]?.v;
-  if (fase !== "abierta") {
+  // Se repite la hora de cierre acá, después de todas las esperas: lo que se comprueba antes puede ser viejo cuando el
+  // pedido vuelve de la red. Fuera de hora la respuesta es «cerrada», como con la fase, y el envío de la conexión se
+  // cuenta igual: también costó una llamada al proveedor.
+  const cierra = Number(sql<{ v: string }>("SELECT v FROM sala WHERE k = 'cierra'")[0]?.v ?? 0);
+  if (
+    fase !== "abierta" ||
+    (Number.isSafeInteger(cierra) && cierra > 0 && alta.ahora >= cierra)
+  ) {
     contarEnvio(sql, alta.grupo, ritmo.ventana, false);
     return { ok: false, motivo: "cerrada" };
   }
@@ -789,6 +815,12 @@ export function anotarPersona(
     contarEnvio(sql, alta.grupo, ritmo.ventana, false);
     return { ok: false, motivo: "ajena" };
   }
+  // El cupo antes que los topes de ritmo (issue #168, en este orden): con la sala llena la respuesta es «llena», no una
+  // espera que nunca la va a abrir. Contar el envío de la conexión igual: el alta costó su llamada al proveedor.
+  if ((sql<{ c: number }>("SELECT COUNT(*) AS c FROM equipos")[0]?.c ?? 0) >= CAMPANA_MAX) {
+    contarEnvio(sql, alta.grupo, ritmo.ventana, false);
+    return { ok: false, motivo: "llena" };
+  }
   if (ritmo.envios >= ENVIOS_CAMPANA_POR_CONEXION) {
     return { ok: false, motivo: "cupo-conexion", esperaS: ritmo.esperaS };
   }
@@ -797,13 +829,9 @@ export function anotarPersona(
     contarEnvio(sql, alta.grupo, ritmo.ventana, false);
     return { ok: false, motivo: "rapido" };
   }
-  if (ritmo.altas >= ALTAS_CAMPANA_POR_CONEXION) {
+  if (ritmo.altas >= altasDeCampanaPorConexion(CAMPANA_MAX)) {
     contarEnvio(sql, alta.grupo, ritmo.ventana, false);
     return { ok: false, motivo: "cupo-conexion", esperaS: ritmo.esperaS };
-  }
-  if ((sql<{ c: number }>("SELECT COUNT(*) AS c FROM equipos")[0]?.c ?? 0) >= CAMPANA_MAX) {
-    contarEnvio(sql, alta.grupo, ritmo.ventana, false);
-    return { ok: false, motivo: "llena" };
   }
   const v = siguienteVersion(sql);
   const n = sql<{ n: number }>(
