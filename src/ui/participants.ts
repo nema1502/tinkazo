@@ -1046,10 +1046,15 @@ function escribirBorrador(aunVacio: boolean): void {
   }
 }
 
-/** Al escribir no se guarda en cada tecla: un momento después. */
+/**
+ * Al escribir no se guarda en cada tecla: un momento después. Si para entonces la página ya no está (se cerró, o una prueba
+ * terminó y desmontó su documento), no queda nada que guardar: sin esa mirada, el guardado tardío tiraba un error suelto.
+ */
 function guardarPronto(): void {
   window.clearTimeout(guardarLuego);
-  guardarLuego = window.setTimeout(guardarBorrador, 400);
+  guardarLuego = window.setTimeout(() => {
+    if (typeof window !== "undefined" && typeof document !== "undefined") guardarBorrador();
+  }, 400);
 }
 
 /** Se selló (o se retomó un sorteo sellado): no queda nada por recuperar. La demo y el ensayo no lo tocan: son otra lista. */

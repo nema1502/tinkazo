@@ -443,6 +443,36 @@ describe("el borrador guarda el modo de varias participaciones", () => {
   });
 });
 
+describe("el guardado tardío del borrador", () => {
+  it("con la página viva, un momento después de escribir el borrador queda guardado", async () => {
+    vi.useFakeTimers();
+    try {
+      await montar();
+      escribir("Ana Quispe\nBeto Rojas");
+      expect(sessionStorage.getItem("tinkazo.borrador")).toBeNull();
+      vi.advanceTimersByTime(500);
+      expect(JSON.parse(sessionStorage.getItem("tinkazo.borrador") as string)).toMatchObject({ texto: "Ana Quispe\nBeto Rojas" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("si la página ya no está cuando vence la espera, no tira un error suelto", async () => {
+    vi.useFakeTimers();
+    try {
+      await montar();
+      escribir("Ana Quispe\nBeto Rojas");
+      // Una prueba que termina desmonta su documento antes de que venzan los 400 ms: el guardado tardío no puede romper.
+      vi.stubGlobal("window", undefined);
+      vi.stubGlobal("document", undefined);
+      expect(() => vi.advanceTimersByTime(500)).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("con la lista cerrada", () => {
   it("la pregunta se esconde, el botón se apaga y el panel se pliega", async () => {
     const p = await montar("varias");
