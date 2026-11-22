@@ -241,12 +241,24 @@ describe("abrir la inscripción", () => {
     }
   });
 
-  it("mientras abre, el botón dice Abriendo y queda apagado", async () => {
+  it("mientras abre, la fila dice la etapa y no queda un botón apagado", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
     await elegirArchivo(m, p, archivoDe());
+    let soltarFase: () => void = () => undefined;
+    const fase = m.deps.fase;
+    m.deps.fase = async (s, f, c) => {
+      await new Promise<void>((r) => {
+        soltarFase = r;
+      });
+      return fase(s, f, c);
+    };
     boton(p, "Abrir la inscripción").click();
-    expect(principales(p).map((b) => [b.textContent, b.disabled])).toEqual([["Abriendo…", true]]);
+    // Primero crea la sala, y recién después abre la inscripción.
+    expect(texto(p, "#cpo-fila")).toBe("Creando la sala");
+    expect(principales(p)).toEqual([]);
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe("Abriendo la inscripción"));
+    soltarFase();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
   });
 

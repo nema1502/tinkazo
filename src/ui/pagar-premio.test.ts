@@ -181,7 +181,7 @@ describe("lo que se le dice a la persona", () => {
   it("nombra a la persona, el saldo y la red cuando hace falta", () => {
     expect(T.es[mensajeDe({ tipo: "no-se-puede", motivo: "destino-sin-linea" }, { quien: "Equipo Cohete", red: "testnet", monto: "50" }).clave]).toContain("{quien}");
     const saldo = mensajeDe({ tipo: "no-se-puede", motivo: "origen-sin-saldo", saldo: "12.5000000" }, { quien: "x", red: "testnet", monto: "50" });
-    expect(saldo.vars).toMatchObject({ saldo: "12.5", monto: "50" });
+    expect(saldo.vars).toMatchObject({ saldo: "12,50", monto: "50,00" });
     expect(mensajeDe({ tipo: "otra-red" }, { quien: "x", red: "mainnet", monto: "1" }).vars.red).toBe("mainnet");
   });
 
@@ -349,7 +349,7 @@ describe("el formulario de 'Pagar premio'", () => {
     avisar.click();
     await vi.waitFor(() => expect(mensaje.textContent).toBe("Mensaje copiado. Pegalo donde hables con esa persona."));
     const copiado = (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
-    expect(copiado).toContain("50 USDC");
+    expect(copiado).toContain("50,00 USDC");
     expect(copiado).toContain(GANA);
     expect(copiado).not.toMatch(/\{\w+\}/);
   });
@@ -371,7 +371,7 @@ describe("el formulario de 'Pagar premio'", () => {
     const dep = armar({ prep: { ok: false, motivo: "origen-sin-saldo", saldo: "10.0000000" } });
     const { caja, form } = abrir(dep);
     enviar(form);
-    await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toBe("La cuenta que paga tiene 10 USDC y el premio es de 50."));
+    await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toBe("La cuenta que paga tiene 10,00 USDC y el premio es de 50,00."));
     expect((botonCon(caja, "Avisarle") as HTMLButtonElement).hidden).toBe(true);
   });
 

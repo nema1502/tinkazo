@@ -4056,3 +4056,29 @@
     .modal-back.ingreso-entra, .modal-back.ingreso-entra .modal-card.login,
     .modal-back.ingreso-sale, .modal-back.ingreso-sale .modal-card.login { animation: none; }
   }
+
+  /* La fila viva (src/ui/fila-viva.ts): lo que se espera, en el lugar de la línea de estado. La ruedita es la de siempre
+     (.cc-gira). Con movimiento reducido no se mueve nada: la señal es el texto y «Mirado hace N s». */
+  .fila-viva {
+    display: flex; align-items: center; gap: 10px; box-sizing: border-box; min-height: 44px; padding: 6px 12px;
+    background: var(--card); color: var(--ink); border: 2px solid var(--line); border-left: 4px solid var(--magenta-ink);
+    font-size: 16px; line-height: 1.35; overflow-wrap: anywhere;
+  }
+  .fila-viva:empty { display: none; }
+  .fila-viva .fv-texto { flex: 1 1 auto; min-width: 0; font-weight: 700; }
+  .fila-viva .fv-hace { flex: none; color: var(--ink2); font-size: 14px; font-weight: 400; }
+  .fila-viva .fv-hace:empty { display: none; }
+  .fila-viva .fv-ico:not(.cc-gira) {
+    display: grid; place-items: center; flex: none; width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%;
+    border: 2px solid var(--ink); color: var(--on-accent); font-size: 14px; font-weight: 900; line-height: 1;
+  }
+  .fila-viva.fv-llego .fv-ico::before { content: "\2713"; }
+  .fila-viva.fv-no-salio .fv-ico::before { content: "!"; }
+  .fila-viva.fv-llego { border-left-color: var(--teal); }
+  .fila-viva.fv-llego .fv-ico { background: var(--teal); animation: fv-pop 0.7s ease-out both; }
+  .fila-viva.fv-no-salio { border-left-color: var(--orange); }
+  .fila-viva.fv-no-salio .fv-ico { background: var(--orange); }
+  @keyframes fv-pop { 0% { transform: scale(0.4); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) {
+    .fila-viva.fv-llego .fv-ico { animation: none; }
+  }

@@ -257,6 +257,27 @@ describe("el panel de quien organiza", () => {
     expect(regla).toContain("display: none !important");
   });
 
+  it("las piezas nuevas del panel siguen una sola convención de movimiento: se mueven salvo que se pida reducido", () => {
+    // El tilde de Servicio pagado salta con la animación de siempre y con movimiento reducido no hay ninguna.
+    expect(css).toContain(".cpo-cab .cpo-marca-viva.recien::before { animation: fv-pop");
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.cpo-cab \.cpo-marca-viva\.recien::before \{ animation: none; \}/);
+    // Ninguna animación nueva se prende solo con prefers-reduced-motion: no-preference.
+    expect(css).not.toContain("no-preference");
+  });
+
+  it("el panel anuncia lo que cambia desde un solo lugar: la fila viva y la marca de servicio pagado", () => {
+    const armado = readFileSync("src/ui/campana-sala.ts", "utf8");
+    expect(armado).toContain('<div id="cpo-fila" class="cpo-viva"></div>');
+    expect(armado).toContain('marcaEl.setAttribute("role", "status")');
+  });
+
+  it("la fila viva no comparte clase con las filas de la lista: no hereda su borde ni su flex-wrap", () => {
+    const armado = readFileSync("src/ui/campana-sala.ts", "utf8");
+    expect(armado).not.toMatch(/id="cpo-fila" class="[^"]*\bcpo-fila\b/u);
+    expect(css).not.toMatch(/\.cpo-acciones > \.cpo-fila/u);
+    expect(css).toMatch(/\.cpo-acciones > \.cpo-viva \{ flex: 1 1 100%; min-height: 56px; \}/u);
+  });
+
   it("cada bloque del panel tiene una clase igual a su id", () => {
     const armado = readFileSync("src/ui/campana-sala.ts", "utf8");
     for (const id of ["cpo-cab", "cpo-previa", "cpo-qr", "cpo-numero", "cpo-acciones", "cpo-lista"]) {

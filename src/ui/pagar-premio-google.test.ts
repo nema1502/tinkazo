@@ -169,9 +169,9 @@ describe("el monto con botones", () => {
   it("el monto sale con siete decimales y se lee con el idioma de ahora", () => {
     expect(montoEnTexto(dolares(50))).toBe("50.0000000");
     expect(montoEnTexto(dolares(0.4))).toBe("0.4000000");
-    expect(formatoDeMonto(dolares(12.5))).toBe("12,5");
+    expect(formatoDeMonto(dolares(12.5))).toBe("12,50");
     setLang("en");
-    expect(formatoDeMonto(dolares(12.5))).toBe("12.5");
+    expect(formatoDeMonto(dolares(12.5))).toBe("12.50");
   });
 });
 
@@ -319,7 +319,7 @@ describe("lo que se le dice a la persona", () => {
     const sin = { tipo: "no-se-puede", motivo: "origen-sin-saldo", saldo: "12.5000000" } as const;
     const m = mensajeDe(sin, { quien: "x", red: "mainnet", monto: "50", google: true });
     expect(m.clave).toBe("pgGoogleNoAlcanza");
-    expect(m.vars).toMatchObject({ saldo: "12,5", monto: "50", falta: "37,5" });
+    expect(m.vars).toMatchObject({ saldo: "12,50", monto: "50,00", falta: "37,50" });
     expect(m.cargar).toBe(true);
     // Sin la cuenta que paga sola, el texto de siempre y sin cargar.
     const otra = mensajeDe(sin, { quien: "x", red: "mainnet", monto: "50" });
@@ -445,8 +445,8 @@ describe("con un monto claro en el texto del premio", () => {
   it("se ve en grande, sin campo para escribirlo, con lo que queda y una sola principal: Pagar", async () => {
     const { caja } = abrir(armar());
     await lista(caja);
-    expect(texto(caja, ".gan-monto-grande")).toBe("50 dólares digitales");
-    expect(texto(caja, ".gan-explica")).toBe("Pagás a Equipo Cohete y te quedan 50 dólares digitales.");
+    expect(texto(caja, ".gan-monto-grande")).toBe("50,00 dólares digitales");
+    expect(texto(caja, ".gan-explica")).toBe("Pagás a Equipo Cohete y te quedan 50,00 dólares digitales.");
     expect(visible(q(caja, ".gan-contador"))).toBe(false);
     // El único campo de texto es el de otra billetera, plegado: el monto no se escribe.
     const campos = [...caja.querySelectorAll("input")];
@@ -490,10 +490,17 @@ describe("con un monto claro en el texto del premio", () => {
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Revisando que el premio no esté pagado…"));
     expect(principal(caja).disabled).toBe(true);
     expect(botonCon(caja, "Otro monto")?.disabled).toBe(true);
+    // Mientras trabaja se ve que trabaja: la ruedita de la fila viva, no un párrafo quieto.
+    expect(caja.querySelector(".gan-msg.fv-revisando .cc-gira")).not.toBeNull();
     soltarBusqueda({ tipo: "no-hay" });
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Pagando…"));
+    expect(caja.querySelector(".gan-msg.fv-revisando .cc-gira")).not.toBeNull();
     soltarPago({ estado: "salio", hash: HASH });
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
+    // Pagado: el tilde y nada más, sin papelitos ni festejo.
+    expect(caja.querySelector(".gan-msg.fv-llego")).not.toBeNull();
+    expect(caja.querySelector(".gan-msg .cc-gira")).toBeNull();
+    expect(caja.querySelector(".cmp-festejo, .cmp-papelito")).toBeNull();
   });
 
   it("un toque doble o un Enter de más pasan un solo pago", async () => {
@@ -525,7 +532,7 @@ describe("con un monto claro en el texto del premio", () => {
     const dep = armar();
     const { caja, form } = abrir(dep, { premio: "Beca de 12,5 USDC" });
     await lista(caja);
-    expect(texto(caja, ".gan-monto-grande")).toBe("12,5 dólares digitales");
+    expect(texto(caja, ".gan-monto-grande")).toBe("12,50 dólares digitales");
     enviar(form);
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
     expect(dep.pagar.mock.calls[0]?.[1].monto).toBe("12.5000000");
@@ -539,7 +546,7 @@ describe("sin un monto claro en el texto del premio", () => {
     const { caja } = abrir(armar(), sinMonto);
     await lista(caja);
     expect(visible(q(caja, ".gan-contador"))).toBe(true);
-    expect(contador(caja)).toBe("1 dólares digitales");
+    expect(contador(caja)).toBe("1,00 dólares digitales");
     expect(visible(q(caja, ".gan-monto-grande"))).toBe(false);
     expect(visible(botonCon(caja, "Otro monto"))).toBe(false);
     expect(botonCon(caja, "Un dólar menos")).toBeDefined();
@@ -556,13 +563,13 @@ describe("sin un monto claro en el texto del premio", () => {
     expect(menos.disabled).toBe(true);
     mas.click();
     mas.click();
-    expect(contador(caja)).toBe("3 dólares digitales");
-    expect(texto(caja, ".gan-explica")).toBe("Pagás a Equipo Cohete y te quedan 97 dólares digitales.");
+    expect(contador(caja)).toBe("3,00 dólares digitales");
+    expect(texto(caja, ".gan-explica")).toBe("Pagás a Equipo Cohete y te quedan 97,00 dólares digitales.");
     menos.click();
-    expect(contador(caja)).toBe("2 dólares digitales");
+    expect(contador(caja)).toBe("2,00 dólares digitales");
     menos.click();
     menos.click();
-    expect(contador(caja)).toBe("1 dólares digitales");
+    expect(contador(caja)).toBe("1,00 dólares digitales");
     mas.click();
     enviar(form);
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
@@ -577,9 +584,9 @@ describe("sin un monto claro en el texto del premio", () => {
     mas.click();
     mas.click();
     mas.click();
-    expect(contador(caja)).toBe("3 dólares digitales");
+    expect(contador(caja)).toBe("3,00 dólares digitales");
     expect(mas.disabled).toBe(true);
-    expect(texto(caja, ".gan-explica")).toContain("te quedan 0 dólares digitales.");
+    expect(texto(caja, ".gan-explica")).toContain("te quedan 0,00 dólares digitales.");
     enviar(form);
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
     expect(dep.pagar.mock.calls[0]?.[1].monto).toBe("3.0000000");
@@ -587,7 +594,7 @@ describe("sin un monto claro en el texto del premio", () => {
 
   it("con menos de un dólar en la cuenta, el contador marca lo que hay", async () => {
     const { caja } = abrir(armar({ saldo: dolares(0.4) }), sinMonto);
-    await vi.waitFor(() => expect(contador(caja)).toBe("0,4 dólares digitales"));
+    await vi.waitFor(() => expect(contador(caja)).toBe("0,40 dólares digitales"));
     expect((botonCon(caja, "Un dólar más") as HTMLButtonElement).disabled).toBe(true);
     expect((botonCon(caja, "Un dólar menos") as HTMLButtonElement).disabled).toBe(true);
   });
@@ -599,7 +606,7 @@ describe("con un premio por lugar", () => {
     const dep = armar();
     const { caja, form } = abrir(dep, { premio: "1.er premio: 50 USDC, 2.º premio: 20 USDC, 3.er premio: 10 USDC" });
     await lista(caja);
-    expect(texto(caja, ".gan-monto-grande")).toBe("10 dólares digitales");
+    expect(texto(caja, ".gan-monto-grande")).toBe("10,00 dólares digitales");
     enviar(form);
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
     expect(dep.pagar.mock.calls[0]?.[1].monto).toBe("10.0000000");
@@ -609,7 +616,7 @@ describe("con un premio por lugar", () => {
     const { caja } = abrir(armar(), { premio: "1.er premio: 50 USDC, 2.º premio: 20 USDC, 3.er premio: Una polera" });
     await lista(caja);
     expect(visible(q(caja, ".gan-contador"))).toBe(true);
-    expect(contador(caja)).toBe("1 dólares digitales");
+    expect(contador(caja)).toBe("1,00 dólares digitales");
     expect(visible(q(caja, ".gan-monto-grande"))).toBe(false);
   });
 
@@ -630,9 +637,9 @@ describe("Otro monto", () => {
     expect(visible(q(caja, ".gan-contador"))).toBe(true);
     expect(visible(q(caja, ".gan-monto-grande"))).toBe(false);
     expect(visible(botonCon(caja, "Otro monto"))).toBe(false);
-    expect(contador(caja)).toBe("50 dólares digitales");
+    expect(contador(caja)).toBe("50,00 dólares digitales");
     (botonCon(caja, "Un dólar menos") as HTMLButtonElement).click();
-    expect(contador(caja)).toBe("49 dólares digitales");
+    expect(contador(caja)).toBe("49,00 dólares digitales");
     enviar(form);
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
     expect(dep.pagar.mock.calls[0]?.[1].monto).toBe("49.0000000");
@@ -640,9 +647,9 @@ describe("Otro monto", () => {
 
   it("si el monto del premio es más que el saldo, el contador arranca en lo que hay y deja pagar", async () => {
     const { caja } = abrir(armar({ saldo: dolares(20) }));
-    await vi.waitFor(() => expect(falta(caja)).toContain("Tenés 20."));
+    await vi.waitFor(() => expect(falta(caja)).toContain("Tenés 20,00."));
     (botonCon(caja, "Otro monto") as HTMLButtonElement).click();
-    expect(contador(caja)).toBe("20 dólares digitales");
+    expect(contador(caja)).toBe("20,00 dólares digitales");
     expect(visible(principal(caja))).toBe(true);
     expect(visible(q(caja, ".gan-falta"))).toBe(false);
     expect(visible(botonCon(caja, "Cargar dólares digitales"))).toBe(false);
@@ -652,7 +659,7 @@ describe("Otro monto", () => {
 describe("el saldo y lo que falta", () => {
   it("si no alcanza, dice cuánto falta, esconde Pagar y deja una sola principal: cargar dólares digitales", async () => {
     const { caja } = abrir(armar({ saldo: dolares(12.5) }));
-    await vi.waitFor(() => expect(falta(caja)).toBe("Te faltan 37,5 dólares digitales. Tenés 12,5."));
+    await vi.waitFor(() => expect(falta(caja)).toBe("Te faltan 37,50 dólares digitales. Tenés 12,50."));
     expect(visible(principal(caja))).toBe(false);
     expect(visible(botonCon(caja, "Cargar dólares digitales"))).toBe(true);
     expect(visible(q(caja, ".gan-explica"))).toBe(false);
@@ -672,7 +679,7 @@ describe("el saldo y lo que falta", () => {
     await vi.waitFor(() => expect(visible(principal(caja))).toBe(true));
     expect(visible(botonCon(caja, "Cargar dólares digitales"))).toBe(false);
     expect(visible(q(caja, ".gan-falta"))).toBe(false);
-    expect(texto(caja, ".gan-explica")).toContain("te quedan 50 dólares digitales.");
+    expect(texto(caja, ".gan-explica")).toContain("te quedan 50,00 dólares digitales.");
     expect(dep.saldo).toHaveBeenCalledTimes(2);
   });
 
@@ -680,12 +687,12 @@ describe("el saldo y lo que falta", () => {
     const alCerrar = vi.fn();
     cargarEnSaldo(ORG, alCerrar);
     await vi.waitFor(() => expect(abrirSaldo).toHaveBeenCalledTimes(1));
-    expect(abrirSaldo).toHaveBeenCalledWith({ address: ORG }, {}, { vista: "traer", alCerrar });
+    expect(abrirSaldo).toHaveBeenCalledWith({ address: ORG }, {}, { vista: "traer", alCerrar, vigilar: true });
   });
 
   it("con la cuenta en cero y sin monto claro, dice que falta un dólar", async () => {
     const { caja } = abrir(armar({ saldo: 0n }), { premio: "Una polera" });
-    await vi.waitFor(() => expect(falta(caja)).toBe("Te faltan 1 dólares digitales. Tenés 0."));
+    await vi.waitFor(() => expect(falta(caja)).toBe("Te faltan 1,00 dólares digitales. Tenés 0,00."));
     expect(visible(botonCon(caja, "Cargar dólares digitales"))).toBe(true);
     expect(visible(principal(caja))).toBe(false);
   });
@@ -693,7 +700,7 @@ describe("el saldo y lo que falta", () => {
   it("con el saldo justo para el monto, deja pagar y dice que quedan cero", async () => {
     const dep = armar({ saldo: dolares(50) });
     const { caja, form } = abrir(dep);
-    await vi.waitFor(() => expect(texto(caja, ".gan-explica")).toContain("te quedan 0 dólares digitales."));
+    await vi.waitFor(() => expect(texto(caja, ".gan-explica")).toContain("te quedan 0,00 dólares digitales."));
     expect(visible(principal(caja))).toBe(true);
     expect(visible(q(caja, ".gan-falta"))).toBe(false);
     expect(visible(botonCon(caja, "Cargar dólares digitales"))).toBe(false);
@@ -719,9 +726,9 @@ describe("el saldo y lo que falta", () => {
     const mas = botonCon(caja, "Un dólar más") as HTMLButtonElement;
     mas.click();
     mas.click();
-    expect(contador(caja)).toBe("2,5 dólares digitales");
+    expect(contador(caja)).toBe("2,50 dólares digitales");
     expect(mas.disabled).toBe(true);
-    expect(texto(caja, ".gan-explica")).toContain("te quedan 0 dólares digitales.");
+    expect(texto(caja, ".gan-explica")).toContain("te quedan 0,00 dólares digitales.");
     enviar(form);
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
     expect(dep.pagar.mock.calls[0]?.[1].monto).toBe("2.5000000");
@@ -750,7 +757,7 @@ describe("el saldo y lo que falta", () => {
     const { caja, form } = abrir(dep);
     await lista(caja);
     enviar(form);
-    await vi.waitFor(() => expect(falta(caja)).toBe("Te faltan 40 dólares digitales. Tenés 10."));
+    await vi.waitFor(() => expect(falta(caja)).toBe("Te faltan 40,00 dólares digitales. Tenés 10,00."));
     expect(visible(botonCon(caja, "Cargar dólares digitales"))).toBe(true);
     expect(visible(principal(caja))).toBe(false);
     expect(dep.pagar).not.toHaveBeenCalled();
@@ -854,6 +861,7 @@ describe("un premio se paga una sola vez", () => {
     enviar(form);
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Mirando si el pago salió…"));
     expect(principal(caja).disabled).toBe(true);
+    expect(caja.querySelector(".gan-msg.fv-revisando .cc-gira")).not.toBeNull();
     mirar();
     await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
     expect(q<HTMLAnchorElement>(caja, "a").href).toBe(txUrl(HASH, "mainnet"));
@@ -1128,8 +1136,8 @@ describe("en inglés", () => {
     (botonCon(caja, "Otro monto") as HTMLButtonElement).click();
     (botonCon(caja, "Un dólar más") as HTMLButtonElement).click();
     setLang("en");
-    expect(contador(caja)).toBe("51 digital dollars");
-    expect(texto(caja, ".gan-explica")).toBe("You pay Equipo Cohete and you'll have 49 digital dollars left.");
+    expect(contador(caja)).toBe("51.00 digital dollars");
+    expect(texto(caja, ".gan-explica")).toBe("You pay Equipo Cohete and you'll have 49.00 digital dollars left.");
     expect(principal(caja).textContent).toBe("Pay");
     expect(botonCon(caja, "One dollar more")).toBeDefined();
     expect(caja.querySelector("details.gan-otra summary")?.textContent).toBe("Pay from another wallet");
@@ -1138,7 +1146,7 @@ describe("en inglés", () => {
   it("si no alcanza, lo dice en inglés con los números como se leen allá", async () => {
     setLang("en");
     const { caja } = abrir(armar({ saldo: dolares(12.5) }));
-    await vi.waitFor(() => expect(falta(caja)).toBe("You're 37.5 digital dollars short. You have 12.5."));
+    await vi.waitFor(() => expect(falta(caja)).toBe("You're 37.50 digital dollars short. You have 12.50."));
     expect(visible(botonCon(caja, "Add digital dollars"))).toBe(true);
   });
 

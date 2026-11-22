@@ -305,3 +305,17 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
   .cg-numero.sube { animation: none; }
   .campana-grande *, .cpo-panel * { transition: none !important; }
 }
+
+/* La fila viva (src/ui/fila-viva.ts) ocupa el lugar del botón principal mientras el panel espera algo: la misma altura, así nada salta. */
+.cpo-acciones > .cpo-viva { flex: 1 1 100%; min-height: 56px; }
+.cpo-acciones > .cpo-viva:empty { display: none; }
+/* Servicio pagado: el tilde es el de la fila viva. Salta una sola vez, cuando el pago se confirma mientras se lo esperaba. */
+.cpo-cab .cpo-marca-viva::before {
+  content: "\2713"; display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 8px; box-sizing: border-box;
+  border: 2px solid var(--ink); border-radius: 50%; background: var(--teal); color: var(--on-accent);
+  font-size: 13px; font-weight: 900; line-height: 1; vertical-align: -3px;
+}
+.cpo-cab .cpo-marca-viva.recien::before { animation: fv-pop 0.7s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .cpo-cab .cpo-marca-viva.recien::before { animation: none; }
+}
