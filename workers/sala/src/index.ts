@@ -154,6 +154,7 @@ import {
   vidaDeCampana,
 } from "./campana";
 import type { CampanaFirmada, EstadoDeCelular, Fase, MotivoDeSalida, ReemplazoDeSala, ReservaDeEvento } from "./campana";
+import { activacionesDeCampana, anotarAltaDeCampana } from "./vigilancia-campana";
 import { leerSorteoEnLaRed } from "./cadena";
 import { CABECERA_DE_CACHE, esCacheable, esSinResultado, guardar as guardarEnLaCache, leerGuardada } from "./cache";
 import {
@@ -926,8 +927,12 @@ export class Sala extends DurableObject<Env> {
     if (!r.ok && r.motivo === "quitada") this.fichasVerificadas.recordar(ficha, persona, ahora, alta.vence);
     if (!r.ok) return r;
     this.fichasVerificadas.recordar(ficha, persona, ahora, alta.vence);
-    if (!r.ya) this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta: r.cuenta, d: alta.d, estado: "aceptado" });
-    else if (r.nombre) this.avisarNombre(r.cuenta, { n: r.n, v: r.v, ...r.nombre });
+    if (!r.ya) {
+      // La vigilancia de firmas: cada alta nueva es una activación explicada del día. Lo que se guarda es la cantidad,
+      // nunca el token, el id de la persona, la cuenta ni el nombre.
+      anotarAltaDeCampana(this.sql, diaUtc(ahora));
+      this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta: r.cuenta, d: alta.d, estado: "aceptado" });
+    } else if (r.nombre) this.avisarNombre(r.cuenta, { n: r.n, v: r.v, ...r.nombre });
     return { ok: true, cuenta: r.cuenta, ya: r.ya, v: r.v, n: r.n };
   }
 
@@ -955,6 +960,12 @@ export class Sala extends DurableObject<Env> {
     // La marca de correo confirmado: solo si el Worker la acepta, con la llave del propio celular y si hay algo nuevo que escribir.
     if (confirmo && marcaDeCorreoPrendida(this.env)) marcarCorreoConfirmado(this.sql, cuenta, huella);
     return { ok: true, ...leerEstadoDeCelular(this.sql, cuenta, huella) };
+  }
+
+  /** Cuántas altas de campaña explican firmas, por día: solo cifras, sin ningún dato de persona. Lo lee la vigilancia. */
+  async activacionesDeCampana(): Promise<Resultado<Record<string, number>>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    return { ok: true, ...activacionesDeCampana(this.sql) };
   }
 
   /** El pase que la pantalla presenta al entrar con Google; solo lo renueva quien tiene el token. */

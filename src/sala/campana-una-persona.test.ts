@@ -107,4 +107,22 @@ describe("una sola persona no deja afuera a las demás", () => {
     for (let i = 0; i < 3 * RECHAZOS_POR_FICHA; i++) await altaDe(mundo, sala.id, persona);
     expect((await altaDe(mundo, sala.id, personaDePrueba(mundo, 4))).status).toBe(201);
   });
+
+  it("dos pedidos a la vez de la misma persona anotan una sola vez", async () => {
+    const persona = personaDePrueba(mundo, 5);
+    const [primero, segundo] = await Promise.all([
+      altaDe(mundo, sala.id, persona),
+      altaDe(mundo, sala.id, otraSesion(persona, 1)),
+    ]);
+    // Uno entra como nueva y el otro se encuentra ya anotado: nunca hay dos filas para la misma persona.
+    expect([primero.status, segundo.status].sort()).toEqual([200, 201]);
+    const cuerpo = async (r: Response): Promise<{ cuenta: string; ya?: boolean }> => (await r.json()) as never;
+    const a = await cuerpo(primero);
+    expect(a.cuenta).toBe(persona.cuenta);
+    const b = await cuerpo(segundo);
+    expect(b.cuenta).toBe(persona.cuenta);
+    expect([a.ya, b.ya].filter(Boolean)).toHaveLength(1);
+    const estado = await mundo.pedir(`/v1/sala/${sala.id}/campana/estado`);
+    expect(((await estado.json()) as { total: number }).total).toBe(1);
+  });
 });
