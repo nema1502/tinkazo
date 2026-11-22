@@ -221,7 +221,7 @@ export const PAGINAS_SIN_CUPON_DE_ENTRADA: readonly string[] = ["precios.html", 
 /**
  * Lo que frena la publicación de producción que abre en Oficial (`VITE_STELLAR_NETWORK` en `mainnet` u `oficial`): que
  * esas páginas todavía digan que Oficial es gratis con el cupón de tu evento. Fuera de producción o sin la variable en
- * Oficial nunca frena: hoy el sitio abre en Prueba y esas páginas dicen la verdad.
+ * Oficial nunca frena: sin la variable, el sitio abre en Prueba y esas páginas dicen la verdad.
  */
 export function problemasDeLasPaginasEnOficial(env: Record<string, string | undefined>, paginas: Readonly<Record<string, string>>): string[] {
   if (env.VERCEL_ENV !== "production" || parseModeValue(env.VITE_STELLAR_NETWORK) !== "mainnet") return [];

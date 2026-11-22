@@ -99,8 +99,12 @@ export interface SalidasDelPaso {
 
 export interface OpcionesDelPaso {
   para: Para;
-  /** El correo de la sesión, entero: se muestra tapado. */
-  correo?: string | undefined;
+  /**
+   * El correo de la sesión, entero: se muestra tapado. Puede ser una función, que se lee en cada pintada y al mandar el
+   * código: el perfil de una sesión retomada llega unos segundos después de abrirse el paso. Solo sirve el correo que la
+   * sesión del proveedor ya verificó, porque a esa dirección va el código que recupera la cuenta.
+   */
+  correo?: string | undefined | (() => string | undefined);
   /** Entró con su correo y no con Google. */
   viaCorreo?: boolean | undefined;
   /** A dónde vuelve el foco al cerrar. */
@@ -288,6 +292,9 @@ export const TOPE_LECTURA_SERVIDOR_MS = TOPE_TOKEN_MS + ESPERA_MS + 1_000;
 export const TOPE_CERRAR_MS = 12_000;
 /** Un toque en la principal no cuenta si cambió de acción hace menos que esto (o si el paso recién se abrió). */
 export const GUARDA_DE_TOQUE_MS = 500;
+/** Cada cuánto se mira si llegó el correo de la sesión retomada, y cuántas veces: unos 15 segundos, como la cabecera. */
+const ESPERA_DEL_CORREO_MS = 700;
+const ESPERAS_DEL_CORREO = 22;
 
 /** Las pruebas dicen que sus clics simulados valen: el navegador marca los de verdad con `isTrusted`. */
 let confiarEnClicsDePrueba = false;
@@ -397,7 +404,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   }
 
   const celular = op.celular ?? (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches);
-  const correoSesion = (op.correo ?? "").trim();
+  /** El correo de la sesión de ahora, o vacío si todavía no llegó. */
+  const correoDeLaSesion = (): string => ((typeof op.correo === "function" ? op.correo() : op.correo) ?? "").trim();
   const st = {
     est: { ...vacio(), ...(op.inicial ?? {}) } as EstadoOficial,
     corre: "revisando" as Corre,
@@ -444,6 +452,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     bienvenida: null as Bienvenida | null,
     /** Los sorteos que dejó el regalo recibido en este paso, para la línea del final. */
     sorteosDelRegalo: null as SorteosDeAlta | null,
+    /** Los sorteos de la cuenta como los dijo el último estado, con acceso: para el final de una cuenta ya activada. */
+    cupo: null as SorteosDeAlta | null,
     /** El servidor activó la cuenta pero el regalo no pasó (`regalo: "lleno"`): el final lo dice. */
     regaloLleno: false,
     /**
@@ -625,7 +635,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     hayDesbloqueo: st.hayDesbloqueo,
     desbloqueoFallo: st.desbloqueoFallo,
     eligioCorreo: st.eligioCorreo,
-    correoSesion: ocultarCorreo(correoSesion),
+    correoSesion: ocultarCorreo(correoDeLaSesion()),
     correoCuenta: ocultarCorreo(st.est.correoDeLaCuenta ?? ""),
     entroConCorreo: !!op.viaCorreo,
     codigo: st.codigo ? { a: st.codigo.a, segundos: Math.floor((Date.now() - st.codigo.desde) / 1000) } : null,
@@ -651,6 +661,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       ...(compraEnElBuild ? { pago: pagoEnLaVista() } : {}),
       ...(acc.bienvenida ? { bienvenida: { ...acc.bienvenida } } : {}),
       ...(acc.sorteosDelRegalo ? { sorteosDelRegalo: sorteosParaLaVista(acc.sorteosDelRegalo) } : {}),
+      ...(acc.cupo ? { cupo: sorteosParaLaVista(acc.cupo) } : {}),
     },
   });
 
@@ -1181,6 +1192,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       acc.arreglo = "probar";
       // El regalo solo se ofrece si hay cómo pedirlo. Sin el campo (el servicio de antes), nada cambia.
       acc.bienvenida = acceso?.reclamar ? (r.datos.bienvenida ?? null) : null;
+      acc.cupo = r.datos.acceso === "ninguno" ? null : (r.datos.sorteos ?? null);
       return;
     }
     acc.estado = "error";
@@ -2017,7 +2029,12 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       case "desbloqueo":
         return desbloquear();
       case "mandar-codigo":
-        return mandar(aparato() ? null : correoSesion, aparato() ? ocultarCorreo(st.est.correoDeLaCuenta ?? "") || ocultarCorreo(correoSesion) : ocultarCorreo(correoSesion));
+        {
+          const correoSesion = correoDeLaSesion();
+          // Sin el correo que verificó el proveedor no se manda nada a ninguna dirección: queda el campo para escribir el tuyo.
+          if (!aparato() && correoSesion === "") return pintar();
+          return mandar(aparato() ? null : correoSesion, aparato() ? ocultarCorreo(st.est.correoDeLaCuenta ?? "") || ocultarCorreo(correoSesion) : ocultarCorreo(correoSesion));
+        }
       case "mandar-a-mano": {
         const dir = campoCorreo.value.trim();
         if (!mailOk(dir)) {
@@ -2029,7 +2046,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         return mandar(dir, dir);
       }
       case "otro-codigo":
-        return mandar(st.codigo?.destino ?? (codigoAMano ? campoCorreo.value.trim() : correoSesion), st.codigo?.a ?? ocultarCorreo(correoSesion), true);
+        return mandar(st.codigo?.destino ?? (codigoAMano ? campoCorreo.value.trim() : correoDeLaSesion()), st.codigo?.a ?? ocultarCorreo(correoDeLaSesion()), true);
       case "otro-correo":
         st.eligioCorreo = true;
         st.codigo = null;
@@ -2279,6 +2296,20 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   const inertes: HTMLElement[] = [];
   let soltarAvisos: () => void = () => undefined;
 
+  /**
+   * Con una sesión retomada, el correo (parte del perfil) llega unos segundos después de abrirse el paso, hasta unos 15: se mira
+   * cada tanto y, cuando llega, se vuelve a pintar para que ofrezca mandar el código a ese correo y no pida escribirlo.
+   */
+  let esperasDelCorreo = 0;
+  function esperarElCorreo(): void {
+    if (typeof op.correo !== "function" || correoDeLaSesion() !== "" || esperasDelCorreo >= ESPERAS_DEL_CORREO) return;
+    esperasDelCorreo += 1;
+    despues(() => {
+      if (correoDeLaSesion() !== "") pintar();
+      else esperarElCorreo();
+    }, ESPERA_DEL_CORREO_MS);
+  }
+
   function devolverFoco(vez = 0): void {
     const destino = op.volverA;
     if (destino instanceof HTMLElement && destino.isConnected && !(destino as HTMLButtonElement).disabled) return destino.focus({ preventScroll: true });
@@ -2355,6 +2386,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   abiertoEn = Date.now();
   cambioEn = abiertoEn;
   pintar();
+  esperarElCorreo();
   (principal.disabled || principal.hidden ? titulo : principal).focus({ preventScroll: true });
   void (op.puedeUsarDesbloqueo?.() ?? Promise.resolve(false)).then(
     (si) => {

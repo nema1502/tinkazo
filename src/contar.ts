@@ -29,7 +29,7 @@
  * que salir en ese mismo instante. Los términos lo cuentan en "Y además"
  * (`tmMore2`); si esto cambia, cambian ellos.
  */
-import { type ClaveDeError, ERRORES, ERRORES_DEL_PORTERO, type Evento, ORIGENES, type Origen, type PropsDe, type Ref } from "../workers/enlaces/src/conteo";
+import { type ClaveDeError, ERRORES, ERRORES_DEL_PORTERO, type Evento, ORIGENES, type Origen, type PropsDe, type Ref, contratoOficial } from "../workers/enlaces/src/conteo";
 import { sinGrabar } from "./ensayo-modo";
 
 /**
@@ -289,8 +289,12 @@ export function marcarQr(enlace: string): string {
   return `${base}${base.includes("?") ? "&" : "?"}o=qr${corte < 0 ? "" : enlace.slice(corte)}`;
 }
 
-/** Se abrió un comprobante anclado: una vez por pestaña y por sorteo. */
+/**
+ * Se abrió un comprobante anclado: una vez por pestaña y por sorteo. Solo los de un contrato oficial: el Worker no cuenta los
+ * de contratos anteriores y los rechaza con un 400 que igual gasta el tope de pedidos de la cuenta, así que ni se mandan.
+ */
 export function contarApertura(via: Via, ref: Ref): boolean {
+  if (!contratoOficial(ref)) return false;
   return contarUnaVez(`proof_open:${claveDe(ref)}`, "proof_open", { via }, ref);
 }
 
@@ -299,8 +303,9 @@ export function contarAperturaDeEvento(via: Via, clave: string): boolean {
   return contarUnaVez(`proof_open:evento:${clave}`, "proof_open", { via });
 }
 
-/** Cómo terminó la verificación de un sorteo anclado: una vez por pestaña, sorteo y veredicto. */
+/** Cómo terminó la verificación de un sorteo anclado: una vez por pestaña, sorteo y veredicto. Solo de un contrato oficial, como la apertura. */
 export function contarVeredicto(verdict: PropsDe<"proof_verdict">["verdict"], ref: Ref): boolean {
+  if (!contratoOficial(ref)) return false;
   return contarUnaVez(`proof_verdict:${verdict}:${claveDe(ref)}`, "proof_verdict", { verdict }, ref);
 }
 

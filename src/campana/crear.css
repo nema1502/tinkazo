@@ -119,6 +119,8 @@ a.ccp-enlace { display: inline-flex; align-items: center; }
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+  /* Aire antes de la barra fija de abajo: sin esto el último renglón del paso (el total, el botón de ver cómo queda) queda pegado a ella. */
+  padding-bottom: 16px;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
@@ -212,6 +214,7 @@ a.ccp-enlace { display: inline-flex; align-items: center; }
   font-weight: 800;
   cursor: pointer;
 }
+.ccp-paso-contador:disabled { border-color: var(--muted); color: var(--muted); background: var(--field); cursor: not-allowed; }
 .ccp-numero { min-width: 64px; font-size: 28px; font-weight: 800; text-align: center; }
 .ccp-otro-fila { display: flex; align-items: center; gap: 10px; }
 .ccp-unidad { font-size: var(--letra-sec); color: var(--ink2); }
@@ -337,7 +340,7 @@ a.ccp-enlace { display: inline-flex; align-items: center; }
   .ccp-circulos { flex: none; gap: 8px; }
   .ccp-circulo-item { flex: none; }
   .ccp-circulo { width: 48px; }
-  .ccp-paso { overflow: auto; gap: clamp(10px, 2vh, 20px); padding-right: 4px; }
+  .ccp-paso { overflow: auto; gap: clamp(10px, 2vh, 20px); padding-right: 4px; padding-bottom: 0; }
   .ccp-titulo { font-size: clamp(36px, 3.4vw, 56px); }
   .ccp-cuerpo { gap: clamp(16px, 3vh, 32px); justify-content: flex-start; }
   .ccp-rotulo, .ccp-linea, .ccp-error { font-size: 18px; }

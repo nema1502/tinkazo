@@ -190,7 +190,7 @@ describe("la cadena de «Activar mi cuenta» con el regalo", () => {
     await pasa(PEDIDO_CADA_MS * 2);
     expect(textoDe()).toContain(t("clListaTitulo"));
     const vence = t("cupoOfVencenTodos").replace("{fecha}", fechaDeAlta(VENCE, "es"));
-    expect(bajada()).toBe(`${t("cupoOfQuedan").replace("{n}", "3")} ${vence}`);
+    expect(bajada()).toBe(`${t("cupoOfRegalo").replace("{n}", "3")} ${vence}`);
     expect(principal().textContent).toBe(t("clSeguir"));
     // El final no tiene salidas: se cierra con su principal.
     await pasa();
@@ -430,12 +430,25 @@ describe("el nombre del acceso que contesta el servidor no cambia lo que se ve",
     expect(textoDe()).not.toContain(t("altaCuponGuardado"));
   });
 
+  it("una cuenta que ya estaba activada: el final dice cuántos sorteos oficiales tiene, sin decir gratis", async () => {
+    const srv = servidorFalso({ bienvenida: null });
+    srv.s.acceso = "admin";
+    const { promesa } = await abrir({ srv, inicial: { activacion: "lista", proteccion: "lista" } });
+    await pasa(PEDIDO_CADA_MS * 2);
+    expect(textoDe()).toContain(t("clListaTitulo"));
+    const vence = t("cupoOfVencenTodos").replace("{fecha}", fechaDeAlta(VENCE, "es"));
+    expect(bajada()).toBe(`${t("cupoOfQuedan").replace("{n}", "3")} ${vence}`);
+    expect(bajada()).not.toMatch(/gratis/iu);
+    principal().click();
+    await expect(promesa).resolves.toBe(true);
+  });
+
   it("con gratis, que se tolera si llega, el final dice lo mismo que con admin", async () => {
     const { promesa } = await abrir({ srv: servidorFalso({ delRegalo: "gratis" }), inicial: { proteccion: "lista" } });
     principal().click();
     await pasa(PEDIDO_CADA_MS * 2);
     const vence = t("cupoOfVencenTodos").replace("{fecha}", fechaDeAlta(VENCE, "es"));
-    expect(bajada()).toBe(`${t("cupoOfQuedan").replace("{n}", "3")} ${vence}`);
+    expect(bajada()).toBe(`${t("cupoOfRegalo").replace("{n}", "3")} ${vence}`);
     // El final no tiene salidas: se cierra con su principal.
     await pasa();
     principal().click();

@@ -361,6 +361,91 @@ describe("el cliente de la sala", () => {
     expect(SocketFalso.ultimo).not.toBe(antes);
   });
 
+  it("con el socket en vivo y callado, consulta de respaldo cada 20 s y no antes", async () => {
+    let n = 0;
+    const f = vi.fn().mockImplementation(async () => respuesta(n > 0 ? [{ n, d: `d${n}` }] : []));
+    const alNombre = vi.fn();
+    escucharSala(sala, { alNombre }, { fetch: f, socket: (u) => new SocketFalso(u) as unknown as WebSocket });
+    const s = SocketFalso.ultimo as SocketFalso;
+    s.emitir("open");
+    s.emitir("message", { data: JSON.stringify({ t: "listo" }) });
+    await vi.advanceTimersByTimeAsync(10);
+    const alAbrir = f.mock.calls.length;
+    // Alguien se anotó y el socket, medio muerto, no avisó.
+    n = 1;
+    await vi.advanceTimersByTimeAsync(19_000);
+    expect(f.mock.calls.length).toBe(alAbrir);
+    expect(alNombre).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(f.mock.calls.length).toBe(alAbrir + 1);
+    expect(alNombre).toHaveBeenCalledWith(1, "d1");
+    // Y sigue, una por cada 20 s: nunca más seguido.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(f.mock.calls.length).toBe(alAbrir + 4);
+  });
+
+  it("con la pestaña oculta no hace la consulta de respaldo", async () => {
+    vi.stubGlobal("document", { visibilityState: "hidden" });
+    try {
+      const f = vi.fn().mockResolvedValue(respuesta([]));
+      escucharSala(sala, { alNombre: vi.fn() }, { fetch: f, socket: (u) => new SocketFalso(u) as unknown as WebSocket });
+      const s = SocketFalso.ultimo as SocketFalso;
+      s.emitir("open");
+      s.emitir("message", { data: JSON.stringify({ t: "listo" }) });
+      await vi.advanceTimersByTimeAsync(10);
+      const alAbrir = f.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(100_000);
+      expect(f.mock.calls.length).toBe(alAbrir);
+      // Al volver a la pestaña, la próxima vuelta del respaldo consulta.
+      vi.stubGlobal("document", { visibilityState: "visible" });
+      await vi.advanceTimersByTimeAsync(20_500);
+      expect(f.mock.calls.length).toBe(alAbrir + 1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("con otra pantalla en la sala (cierre 4000) no reabre el socket, pero la lista sigue al día cada 10 s", async () => {
+    let n = 0;
+    const f = vi.fn().mockImplementation(async () => respuesta(n > 0 ? [{ n, d: `d${n}` }] : []));
+    const alNombre = vi.fn();
+    const alEstado = vi.fn();
+    escucharSala(sala, { alNombre, alEstado }, { fetch: f, socket: (u) => new SocketFalso(u) as unknown as WebSocket });
+    const s = SocketFalso.ultimo as SocketFalso;
+    s.emitir("open");
+    s.emitir("message", { data: JSON.stringify({ t: "listo" }) });
+    s.emitir("close", { code: 4000 });
+    expect(alEstado).toHaveBeenLastCalledWith("sondeo");
+    // Al cortarse consulta enseguida, y después cada 10 s.
+    await vi.advanceTimersByTimeAsync(10);
+    n = 1;
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(alNombre).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(alNombre).toHaveBeenCalledWith(1, "d1");
+    n = 2;
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(alNombre).not.toHaveBeenCalledWith(2, "d2");
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(alNombre).toHaveBeenCalledWith(2, "d2");
+    // Pasado el tiempo en que se reintentaría el socket, sigue siendo el mismo: no se pelea por la sala.
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(SocketFalso.ultimo).toBe(s);
+  });
+
+  it("parar corta también la consulta de respaldo", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta([]));
+    const { parar } = escucharSala(sala, { alNombre: vi.fn() }, { fetch: f, socket: (u) => new SocketFalso(u) as unknown as WebSocket });
+    const s = SocketFalso.ultimo as SocketFalso;
+    s.emitir("open");
+    s.emitir("message", { data: JSON.stringify({ t: "listo" }) });
+    await vi.advanceTimersByTimeAsync(10);
+    parar();
+    const alParar = f.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(f.mock.calls.length).toBe(alParar);
+  });
+
   it("al recargar la pantalla pide todo desde cero y sigue con lo que ya tenía", async () => {
     const f = vi.fn().mockResolvedValue(respuesta([{ n: 5, d: "cinco" }, { n: 6, d: "seis" }]));
     const alNombre = vi.fn();

@@ -5,7 +5,9 @@ import { pintarElCostoDelRetiro } from "./costo-del-retiro";
 import { pintarLaComision } from "./comision-texto";
 import { contractUrl, network } from "./stellar/config";
 import { enlazarContrato } from "./enlace-contrato";
-import { leerMarcaPollar } from "./stellar/pollar-config";
+import { hasPollarKey, leerMarcaPollar } from "./stellar/pollar-config";
+import { enNavegadorDeApp } from "./navegador";
+import { claveDeLaCta, pintarLaCtaDeLaPagina } from "./cta-de-la-pagina";
 import { loadSessionKind } from "./stellar/session-store";
 import { crearChip } from "./ui/cuenta-chip";
 import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
@@ -37,6 +39,17 @@ const tema = new URLSearchParams(location.search).get("theme");
 export { fijarElTema };
 fijarElTema(tema);
 
+/** La vía de la sesión guardada en esta red, o null sin ella: sin cargar ninguna billetera. */
+function viaGuardada(): ReturnType<typeof viaDeLaSesionGuardada> {
+  let marcaPollar: string | null = null;
+  try {
+    marcaPollar = leerMarcaPollar(localStorage, network.name);
+  } catch {
+    /* sin almacenamiento no hay marca */
+  }
+  return viaDeLaSesionGuardada(loadSessionKind(network.name), marcaPollar);
+}
+
 /**
  * La cuenta, siempre a la vista también acá (26 de octubre de 2026): "Entrar" si no hay cuenta (un enlace a la
  * herramienta, que al abrirse pide entrar) y, si hay una sesión guardada en esta red, "Mi cuenta · Google" (o la vía
@@ -60,13 +73,7 @@ function montarLaCuenta(): void {
       lado.appendChild(idiomas);
     } else cabecera.appendChild(lado);
   }
-  let marcaPollar: string | null = null;
-  try {
-    marcaPollar = leerMarcaPollar(localStorage, network.name);
-  } catch {
-    /* sin almacenamiento no hay marca */
-  }
-  const via = viaDeLaSesionGuardada(loadSessionKind(network.name), marcaPollar);
+  const via = viaGuardada();
   const chip = via
     ? crearChip({ estado: "dentro", via, nombre: "", inicial: "", foto: "", direccion: "" }, { tx: texto, enlace: "/#mis-sorteos", titulo: texto("navCuenta") })
     : crearChip({ estado: "fuera" }, { tx: texto, enlace: "/#sortear" });
@@ -92,6 +99,12 @@ onLangChange(() => pintarElCostoDelRetiro(document));
 // Lo que cobra Tinkazo a una campaña de empresa, igual: dentro de un molde que solo se abre con la comisión configurada (src/comision-texto.ts).
 onLangChange(() => pintarLaComision(document));
 setLang(initialLang());
+// El botón de entrar del final dice lo mismo que el de la portada (`cta-de-la-pagina.ts`).
+pintarLaCtaDeLaPagina(
+  document,
+  claveDeLaCta({ conSesion: viaGuardada() !== null, conGoogle: hasPollarKey(network.name) && !enNavegadorDeApp(navigator.userAgent) }),
+  texto,
+);
 // El enlace al contrato sigue el modo de la pestaña (`?red=` o lo guardado): en Prueba es el de siempre, el que trae el
 // HTML. Nunca se fija a mano al de la red principal: los sorteos de Prueba siguen comprobándose ahí hasta que esa red se
 // borre.

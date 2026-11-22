@@ -108,6 +108,9 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
 .cpo-panel button.primary { width: 100%; min-height: 56px; font-size: 18px; }
 .cpo-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .cpo-acciones .primary { flex: 1 1 100%; }
+/* El botón que entra directo a Google lleva la G de los botones de la portada (la imagen viene de styles.css). */
+.cpo-acciones button.primary.con-g { display: inline-flex; align-items: center; justify-content: center; gap: 10px; text-align: center; }
+.cpo-acciones button.primary .g-ico { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink); background: #fff var(--g-de-google) center / 16px 16px no-repeat; }
 .cpo-previa .cpo-premio { font-size: clamp(26px, 8vw, 40px); font-weight: 900; line-height: 1.1; margin: 8px 0; overflow-wrap: anywhere; }
 .cpo-logo { max-height: 72px; max-width: 220px; object-fit: contain; }
 /* Pantalla grande: el título y la línea suben con el ancho, para leerse de lejos. */

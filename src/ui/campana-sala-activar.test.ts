@@ -188,6 +188,29 @@ describe("un borrador sin firma", () => {
     }
   });
 
+  it("con una cuenta de correo, Entrar con Google va directo a Google y no a la ventana con el correo", async () => {
+    const x = armar();
+    const entradas: string[] = [];
+    x.m.deps.entrar = () => void entradas.push("google");
+    x.m.deps.cambiarDeCuenta = () => void entradas.push("ventana");
+    x.m.deps.comision = { ...(x.m.deps.comision as DepsDeComision), billetera: async () => "correo" };
+    const p = nuevoPanel(x.m);
+    await eligiendo(x, p);
+    expect(texto(p, "#cpo-h")).toBe("Hace falta una cuenta de Google");
+    expect(principales(p)[0]?.querySelector(".g-ico")).toBeNull();
+    boton(p, "Entrar con Google").click();
+    expect(entradas).toEqual(["google"]);
+  });
+
+  it("con una cuenta de correo, el botón de Google lleva la G cuando Google entra directo", async () => {
+    const x = armar();
+    x.m.deps.entraConGoogle = () => true;
+    x.m.deps.comision = { ...(x.m.deps.comision as DepsDeComision), billetera: async () => "correo" };
+    const p = nuevoPanel(x.m);
+    await eligiendo(x, p);
+    expect(principales(p)[0]?.querySelector(".g-ico")).not.toBeNull();
+  });
+
   it("con la cuenta de Google sí ofrece cargar y pagar", async () => {
     const sinSaldo = armar({ saldo: 0n });
     const p = nuevoPanel(sinSaldo.m);
@@ -387,6 +410,89 @@ describe("pagar y activarse sola", () => {
     expect(x.hecho).toEqual(["pagar", "activar", "activar", "activar"]);
   });
 
+  it("el botón Abrir pasa solo a Abrir la inscripción ahora al cruzar la hora en que ya cabe, sin tocar nada", async () => {
+    const x = armar();
+    const p = nuevoPanel(x.m);
+    const hora = 3_600_000;
+    // Abre en 30 horas y sortea en 32: abrirla ya cabe recién 18 horas antes del sorteo, o sea dentro de 14 horas.
+    const abre = AHORA + 30 * hora;
+    const crudo = borradorDe({ abre_ms: abre, cierra_ms: abre + hora, sorteo_ms: abre + 2 * hora, recibir_hasta_ms: abre + 9 * 86_400_000 });
+    x.m.almacen.setItem(CLAVE_DEL_BORRADOR, crudo);
+    await eligiendo(x, p, crudo);
+    boton(p, "Pagar 2,40").click();
+    await vi.waitFor(() => expect(texto(p, "#cpo-h")).toBe("Tu campaña ya está activada"));
+    expect(principales(p).map((b) => [b.textContent, b.disabled])).toEqual([["Abrir la inscripción", true]]);
+    await x.m.correr(14 * hora - 60_000);
+    expect(principales(p).map((b) => [b.textContent, b.disabled])).toEqual([["Abrir la inscripción", true]]);
+    await x.m.correr(2 * 60_000);
+    expect(principales(p).map((b) => [b.textContent, b.disabled])).toEqual([["Abrir la inscripción ahora", false]]);
+    expect(x.m.creadas).toEqual([]);
+  });
+
+  it("si la sala falla al abrir ya por la red, vuelve a probar sola a la hora de abrir", async () => {
+    const x = armar();
+    const p = nuevoPanel(x.m);
+    const crudo = borradorDeHoyMasTarde();
+    x.m.almacen.setItem(CLAVE_DEL_BORRADOR, crudo);
+    await eligiendo(x, p, crudo);
+    boton(p, "Pagar 2,40").click();
+    await vi.waitFor(() => expect(texto(p, "#cpo-h")).toBe("Tu campaña ya está activada"));
+    x.respuestas.push({ ok: false, motivo: "sin-respuesta" });
+    boton(p, "Abrir la inscripción ahora").click();
+    await vi.waitFor(() => expect(botonesDe(p)).toContain("Probar de nuevo"));
+    expect(x.activaciones).toHaveLength(2);
+    // La inscripción abre en 8 horas y la sala se crea 6 antes: a las 2 horas, sin tocar nada.
+    await x.m.correr(2 * 3_600_000 - 60_000);
+    expect(x.activaciones).toHaveLength(2);
+    await x.m.correr(2 * 60_000);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+    expect(x.activaciones).toHaveLength(3);
+    expect(x.m.creadas).toHaveLength(1);
+    // Una sola vez pagado.
+    expect(x.hecho).toEqual(["pagar", "activar", "activar", "activar"]);
+  });
+
+  it("los reintentos solos son pocos: a la tercera vez que falla, queda el botón", async () => {
+    const x = armar();
+    const p = nuevoPanel(x.m);
+    const crudo = borradorDeHoyMasTarde();
+    x.m.almacen.setItem(CLAVE_DEL_BORRADOR, crudo);
+    await eligiendo(x, p, crudo);
+    boton(p, "Pagar 2,40").click();
+    await vi.waitFor(() => expect(texto(p, "#cpo-h")).toBe("Tu campaña ya está activada"));
+    for (let i = 0; i < 8; i++) x.respuestas.push({ ok: false, motivo: "red" });
+    boton(p, "Abrir la inscripción ahora").click();
+    await vi.waitFor(() => expect(x.activaciones).toHaveLength(2));
+    await x.m.correr(3 * 3_600_000);
+    await x.m.correr(5 * 60_000);
+    await x.m.correr(24 * 3_600_000);
+    // La primera activación, el toque y tres vueltas solas: nada más.
+    expect(x.activaciones).toHaveLength(5);
+    expect(vistaDe(p)).toBe("previa");
+    expect(botonesDe(p)).toContain("Probar de nuevo");
+  });
+
+  it("lo que pide una acción de la persona no se reintenta solo", async () => {
+    for (const motivo of ["sesion", "sin-fondos", "no-google", "limite"] as const) {
+      document.body.innerHTML = "";
+      const x = armar();
+      const p = nuevoPanel(x.m);
+      const crudo = borradorDeHoyMasTarde();
+      x.m.almacen.setItem(CLAVE_DEL_BORRADOR, crudo);
+      await eligiendo(x, p, crudo);
+      boton(p, "Pagar 2,40").click();
+      await vi.waitFor(() => expect(texto(p, "#cpo-h")).toBe("Tu campaña ya está activada"));
+      x.respuestas.push({ ok: false, motivo });
+      boton(p, "Abrir la inscripción ahora").click();
+      await vi.waitFor(() => expect(x.activaciones).toHaveLength(2));
+      await suelta(6);
+      await x.m.correr(12 * 3_600_000);
+      expect(x.activaciones, motivo).toHaveLength(2);
+      expect(vistaDe(p), motivo).toBe("previa");
+      cerrarTodos();
+    }
+  });
+
   it("abrir ya se ofrece solo si a la sala le quedan seis horas después del sorteo", () => {
     const hora = 3_600_000;
     expect(cabeAbrirYa(AHORA + 18 * hora, AHORA)).toBe(true);
@@ -579,6 +685,18 @@ describe("cuando la sala dice que no", () => {
     const p = nuevoPanel(x.m);
     await eligiendo(x, p);
     expect(principales(p).map((b) => b.textContent)).toEqual(["Entrar con Google"]);
+  });
+
+  it.each<MotivoDeActivar>(["sesion", "organizadora", "no-google"])("%s: Entrar con Google va directo a Google, sin la ventana con el correo", async (motivo) => {
+    const x = pagado();
+    x.respuestas.push(falla(motivo));
+    const entradas: string[] = [];
+    x.m.deps.entrar = () => void entradas.push("google");
+    x.m.deps.cambiarDeCuenta = () => void entradas.push("ventana");
+    const p = nuevoPanel(x.m);
+    await eligiendo(x, p);
+    boton(p, "Entrar con Google").click();
+    expect(entradas).toEqual(["google"]);
   });
 
   it("sin token de sesión no pide nada a la sala y ofrece entrar de nuevo", async () => {
@@ -778,6 +896,22 @@ describe("la campaña por activar, sin sesión", () => {
     await suelta(10);
     boton(p, "Entrar con Google").click();
     expect(entradas).toEqual(["entrar"]);
+  });
+
+  it("el botón de entrar lleva la G de Google cuando entra directo a Google, y no si no", async () => {
+    for (const conGoogle of [true, false]) {
+      document.body.innerHTML = "";
+      const { x } = sinSesion();
+      x.m.deps.entraConGoogle = () => conGoogle;
+      const p = nuevoPanel(x.m);
+      await suelta(10);
+      const [entrar] = principales(p);
+      expect(entrar?.textContent).toBe("Entrar con Google");
+      expect(entrar?.querySelector(".g-ico") !== null).toBe(conGoogle);
+      // El otro botón no lleva G.
+      expect(p.raiz.querySelectorAll(".cpo-acciones .g-ico")).toHaveLength(conGoogle ? 1 : 0);
+      cerrarTodos();
+    }
   });
 
   it("al entrar, el título deja de pedir que entre y pide el pago", async () => {

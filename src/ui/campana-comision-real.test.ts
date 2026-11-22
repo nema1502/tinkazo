@@ -25,6 +25,8 @@ const h = vi.hoisted(() => ({
   rpc: "no-se-sabe" as string,
   /** La billetera entrada: por defecto una sin nada que la haga pagar con un toque. */
   billetera: { address: "x" } as Record<string, unknown> | null,
+  /** Si Google entra directo (hay llave del proveedor y no es el navegador de una app). */
+  conGoogle: true,
 }));
 
 vi.mock("./mandar-usdc", () => ({
@@ -54,6 +56,9 @@ vi.mock("./wallet-ui", () => ({
     // Cerrar la sesión deja sin billetera, como la de verdad.
     h.billetera = null;
   },
+  entraConGoogle: () => h.conGoogle,
+  entrar: async (opciones?: { soloGoogle?: boolean }) => void h.llamadas.push(`entrar:${opciones?.soloGoogle === true ? "soloGoogle" : "todo"}`),
+  openPicker: async () => void h.llamadas.push("selector"),
 }));
 vi.mock("../stellar/patrocinio-config", () => ({ configDelPortero: () => ({ url: "https://portero.ejemplo", porDefecto: false }) }));
 vi.mock("../stellar/pago-portero", () => ({ mirarPagos: async () => h.pagos }));
@@ -70,7 +75,7 @@ vi.mock("../campana/comision-red", async (original) => ({
 
 import { network } from "../stellar/config";
 import type { PedidoDePagoDeComision } from "./campana-comision";
-import { cambiarDeCuentaReal, depsDeComisionReales } from "./campana-comision-real";
+import { cambiarDeCuentaReal, depsDeComisionReales, entrarConGoogleReal } from "./campana-comision-real";
 
 const ORIGEN = cuentaDePrueba(5);
 const CUENTA = cuentaDePrueba(2);
@@ -106,6 +111,7 @@ beforeEach(() => {
   h.preparado = { ok: true, xdr: xdrArmado() };
   h.enviado = "listo";
   h.llamadas = [];
+  h.conGoogle = true;
   h.datos = null;
   h.marca = null;
   h.marcaAlEnviar = null;
@@ -324,6 +330,51 @@ describe("el respaldo y la configuración", () => {
       await cambiarDeCuentaReal(async () => void h.llamadas.push("abrir"));
       expect(h.llamadas).toEqual(["abrir"]);
     }
+  });
+
+  it("entrarConGoogleReal con el correo abierto: cierra esa sesión y entra directo con Google, sin el selector", async () => {
+    h.billetera = { address: ORIGEN, label: "Email", submitsItself: true, votaPorContenido: () => true };
+    await entrarConGoogleReal();
+    expect(h.llamadas).toEqual(["cerrar", "entrar:soloGoogle"]);
+  });
+
+  it("entrarConGoogleReal con el correo abierto y el toque vencido: solo cierra la sesión, sin abrir una ventana que saldría bloqueada", async () => {
+    vi.stubGlobal("navigator", { userActivation: { isActive: false } });
+    try {
+      h.billetera = { address: ORIGEN, label: "Email", submitsItself: true, votaPorContenido: () => true };
+      await entrarConGoogleReal();
+      expect(h.llamadas).toEqual(["cerrar"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("entrarConGoogleReal con el correo abierto y el toque vivo: cierra y entra con Google en el mismo toque", async () => {
+    vi.stubGlobal("navigator", { userActivation: { isActive: true } });
+    try {
+      h.billetera = { address: ORIGEN, label: "Email", submitsItself: true, votaPorContenido: () => true };
+      await entrarConGoogleReal();
+      expect(h.llamadas).toEqual(["cerrar", "entrar:soloGoogle"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("entrarConGoogleReal sin nadie adentro entra directo con Google", async () => {
+    h.billetera = null;
+    await entrarConGoogleReal();
+    expect(h.llamadas).toEqual(["entrar:soloGoogle"]);
+  });
+
+  it("entrarConGoogleReal con otra billetera, o donde Google no entra, deja la ventana de siempre", async () => {
+    h.billetera = { address: ORIGEN, label: "Varial" };
+    await entrarConGoogleReal();
+    expect(h.llamadas).toEqual(["selector"]);
+    h.llamadas = [];
+    h.billetera = null;
+    h.conGoogle = false;
+    await entrarConGoogleReal();
+    expect(h.llamadas).toEqual(["selector"]);
   });
 
   it("fuera de la red principal la comisión está apagada", () => {

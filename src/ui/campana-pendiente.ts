@@ -1,12 +1,13 @@
 import "../campana/campana-sala.css";
 import { borrarBorrador, leerBorrador } from "../campana/borrador";
+import { DIRECCION_DE_LA_CAMPANA, direccionDelPanel } from "../campana/direccion-del-panel";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
 import { getLang, onLangChange } from "../i18n";
 
 /**
- * La campaña por activar, vista desde el modo Prueba: quien la armó vuelve mañana a tinkazo.app sin nada en la dirección y
- * la pestaña nueva abre en Prueba, donde una campaña no se activa. Un aviso arriba de todo la nombra y un toque la lleva a
- * su campaña en el modo oficial. Se baja solo con un borrador guardado (`campana-arranque.ts`): sin él no existe.
+ * La campaña por activar, vista desde el modo Prueba: quien la armó vuelve con la dirección sin nada y la pestaña cae en
+ * Prueba (en local o con `?red=prueba`: el sitio publicado abre en Oficial), donde una campaña no se
+ * activa. Un aviso arriba de todo la nombra y un toque la lleva a su campaña en el modo oficial. Se baja solo con un borrador guardado (`campana-arranque.ts`): sin él no existe.
  */
 
 type Almacen = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -16,10 +17,11 @@ export interface DepsDelAviso {
   tx: (clave: string) => string;
   /** Lleva a la campaña en el modo oficial. */
   ir: (direccion: string) => void;
+  /** La consulta de esta página (`location.search`): de ahí salen el idioma y el tema que pasan a la campaña. Sin ella, ninguno. */
+  consulta?: string;
 }
 
-/** La dirección del panel de quien organiza en el modo oficial: la misma a la que lleva crear-campana.html al activar. */
-export const DIRECCION_DE_LA_CAMPANA = "/?campana&red=oficial";
+export { DIRECCION_DE_LA_CAMPANA };
 
 /** El nombre de la empresa que dice el borrador, o `null` si no se lee. */
 export function empresaDelBorrador(crudo: string): string | null {
@@ -56,7 +58,7 @@ export function pintarAvisoEnPrueba(doc: Document, d: DepsDelAviso): { raiz: HTM
   const ir = doc.createElement("button");
   ir.type = "button";
   ir.className = "primary";
-  ir.addEventListener("click", () => d.ir(DIRECCION_DE_LA_CAMPANA));
+  ir.addEventListener("click", () => d.ir(direccionDelPanel(d.consulta ?? "")));
   const dejar = doc.createElement("button");
   dejar.type = "button";
   dejar.className = "enlace";
@@ -94,6 +96,7 @@ export function avisarEnPrueba(): void {
     almacen,
     tx: (clave) => TEXTOS_SALA_CAMPANA[getLang()][clave] ?? clave,
     ir: (direccion) => location.assign(direccion),
+    consulta: location.search,
   });
   if (aviso) onLangChange(() => aviso.pintar());
 }
