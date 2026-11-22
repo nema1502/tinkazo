@@ -224,7 +224,7 @@ describe("listo para pagar", () => {
     const p = nuevoPanel(m);
     await eligiendo(m, p);
     expect(texto(p, "#cpo-h")).toBe("Pagá 2,40 a Tinkazo");
-    expect(texto(p, "#cpo-linea")).toBe("Es el servicio. Los 120 quedan para el premio.");
+    expect(texto(p, "#cpo-linea")).toBe("Tenés 150. Es el servicio. Los 120 quedan para el premio.");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Pagar 2,40"]);
     expect(botonesDe(p)).not.toContain("Abrir la inscripción");
     expect($<HTMLElement>(p, "#cpo-comision")).toBeNull();
