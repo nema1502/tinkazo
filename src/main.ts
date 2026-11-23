@@ -645,3 +645,16 @@ if (campanasActivo()) {
   for (const enlace of document.querySelectorAll<HTMLElement>("[data-campana-enlace]")) enlace.hidden = false;
   void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);
 }
+// El stand de una campaña (detrás de VITE_CAMPANAS, #173): su enlace trae el evento y la sala en la dirección
+// y el token del stand en el fragmento. Se baja aparte y cubre la página entera; el modo stand de las rondas
+// de ejemplo y el de los equipos con cupón no cambian ni se tocan.
+if (
+  campanasActivo() &&
+  params.has("c") &&
+  params.has("s") &&
+  /^[A-Za-z0-9_-]{22}$/u.test(location.hash.slice(1))
+) {
+  void import("./ui/stand-campana")
+    .then((m) => m.abrirElStandDeCampana())
+    .catch(() => undefined);
+}
