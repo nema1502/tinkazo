@@ -82,6 +82,7 @@ import { RpcRed } from "./red";
 import { type AccionAlta, type AccionCompra, type AccionPago, type PedidoAlta, PuertaAltas, atenderAlta, atenderCarga, memoriaEnAjustes } from "./rutas-altas";
 import { type Firmante, Portero, type Respuesta, firmanteDe } from "./servicio";
 import { haciaHorizon } from "./servidores";
+import { atenderLineaBase, RUTA_LINEA_BASE } from "./linea-base";
 import { Sorteadora, atenderSorteo, leerSorteo } from "./sorteadora";
 
 /**
@@ -814,6 +815,9 @@ export default {
       const r = await atenderPagoClasico(request, leerConfig(env), pagoClasicoPorIp, (forma, xdr) => objeto.pagoClasico(forma, xdr));
       if (r) return r;
     }
+
+    // La línea base de la red (issue #220): lectura sin llaves, la misma base que el detector de GitHub.
+    if (url.pathname === RUTA_LINEA_BASE && request.method === "GET") return atenderLineaBase(request);
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origen, url.pathname.endsWith("/cupo")) });
 
