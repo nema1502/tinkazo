@@ -196,3 +196,37 @@ describe("el tope por conexión", () => {
     expect(await anotarEquipo(sql, alta({ cuenta: cuentaN(9999), llave: llaveNueva(), ip: "10.9.9.9" }), siempre)).toEqual({ ok: false, motivo: "llena" });
   });
 });
+
+/**
+ * La corrección de la cuenta de un equipo (issue #119), tal como se pide en el cuerpo del issue, en la suite de la
+ * casa: la página lo dice (lleva la cuenta anterior) y el registro mueve la fila solo si la llave es la misma.
+ */
+describe("corregir la cuenta de un equipo anotado", () => {
+  it("la misma llave con otra cuenta como corrección deja una sola fila", async () => {
+    const { sql } = nuevaSala();
+    const llave = llaveNueva();
+    await anotarEquipo(sql, alta({ llave, d: D("primero") }), siempre);
+    const r = await anotarEquipo(sql, alta({ cuenta: cuentaN(2), correccion: cuentaN(1), llave, d: D("corregido") }), siempre);
+    expect(r).toMatchObject({ ok: true, n: 1 });
+    expect(sql<{ c: number }>("SELECT COUNT(*) AS c FROM equipos")[0]?.c).toBe(1);
+    expect(fila(sql, cuentaN(1))).toBeUndefined();
+    expect(fila(sql, cuentaN(2))?.d).toBe(D("corregido"));
+  });
+
+  it("la misma llave como equipo nuevo suma otra fila", async () => {
+    const { sql } = nuevaSala();
+    const llave = llaveNueva();
+    await anotarEquipo(sql, alta({ llave, d: D("equipo 1") }), siempre);
+    await anotarEquipo(sql, alta({ cuenta: cuentaN(2), llave, d: D("equipo 2") }), siempre);
+    expect(sql<{ c: number }>("SELECT COUNT(*) AS c FROM equipos")[0]?.c).toBe(2);
+  });
+
+  it("una llave distinta no puede mover la fila de otro", async () => {
+    const { sql } = nuevaSala();
+    await anotarEquipo(sql, alta({ llave: llaveNueva(), d: D("de verdad") }), siempre);
+    const antes = fila(sql, cuentaN(1));
+    const r = await anotarEquipo(sql, alta({ cuenta: cuentaN(2), correccion: cuentaN(1), llave: llaveNueva(), d: D("pisado"), ip: "181.115.9.9" }), siempre);
+    expect(r).toEqual({ ok: false, motivo: "ajena" });
+    expect(fila(sql, cuentaN(1))).toEqual(antes);
+  });
+});

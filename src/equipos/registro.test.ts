@@ -33,7 +33,7 @@ interface Mundo {
   raiz: HTMLElement;
   /** Lo que la sala dice del equipo de esta cuenta. */
   sala: { estado: EstadoEquipo | null | "red" };
-  altas: Array<{ cuenta: string; d: string; llave?: string }>;
+  altas: Array<{ cuenta: string; d: string; llave?: string; correccion?: string }>;
   reloj: { f: () => void; parado: boolean };
   fuera: { destino: string };
 }
@@ -59,8 +59,8 @@ async function montar(o: Partial<DepsDelRegistro> & { modo?: ConfigEquipos["modo
     cuentaRecordada: async () => null,
     entrarConGoogle: async () => cuenta(),
     leerPublico: async () => ({ ok: true, config: o.config === undefined ? CONFIG(o.modo ?? "sorteo") : o.config, equipos: 0 }),
-    anotar: async (_s, _i, c, d, llave) => {
-      m.altas.push({ cuenta: c, d, llave });
+    anotar: async (_s, _i, c, d, llave, _dep, correccion) => {
+      m.altas.push({ cuenta: c, d, llave, ...(correccion ? { correccion } : {}) });
       m.sala.estado = (o.modo ?? "sorteo") === "sorteo" ? "solicitud" : "aceptado";
       return { ok: true, n: 1, estado: m.sala.estado };
     },
@@ -490,3 +490,88 @@ describe("el camino con sorteo propio", () => {
 });
 
 const espera = (ms = 0): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * La corrección de la cuenta de un equipo (issue #119): la página sabe cuándo es una corrección (llevó la cuenta
+ * anterior) y lo dice al servidor; con el cupón ya entregado no se cambia la cuenta; y anotar otro equipo desde
+ * este celular es una acción aparte, no el camino de la corrección.
+ */
+describe("corregir la cuenta y anotar otro equipo", () => {
+  it("cambiar la cuenta y anotar otra vez es una corrección: manda la cuenta anterior y la misma llave", async () => {
+    const g = cuenta();
+    const m = await montar({ cuentaRecordada: async () => g, modo: "cupon", leerEstado: async () => null });
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-datos"));
+    await llenar(m);
+    await vi.waitFor(() => expect(m.altas).toHaveLength(1));
+    const llave = m.altas[0]?.llave;
+    const g2 = cuenta();
+    q<HTMLButtonElement>(m, "eqp-cambiar").click();
+    q<HTMLButtonElement>(m, "eqp-otra-cuenta").click();
+    escribir(m, "eqp-g", g2);
+    q<HTMLFormElement>(m, "eqp-form-cuenta").requestSubmit();
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-datos"));
+    await llenar(m, "Los Cóndores Andinos");
+    await vi.waitFor(() => expect(m.altas).toHaveLength(2));
+    expect(m.altas[1]?.cuenta).toBe(g2);
+    expect(m.altas[1]?.correccion).toBe(g);
+    expect(m.altas[1]?.llave).toBe(llave);
+  });
+
+  it("sin haber anotado nada antes, el alta no es corrección", async () => {
+    const m = await montar({ cuentaRecordada: async () => cuenta(), modo: "cupon", leerEstado: async () => null });
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-datos"));
+    await llenar(m);
+    await vi.waitFor(() => expect(m.altas).toHaveLength(1));
+    expect(m.altas[0]?.correccion).toBeUndefined();
+  });
+
+  it("con el cupón ya entregado, usar otra cuenta queda en la página: lo dice y no entra a la cuenta", async () => {
+    const g = cuenta();
+    const m = await montar({ cuentaRecordada: async () => g, modo: "cupon", estado: "cupon" });
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-estado"));
+    q<HTMLButtonElement>(m, "eqp-cambiar").click();
+    q<HTMLButtonElement>(m, "eqp-otra-cuenta").click();
+    expect(mensaje(m)).toBe(t("eqpErrCupon"));
+    expect(q(m, "eqp-form-cuenta").hidden).toBe(true);
+    expect(m.altas).toEqual([]);
+  });
+
+  it("aceptado, al cambiar de cuenta vuelve a quedar como solicitud: la página no hereda la aceptación", async () => {
+    const g = cuenta();
+    const m = await montar({
+      cuentaRecordada: async () => g,
+      modo: "sorteo",
+      estado: "aceptado",
+      leerEstado: async (_s, _i, c) => (c === g ? { n: 1, estado: "aceptado" } : null),
+    });
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-estado"));
+    q<HTMLButtonElement>(m, "eqp-cambiar").click();
+    q<HTMLButtonElement>(m, "eqp-otra-cuenta").click();
+    const g2 = cuenta();
+    escribir(m, "eqp-g", g2);
+    q<HTMLFormElement>(m, "eqp-form-cuenta").requestSubmit();
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-datos"));
+    await llenar(m, "Otra vez");
+    await vi.waitFor(() => expect(m.altas).toHaveLength(1));
+    await vi.waitFor(() => expect(q(m, "eqp-estado-t").textContent).toBe(t("eqpSolicitud")));
+  });
+
+  it("«Anotar otro equipo» es una acción aparte: va a la cuenta y el siguiente alta no corrección", async () => {
+    const g = cuenta();
+    const m = await montar({ cuentaRecordada: async () => g, modo: "cupon", leerEstado: async () => null });
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-datos"));
+    await llenar(m);
+    await vi.waitFor(() => expect(m.altas).toHaveLength(1));
+    q<HTMLButtonElement>(m, "eqp-otro").click();
+    expect(vista(m)).toBe("eqp-cuenta");
+    q<HTMLButtonElement>(m, "eqp-otra").click();
+    const g2 = cuenta();
+    escribir(m, "eqp-g", g2);
+    q<HTMLFormElement>(m, "eqp-form-cuenta").requestSubmit();
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-datos"));
+    await llenar(m, "Los Cuervos");
+    await vi.waitFor(() => expect(m.altas).toHaveLength(2));
+    expect(m.altas[1]?.cuenta).toBe(g2);
+    expect(m.altas[1]?.correccion).toBeUndefined();
+  });
+});

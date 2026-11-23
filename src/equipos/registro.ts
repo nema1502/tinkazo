@@ -80,6 +80,13 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
   let cargaActual = 0;
   /** La llave de este celular para la sala: prueba ante la sala que los cambios del equipo vienen del mismo celular. */
   let llave: string | null = null;
+  /**
+   * La cuenta que el equipo tenía anotada cuando esta página sabe que corrige (issue #119): la mandamos al servidor
+   * para que mueva la fila del mismo celular a la cuenta nueva en vez de sumar otra. Se pone al salir de la pantalla
+   * del equipo ya anotado («Cambiar los nombres», «Usar otra cuenta») y se limpia al anotar bien, o con «Anotar otro
+   * equipo», que es el camino aparte: un celular que anota a varios equipos de verdad no correige nada.
+   */
+  let cuentaAnterior: string | null = null;
 
   const ver = (v: Vista): void => {
     vista = v;
@@ -231,14 +238,16 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
     mensaje("", false);
     try {
       llave ??= llaveDelCelular(sala.id, deps.local);
-      const r = await deps.anotar(sala.servicio, sala.id, cuenta, await deps.cifrar(sala.clave, hecho.equipo), llave);
+      const r = await deps.anotar(sala.servicio, sala.id, cuenta, await deps.cifrar(sala.clave, hecho.equipo), llave, {}, cuentaAnterior ?? undefined);
       if (!r.ok) {
         if (r.motivo === "ajena") return mensaje("eqpErrAjena");
         if (r.motivo === "cupo-conexion") return mensaje("eqpErrCupoConexion");
+        if (r.motivo === "cupon") return mensaje("eqpErrCupon");
         return mensaje(r.motivo === "cerrada" ? "eqpCerrada" : r.motivo === "sin-registro" ? "eqpSinRegistro" : r.motivo === "llena" ? "eqpErrLlena" : r.motivo === "rapido" ? "eqpErrRapido" : r.motivo === "red" ? "eqpRed" : "eqpErrOtro");
       }
       equipo = hecho.equipo;
       estado = r.estado;
+      cuentaAnterior = null;
       guardarEquipoLocal({ ...hecho.equipo, cuenta, sala: sala.id }, deps.local);
       ver("estado");
       arrancarReloj();
@@ -292,6 +301,10 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
     void enviar();
   });
   q("eqp-otra-cuenta").addEventListener("click", () => {
+    // Con el cupón ya entregado la cuenta no se cambia: lo dice la página y lo resuelve quien organiza (issue #119).
+    if (estado === "cupon") return mensaje("eqpErrCupon");
+    // Si el equipo ya está anotado con esta cuenta, lo que sigue es una corrección: la página se acuerda de a quién.
+    if (estado && cuenta) cuentaAnterior = cuenta;
     pararReloj?.();
     cuenta = null;
     estado = null;
@@ -305,9 +318,21 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
       const mio = leerEquipoLocal(deps.sala.id, deps.local);
       if (mio && mio.cuenta === cuenta) equipo = { nombre: mio.nombre, integrantes: mio.integrantes };
     }
+    // Salir de la pantalla del equipo anotado para reescribirlo es corregir: si la cuenta cambia, la fila se mueve.
+    if (cuenta) cuentaAnterior = cuenta;
     rellenar();
     mensaje("", false);
     ver("datos");
+  });
+  // Anotar otro equipo desde este celular: acción aparte y explícita, fuera del camino de la corrección (issue #119).
+  q("eqp-otro").addEventListener("click", () => {
+    pararReloj?.();
+    cuenta = null;
+    estado = null;
+    equipo = null;
+    cuentaAnterior = null;
+    mensaje("", false);
+    ver("cuenta");
   });
   q("eqp-sorteo").addEventListener("click", () => {
     // Guarda la lista y el premio sugeridos en esta pestaña y abre la herramienta, que repone el borrador.
