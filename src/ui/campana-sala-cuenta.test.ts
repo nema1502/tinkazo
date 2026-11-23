@@ -4,12 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * La campaña es de la cuenta que la organiza: otra cuenta en la misma compu no la ve ni la mueve, y nada se borra al cambiar
- * de cuenta. Sin sesión la sala se mira (el QR, la lista, la pantalla grande) y lo que cambia la lista pide entrar primero.
+ * de cuenta. Sin ninguna cuenta conectada la sala se maneja con su token, como siempre: cerrar, quitar, sumar 15 minutos,
+ * reabrir y pasar la lista no piden entrar. Sellar, guardar el resultado y avisar siguen pidiendo la cuenta dueña.
  */
 
 vi.mock("./qr", () => ({ pintarQr: async () => true, precargarQr: async () => undefined }));
 
-import { CLAVE_EVENTOS_ORG, CLAVE_ORG, guardarOrg, leerOrg } from "../sala/campana-org";
+import { CLAVE_EVENTOS_ORG, CLAVE_ORG, borrarOrg, guardarOrg, leerOrg } from "../sala/campana-org";
 import {
   AHORA,
   SALA,
@@ -21,12 +22,15 @@ import {
   boton,
   botonDeFila,
   cerrarTodos,
+  confirmarCierre,
   elegirArchivo,
+  equipoDe,
   filasDe,
   mundo,
   nuevoPanel,
   principales,
   suelta,
+  texto,
   vistaDe,
 } from "./campana-sala-mundo";
 
@@ -118,7 +122,10 @@ describe("otra cuenta no ve la campaña", () => {
   });
 });
 
-describe("sin sesión la sala se mira y lo que cambia la lista pide entrar", () => {
+describe("sin ninguna cuenta conectada la sala se maneja con su token", () => {
+  // Decisión del 22 de noviembre de 2026, contraria a la de antes (que pedía entrar con Google para cerrar o quitar): el evento no
+  // puede depender de un ingreso nuevo en el wifi donde 150 personas entran a la vez, y la sala acepta todo esto con el token
+  // guardado. La protección queda para otra cuenta conectada, que aparta la campaña (arriba).
   async function abiertaSinSesion(): Promise<{ m: Mundo; p: ReturnType<typeof nuevoPanel>; entradas: () => number }> {
     const m = mundo();
     const { entradas } = conEntradas(m);
@@ -130,13 +137,12 @@ describe("sin sesión la sala se mira y lo que cambia la lista pide entrar", () 
     return { m, p, entradas };
   }
 
-  it("el botón principal dice Entrar para cerrar y abre la entrada sin tocar la sala", async () => {
-    const { m, p, entradas } = await abiertaSinSesion();
-    expect(principales(p).map((b) => b.textContent)).toEqual(["Entrar para cerrar"]);
-    boton(p, "Entrar para cerrar").click();
-    expect(entradas()).toBe(1);
-    expect(m.fases).toEqual([]);
-    expect(vistaDe(p)).toBe("abierta");
+  it("los botones son los de siempre y ninguno abre la entrada", async () => {
+    const { p, entradas } = await abiertaSinSesion();
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Mostrar en grande"]);
+    expect(boton(p, "Cerrar la lista").disabled).toBe(false);
+    expect(p.raiz.textContent).not.toContain("Entrar para cerrar");
+    expect(entradas()).toBe(0);
   });
 
   it("la pantalla grande se puede abrir y el QR sigue renovándose", async () => {
@@ -146,36 +152,127 @@ describe("sin sesión la sala se mira y lo que cambia la lista pide entrar", () 
     expect(m.pases).toBeGreaterThan(0);
   });
 
-  it("15 minutos más y Quitar piden entrar y no mandan nada", async () => {
+  it("15 minutos más y quitar con motivo llegan a la sala sin pedir entrar", async () => {
     const { m, p, entradas } = await abiertaSinSesion();
     await alta(m, 1, "Ana");
     await vi.waitFor(() => expect(filasDe(p)).toEqual(["Ana"]));
     boton(p, "15 minutos más").click();
-    await suelta();
-    expect(m.fases).toEqual([]);
-    expect(entradas()).toBe(1);
+    await vi.waitFor(() => expect(m.fases.map(([f]) => f)).toEqual(["abierta"]));
     botonDeFila(p, 1, "Quitar").click();
-    await suelta();
-    expect(entradas()).toBe(2);
-    expect(m.quitadas).toEqual([]);
-    expect(botonesDeMotivo(p)).toBe(0);
+    expect(botonesDeMotivo(p)).toBe(1);
+    botonDeFila(p, 1, "Cuenta repetida").click();
+    await m.correr(5_000);
+    expect(m.quitadas).toEqual([[1, "repetida"]]);
+    expect(entradas()).toBe(0);
   });
 
-  it("con la sesión de la dueña vuelve el botón de cerrar", async () => {
+  it("cerrar la lista, pasarla al sorteo y volver a abrirla andan sin sesión", async () => {
+    const { m, p, entradas } = await abiertaSinSesion();
+    await alta(m, 1, "Ana");
+    await alta(m, 2, "Nora");
+    await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
+    boton(p, "Cerrar la lista").click();
+    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    await vi.waitFor(() => expect(m.cerradas).toHaveLength(1));
+    expect(m.fases[m.fases.length - 1]).toEqual(["cerrada", null]);
+    boton(p, "Volver a abrir la lista").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+    expect(m.fases[m.fases.length - 1]?.[0]).toBe("abierta");
+    expect(entradas()).toBe(0);
+  });
+
+  it("al recargar con la lista cerrada, Pasar la lista al sorteo anda sin sesión", async () => {
+    const m = mundo();
+    const { entradas } = conEntradas(m);
+    guardarOrg(m.almacen, { sala: SALA, cuenta: A, fase: "cerrada" });
+    m.sala.fase = "cerrada";
+    m.paginas.push([await equipoDe(m, 1, "Ana"), await equipoDe(m, 2, "Nora")]);
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Pasar la lista al sorteo"]);
+    boton(p, "Pasar la lista al sorteo").click();
+    await vi.waitFor(() => expect(m.cerradas).toHaveLength(1));
+    expect(entradas()).toBe(0);
+  });
+
+  it("con la sesión de la dueña sigue igual, sin apartar nada", async () => {
     const { m, p } = await abiertaSinSesion();
     cambiarLaSesion(m, A);
     await suelta();
-    expect(principales(p).map((b) => b.textContent)).not.toContain("Entrar para cerrar");
+    expect(vistaDe(p)).toBe("abierta");
+    expect(m.apartadas).toEqual([]);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Mostrar en grande"]);
   });
 
-  it("una sala de una campaña que no nombra a nadie no pide entrar", async () => {
+  it("dejar la campaña sin sesión no borra las de otras cuentas guardadas al costado, aunque la suya ya no esté guardada", async () => {
+    const m = mundo();
+    const DE_B = { ...SALA, id: "BbBb1234", token: "B".repeat(22) };
+    guardarOrg(m.almacen, { sala: SALA, cuenta: A, fase: "abierta" }, AHORA);
+    guardarOrg(m.almacen, { sala: DE_B, cuenta: B, fase: "abierta" }, AHORA);
+    m.sala.fase = "abierta";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+    // La sala en curso deja de estar guardada (venció, o la borró otra lectura) mientras se la mira.
+    borrarOrg(m.almacen, "testnet");
+    boton(p, "Elegir otro archivo").click();
+    boton(p, "Sí, dejarla").click();
+    await suelta();
+    expect(vistaDe(p)).toBe("elegir");
+    expect(leerOrg(m.almacen, AHORA, "testnet", A)?.sala.token).toBe(TOKEN);
+  });
+
+  describe("sin sesión y sin sala en curso, la que se retoma es una de las de un costado", () => {
+    const DE_B = { ...SALA, id: "BbBb1234", token: "B".repeat(22) };
+    const DE_C = { ...SALA, id: "CcCc1234", token: "Q".repeat(22) };
+    const C = Keypair.random().publicKey();
+    /** Tres cuentas pasaron por esta compu y la última dejó la suya: quedan la de A y la de B al costado, sin sala en curso. */
+    function tresCuentas(): Mundo {
+      const m = mundo();
+      guardarOrg(m.almacen, { sala: SALA, cuenta: A, fase: "abierta" }, AHORA);
+      guardarOrg(m.almacen, { sala: DE_B, cuenta: B, fase: "abierta" }, AHORA);
+      guardarOrg(m.almacen, { sala: DE_C, cuenta: C, fase: "abierta" }, AHORA);
+      borrarOrg(m.almacen, "testnet", C);
+      m.sala.fase = "abierta";
+      m.cuenta = null;
+      // Sin sesión se ve la primera de un costado: la de B.
+      expect(leerOrg(m.almacen, AHORA, "testnet", null)?.sala.id).toBe(DE_B.id);
+      return m;
+    }
+
+    it("si la sala ya no existe, se deja de recordar esa y la de A sigue", async () => {
+      const m = tresCuentas();
+      m.respuestaAlEstado.push("no-existe");
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(texto(p, "#cpo-aviso")).toBe("Esta lista ya no existe."));
+      expect(vistaDe(p)).toBe("elegir");
+      expect(leerOrg(m.almacen, AHORA, "testnet", B)).toBeNull();
+      expect(m.almacen.getItem(CLAVE_ORG)).not.toContain(DE_B.token);
+      expect(leerOrg(m.almacen, AHORA, "testnet", A)?.sala).toEqual(SALA);
+    });
+
+    it("sin conexión, dejarla saca esa y la de A sigue", async () => {
+      const m = tresCuentas();
+      m.respuestaAlEstado.push("red");
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("sin-red"));
+      boton(p, "Elegir otro archivo").click();
+      boton(p, "Sí, dejarla").click();
+      await suelta();
+      expect(vistaDe(p)).toBe("elegir");
+      expect(leerOrg(m.almacen, AHORA, "testnet", B)).toBeNull();
+      expect(m.almacen.getItem(CLAVE_ORG)).not.toContain(DE_B.token);
+      expect(leerOrg(m.almacen, AHORA, "testnet", A)?.sala).toEqual(SALA);
+    });
+  });
+
+  it("una sala de una campaña que no nombra a nadie tampoco pide entrar", async () => {
     const m = mundo();
     const { entradas } = conEntradas(m);
     guardarOrg(m.almacen, { sala: SALA, cuenta: null, fase: "abierta" });
     m.sala.fase = "abierta";
     const p = nuevoPanel(m);
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
-    expect(principales(p).map((b) => b.textContent)).not.toContain("Entrar para cerrar");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Mostrar en grande"]);
     expect(entradas()).toBe(0);
   });
 });
@@ -190,15 +287,16 @@ describe("la memoria de antes, sin la cuenta guardada", () => {
     m.sala.fase = "abierta";
   };
 
-  it("sin sesión no se completa: la sala se mira y la acción pide entrar", async () => {
+  it("sin sesión no se completa, y la sala se maneja con su token sin pedir entrar", async () => {
     const m = mundo();
     const { entradas } = conEntradas(m);
     vieja(m);
     const p = nuevoPanel(m);
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
-    expect(principales(p).map((b) => b.textContent)).toEqual(["Entrar para cerrar"]);
-    boton(p, "Entrar para cerrar").click();
-    expect(entradas()).toBe(1);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Mostrar en grande"]);
+    boton(p, "15 minutos más").click();
+    await vi.waitFor(() => expect(m.fases.map(([f]) => f)).toEqual(["abierta"]));
+    expect(entradas()).toBe(0);
     expect(leerOrg(m.almacen, AHORA, "testnet", null)?.cuenta).toBeUndefined();
   });
 

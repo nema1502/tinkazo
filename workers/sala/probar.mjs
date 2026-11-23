@@ -146,6 +146,8 @@ async function probarTusCampanas() {
   const sufijo = crypto.getRandomValues(new Uint32Array(1))[0];
   const evento = (n) => `prueba-${sufijo}-${n}`;
   const nuevoToken = () => b64(crypto.getRandomValues(new Uint8Array(16)));
+  // Una sesión de mentira con la forma de la del proveedor (un JWT de tres partes): las rutas de Tus campañas no miran otra cosa.
+  const sesionConForma = (nombre) => `${b64('{"alg":"ES256","typ":"JWT"}')}.${b64(JSON.stringify({ sub: `prueba-${nombre}`, n: nuevoToken() }))}.${b64(`firma-${nuevoToken()}`)}`;
   const ES_TOKEN_22 = /^[A-Za-z0-9_-]{22}$/;
 
   // Las cuentas y sus sesiones de mentira. Cada una con su sesión de Google y su billetera.
@@ -153,7 +155,7 @@ async function probarTusCampanas() {
   const sesiones = {};
   const sesion = (nombre, byte, via = "google") => {
     cuentas[nombre] = cuentaDePrueba(byte);
-    const token = `prueba-${nombre}-${nuevoToken()}`;
+    const token = sesionConForma(nombre);
     sesiones[token] = { userId: `usuario-${nombre}`, cuenta: cuentas[nombre], via };
     return token;
   };
@@ -163,7 +165,7 @@ async function probarTusCampanas() {
   // pedidos llegan casi juntos con los dos órdenes posibles.
   const ATRASO_DEL_SELLO = [-30, -15, -8, -4, 0, 4, 8, 15];
   for (let i = 0; i < CARRERAS; i++) S[`R${i}`] = sesion(`R${i}`, 50 + i);
-  S.X = `prueba-X-${nuevoToken()}`; // con forma de sesión, pero el proveedor no la conoce
+  S.X = sesionConForma("X"); // con forma de sesión, pero el proveedor no la conoce
   const armado = await fetch(`${base}/__prueba/sesiones`, { method: "POST", headers: JSONH, body: JSON.stringify({ sesiones }) }).catch(() => null);
   if (!armado || armado.status !== 200) {
     check("tus campañas: el Worker local tiene la entrada de prueba (prueba-local/entrada.mjs)", false, armado ? String(armado.status) : "sin respuesta");

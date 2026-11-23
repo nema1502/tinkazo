@@ -241,8 +241,9 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
 .cpo-tus { margin: 0 0 12px; }
 .cpo-tus-fila { padding: 12px 0; border-bottom: 2px solid var(--ink); }
 .cpo-tus-fila:first-child { padding-top: 0; }
-/* Con más de una campaña que se puede usar, la del botón principal de la barra de abajo lleva una marca al costado. */
-.cpo-tus-fila:not(:only-of-type).cpo-tus-primera { border-left: 6px solid var(--magenta); padding-left: 10px; }
+/* Con más de una campaña que se puede usar (el panel lo marca con cpo-tus-varias), la del botón principal de la barra de abajo
+   lleva una marca al costado. */
+.cpo-tus.cpo-tus-varias .cpo-tus-primera { border-left: 6px solid var(--magenta); padding-left: 10px; }
 .cpo-tus-nombre { margin: 0 0 2px; font-size: 22px; font-weight: 900; line-height: 1.15; overflow-wrap: anywhere; }
 .cpo-tus-fila .cpo-linea { margin-bottom: 8px; }
 .cpo-tus-acc { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }

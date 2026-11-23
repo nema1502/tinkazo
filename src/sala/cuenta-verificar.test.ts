@@ -14,12 +14,13 @@ import {
   antesDeActivar,
   antesDeCuenta,
   contarRechazoDeActivar,
+  contarRechazoDeCuenta,
   crearTablasDeActivar,
   topeDeCuenta,
 } from "../../workers/sala/src/activar-cupos";
-import { RECHAZOS_POR_FICHA, VENTANA_CAMPANA_MS } from "../../workers/sala/src/campana";
+import { RECHAZOS_POR_CONEXION, RECHAZOS_POR_FICHA, VENTANA_CAMPANA_MS } from "../../workers/sala/src/campana";
 import type { Ejecutar } from "../../workers/sala/src/registro";
-import { montarMundo } from "./mundo-sala";
+import { montarMundo, sesionDePrueba } from "./mundo-sala";
 
 vi.mock("cloudflare:workers", async () => await import("./cloudflare-falso"));
 
@@ -29,8 +30,9 @@ vi.mock("cloudflare:workers", async () => await import("./cloudflare-falso"));
  */
 const AHORA = Date.UTC(2026, 10, 21, 15, 0, 0);
 const CUENTA = Keypair.random().publicKey();
-const TOKEN = "tok_buena_" + "x".repeat(30);
-const TOKEN_MALO = "tok_mala__" + "y".repeat(30);
+// Las sesiones tienen la forma de las del proveedor de cuentas: un JWT de tres partes.
+const TOKEN = sesionDePrueba("buena");
+const TOKEN_MALO = sesionDePrueba("mala");
 
 interface Mundillo {
   sql: Ejecutar;
@@ -83,7 +85,7 @@ function mundillo(): Mundillo {
           },
           rechazo: async (ip, ficha) => {
             m.llamadas.rechazo++;
-            contarRechazoDeActivar(sql, { grupo: ip, ficha, ahora: AHORA });
+            contarRechazoDeCuenta(sql, { grupo: ip, ficha, ahora: AHORA });
           },
           tope: async (cuenta, tipo) => {
             m.llamadas.tope++;
@@ -97,7 +99,13 @@ function mundillo(): Mundillo {
       return {
         ip: d.ip,
         proveedor: d.proveedor,
-        topes: { antes: async (ip, ficha) => antesDeActivar(sql, { grupo: ip, ficha, ahora: AHORA }), rechazo: (ip, ficha) => d.topes.rechazo(ip, ficha) },
+        topes: {
+          antes: async (ip, ficha) => antesDeActivar(sql, { grupo: ip, ficha, ahora: AHORA }),
+          rechazo: async (ip, ficha) => {
+            m.llamadas.rechazo++;
+            contarRechazoDeActivar(sql, { grupo: ip, ficha, ahora: AHORA });
+          },
+        },
       };
     },
   };
@@ -214,7 +222,7 @@ describe("el ritmo de la conexión de las rutas de Tus campañas", () => {
   });
 
   it("los rechazos de la conexión (300) frenan a una sesión desconocida y no a otra conexión", () => {
-    for (let i = 0; i < 300; i++) contarRechazoDeActivar(m.sql, { grupo: "g", ficha: `m${i}`, ahora: AHORA });
+    for (let i = 0; i < 300; i++) contarRechazoDeCuenta(m.sql, { grupo: "g", ficha: `m${i}`, ahora: AHORA });
     expect(antesDeCuenta(m.sql, { grupo: "g", ficha: "nueva", conocida: false, ahora: AHORA })).toMatchObject({ ok: false, motivo: "rechazos" });
     expect(antesDeCuenta(m.sql, { grupo: "h", ficha: "nueva", conocida: false, ahora: AHORA })).toEqual({ ok: true });
   });
@@ -222,6 +230,46 @@ describe("el ritmo de la conexión de las rutas de Tus campañas", () => {
   it("en la ventana siguiente el contador vuelve a cero", () => {
     for (let i = 0; i < CUENTA_POR_CONEXION; i++) antesDeCuenta(m.sql, { grupo: "g", ficha: `f${i}`, conocida: false, ahora: AHORA });
     expect(antesDeCuenta(m.sql, { grupo: "g", ficha: "f", conocida: false, ahora: AHORA + VENTANA_CAMPANA_MS })).toEqual({ ok: true });
+  });
+});
+
+describe("un vecino ruidoso en la misma conexión", () => {
+  /** Un texto que pasa por token pero no es una sesión de tres partes, distinto en cada pedido. */
+  const inventado = (i: number): string => `inventado${String(i).padStart(4, "0")}_${"z".repeat(24)}`;
+
+  it("con textos inventados sin forma de sesión de tres partes no traba a la empresa ni le pregunta nada al proveedor", async () => {
+    for (let i = 0; i < CUENTA_POR_CONEXION + RECHAZOS_POR_CONEXION; i++) {
+      const r = await verificarCuentaDeCampanas(inventado(i), "listado", m.deps());
+      expect(r).toMatchObject({ ok: false, respuesta: { estado: 401, cuerpo: { error: "sesion" } } });
+    }
+    expect(m.llamadas).toMatchObject({ verificar: 0, conocida: 0, antes: 0, rechazo: 0 });
+    expect(m.sql("SELECT COUNT(*) AS n FROM activar_ritmo")[0]).toEqual({ n: 0 });
+    expect(m.sql("SELECT COUNT(*) AS n FROM activar_rechazos")[0]).toEqual({ n: 0 });
+    // La empresa, desde la misma conexión y sin su sesión en la memoria del proveedor, entra igual.
+    expect(await verificarCuentaDeCampanas(TOKEN, "listado", m.deps())).toEqual({ ok: true, cuenta: CUENTA });
+  });
+
+  it("los rechazos de Tus campañas no frenan a activar, y los de activar no frenan a Tus campañas", () => {
+    for (let i = 0; i < RECHAZOS_POR_CONEXION; i++) contarRechazoDeCuenta(m.sql, { grupo: "g", ficha: `t${i}`, ahora: AHORA });
+    expect(antesDeCuenta(m.sql, { grupo: "g", ficha: "nueva", conocida: false, ahora: AHORA })).toMatchObject({ ok: false, motivo: "rechazos" });
+    expect(antesDeActivar(m.sql, { grupo: "g", ficha: "nueva", ahora: AHORA })).toEqual({ ok: true });
+    for (let i = 0; i < RECHAZOS_POR_CONEXION; i++) contarRechazoDeActivar(m.sql, { grupo: "h", ficha: `a${i}`, ahora: AHORA });
+    // Activar sigue con su tope de siempre.
+    expect(antesDeActivar(m.sql, { grupo: "h", ficha: "nueva", ahora: AHORA })).toMatchObject({ ok: false, motivo: "rechazos" });
+    expect(antesDeCuenta(m.sql, { grupo: "h", ficha: "nueva", conocida: false, ahora: AHORA })).toEqual({ ok: true });
+  });
+
+  it("quien manda sesiones de tres partes que el proveedor rechaza sigue frenado a los 300, solo en Tus campañas", async () => {
+    for (let i = 0; i < RECHAZOS_POR_CONEXION; i++) {
+      const r = await verificarCuentaDeCampanas(sesionDePrueba(`falsa${i}`), "listado", m.deps());
+      expect(r).toMatchObject({ ok: false, respuesta: { estado: 401 } });
+    }
+    const verificadas = m.llamadas.verificar;
+    const r = await verificarCuentaDeCampanas(sesionDePrueba("otra-falsa"), "listado", m.deps());
+    expect(r).toMatchObject({ ok: false, respuesta: { estado: 429, cuerpo: { error: "rechazos" } } });
+    expect(m.llamadas.verificar).toBe(verificadas);
+    // Activar desde la misma conexión no quedó trabado por eso.
+    expect(await verificarQuienOrganiza(TOKEN, m.depsDeActivar())).toEqual({ ok: true, cuenta: CUENTA });
   });
 });
 

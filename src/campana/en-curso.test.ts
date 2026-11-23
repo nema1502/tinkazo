@@ -53,7 +53,7 @@ const entrada = (cambios: Partial<SorteoDeCampana> = {}): SorteoDeCampana => ({
 
 function ponerSala(fase: FaseDeSala, evento = "evento-uno"): void {
   const memoria: MemoriaDeOrg = { sala: sala(evento), fase };
-  guardarOrg(localStorage, memoria);
+  guardarOrg(localStorage, memoria, AHORA);
 }
 
 beforeEach(() => {
@@ -314,7 +314,7 @@ describe("de quién es la campaña que recuerda la compu", () => {
   const salaDe = (cuenta: string | null | undefined, fase: FaseDeSala = "cerrada"): void => {
     const memoria: MemoriaDeOrg = { sala: sala(), fase };
     if (cuenta !== undefined) memoria.cuenta = cuenta;
-    guardarOrg(localStorage, memoria);
+    guardarOrg(localStorage, memoria, AHORA);
   };
 
   it("con otra cuenta conectada la sala no cuenta como activa, y sigue guardada", () => {
@@ -328,10 +328,10 @@ describe("de quién es la campaña que recuerda la compu", () => {
 
   it("la sala de una cuenta que otra apartó al crear la suya sigue contando como activa para ella", () => {
     salaDe(CUENTA_A, "sellada");
-    guardarOrg(localStorage, { sala: { ...sala(), evento: "evento-de-b", token: "B".repeat(22) }, fase: "lista", cuenta: CUENTA_B });
+    guardarOrg(localStorage, { sala: { ...sala(), evento: "evento-de-b", token: "B".repeat(22) }, fase: "lista", cuenta: CUENTA_B }, AHORA);
     expect(salaDeCampanaActiva(network.name, AHORA, localStorage, CUENTA_A)).toEqual({ evento: sala().evento, fase: "sellada" });
     expect(salaDeCampanaActiva(network.name, AHORA, localStorage, CUENTA_B)).toBeNull();
-    guardarOrg(localStorage, { sala: { ...sala(), evento: "evento-de-b", token: "B".repeat(22) }, fase: "abierta", cuenta: CUENTA_B });
+    guardarOrg(localStorage, { sala: { ...sala(), evento: "evento-de-b", token: "B".repeat(22) }, fase: "abierta", cuenta: CUENTA_B }, AHORA);
     expect(salaDeCampanaActiva(network.name, AHORA, localStorage, CUENTA_B)).toEqual({ evento: "evento-de-b", fase: "abierta" });
   });
 

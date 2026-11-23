@@ -157,6 +157,8 @@ const campana = (nombre, cuenta, extra2 = {}) =>
     ...extra2,
   });
 const nuevoToken = () => b64(crypto.getRandomValues(new Uint8Array(16)));
+// Una sesión de mentira con la forma de la del proveedor (un JWT de tres partes): las rutas de Tus campañas no miran otra cosa.
+const sesionConForma = (nombre) => `${b64('{"alg":"ES256","typ":"JWT"}')}.${b64(JSON.stringify({ sub: `prueba-${nombre}`, n: nuevoToken() }))}.${b64(`firma-${nuevoToken()}`)}`;
 const crear = async (base, firmado, token, anterior = null) => {
   const r = await http(base, "POST", "/v1/campana", { cuerpo: { ...firmado, intento: token }, token: anterior });
   return r;
@@ -217,7 +219,7 @@ try {
     const sesiones = {};
     const S = {};
     for (const [n, cuenta] of Object.entries(cuentas)) {
-      S[n] = `prueba-${n}-${nuevoToken()}`;
+      S[n] = sesionConForma(n);
       sesiones[S[n]] = { userId: `usuario-${n}`, cuenta, via: "google" };
     }
     await http(base, "POST", "/__prueba/sesiones", { cuerpo: { sesiones }, cabeceras: {} });

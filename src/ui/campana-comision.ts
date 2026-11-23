@@ -81,8 +81,9 @@ export interface DepsDeComision {
    * La cuenta lista para pagar desde esta compu (`cuenta-lista-flujo.ts`, `cuentaListaParaGrabar("pago")`), antes de armar nada:
    * `lista` si ya lo estaba y se puede pagar en este mismo toque, `paso` si hubo que dejarla lista (se abrió el paso y la persona
    * lo terminó: vuelve a tocar Pagar), `no` si no se pudo o se dejó. Sin esto, no se mira nada y se paga como siempre.
+   * `alRevisar` avisa mientras se revisa la cuenta en la red (hasta 4 segundos): el botón queda apagado y lo dice.
    */
-  cuentaLista?: () => Promise<"lista" | "paso" | "no">;
+  cuentaLista?: (alRevisar?: (revisando: boolean) => void) => Promise<"lista" | "paso" | "no">;
 }
 
 /** Lo que el controlador le pide al panel. */
@@ -182,6 +183,8 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
   let pagando = false;
   /** Mientras se mira la cuenta (o está abierto el paso de dejarla lista), otro toque en Pagar no empieza otro. */
   let revisandoLaCuenta = false;
+  /** La parte de esa revisión que espera la red: el botón de pagar se apaga y dice Revisando tu cuenta. */
+  let revisandoEnLaRed = false;
   let rechazos = 0;
   let mirada = 0;
   /** Sube al reiniciar o detener: una vuelta de la duda que ya estaba en el aire no vuelve a armar la mirada. */
@@ -419,11 +422,21 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     // después, en otra compu donde nadie sabría entrar. No cambia cuándo se paga: solo pone el paso delante.
     if (deps.cuentaLista) {
       revisandoLaCuenta = true;
-      const cuenta = await deps.cuentaLista().catch((): "lista" => "lista");
+      const alRevisar = (revisando: boolean): void => {
+        if (revisandoEnLaRed === revisando) return;
+        revisandoEnLaRed = revisando;
+        ctx.alCambiar();
+      };
+      const cuenta = await deps.cuentaLista(alRevisar).catch((): "lista" => "lista");
       revisandoLaCuenta = false;
+      alRevisar(false);
       if (cuenta === "no") return;
-      // El paso terminó: lo que se sabe de la cuenta cambió y el pago sale con el toque que sigue, no con este.
-      if (cuenta === "paso") return void mirar();
+      if (cuenta === "paso") {
+        // El paso terminó: lo que se sabe de la cuenta cambió y el pago sale con el toque que sigue, no con este. Una línea lo dice.
+        await mirar();
+        if (ctx.campana() === c && estado().tipo === "lista") ctx.aviso(ctx.tx("cpoCmCuentaLista"));
+        return;
+      }
     }
     // Lo que se mira de nuevo: durante la revisión de la cuenta la pantalla pudo cambiar.
     const e = estado();
@@ -610,7 +623,9 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
         return {
           titulo: fmt("cpoCmListaT", { c: montoSale(e.sale, idioma) }),
           linea: fmt("cpoCmListaL", { saldo: montoTiene(e.saldo, idioma), premios: montoTiene(n.premios, idioma) }),
-          principal: { texto: fmt("cpoCmPagar", { c: montoSale(e.sale, idioma) }), accion: "pagar", apagado: false },
+          principal: revisandoEnLaRed
+            ? { texto: tx("cpoCmRevisando"), accion: "pagar", apagado: true }
+            : { texto: fmt("cpoCmPagar", { c: montoSale(e.sale, idioma) }), accion: "pagar", apagado: false },
           secundario: null,
           plegado: null,
         };
@@ -676,7 +691,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     const e = estado();
     const c = ctx.campana();
     const hasta = c ? (marcaViva(c.evento)?.hasta ?? 0) : 0;
-    return [activo(), JSON.stringify(e, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), hasta, ctx.idioma(), ctx.puedeEntrar(), etapaDelPago].join("|");
+    return [activo(), JSON.stringify(e, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), hasta, ctx.idioma(), ctx.puedeEntrar(), etapaDelPago, revisandoEnLaRed].join("|");
   }
 
   function reiniciar(): void {
@@ -694,6 +709,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     pagadaAca = false;
     pagando = false;
     revisandoLaCuenta = false;
+    revisandoEnLaRed = false;
     rechazos = 0;
     marcaEnMemoria = null;
   }

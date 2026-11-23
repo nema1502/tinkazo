@@ -371,17 +371,17 @@ describe("de quién es lo que recuerda la compu", () => {
 
   it("si otra cuenta crea o toma una campaña en la misma compu, la de la primera no se pisa y vuelve al retomarla", () => {
     const DE_B: SalaDeCampana = { ...SALA, id: "BbBb1234", token: "B".repeat(22), evento: "evento-de-b" };
-    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "sellada" });
-    guardarOrg(a, { sala: DE_B, cuenta: CUENTA_B, fase: "lista" });
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "sellada" }, AHORA);
+    guardarOrg(a, { sala: DE_B, cuenta: CUENTA_B, fase: "lista" }, AHORA);
     // Cada cuenta ve la suya, con su token y su clave.
     expect(leerOrg(a, AHORA, "testnet", CUENTA_B)?.sala).toEqual(DE_B);
     expect(leerOrg(a, AHORA, "testnet", CUENTA_A)).toMatchObject({ sala: SALA, fase: "sellada", cuenta: CUENTA_A });
     // Cuando la primera cuenta vuelve a guardar la suya, la de la segunda pasa al costado y tampoco se pierde.
-    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "sorteada" });
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "sorteada" }, AHORA);
     expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.fase).toBe("sorteada");
     expect(leerOrg(a, AHORA, "testnet", CUENTA_B)?.sala).toEqual(DE_B);
     // La de la otra red sigue donde estaba.
-    guardarOrg(a, { sala: OTRA, cuenta: CUENTA_B, fase: "abierta" });
+    guardarOrg(a, { sala: OTRA, cuenta: CUENTA_B, fase: "abierta" }, AHORA);
     expect(leerOrg(a, AHORA, "mainnet", CUENTA_B)?.sala).toEqual(OTRA);
     expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.fase).toBe("sorteada");
   });
@@ -393,16 +393,84 @@ describe("de quién es lo que recuerda la compu", () => {
     expect(JSON.parse(a.getItem(CLAVE_ORG) ?? "{}")).not.toHaveProperty("otras");
   });
 
+  describe("muchas cuentas en la misma compu", () => {
+    const cuentas = Array.from({ length: 10 }, () => Keypair.random().publicKey());
+    const DIA = 86_400_000;
+    const salaDe = (i: number, vence = AHORA + DIA + i): SalaDeCampana => ({
+      ...SALA,
+      id: `Sa${String(i).padStart(6, "0")}`,
+      token: `K${String(i).padStart(2, "0")}`.padEnd(22, "x"),
+      clave: `C${String(i).padStart(2, "0")}`.padEnd(22, "c"),
+      evento: `evento-${i}x`,
+      vence,
+    });
+    const guardar = (i: number, ahora: number, vence?: number): void =>
+      guardarOrg(a, { sala: salaDe(i, vence), cuenta: cuentas[i] ?? null, fase: "abierta" }, ahora);
+    const tokenDe = (i: number, ahora = AHORA): string | undefined => leerOrg(a, ahora, "testnet", cuentas[i] ?? null)?.sala.token;
+
+    it("con siete cuentas cada una conserva su sala, su token y su clave", () => {
+      for (let i = 0; i < 7; i++) guardar(i, AHORA);
+      for (let i = 0; i < 7; i++) {
+        expect(tokenDe(i)).toBe(salaDe(i).token);
+        expect(leerOrg(a, AHORA, "testnet", cuentas[i] ?? null)?.sala.clave).toBe(salaDe(i).clave);
+      }
+    });
+
+    it("si no entran, la que sale es la que vence primero y no la más vieja", () => {
+      for (let i = 0; i < 8; i++) guardar(i, AHORA, i === 3 ? AHORA + 3_600_000 : undefined);
+      expect(tokenDe(3)).toBeUndefined();
+      for (const i of [0, 1, 2, 4, 5, 6, 7]) expect(tokenDe(i)).toBe(salaDe(i).token);
+    });
+
+    it("una sala vencida no se aparta ni ocupa el lugar de una viva", () => {
+      const corta = AHORA + 1_000;
+      const despues = AHORA + 2_000;
+      for (let i = 0; i < 3; i++) guardar(i, AHORA, corta);
+      guardar(3, AHORA);
+      for (let i = 4; i < 10; i++) guardar(i, despues);
+      for (let i = 3; i < 10; i++) expect(tokenDe(i, despues)).toBe(salaDe(i).token);
+      const guardado = a.getItem(CLAVE_ORG) ?? "";
+      for (let i = 0; i < 3; i++) expect(guardado).not.toContain(salaDe(i).token);
+    });
+
+    it("la sala en curso vencida de otra cuenta no pasa al costado", () => {
+      guardar(0, AHORA, AHORA + 1_000);
+      guardar(1, AHORA + 2_000);
+      expect(a.getItem(CLAVE_ORG)).not.toContain(salaDe(0).token);
+      expect(JSON.parse(a.getItem(CLAVE_ORG) ?? "{}")).not.toHaveProperty("otras");
+    });
+  });
+
   it("borrar la sala de una cuenta no toca la que otra cuenta dejó al costado, y al revés", () => {
     const DE_B: SalaDeCampana = { ...SALA, id: "BbBb1234", token: "B".repeat(22), evento: "evento-de-b" };
-    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "abierta" });
-    guardarOrg(a, { sala: DE_B, cuenta: CUENTA_B, fase: "abierta" });
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "abierta" }, AHORA);
+    guardarOrg(a, { sala: DE_B, cuenta: CUENTA_B, fase: "abierta" }, AHORA);
     borrarOrg(a, "testnet", CUENTA_A);
     expect(leerOrg(a, AHORA, "testnet", CUENTA_A)).toBeNull();
     expect(leerOrg(a, AHORA, "testnet", CUENTA_B)?.sala).toEqual(DE_B);
-    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "abierta" });
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "abierta" }, AHORA);
     borrarOrg(a, "testnet", CUENTA_B);
     expect(leerOrg(a, AHORA, "testnet", CUENTA_B)).toBeNull();
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.sala).toEqual(SALA);
+  });
+
+  it("sin sesión y sin sala en curso, dejar la campaña a la vista no borra las de otras cuentas", () => {
+    const DE_B: SalaDeCampana = { ...SALA, id: "BbBb1234", token: "B".repeat(22), evento: "evento-de-b" };
+    const DE_C: SalaDeCampana = { ...SALA, id: "CcCc1234", token: "Q".repeat(22), evento: "evento-de-c" };
+    const CUENTA_C = Keypair.random().publicKey();
+    guardarOrg(a, { sala: SALA, cuenta: CUENTA_A, fase: "abierta" }, AHORA);
+    guardarOrg(a, { sala: DE_B, cuenta: CUENTA_B, fase: "abierta" }, AHORA);
+    guardarOrg(a, { sala: DE_C, cuenta: CUENTA_C, fase: "abierta" }, AHORA);
+    // La de C se deja con su sesión: no queda sala en curso, y las de A y B siguen al costado.
+    borrarOrg(a, "testnet", CUENTA_C);
+    // Sin sesión se ve la primera de un costado. Dejarla saca solo esa.
+    const vista = leerOrg(a, AHORA, "testnet", null);
+    expect(vista?.sala.id).toBe(DE_B.id);
+    borrarOrg(a, "testnet", null, vista?.sala.id);
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_B)).toBeNull();
+    expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.sala).toEqual(SALA);
+    // Sin saber cuál se dejó, sin sesión no se borra ninguna de otra cuenta.
+    borrarOrg(a, "testnet", null);
     expect(leerOrg(a, AHORA, "testnet", CUENTA_A)?.sala).toEqual(SALA);
   });
 

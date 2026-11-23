@@ -83,21 +83,25 @@ export type AntesDeActivar = { ok: true } | { ok: false; motivo: "rechazos" | "c
  * está en orden, este pedido queda contado en el ritmo de la conexión.
  */
 export function antesDeActivar(sql: Ejecutar, a: { grupo: string; ficha: string; ahora: number }): AntesDeActivar {
-  return mirarAntes(sql, { ...a, grupoDeRitmo: a.grupo, tope: ACTIVAR_POR_CONEXION, conocida: false });
+  return mirarAntes(sql, { ...a, grupoDeRitmo: a.grupo, grupoDeRechazos: a.grupo, tope: ACTIVAR_POR_CONEXION, conocida: false });
 }
 
+/** El grupo de la conexión en las rutas de Tus campañas: su ritmo y sus rechazos van aparte de los de activar. */
+const grupoDeCuenta = (grupo: string): string => `cuenta|${grupo}`;
+
 /**
- * Lo mismo para las rutas de Tus campañas, con su grupo de ritmo propio (`cuenta|` y la conexión) y su tope de 300 por
- * ventana. Los rechazos siguen en las mismas tablas y con los mismos topes que activar. Una sesión que el proveedor ya dio por
- * buena (`conocida`) no se frena por la conexión, ni por su ritmo ni por sus rechazos: la ficha sí se mira.
+ * Lo mismo para las rutas de Tus campañas, con su grupo propio (`cuenta|` y la conexión) para el ritmo, con su tope de 300 por
+ * ventana, y para los rechazos, con el mismo tope que activar pero contados aparte: lo que se rechaza en una de las dos no frena a
+ * la otra. La ficha es la misma. Una sesión que el proveedor ya dio por buena (`conocida`) no se frena por la conexión, ni por su
+ * ritmo ni por sus rechazos: la ficha sí se mira.
  */
 export function antesDeCuenta(sql: Ejecutar, a: { grupo: string; ficha: string; conocida: boolean; ahora: number }): AntesDeActivar {
-  return mirarAntes(sql, { ...a, grupoDeRitmo: `cuenta|${a.grupo}`, tope: CUENTA_POR_CONEXION });
+  return mirarAntes(sql, { ...a, grupoDeRitmo: grupoDeCuenta(a.grupo), grupoDeRechazos: grupoDeCuenta(a.grupo), tope: CUENTA_POR_CONEXION });
 }
 
 function mirarAntes(
   sql: Ejecutar,
-  a: { grupo: string; grupoDeRitmo: string; tope: number; ficha: string; conocida: boolean; ahora: number },
+  a: { grupo: string; grupoDeRitmo: string; grupoDeRechazos: string; tope: number; ficha: string; conocida: boolean; ahora: number },
 ): AntesDeActivar {
   const ventana = Math.floor(a.ahora / VENTANA_CAMPANA_MS);
   sql("DELETE FROM activar_ritmo WHERE ventana < ?", ventana);
@@ -106,7 +110,7 @@ function mirarAntes(
   const deFicha = sql<{ n: number }>("SELECT n FROM activar_ficha WHERE ficha = ? AND ventana = ?", a.ficha, ventana)[0]?.n ?? 0;
   if (deFicha >= RECHAZOS_POR_FICHA) return { ok: false, motivo: "rechazos", esperaS: esperaDeVentana(a.ahora, ventana) };
   if (a.conocida) return { ok: true };
-  const rechazos = sql<{ n: number }>("SELECT n FROM activar_rechazos WHERE grupo = ? AND ventana = ?", a.grupo, ventana)[0]?.n ?? 0;
+  const rechazos = sql<{ n: number }>("SELECT n FROM activar_rechazos WHERE grupo = ? AND ventana = ?", a.grupoDeRechazos, ventana)[0]?.n ?? 0;
   if (rechazos >= RECHAZOS_POR_CONEXION) return { ok: false, motivo: "rechazos", esperaS: esperaDeVentana(a.ahora, ventana) };
   const pedidos = sql<{ n: number }>("SELECT n FROM activar_ritmo WHERE grupo = ? AND ventana = ?", a.grupoDeRitmo, ventana)[0]?.n ?? 0;
   if (pedidos >= a.tope) return { ok: false, motivo: "cupo-conexion", esperaS: esperaDeVentana(a.ahora, ventana) };
@@ -143,6 +147,15 @@ export function topeDeCuenta(
  * repetirla no cuesta otra llamada al proveedor, y una sola sesión mala no deja sin tope a las demás.
  */
 export function contarRechazoDeActivar(sql: Ejecutar, a: { grupo: string; ficha: string; ahora: number }): void {
+  contarRechazoEn(sql, a.grupo, a);
+}
+
+/** Lo mismo en las rutas de Tus campañas: la ficha es la misma, y la conexión suma en su grupo propio, aparte del de activar. */
+export function contarRechazoDeCuenta(sql: Ejecutar, a: { grupo: string; ficha: string; ahora: number }): void {
+  contarRechazoEn(sql, grupoDeCuenta(a.grupo), a);
+}
+
+function contarRechazoEn(sql: Ejecutar, grupoDeRechazos: string, a: { ficha: string; ahora: number }): void {
   const ventana = Math.floor(a.ahora / VENTANA_CAMPANA_MS);
   const vista = sql<{ n: number }>("SELECT n FROM activar_ficha WHERE ficha = ? AND ventana = ?", a.ficha, ventana)[0];
   sql(
@@ -153,7 +166,7 @@ export function contarRechazoDeActivar(sql: Ejecutar, a: { grupo: string; ficha:
   if (vista !== undefined) return;
   sql(
     "INSERT INTO activar_rechazos (grupo, ventana, n) VALUES (?, ?, 1) ON CONFLICT(grupo, ventana) DO UPDATE SET n = n + 1",
-    a.grupo,
+    grupoDeRechazos,
     ventana,
   );
 }

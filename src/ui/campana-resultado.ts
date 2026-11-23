@@ -179,8 +179,12 @@ export function publicarSellada(d: DepsDelResultado): void {
   const f = d.sellado();
   if (!s && e && f && f.raffleId !== undefined && !f.sinSello && d.sinPoderMoverLaSala?.()) {
     // El sello quedó en la red y la sala no lo sabe: no se calla. Se dice que hace falta entrar, y se retoma al llegar la cuenta.
+    // Si completar la cuenta alcanza, el aviso sale acá y la marca baja: la retomada siguiente no se gasta en este sello.
     selloSinAvisar = true;
-    pedirLaCuenta(d, () => publicarSellada(d));
+    pedirLaCuenta(d, () => {
+      selloSinAvisar = false;
+      publicarSellada(d);
+    });
     return;
   }
   if (!s || !e || !f || f.raffleId === undefined || f.sinSello) return;
@@ -612,14 +616,16 @@ export function registrarLasAcciones(d: DepsDelResultado): void {
  */
 export function retomarAlArrancar(d: DepsDelResultado): void {
   const s = d.sala();
-  const e = d.entrada();
-  if (!s || !e || e.evento !== s.evento || e.red !== s.red || d.sinGrabar()) return;
-  // El sello que no se pudo avisar por falta de cuenta sale ahora que la sala se puede mover.
+  const antes = d.entrada();
+  if (!s || !antes || antes.evento !== s.evento || antes.red !== s.red || d.sinGrabar()) return;
+  // El sello que no se pudo avisar por falta de cuenta sale ahora que la sala se puede mover. Lo demás sigue en la misma vuelta:
+  // si el aviso ya estaba hecho, el resultado pendiente o las ganadoras se retoman igual.
   if (selloSinAvisar) {
     selloSinAvisar = false;
     publicarSellada(d);
-    return;
   }
+  const e = d.entrada() ?? antes;
+  if (e.evento !== s.evento || e.red !== s.red) return;
   if (e.aviso === "pendiente" && e.sorteo !== undefined && e.ronda !== undefined) {
     if (!avisando.has(s.evento)) {
       ponerPaso({ paso: "avisando" });

@@ -186,6 +186,7 @@ import {
   campanasDeLaCuenta,
   confirmarToma,
   contarRechazoDeActivar,
+  contarRechazoDeCuenta,
   crearTablasDeActivar,
   cupoDeCuenta,
   duenaDelEvento,
@@ -419,9 +420,11 @@ export class Cupos extends DurableObject<Env> {
     return antesDeCuenta(this.sql, { grupo: await this.huella(ip, hora), ficha: await this.huellaDeSesion(token, hora), conocida, ahora });
   }
 
-  /** Una sesión que el proveedor rechazó en las rutas de Tus campañas: las mismas tablas de rechazos que activar. */
+  /** Una sesión que el proveedor rechazó en las rutas de Tus campañas: la conexión suma aparte de activar (`contarRechazoDeCuenta`). */
   async cuentaRechazo(ip: string, token: string): Promise<void> {
-    return this.activarRechazo(ip, token);
+    const ahora = Date.now();
+    const hora = horaUtc(ahora);
+    contarRechazoDeCuenta(this.sql, { grupo: await this.huella(ip, hora), ficha: await this.huellaDeSesion(token, hora), ahora });
   }
 
   /** Cuenta un listado o una toma de esta cuenta, ya verificada: 30 listados y 10 tomas cada 10 minutos. */
@@ -1610,6 +1613,13 @@ export default {
       if (req.method !== "POST") return json({ error: "no-existe" }, 404, h);
       if (!tusCampanasPrendido(env)) return json({ error: "apagada" }, 503, h);
       if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
+      // Usar en esta compu va atado al aviso por correo de la toma, que es la defensa de quien perdió su sesión: si el aviso no
+      // puede salir (su interruptor, el correo a quien gana, el remitente, el enlace de correo o la llave del proveedor), contesta
+      // apagada y lo deja dicho con un código fijo. La lista de la cuenta sigue.
+      if (recuperar && !correoDeTomaPrendido(env)) {
+        registrar("tus-campanas", { codigo: "sin-correo-de-toma" });
+        return json({ error: "apagada" }, 503, h);
+      }
       const pedido = leerPedidoDeTus(await leerJson(req, MAX_CUERPO_TUS_CAMPANAS), recuperar);
       const responder = (r: { estado: number; cuerpo: Record<string, unknown>; esperaS?: number }): Response =>
         json(r.cuerpo, r.estado, r.esperaS === undefined ? h : { ...h, "Retry-After": String(r.esperaS) });

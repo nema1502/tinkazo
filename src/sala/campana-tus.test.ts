@@ -174,6 +174,24 @@ describe("si la sala tiene Tus campañas, antes de ofrecerla", () => {
     expect(await salaTieneTusCampanas(sinRed, SERVICIO)).toBeNull();
   });
 
+  it("una caída pasajera no dice que no: un 5xx, un 429 o un 403 sin motivo vuelven null, y se puede preguntar de nuevo", async () => {
+    for (const [estado, cuerpo] of [
+      [500, undefined],
+      [502, "Bad Gateway"],
+      [503, undefined],
+      [503, { error: "ocupado" }],
+      [504, "Gateway Timeout"],
+      [429, { error: "rechazos" }],
+      [403, undefined],
+      [403, {}],
+    ] as const) {
+      const x = conRespuesta(estado, cuerpo, typeof cuerpo === "string");
+      expect(await salaTieneTusCampanas({ fetch: x.fetch }, SERVICIO), `${estado} ${JSON.stringify(cuerpo)}`).toBeNull();
+    }
+    // Un 403 con su motivo sí es una respuesta de la sala: esta página no puede usar la función.
+    expect(await salaTieneTusCampanas({ fetch: conRespuesta(403, { error: "origen" }).fetch }, SERVICIO)).toBe(false);
+  });
+
   it("espera hasta 15 segundos", async () => {
     let plazo = 0;
     await salaTieneTusCampanas({ fetch: conRespuesta(400, { error: "forma" }).fetch, senal: () => ((plazo++), AbortSignal.timeout(1_000)) }, SERVICIO);
@@ -244,10 +262,18 @@ describe("usar una campaña en esta compu: el pedido", () => {
     expect(r).toEqual({ ok: false, motivo });
   });
 
-  it("una sala sin la ruta no rompe nada: el 404 de texto plano y el 503 apagada se leen como sin la función, y la falla de red como red", async () => {
-    expect(await recuperarCampana({ sesion: SESION, evento: EVENTO }, { fetch: conRespuesta(404, "no encontrada", true).fetch }, SERVICIO)).toEqual({ ok: false, motivo: "sin-funcion" });
+  it("una sala con la función apagada no rompe nada: el 503 apagada se lee como sin la función, y la falla de red como red", async () => {
     expect(await recuperarCampana({ sesion: SESION, evento: EVENTO }, { fetch: conRespuesta(503, { error: "apagada" }).fetch }, SERVICIO)).toEqual({ ok: false, motivo: "sin-funcion" });
     expect(await recuperarCampana({ sesion: SESION, evento: EVENTO }, sinRed, SERVICIO)).toEqual({ ok: false, motivo: "red" });
+  });
+
+  it("un 404 sin no-existe es una falla pasajera, como la red: no apaga la función y se puede probar de nuevo", async () => {
+    // Se llega acá con la ruta confirmada, y la sala contesta todo 404 de esta ruta con no-existe: el resto es de un intermediario.
+    const deUnIntermediario = [conRespuesta(404, "no encontrada", true), conRespuesta(404), conRespuesta(404, {}), conRespuesta(404, { error: "otra-cosa" })];
+    for (const x of deUnIntermediario) {
+      expect(await recuperarCampana({ sesion: SESION, evento: EVENTO }, { fetch: x.fetch }, SERVICIO)).toEqual({ ok: false, motivo: "red" });
+      expect(x.llamadas).toHaveLength(1);
+    }
   });
 });
 
