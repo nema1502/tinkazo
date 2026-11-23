@@ -12,22 +12,26 @@ import type { LecturaDelCelular, OrigenDelAviso } from "../stellar/wallet-pollar
 import { cancelo, conTope, noPermitido } from "../ui/proteger-cuenta";
 import type { AccionesDeLaCuenta } from "./celular";
 import {
+  AZAR_DEL_LIMITE_MS,
   clasificarFallaAlConfirmar,
   clasificarFallaAlMandar,
   clasificarFallaDelDesbloqueo,
   enCurso,
+  ESPERA_POR_LIMITE_MS,
   HECHO_VISIBLE_MS,
   iniciar,
   LARGO_MINIMO_DEL_CODIGO,
   limpiarElCodigo,
   MARCA_DEL_CODIGO,
   marcaVigente,
+  NOTA_DEL_LIMITE,
   siguiente,
   vistaDe,
   type Evento,
   type Tarjeta,
   type Vista,
 } from "./confirmar-estado";
+import { textoDeLimite } from "./limite";
 import { marcaDeTilde } from "./piezas";
 import { sustituir } from "./sustituir";
 import { TEXTOS_CONFIRMAR } from "./textos-confirmar";
@@ -58,12 +62,17 @@ export interface DepsDeLaTarjeta {
   releer: (origen?: OrigenDelAviso) => void;
   /** Avisa cuando la confirmación pasa a estar en curso o deja de estarlo: con la lista sellada cambia qué pantalla manda. */
   alCambiarElCurso?: () => void;
+  /** Un número al azar entre 0 y 1: reparte cuándo vuelve a poder pedir quien recibió un límite. Sin esto, `Math.random`. */
+  azar?: () => number;
 }
 
 export interface TarjetaMontada {
   /** Vuelve a escribir los textos (cambió el idioma) y el estado. */
   pintar: () => void;
-  /** La persona ya empezó a confirmar (ver `enCurso` de la máquina). */
+  /**
+   * La persona ya empezó a confirmar (ver `enCurso` de la máquina), o un pedido de la tarjeta todavía no contestó aunque la
+   * tarjeta ya haya dicho que tarda: el código que sale tarde vive en la sesión del proveedor y se tiene que poder confirmar.
+   */
   enCurso: () => boolean;
   /** La cuenta se leyó de nuevo. */
   alLeer: (lectura: LecturaDelCelular) => void;
@@ -162,8 +171,44 @@ export function montarTarjeta(
   };
 
   let vista: Vista = vistaDe(t, deps.ahora());
+  /** La nota que se pintó la vez anterior: la del límite se anuncia solo al aparecer. */
+  let notaAntes: string | null = null;
+  /**
+   * Cuánto queda apagada la acción después de un límite del servicio: los segundos que dijo (los que vio la billetera) o la
+   * espera corta, más unos segundos al azar para que quienes lo recibieron juntos no vuelvan a pedir en el mismo instante.
+   */
+  const esperaDelLimite = (): number =>
+    (deps.acciones.segundosDeLimite?.() ?? ESPERA_POR_LIMITE_MS / 1000) * 1000 + Math.round((deps.azar ?? Math.random)() * AZAR_DEL_LIMITE_MS);
+  /**
+   * Los pedidos de la tarjeta que todavía no contestaron. Pasada la espera la tarjeta vuelve a invitar y dice que tarda, pero
+   * el pedido sigue: mientras tanto la sesión del proveedor no se suelta, porque el código pendiente vive adentro de ella.
+   */
+  let enVuelo = 0;
   /** Lo último que se le dijo a la página sobre si hay una confirmación en curso. */
   let enCursoAntes = false;
+  const enCursoAhora = (): boolean => enCurso(t) || enVuelo > 0;
+  /** Quien manda en la pantalla (la tarjeta o la cuenta regresiva) y si la sesión se puede soltar dependen de esto. */
+  function avisarSiCambiaElCurso(): void {
+    if (destruida) return;
+    const curso = enCursoAhora();
+    if (curso === enCursoAntes) return;
+    enCursoAntes = curso;
+    deps.alCambiarElCurso?.();
+  }
+  /**
+   * Espera un pedido de la tarjeta con el tope de siempre y lo cuenta en vuelo hasta que contesta, también si contesta pasado
+   * el tope. Se descuenta después de que `tarde` hizo lo suyo: un código que sale tarde ya dejó la tarjeta con el código.
+   */
+  function enVueloConTope<T>(llamada: Promise<T>, tarde: (valor: T) => void): Promise<T> {
+    const esperada = conTope(llamada, tarde);
+    enVuelo += 1;
+    const listo = (): void => {
+      enVuelo -= 1;
+      avisarSiCambiaElCurso();
+    };
+    llamada.then(listo, listo);
+    return esperada;
+  }
 
   function pintar(): void {
     if (destruida) return;
@@ -177,8 +222,12 @@ export function montarTarjeta(
     titulo.hidden = !vista.conCodigo;
     poner(titulo, vista.conCodigo ? tx("ccCodigoT") : "");
     poner(linea, vista.linea ? tx(vista.linea, { mail: lectura.correoTapado ?? "" }) : "");
+    // La nota del límite cuenta los segundos: se anuncia una sola vez, y los números que bajan no se leen cada segundo.
+    if (vista.nota === NOTA_DEL_LIMITE && notaAntes === NOTA_DEL_LIMITE) nota.removeAttribute("role");
+    else nota.setAttribute("role", "status");
+    notaAntes = vista.nota;
     nota.hidden = vista.nota === null;
-    poner(nota, vista.nota === null ? "" : tx(vista.nota));
+    poner(nota, vista.nota === null ? "" : vista.nota === NOTA_DEL_LIMITE ? textoDeLimite(deps.idioma(), vista.limiteEn ?? 1) : tx(vista.nota));
     ultimo.hidden = !vista.usaElUltimo;
     poner(ultimo, vista.usaElUltimo ? tx("ccUsaElUltimo") : "");
     spam.hidden = !vista.spam;
@@ -190,6 +239,8 @@ export function montarTarjeta(
     secundaria.title = vista.secundaria?.accion === "desbloquear" ? tx("ccDesbloqueoAyuda") : "";
     campo.hidden = !vista.conCodigo;
     campo.disabled = vista.campoApagado;
+    // Con el campo apagado o escondido no hay teclado, y el navegador no siempre avisa que el campo perdió el foco.
+    if (!vista.conCodigo || vista.campoApagado) pagina.classList.remove("cmp-teclado");
     campo.placeholder = tx("ccCodigoCampo");
     campo.setAttribute("aria-label", tx("ccCodigoCampo"));
     // Sin campo ni botón (Listo) la barra no queda vacía.
@@ -202,11 +253,7 @@ export function montarTarjeta(
       else principal.removeAttribute("aria-busy");
     }
     // Quien manda en la pantalla (la tarjeta o la cuenta regresiva) depende de esto: se avisa solo cuando cambia.
-    const curso = enCurso(t);
-    if (curso !== enCursoAntes) {
-      enCursoAntes = curso;
-      deps.alCambiarElCurso?.();
-    }
+    avisarSiCambiaElCurso();
   }
 
   /** El estado de ahora: después de un evento ya no es el que se miró antes. */
@@ -238,11 +285,11 @@ export function montarTarjeta(
       pintar();
     };
     try {
-      await conTope(deps.acciones.mandarCodigo(), () => salio());
+      await enVueloConTope(deps.acciones.mandarCodigo(), () => salio());
     } catch (e) {
       if (destruida) return;
       const falla = clasificarFallaAlMandar(e, deps.enLinea());
-      pasa({ tipo: "fallo-al-mandar", falla });
+      pasa({ tipo: "fallo-al-mandar", falla, ...(falla === "limite" ? { espera: esperaDelLimite() } : {}) });
       if (falla === "naciendo") {
         deps.alIrse("naciendo");
         deps.releerEn(RELEER_SI_NACIENDO_MS);
@@ -284,11 +331,11 @@ export function montarTarjeta(
       return;
     }
     try {
-      despuesDeConfirmar(await conTope(deps.acciones.confirmarCodigo(codigo), (tarde) => despuesDeConfirmar(tarde)));
+      despuesDeConfirmar(await enVueloConTope(deps.acciones.confirmarCodigo(codigo), (tarde) => despuesDeConfirmar(tarde)));
     } catch (e) {
       if (destruida) return;
       const falla = clasificarFallaAlConfirmar(e, deps.enLinea());
-      pasa({ tipo: "fallo-al-confirmar", falla });
+      pasa({ tipo: "fallo-al-confirmar", falla, ...(falla === "limite" ? { espera: esperaDelLimite() } : {}) });
       if (falla === "naciendo") {
         deps.alIrse("naciendo");
         deps.releerEn(RELEER_SI_NACIENDO_MS);
@@ -303,7 +350,7 @@ export function montarTarjeta(
     pasa({ tipo: "pedir-desbloqueo" });
     if (t.estado !== "desbloqueo") return;
     try {
-      const quedo = await conTope(deps.acciones.usarDesbloqueo(), (tarde) => {
+      const quedo = await enVueloConTope(deps.acciones.usarDesbloqueo(), (tarde) => {
         if (tarde) deps.releer();
       });
       if (destruida) return;
@@ -371,7 +418,7 @@ export function montarTarjeta(
 
   return {
     pintar,
-    enCurso: () => enCurso(t),
+    enCurso: enCursoAhora,
     alLeer: (nueva) => {
       if (destruida) return;
       lectura = nueva;

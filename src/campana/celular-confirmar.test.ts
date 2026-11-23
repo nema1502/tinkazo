@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LecturaDelCelular } from "../stellar/wallet-pollar";
 import { setLang } from "../idioma";
 import { AHORA, SESION, asentar, lectura, lecturasDe, pasar, prepararCelular as preparar, propio } from "./celular-falso";
-import { RELECTURA_POR_VISTA_MS, type AccionesDeLaCuenta, type DepsDelCelular } from "./celular";
+import type { AccionesDeLaCuenta, DepsDelCelular } from "./celular";
 import { MARCA_DEL_CODIGO, PROMESA_VERIFICADA } from "./confirmar-estado";
 import { TEXTOS_CAMPANA } from "./textos";
 import { TEXTOS_CONFIRMAR } from "./textos-confirmar";
@@ -280,7 +280,7 @@ describe("cuándo se va la tarjeta", () => {
     expect(apoyoDeAdentro(mundo.raiz)).toBe(TEXTOS_CAMPANA.es.cpDejaAbiertaLibre);
   });
 
-  it("volver a la pestaña con la tarjeta quieta no le pregunta de nuevo al proveedor antes del minuto, pero lo de otra pestaña sí", async () => {
+  it("volver a la pestaña o recuperar la conexión con la tarjeta quieta no le pregunta nada al proveedor, pero lo de otra pestaña sí", async () => {
     let aviso: (origen?: "canal" | "kit" | "vista") => void = () => undefined;
     const acciones = accionesFalsas({ alCambiar: vi.fn((cb: (origen?: "canal" | "kit" | "vista") => void) => { aviso = cb; return () => undefined; }) });
     const { leer } = await conTarjeta(lecturasDe(FALTA), acciones);
@@ -293,11 +293,13 @@ describe("cuándo se va la tarjeta", () => {
     aviso("canal");
     await pasar(100);
     expect(leer).toHaveBeenCalledTimes(2);
-    // Pasado el minuto de la última lectura, una vuelta a la pestaña vuelve a leer.
-    await pasar(RELECTURA_POR_VISTA_MS);
-    aviso("vista");
-    await pasar(100);
-    expect(leer).toHaveBeenCalledTimes(3);
+    // Ni pasados diez minutos: con la tarjeta quieta, volver a la pestaña o recuperar la conexión no vuelve a leer.
+    for (let vuelta = 0; vuelta < 10; vuelta += 1) {
+      await pasar(60_000);
+      aviso("vista");
+      await pasar(100);
+    }
+    expect(leer).toHaveBeenCalledTimes(2);
   });
 
   it("con un código en juego, volver a la pestaña sí vuelve a leer: es cuando puede haber cambiado la cuenta", async () => {

@@ -1392,6 +1392,16 @@ class PollarWallet implements SubmittingWallet {
   /** Cómo dejar de mirar los rechazos por límite del cliente armado (`restore`). */
   #sinMirarLimites: (() => void) | null = null;
   /**
+   * Los clientes que ya terminaron de leer su sesión guardada (`restore`) o que acaban de entrar: antes de eso, que el cliente no
+   * tenga ninguna sesión no dice nada (`sesionPerdida`). Solo lo mira la página del celular de una campaña.
+   */
+  readonly #leidos = new WeakSet<object>();
+  /**
+   * Por cliente, si la llave de este navegador quedó guardada (IndexedDB): true, false, o null mientras se mira. Se mira una
+   * vez al asegurar la sesión, que es lo que usa la página del celular, y lo lee `soltarElCliente`.
+   */
+  readonly #llaves = new WeakMap<object, boolean | null>();
+  /**
    * El cliente armado vota a mano (issue 180): se pidió con la variable del build en la red principal y el kit lo tomó
    * (`_cosignManual`). Todo lo que se levanta con el voto por contenido mira esto, nunca la variable sola.
    */
@@ -1926,6 +1936,7 @@ class PollarWallet implements SubmittingWallet {
     /** Entró con la ventana cerrada hace más de 6 segundos: antes eso era un corte, y se cuenta. */
     const entro = (address: string): string => {
       if (cerradaDesde && Date.now() - cerradaDesde > GRACIA_CIERRE_MS) contarVentana("late");
+      this.#leidos.add(client);
       this.address = address;
       return address;
     };
@@ -2081,6 +2092,7 @@ class PollarWallet implements SubmittingWallet {
     // página del celular lo dice con la verdad. El mirador vive lo que vive el cliente.
     this.#sinMirarLimites ??= mirarLimites(client, (segundos) => this.anotarLimite(segundos));
     const listo = await Promise.race([client.ready().then(() => true, () => false), new Promise<boolean>((r) => setTimeout(() => r(false), LISTO_MS))]);
+    if (listo) this.#leidos.add(client);
     const wallet = client.getWallet();
     this.address = wallet?.address ?? null;
     if (!this.address) {
@@ -3846,11 +3858,11 @@ class PollarWallet implements SubmittingWallet {
    * Suelta el cliente del kit sin cerrar la sesión: paran sus relojes (la renovación de la sesión, la espera a que la cuenta
    * nazca, la validación al volver a la pestaña) y deja de preguntarle nada al servicio de cuentas. La sesión guardada y la
    * llave del navegador quedan: `asegurarLaSesion` lo vuelve a armar cuando hace falta. No suelta nada si hay una entrada o
-   * una confirmación en curso. Dice si lo soltó.
+   * una confirmación en curso, ni si la sesión o la llave viven solo en este cliente (`#soloEnMemoria`). Dice si lo soltó.
    */
   soltarElCliente(): boolean {
     const client = this.#client;
-    if (!client || this.#entrando || this.#confirmacion) return false;
+    if (!client || this.#entrando || this.#confirmacion || this.#soloEnMemoria(client)) return false;
     this.#dejarDeAtender?.();
     this.#dejarDeAtender = null;
     this.#sinMirarLimites?.();
@@ -3868,11 +3880,116 @@ class PollarWallet implements SubmittingWallet {
 
   /**
    * Con el cliente soltado (o sin armar), lo arma y retoma la sesión guardada. Devuelve la cuenta, o null si no hay sesión
-   * que retomar. Con el cliente armado no pide nada.
+   * que retomar. Con el cliente armado y la sesión verificada no pide nada. Si la retomada de antes falló una vez (un límite,
+   * la red lenta), la sesión queda guardada sin verificar y el kit solo vuelve a probar al volver a la pestaña: entonces se
+   * suelta el cliente y se arma de nuevo, una vez por pedido, para que repetir sirva de algo (`#volverAProbar`).
    */
   async asegurarLaSesion(): Promise<string | null> {
-    if (this.#client && this.address) return this.address;
-    return this.restore();
+    if (this.#client && this.address) {
+      if (!this.#volverAProbar()) {
+        this.#mirarLaLlave();
+        return this.address;
+      }
+      this.soltarElCliente();
+    }
+    const dir = await this.restore();
+    this.#mirarLaLlave();
+    return dir;
+  }
+
+  /**
+   * Mira una vez por cliente si la llave de este navegador quedó guardada. Si no (IndexedDB bloqueado), la sesión vive solo en
+   * este cliente: el kit la borra al retomarla con otro. Un kit sin esa comprobación queda como antes.
+   */
+  #mirarLaLlave(): void {
+    const client = this.#client;
+    if (!client || this.#llaves.has(client)) return;
+    const llaves = (client as unknown as { _keyManager?: { ensurePersisted?: () => Promise<boolean> } })._keyManager;
+    if (typeof llaves?.ensurePersisted !== "function") {
+      this.#llaves.set(client, true);
+      return;
+    }
+    this.#llaves.set(client, null);
+    llaves.ensurePersisted().then(
+      (guardada) => this.#llaves.set(client, guardada !== false),
+      () => this.#llaves.set(client, false),
+    );
+  }
+
+  /**
+   * Si la sesión o la llave de este cliente viven solo en memoria: el kit cayó a guardar en memoria (el almacenamiento falló, lo
+   * avisa `onStorageDegrade`), o la llave del navegador no quedó guardada, o todavía no se sabe. Soltarlo sería perderlas.
+   */
+  #soloEnMemoria(client: PollarClient): boolean {
+    let degradado = false;
+    try {
+      // El kit le avisa enseguida a quien se suscribe tarde: suscribirse y soltar alcanza para saberlo.
+      const dejar = (client as unknown as { onStorageDegrade?: (cb: () => void) => () => void }).onStorageDegrade?.(() => {
+        degradado = true;
+      });
+      dejar?.();
+    } catch {
+      /* un kit sin ese aviso no cambia nada */
+    }
+    return degradado || (this.#llaves.has(client) && this.#llaves.get(client) !== true);
+  }
+
+  /**
+   * Espera, como mucho `tope`, a que termine lo que la sesión tiene a medias: la lectura de la sesión guardada del cliente (que
+   * renueva el token si venció) y una renovación en vuelo. Irse de la página con una renovación a medias deja guardado un token
+   * que el servicio ya cambió, y la sesión se pierde. No pide nada: solo espera lo que ya está corriendo. Sin cliente armado no
+   * hay nada a medias. Solo lo usa la página del celular de una campaña, antes de ir a recibir.
+   */
+  esperarLaRetomada(tope: number): Promise<void> {
+    const client = this.#client;
+    if (!client) return Promise.resolve();
+    const renovacion = (): unknown => (client as unknown as { _refreshPromise?: unknown })._refreshPromise;
+    const aMedias = Promise.resolve()
+      .then(() => client.ready())
+      .then(() => renovacion())
+      .then(() => undefined, () => undefined);
+    return new Promise<void>((resolver) => {
+      const reloj = setTimeout(resolver, tope);
+      void aMedias.then(() => {
+        clearTimeout(reloj);
+        resolver();
+      });
+    });
+  }
+
+  /**
+   * Si hay que volver a pedir la retomada: el cliente terminó de leer su sesión, la tiene guardada y no quedó verificada, no
+   * hay un límite vigente y no tiene una renovación ni una retomada en vuelo. Soltarlo en medio de una renovación pierde el
+   * token nuevo, y con un límite vigente volver a pedir solo suma otro rechazo.
+   */
+  #volverAProbar(): boolean {
+    const client = this.#client;
+    if (!client || !this.#leidos.has(client) || this.segundosDeLimite() !== null) return false;
+    try {
+      const a = client.getAuthState() as unknown as { step?: unknown; verified?: unknown };
+      if ((a.step === "authenticated" && a.verified === true) || client.getWallet() === null) return false;
+      const enVuelo = client as unknown as { _refreshPromise?: unknown; _resumePromise?: unknown };
+      return !enVuelo._refreshPromise && !enVuelo._resumePromise;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Si el proveedor ya no tiene ninguna sesión que retomar en este navegador: sin cliente y sin la marca de una entrada, o con
+   * el cliente que terminó de leer la suya y se quedó sin ninguna (venció, o el kit la cerró al frenar su renovación). Una
+   * sesión guardada sin verificar (un límite, la red lenta) no está perdida, y mientras el cliente todavía la lee no se sabe:
+   * en los dos casos, no. Solo lee lo que ya sabe el cliente: no pide nada.
+   */
+  sesionPerdida(): boolean {
+    const client = this.#client;
+    if (!client) return !this.hayMarca();
+    if (!this.#leidos.has(client)) return false;
+    try {
+      return client.getWallet() === null && client.getAuthState().step !== "authenticated";
+    } catch {
+      return false;
+    }
   }
 
   /** ¿Sigue abierta la sesión de Pollar? Si el kit la cerró por su cuenta (venció), el paso pide entrar de nuevo. */

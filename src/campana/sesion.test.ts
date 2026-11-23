@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
     segundosDeLimite: vi.fn(),
     asegurarLaSesion: vi.fn(),
     soltarElCliente: vi.fn(),
+    sesionPerdida: vi.fn(),
   },
 }));
 
@@ -82,6 +83,7 @@ beforeEach(() => {
   h.billetera.segundosDeLimite.mockReset().mockReturnValue(null);
   h.billetera.asegurarLaSesion.mockReset().mockResolvedValue(CUENTA);
   h.billetera.soltarElCliente.mockReset().mockReturnValue(true);
+  h.billetera.sesionPerdida.mockReset().mockReturnValue(false);
 });
 
 afterEach(() => {
@@ -630,6 +632,13 @@ describe("token, sigueLaSesion y salir", () => {
     h.billetera.address = CUENTA;
     expect(await nuevaSesion().sigueLaSesion(CUENTA)).toBe(true);
     expect(await nuevaSesion().sigueLaSesion(`G${"B".repeat(55)}`)).toBe(false);
+  });
+
+  it("sigueLaSesion no da por viva una sesión que el proveedor ya cerró, aunque la cuenta siga en la página", async () => {
+    h.billetera.address = CUENTA;
+    h.billetera.sesionPerdida.mockReturnValue(true);
+    // Así la alta dice que hay que entrar de nuevo, y no que se pruebe otra vez lo que no va a servir.
+    expect(await nuevaSesion().sigueLaSesion(CUENTA)).toBe(false);
   });
 
   it("salir cierra la sesión del proveedor", async () => {

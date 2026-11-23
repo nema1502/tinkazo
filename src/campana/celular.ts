@@ -107,6 +107,8 @@ export interface AccionesDeLaCuenta {
   usarDesbloqueo: () => Promise<boolean>;
   /** Avisa cuando la cuenta pudo cambiar (otra pestaña, la vuelta a esta), diciendo de dónde viene. Devuelve cómo dejar de avisar. */
   alCambiar: (aviso: (origen?: OrigenDelAviso) => void) => () => void;
+  /** Cuántos segundos faltan para que el servicio de cuentas acepte pedidos de nuevo, si lo dijo, o null. */
+  segundosDeLimite?: () => number | null;
 }
 
 export interface DepsDelCelular {
@@ -250,11 +252,10 @@ type LineaDeAdentro = "deja-abierta" | "libre" | "otro-lado" | "con-tarjeta";
 /** Entre dos lecturas pedidas por un aviso de cambio pasa al menos esto: el canal y la vuelta a la pestaña suelen avisar juntos. */
 const ENTRE_RELECTURAS_MS = 3_000;
 /**
- * Volver a la pestaña o volver la conexión casi nunca cambia la cuenta, y cada lectura es un pedido al servicio de cuentas
- * (150 celulares, la misma red). Con la tarjeta quieta, esos avisos no vuelven a leer antes de este tiempo. Lo que avisa otra
- * pestaña o el kit sí lee enseguida, y con un código o un desbloqueo en juego, también.
+ * Lo más que Recibir espera a la comparación de la sesión con la cuenta. La comparación corta sola a los 2,5 segundos y espera
+ * hasta 12 una renovación del token en vuelo (`sesion-confirmar.ts`): esto solo destraba el botón si algo colgara antes.
  */
-export const RELECTURA_POR_VISTA_MS = 60_000;
+export const TOPE_DE_RECIBIR_MS = 15_000;
 
 /** La cuenta que ya se avisó (o aceptó) en esta pestaña, por sala: solo la dirección pública. Así el aviso no se repite. */
 const claveDeAvisada = (sala: string): string => `tinkazo.cmp.otrolado.${sala}`;
@@ -416,8 +417,6 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   /** La tarjeta se fue en esta carga porque el servicio no está para eso: no se vuelve a armar. */
   let tarjetaApagada = false;
   let ultimaRelectura = Number.NEGATIVE_INFINITY;
-  /** Cuándo terminó la última lectura de la cuenta. */
-  let ultimaLectura = Number.NEGATIVE_INFINITY;
 
   const soltarElRelojDeLaLectura = (): void => {
     if (lectura.reloj !== null) window.clearTimeout(lectura.reloj);
@@ -471,11 +470,16 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     raiz.classList.remove("cmp-con-tarjeta", "cmp-tarjeta-enlace");
   }
 
-  /** Pide leer la cuenta de nuevo. Una ráfaga de avisos (el canal y la vuelta a la pestaña juntos) cuenta como uno. */
+  /**
+   * Pide leer la cuenta de nuevo. Una ráfaga de avisos (el canal y la vuelta a la pestaña juntos) cuenta como uno. Volver a la
+   * pestaña o volver la conexión con la tarjeta quieta no lee: casi nunca cambia la cuenta, y leer es volver a armar la sesión
+   * del proveedor en 150 celulares que vuelven juntos. Lo que avisa otra pestaña o el kit sí lee, y con un código o un
+   * desbloqueo en juego, también.
+   */
   function releer(origen?: OrigenDelAviso): void {
     const ahora = deps.ahora();
     if (desmontado || lectura.cuenta === null || lectura.leyendo || ahora - ultimaRelectura < ENTRE_RELECTURAS_MS) return;
-    if (origen === "vista" && tarjeta?.enCurso() !== true && ahora - ultimaLectura < RELECTURA_POR_VISTA_MS) return;
+    if (origen === "vista" && tarjeta?.enCurso() !== true) return;
     ultimaRelectura = ahora;
     void leerLaCuenta();
   }
@@ -710,7 +714,6 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     }
     if (desmontado || vuelta !== lectura.vuelta) return;
     lectura.leyendo = false;
-    ultimaLectura = deps.ahora();
     lectura.datos = leida;
     recordarLaCuenta();
     if (!seSabeLaCuenta() && lectura.reintentos < ESPERAS_DE_LA_LECTURA_MS.length) {
@@ -988,11 +991,13 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
 
   function ir(pantalla: Pantalla): void {
     if (desmontado) return;
+    const llega = estado.pantalla !== pantalla;
     estado.pantalla = pantalla;
     if (pantalla === "hola" && estado.sesion) buscarElNombre(estado.sesion);
     if (pantalla === "hola") ajustarElAviso();
-    // Quien gana y todavía no se sabe cómo está su cuenta: se lee una vez más, ahora que le importa.
-    if (pantalla === "gano" && lectura.cuenta !== null && !seSabeLaCuenta() && !lectura.leyendo) void leerLaCuenta();
+    // Quien gana y todavía no se sabe cómo está su cuenta: se lee una vez más al llegar a Ganaste, ahora que le importa. No en
+    // cada consulta del minuto que la deja en Ganaste: cada lectura vuelve a armar la sesión del proveedor.
+    if (pantalla === "gano" && llega && lectura.cuenta !== null && !seSabeLaCuenta() && !lectura.leyendo) void leerLaCuenta();
     if (pantalla === "gano" || pantalla === "adentro") prepararElPremio();
     programar();
     pintar();
@@ -1385,16 +1390,34 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
    * recordaba este navegador, sin haber retomado la sesión del proveedor: en un celular compartido la sesión de ahora puede ser
    * la de otra persona, y esa no recibe el premio de esta cuenta. Se compara acá, que es cuando hace falta (son pedidos al
    * servicio de cuentas): si es de otra, la página olvida lo que recordaba y abre para quien entró ahora; si no se sabe, sigue
-   * de largo, que el sitio lo resuelve con la cuenta que tenga.
+   * de largo, que el sitio lo resuelve con la cuenta que tenga. El botón queda ocupado desde el toque. La comparación tiene su
+   * tope y no sigue con una renovación del token a medias (`sesion-confirmar.ts`); este tope solo destraba Recibir si algo
+   * colgara antes, como bajar lo que hace falta.
    */
-  async function recibirElPremio(): Promise<void> {
+  async function recibirElPremio(toque?: Event): Promise<void> {
     if (comparandoLaSesion) return;
     const cuenta = estado.memoria?.cuenta;
     if (estado.sesion === null && cuenta !== undefined && deps.cuenta?.laSesionEs) {
       comparandoLaSesion = true;
-      // La comparación se baja con lo de Ganaste: solo la necesita quien recargó y toca Recibir.
-      const otra = await import("./premio").then((m) => m.laSesionEsDeOtra(deps, cuenta), () => false);
-      comparandoLaSesion = false;
+      const boton = toque?.currentTarget instanceof HTMLButtonElement ? toque.currentTarget : null;
+      boton?.setAttribute("aria-busy", "true");
+      if (boton) boton.disabled = true;
+      let reloj = 0;
+      let otra = false;
+      try {
+        // La comparación se baja con lo de Ganaste: solo la necesita quien recargó y toca Recibir.
+        otra = await Promise.race([
+          import("./premio").then((m) => m.laSesionEsDeOtra(deps, cuenta), () => false),
+          new Promise<false>((resolver) => {
+            reloj = window.setTimeout(() => resolver(false), TOPE_DE_RECIBIR_MS);
+          }),
+        ]);
+      } finally {
+        window.clearTimeout(reloj);
+        comparandoLaSesion = false;
+        boton?.removeAttribute("aria-busy");
+        if (boton) boton.disabled = false;
+      }
       if (desmontado) return;
       if (otra) {
         olvidarALaPersona();
@@ -1407,7 +1430,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     deps.recibir();
   }
   /** Lo que ve Ganaste (y el cierre con premio): lo de siempre, con Recibir que primero compara la sesión con la cuenta. */
-  const depsDeRecibir: DepsDelCelular = { ...deps, recibir: () => void recibirElPremio() };
+  const depsDeRecibir: DepsDelCelular = { ...deps, recibir: (toque?: Event) => void recibirElPremio(toque) };
 
   const cancelarVuelta = deps.alVolver(() => {
     if (!deps.visible()) return;

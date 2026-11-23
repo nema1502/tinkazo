@@ -22,6 +22,15 @@ export const CODIGO_VENCE_A_LOS_MS = 300_000;
 export const ENVIOS_PERMITIDOS = 5;
 export const VENTANA_DE_ENVIOS_MS = 900_000;
 export const PAUSA_POR_MUCHOS_MS = 300_000;
+/**
+ * Un límite del servicio de cuentas (un 429) no es lo que pidió esta persona: es de la conexión que comparten todos en el
+ * evento. La acción queda apagada lo que dijo el servicio y, si no lo dijo, esta espera corta. Se le suma un azar de hasta
+ * unos segundos para que quienes recibieron el límite en el mismo minuto no vuelvan a pedir juntos.
+ */
+export const ESPERA_POR_LIMITE_MS = 30_000;
+export const AZAR_DEL_LIMITE_MS = 5_000;
+/** La nota del límite: la tarjeta la escribe con los segundos que faltan (`limite.ts`). */
+export const NOTA_DEL_LIMITE = "lmEspera";
 /** El desbloqueo del celular tarda: a los 8 segundos sin respuesta se dice que se espera la huella. */
 export const DESBLOQUEO_TARDA_MS = 8_000;
 /** Cuánto se ve Listo antes de que la tarjeta se vaya. */
@@ -83,17 +92,18 @@ export interface Tarjeta {
   desbloqueoNoDeja: boolean;
 }
 
-export type FallaAlMandar = "naciendo" | "sin-servicio" | "sin-sesion" | "muchos" | "red" | "tarda" | "falla";
+export type FallaAlMandar = "naciendo" | "sin-servicio" | "sin-sesion" | "limite" | "red" | "tarda" | "falla";
 export type FallaAlConfirmar = FallaAlMandar | "codigo-malo" | "sin-codigo";
 export type FallaDelDesbloqueo = "red" | "tarda" | "falla" | "sin-sesion";
 
 export type Evento =
   | { tipo: "pedir-codigo" }
   | { tipo: "codigo-mandado" }
-  | { tipo: "fallo-al-mandar"; falla: FallaAlMandar }
+  /** `espera`: con un límite, cuántos milisegundos queda apagada la acción. */
+  | { tipo: "fallo-al-mandar"; falla: FallaAlMandar; espera?: number }
   | { tipo: "confirmar" }
   | { tipo: "confirmado"; quedo: boolean }
-  | { tipo: "fallo-al-confirmar"; falla: FallaAlConfirmar }
+  | { tipo: "fallo-al-confirmar"; falla: FallaAlConfirmar; espera?: number }
   | { tipo: "pedir-desbloqueo" }
   | { tipo: "desbloqueado" }
   | { tipo: "desbloqueo-cancelado" }
@@ -132,11 +142,11 @@ export function puedePedir(t: Tarjeta, ahora: number): boolean {
   return !(t.estado === "codigo" && !t.sinEspera && t.mandadoEn !== null && ahora - t.mandadoEn < OTRO_CODIGO_A_LOS_MS);
 }
 
-const NOTA_DE_LA_FALLA: Record<"red" | "tarda" | "falla" | "muchos", string> = {
+const NOTA_DE_LA_FALLA: Record<"red" | "tarda" | "falla" | "limite", string> = {
   red: "cpErrRed",
   tarda: "ccTarda",
   falla: "ccFalla",
-  muchos: "ccMuchos",
+  limite: NOTA_DEL_LIMITE,
 };
 
 /** Lo que pasa con la tarjeta ante un evento. No guarda nada afuera: devuelve la tarjeta nueva. */
@@ -173,7 +183,7 @@ export function siguiente(t: Tarjeta, ev: Evento, ahora: number): Tarjeta {
     case "fallo-al-mandar": {
       if (t.estado !== "mandando") return t;
       if (ev.falla === "naciendo" || ev.falla === "sin-servicio" || ev.falla === "sin-sesion") return { ...t, estado: "oculta", desde: ahora };
-      return alvolver(t, ev.falla, ahora);
+      return alvolver(t, ev.falla, ahora, ev.espera);
     }
     case "confirmar":
       return t.estado === "codigo" ? { ...t, estado: "confirmando", desde: ahora, nota: null } : t;
@@ -197,7 +207,7 @@ export function siguiente(t: Tarjeta, ev: Evento, ahora: number): Tarjeta {
         const nota = t.recargado ? "ccCodigoRecargado" : "ccCodigoViejo";
         return { ...t, estado: "invita", desde: ahora, nota, mandadoEn: null, sinEspera: true, volverA: "invita" };
       }
-      return { ...alvolver({ ...t, volverA: "codigo" }, ev.falla, ahora), estado: "codigo" };
+      return { ...alvolver({ ...t, volverA: "codigo" }, ev.falla, ahora, ev.espera), estado: "codigo" };
     }
     case "pedir-desbloqueo":
       return t.estado === "invita" ? { ...t, estado: "desbloqueo", desde: ahora, nota: null, volverA: "invita" } : t;
@@ -224,10 +234,13 @@ export function siguiente(t: Tarjeta, ev: Evento, ahora: number): Tarjeta {
   }
 }
 
-/** Vuelve al lugar de donde salió el pedido, con la nota de lo que falló. Con "muchos" también apaga la acción un rato. */
-function alvolver(t: Tarjeta, falla: "muchos" | "red" | "tarda" | "falla", ahora: number): Tarjeta {
+/**
+ * Vuelve al lugar de donde salió el pedido, con la nota de lo que falló. Con un límite también apaga la acción lo que dijo el
+ * servicio (`espera`), o la espera corta si no lo dijo.
+ */
+function alvolver(t: Tarjeta, falla: "limite" | "red" | "tarda" | "falla", ahora: number, espera?: number): Tarjeta {
   const base: Tarjeta = { ...t, estado: t.volverA, desde: ahora, nota: NOTA_DE_LA_FALLA[falla] };
-  return falla === "muchos" ? { ...base, bloqueadoHasta: ahora + PAUSA_POR_MUCHOS_MS } : base;
+  return falla === "limite" ? { ...base, bloqueadoHasta: ahora + (espera ?? ESPERA_POR_LIMITE_MS) } : base;
 }
 
 /**
@@ -276,6 +289,8 @@ export interface Vista {
   secundaria: { clave: string; accion: "pedir" | "desbloquear" } | null;
   /** Segundos que faltan para poder mandar otro código, mientras no se puede. */
   cuentaAtras: number | null;
+  /** Con la nota del límite, los segundos que faltan para que el servicio vuelva a aceptar pedidos. */
+  limiteEn: number | null;
 }
 
 const VISTA_VACIA: Vista = {
@@ -290,14 +305,17 @@ const VISTA_VACIA: Vista = {
   principal: null,
   secundaria: null,
   cuentaAtras: null,
+  limiteEn: null,
 };
 
 /** `largoDelCampo`: cuántos caracteres hay escritos, para apagar Confirmar con menos de cuatro. */
 export function vistaDe(t: Tarjeta, ahora: number, largoDelCampo = 0): Vista {
   if (t.estado === "oculta") return VISTA_VACIA;
   const bloqueada = estaBloqueada(t, ahora);
-  const nota = t.nota === "ccMuchos" && !bloqueada ? null : t.nota;
-  const base: Vista = { ...VISTA_VACIA, visible: true, nota };
+  // La nota de muchos códigos y la del límite se van cuando vuelve a poder pedirse.
+  const nota = (t.nota === "ccMuchos" || t.nota === NOTA_DEL_LIMITE) && !bloqueada ? null : t.nota;
+  const limiteEn = nota === NOTA_DEL_LIMITE && t.bloqueadoHasta !== null ? Math.max(1, Math.ceil((t.bloqueadoHasta - ahora) / 1000)) : null;
+  const base: Vista = { ...VISTA_VACIA, visible: true, nota, limiteEn };
   const ofrece = t.ofreceDesbloqueo && !t.desbloqueoNoDeja;
   switch (t.estado) {
     case "invita":
@@ -393,7 +411,8 @@ function fallaGeneral(e: unknown): FallaAlMandar {
   // La cuenta todavía no tiene su billetera: no es un error de quien escribe y no se dice nada. Se vuelve a leer.
   if (codigo === "SDK_COSIGN_REQUEST_NOT_FOUND" && /no turnkey wallet/i.test(detalle)) return "naciendo";
   if (codigo === "SDK_COSIGN_NOT_CONFIGURED" || codigo === "SDK_CREDITS_INSUFFICIENT" || estadoDe(e) === 402) return "sin-servicio";
-  if (estadoDe(e) === 429 || /RATE_LIMITED|too many requests/i.test(`${codigo} ${detalle}`)) return "muchos";
+  // Un límite es de la conexión que comparten todos, no de lo que pidió esta persona.
+  if (estadoDe(e) === 429 || /RATE_LIMITED|too many requests/i.test(`${codigo} ${detalle}`)) return "limite";
   if (esDeRed(e)) return "red";
   return "falla";
 }
@@ -410,7 +429,7 @@ export function clasificarFallaAlConfirmar(e: unknown, enLinea = true): FallaAlC
   if (e !== SIN_RESPUESTA && codigoDe(e) === "SDK_COSIGN_REQUEST_NOT_FOUND" && /no code was sent/i.test(detalleDe(e))) return "sin-codigo";
   const general = fallaGeneral(e);
   // Un rechazo por límite no es un código malo, aunque diga algo de un código.
-  if (general === "naciendo" || general === "sin-servicio" || general === "sin-sesion" || general === "muchos" || general === "tarda") return general;
+  if (general === "naciendo" || general === "sin-servicio" || general === "sin-sesion" || general === "limite" || general === "tarda") return general;
   return codigoMalo(e) ? "codigo-malo" : general;
 }
 

@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TOPE_DE_RECIBIR_MS } from "./celular";
 import { AHORA, CUENTA, OTRA_CUENTA, SESION, asentar, lectura, lecturasDe, pasar as pasarElReloj, prepararCelular, propio } from "./celular-falso";
 import { guardarMemoria, leerMemoria } from "./memoria";
 import { TEXTOS_CAMPANA } from "./textos";
@@ -134,6 +135,36 @@ describe("Recibir mi premio de quien recargó ya anotada", () => {
     contestar("si");
     await pasar(10);
     expect(recibirDeLaPagina).toHaveBeenCalledTimes(1);
+  });
+
+  it("Recibir queda ocupado desde el toque mientras compara, y no se tocan dos veces", async () => {
+    let contestar: (v: "no-se-sabe") => void = () => undefined;
+    const laSesionEs = vi.fn(() => new Promise<"no-se-sabe">((resolver) => { contestar = resolver; }));
+    const { mundo, recibirDeLaPagina } = await ganadora(laSesionEs);
+    const boton = recibir(mundo.raiz);
+    boton.click();
+    await pasar(10);
+    expect(boton.getAttribute("aria-busy")).toBe("true");
+    expect(boton.disabled).toBe(true);
+    expect(recibirDeLaPagina).not.toHaveBeenCalled();
+    contestar("no-se-sabe");
+    await pasar(10);
+    expect(recibirDeLaPagina).toHaveBeenCalledTimes(1);
+    expect(boton.hasAttribute("aria-busy")).toBe(false);
+  });
+
+  it("si la comparación no contesta nunca, Recibir no queda muerto: sigue a recibir pasado su tope", async () => {
+    const laSesionEs = vi.fn(() => new Promise<"si">(() => undefined));
+    const { mundo, recibirDeLaPagina } = await ganadora(laSesionEs);
+    recibir(mundo.raiz).click();
+    await pasar(TOPE_DE_RECIBIR_MS - 100);
+    expect(recibirDeLaPagina).not.toHaveBeenCalled();
+    await pasar(200);
+    expect(recibirDeLaPagina).toHaveBeenCalledTimes(1);
+    // La bandera se soltó: otro toque vuelve a funcionar.
+    recibir(mundo.raiz).click();
+    await pasar(TOPE_DE_RECIBIR_MS + 100);
+    expect(recibirDeLaPagina).toHaveBeenCalledTimes(2);
   });
 
   it("quien llegó con la sesión de la página no compara nada: ya es de su cuenta", async () => {
