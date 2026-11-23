@@ -6,7 +6,7 @@ Qué hace Tinkazo con lo que se reparte, cómo se le avisa a cada participante y
 
 - **Decide a quién le toca.** Un libro, una entrada, un turno para exponer, un cupo en un viaje, una beca. Quien organiza escribe qué se sortea antes de sellar, y eso queda en el sello, a la vista.
 - **No lo entrega.** Lo entrega quien organiza, como siempre. Si es dinero (una beca, un viático), lo paga desde su cuenta, por fuera de Tinkazo.
-- **No toca dinero.** Ni el contrato ni un servidor nuestro guardan fondos, y Tinkazo no se queda con nada de lo que se reparte: ni un porcentaje ni un monto fijo.
+- **No toca dinero.** Ni el contrato ni un servidor nuestro guardan fondos, y de lo que se reparte Tinkazo no se queda con nada: el premio va entero de quien organiza a quien ganó. Lo único que cobra es el costo del servicio de una campaña de empresa, y así se paga hoy: la empresa manda un pago directo desde su cuenta, antes de abrir la inscripción, y se suma a lo que carga, así que nunca sale del premio ni de quien participa (ver abajo, El costo del servicio de una campaña).
 - **Participar es gratis, siempre.** Nadie pone plata para entrar, así que nadie gana la plata de otro.
 
 ## Por qué hoy no hay premios en dinero
@@ -26,6 +26,17 @@ El USDC no está descartado. Si más adelante varias comunidades lo piden, lo qu
 - **Sin custodia.** El dinero va de la cuenta de quien organiza a la de quien ganó. Ni el contrato ni un servidor nuestro lo guardan o lo mueven, y Tinkazo no se queda con ninguna parte.
 - **Entrar sigue siendo gratis.** Nadie pone plata para participar.
 - **Sin fecha.** Antes de hacerlo hay que volver sobre las tres razones de arriba y revisar el marco legal ([legal.md](legal.md)) con un abogado.
+
+## El costo del servicio de una campaña, y el pago directo (cómo se paga hoy)
+
+En una campaña de empresa con premios, lo que Tinkazo cobra es un porcentaje del total de los premios, con un mínimo, y se lo cobra a la empresa, nunca a quien participa. Los números no se escriben a mano en ninguna pantalla: salen de la configuración del build (`VITE_COMISION_PB`, `VITE_COMISION_MINIMO` y la cuenta de cobros en `VITE_COMISION_CUENTA`), la misma para el panel de la empresa, la portada y la sala.
+
+- **El pago directo:** la empresa paga desde su propia cuenta (la de Google usando el panel de la empresa, o cualquier otra billetera) un pago clásico a la cuenta de cobros de Tinkazo, con la nota numérica del evento (`notaDeLaComision`). La billetera de la empresa firma el pago, y Tinkazo no lo firma ni lo guarda: por eso no toca el dinero. El pago va aparte del premio: lo que la empresa carga es el total (premios más servicio), y quien ganó recibe el premio entero.
+- **La activación al pagar:** la sala del evento comprueba el pago en la red (que recibió la cuenta de cobros, con la nota del evento, desde la cuenta de quien organiza) y recién entonces firma sola el archivo de la campaña y la inscripción abre. Sin pago, no hay campaña activa. La mecánica está en [workers/sala, Activar una campaña al pagar](../workers/sala/README.md).
+- **La lista de la campaña:** de cada persona anotada se guarda una huella (calculada con una clave propia de la sala, nunca su identificador), su cuenta y su nombre cifrado, que ningún servidor nuestro puede leer. Quien organiza la revisa y puede quitar a alguien con su motivo, y el estado público cuenta las salidas por motivo, sin decir quiénes. Para el sorteo se sella la lista de cuentas, ordenadas: esa lista queda pública en la red, sin nombres.
+- **Pendiente (issue #163):** quién sella esa lista, y cómo se asegura de que se selle solo la que se vio en la pantalla, lo decide el issue #163, que sigue abierto. Hasta que se resuelva, queda marcado como pendiente en las páginas.
+
+Participar sigue siendo gratis en todos los casos: el costo del servicio lo paga la empresa, y el premio llega entero a quien ganó.
 
 ## El pago del premio y el panel de ganadores, detrás de una bandera (6 de noviembre de 2026)
 
@@ -71,3 +82,4 @@ Lo que más vale del aviso: **a cada participante, su prueba.** "Estuviste en la
 | 2 | Las bases del sorteo, generadas, y los términos de uso y privacidad (ver [legal.md](legal.md)) | No | Hecho |
 | 3 | Textos listos para el envío de Luma: el resultado para todos, con la prueba de cada uno, y el aviso a quien le tocó | No | Va en el kit para organizadores |
 | 4 | Si hace falta: envío de correos desde Tinkazo | Uno chico | Sin fecha |
+| 5 | El costo del servicio de la campaña, cobrado con pago directo, y la activación al pagar | La sala de Cloudflare | Hecho |
