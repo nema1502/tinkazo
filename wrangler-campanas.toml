@@ -1,0 +1,31 @@
+# El servicio de campañas: empresas, eventos por ciudad y bases con su huella (issue #182).
+# Se despliega desde la raíz del repo con: npx wrangler@4 deploy -c wrangler-campanas.toml
+# (solo cuando quien mantiene el proyecto lo pida). Sin ruta todavía: el dominio se agrega al desplegar,
+# igual que crearon el de la sala y el del portero.
+name = "tinkazo-campanas"
+account_id = "d97c3f7acada21d5ec280704fb34ff17"
+main = "workers/campanas/src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = false
+
+[observability]
+enabled = true
+
+# Un solo objeto por red: el depósito de las campañas, sus bases y sus huellas vive todo en el mismo SQLite.
+[[durable_objects.bindings]]
+name = "CAMPANAS"
+class_name = "Campanas"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Campanas"]
+
+# Sin variables: todo lo que manda la operación son secretos de Wrangler, nunca este archivo (S6).
+#   wrangler secret put ADMIN_TOKEN            la clave que crea empresas en POST /v1/empresas
+#   wrangler secret put SECRETO_<ID>           el secreto de cada empresa, con el identificador opaco que
+#                                              devolvió el alta de la empresa, en mayúsculas (sin nombres).
+#   wrangler secret put COMISIONES_SECRETO     el secreto del enlace de servicio hacia comisiones (opcional)
+# Y en vars, si se quieren prender (nada de secretos):
+#   COMISIONES_URL  el enlace completo del servicio de comisiones que recibe el aviso del alta (S5);
+#                   sin él el servicio no avisa a nadie.
+#   ENLACE_BASE     la base de los enlaces de invitación (por omisión, https://tinkazo.app).
