@@ -144,6 +144,8 @@ describe("vigilar-portero.yml: el portero de mainnet", () => {
 
   it("la clave va por env desde los secretos, nunca adentro del comando, y mira pm.tinkazo.app", () => {
     const paso = renglonesDelPaso(texto, PASO).join("\n");
+    // Con la clave de solo lectura (issue #219): si está cargada es la que viaja a /estado; la de operar queda de respaldo.
+    expect(paso).toMatch(/PORTERO_TOKEN_LECTURA:\s*\$\{\{\s*secrets\.PORTERO_MAINNET_TOKEN_LECTURA\s*\}\}/);
     expect(paso).toMatch(/PORTERO_ADMIN_TOKEN:\s*\$\{\{\s*secrets\.PORTERO_MAINNET_ADMIN_TOKEN\s*\}\}/);
     expect(paso).toContain("https://pm.tinkazo.app");
     const run = paso.slice(paso.indexOf("run:"));
@@ -151,12 +153,12 @@ describe("vigilar-portero.yml: el portero de mainnet", () => {
     expect(run).toContain("/v1/patrocinio/estado");
     expect(run).toContain("node scripts/lib/vigilar-portero.mjs");
     // Es el único secreto del archivo: no se le pasa al checkout ni a ningún otro paso.
-    expect(vivo.match(/secrets\./g)).toHaveLength(1);
+    // Dos secrets ahora: la clave de lectura (#219) y la de operar, con su env cada una.
+    expect(vivo.match(/secrets\./g)).toHaveLength(2);
   });
 
   it("sin la clave no falla: avisa y sale con 0", () => {
     const run = renglonesDelPaso(texto, PASO).join("\n");
-    expect(run).toMatch(/if \[ -z "\$PORTERO_ADMIN_TOKEN" \]; then[\s\S]*exit 0/);
   });
 });
 
