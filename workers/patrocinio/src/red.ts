@@ -2,8 +2,8 @@
  * Lo que el portero le pregunta a la red (el RPC de Soroban) y cómo lo entiende.
  *
  * Una interfaz chica (`Red`) para que `servicio.ts` se pruebe sin red, y una
- * implementación (`RpcRed`) que habla JSON-RPC con la lista de RPC en orden: si uno
- * se corta, tarda o contesta 5xx, sigue con el siguiente.
+ * implementación (`RpcRed`) que habla JSON-RPC con la lista de RPC en orden: si uno se corta, tarda, contesta 5xx o
+ * un error del propio RPC (en una lectura), sigue con el siguiente.
  */
 import { StrKey, xdr } from "@stellar/stellar-sdk/base";
 
@@ -96,8 +96,12 @@ export class RpcRed implements Red {
     private readonly pedir: typeof fetch = (...a) => fetch(...a),
   ) {}
 
-  /** Con `senal` cortada, no se pregunta al RPC siguiente: se avisa con `rpc-cortado`, un error de red. */
-  private async llamar<T>(metodo: string, params: unknown, senal?: AbortSignal): Promise<T> {
+  /**
+   * Con `senal` cortada, no se pregunta al RPC siguiente: se avisa con `rpc-cortado`, un error de red. Con
+   * `repetirEnError` en falso (el envío), un error del propio RPC corta enseguida: un sobre rechazado no se le
+   * manda a otro nodo.
+   */
+  private async llamar<T>(metodo: string, params: unknown, senal?: AbortSignal, repetirEnError = true): Promise<T> {
     let ultimo: unknown = new ErrorDeRed("sin-rpc");
     for (const url of this.urls) {
       if (senal?.aborted) throw new ErrorDeRed("rpc-cortado");
@@ -120,8 +124,14 @@ export class RpcRed implements Red {
         ultimo = new ErrorDeRed("rpc-respuesta", { cause: e });
         continue;
       }
-      // Un error del propio RPC (no un corte): para el portero es lo mismo, la red no contestó con sentido. Código fijo, no el texto crudo.
-      if (j.error) throw new ErrorDeRed("rpc-error");
+      // Un error del propio RPC (no un corte): en lectura se prueba el RPC siguiente, como ante un corte, porque
+      // un nodo puede fallar solo. Si todos fallan, el aviso sigue siendo `rpc-error`, distinto de una falla de red.
+      // Código fijo, no el texto crudo del error.
+      if (j.error) {
+        if (!repetirEnError) throw new ErrorDeRed("rpc-error");
+        ultimo = new ErrorDeRed("rpc-error");
+        continue;
+      }
       if (j.result === undefined) {
         ultimo = new ErrorDeRed("rpc-vacio");
         continue;
@@ -172,7 +182,8 @@ export class RpcRed implements Red {
   }
 
   async enviar(xdrTx: string): Promise<Envio> {
-    const r = await this.llamar<{ status: string; errorResultXdr?: string }>("sendTransaction", { transaction: xdrTx });
+    // Un error del propio RPC en el envío corta enseguida (repetirEnError en falso): el rechazo de un envío no se repite en otro nodo.
+    const r = await this.llamar<{ status: string; errorResultXdr?: string }>("sendTransaction", { transaction: xdrTx }, undefined, false);
     const status = r.status === "PENDING" || r.status === "DUPLICATE" || r.status === "TRY_AGAIN_LATER" ? r.status : "ERROR";
     const codigo = status === "ERROR" ? codigoDelRechazo(r.errorResultXdr) : undefined;
     return { status, ...(codigo ? { codigo } : {}) };
