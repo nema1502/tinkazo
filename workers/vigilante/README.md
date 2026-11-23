@@ -78,6 +78,7 @@ Lo demás es `404`, y un método que no corresponde, `405`. Ninguna ruta manda c
 
 | Nombre | Tipo | De dónde sale |
 | --- | --- | --- |
+| `PORTERO_TOKEN_LECTURA` | secreto | La clave de solo lectura del portero (issue #219): abre apenas `/estado`. Si está cargada es la que viaja a ese pedido; si no, el vigilante usa `PORTERO_ADMIN_TOKEN` como siempre. Se carga en el vigilante con `npx wrangler@4.160.0 secret put PORTERO_TOKEN_LECTURA` (el mismo valor que su `TOKEN_LECTURA` en el portero). |
 | `PORTERO_ADMIN_TOKEN` | secreto | La clave de operar del portero de mainnet: el mismo valor que su `ADMIN_TOKEN`, el que el flujo de GitHub guarda como `PORTERO_MAINNET_ADMIN_TOKEN` |
 | `AVISAR_A` | secreto | La dirección (o varias, separadas por comas) a la que llega el aviso. Tiene que estar verificada en la cuenta de Cloudflare |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | secretos, opcionales | Un bot de Telegram propio y el chat al que escribe. Sin los dos, Telegram está apagado |

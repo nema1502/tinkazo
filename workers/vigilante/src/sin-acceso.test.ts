@@ -63,11 +63,13 @@ describe("sin la clave cargada en el vigilante", () => {
     await m.vuelta();
     const conClave = m.env.PORTERO_ADMIN_TOKEN;
     m.env.PORTERO_ADMIN_TOKEN = undefined;
+    m.env.PORTERO_TOKEN_LECTURA = undefined;
     await m.vueltaEn(10);
     expect(m.correo.avisos).toHaveLength(2);
     expect(arreglos(m.asuntos())).toEqual([]);
     expect((await m.memoria()).claves).toContain("creditos-bajos");
     m.env.PORTERO_ADMIN_TOKEN = conClave;
+    m.env.PORTERO_TOKEN_LECTURA = undefined;  // la de lectura sigue sin cargar: el arreglo que se prueba es el de la clave de operar
     await m.vueltaEn(10);
     expect(m.asuntos().filter((a) => /^Créditos de Pollar bajos/.test(a))).toHaveLength(1);
   });

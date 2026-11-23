@@ -31,7 +31,7 @@ id = "fc4a53dd04fa4ba6899d487352437025"
 [[send_email]]
 name = "CORREO"
 
-# Valores que no son secretos. Los secretos (PORTERO_ADMIN_TOKEN, AVISAR_A y, si se prende Telegram, TELEGRAM_BOT_TOKEN y
+# Valores que no son secretos. Los secretos (PORTERO_TOKEN_LECTURA, PORTERO_ADMIN_TOKEN, AVISAR_A y, si se prende Telegram, TELEGRAM_BOT_TOKEN y
 # TELEGRAM_CHAT_ID) van por `wrangler secret put` y, en local, en .dev.vars (que no se versiona).
 [vars]
 # El portero que se mira: el de mainnet.

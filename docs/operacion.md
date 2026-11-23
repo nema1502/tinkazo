@@ -592,6 +592,7 @@ Hace falta la palabra de quien mantiene el proyecto. Desplegar el vigilante no t
 
    | Secreto | De dónde sale |
    |---|---|
+   | `PORTERO_TOKEN_LECTURA` | Opcional. La clave de solo lectura del portero (issue #219): abre apenas `GET /v1/patrocinio/estado`. El vigilante y el flujo de GitHub la usan si está cargada; sin ella usan la de operar como siempre. Se carga con `npx wrangler@4.160.0 secret put PORTERO_TOKEN_LECTURA`, y en el Environment `vigilancia` como `PORTERO_MAINNET_TOKEN_LECTURA`. 
    | `PORTERO_ADMIN_TOKEN` | La clave de operar del portero de mainnet: el mismo valor que su `ADMIN_TOKEN` (el que el flujo de GitHub guarda como `PORTERO_MAINNET_ADMIN_TOKEN`). `npx wrangler@4.160.0 secret put PORTERO_ADMIN_TOKEN` |
    | `AVISAR_A` | La dirección verificada del paso 1. Si son varias, separadas por comas. `npx wrangler@4.160.0 secret put AVISAR_A` |
    | `TELEGRAM_BOT_TOKEN` | Opcional. El bot que se crea hablando con BotFather en Telegram. `npx wrangler@4.160.0 secret put TELEGRAM_BOT_TOKEN` |

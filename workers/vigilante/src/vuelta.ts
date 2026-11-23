@@ -54,6 +54,8 @@ export interface Entorno {
   RESUMEN_CADA_HORAS?: string;
   /** Secretos (`wrangler secret put`). */
   PORTERO_ADMIN_TOKEN?: string;
+  /** La clave de solo lectura del portero (issue #219): abre apenas /estado. Si está cargada, es la que viaja a ese pedido. */
+  PORTERO_TOKEN_LECTURA?: string;
   AVISAR_A?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
@@ -195,7 +197,8 @@ export type Lectura = { ok: true; estado: unknown } | { ok: false; motivo: "sin-
  * puede terminar en otro lugar.
  */
 export async function leerPortero(env: Entorno, dep: Dependencias): Promise<Lectura> {
-  const clave = secreto(env.PORTERO_ADMIN_TOKEN);
+  // El estado solo se mira: con la clave de lectura del portero (#219) es la que viaja; sin ella cargada, la clave de operar de siempre. `secreto` nunca da null: la preferencia se decide por el campo cargado y no por el trim.
+  const clave = env.PORTERO_TOKEN_LECTURA && secreto(env.PORTERO_TOKEN_LECTURA) ? secreto(env.PORTERO_TOKEN_LECTURA) : secreto(env.PORTERO_ADMIN_TOKEN);
   if (!clave) return { ok: false, motivo: "sin-clave" };
   let res: Response;
   try {
