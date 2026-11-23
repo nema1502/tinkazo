@@ -419,6 +419,13 @@ describe("el amigo secreto (el juego del sobre del premio)", () => {
     expect(String(T.es.jgAmigoB), "es.jgAmigoB").not.toMatch(/faro/i);
     expect(String(T.en.jgAmigoB), "en.jgAmigoB").not.toMatch(/beacon/i);
   });
+
+  it("la regla que lee la sala dice el juego, no la mesa del generador viejo", () => {
+    // La prueba que el merge del 16 de noviembre se llevó puesta (1167dc1f), vuelta con las claves
+    // que quedan (issue #132, S4): el texto no habla de la mesa de a ocho ni de la mesa final.
+    expect(String(T.es.gcAmigo)).not.toMatch(/mesa de a ocho|mesa final/i);
+    expect(String(T.en.gcAmigo)).not.toMatch(/table eight at a time|final table/i);
+  });
 });
 
 describe("los juegos interactivos", () => {
