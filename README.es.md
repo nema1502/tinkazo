@@ -36,7 +36,7 @@ Tinkazo decide quién se lleva algo que ya se está regalando. Nadie paga por pa
 - **Participar es gratis, siempre.** No hay entrada paga ni nada que comprar. Los [términos](https://tinkazo.app/terminos.html) prohíben usar Tinkazo para sorteos que cobren por participar.
 - **Nadie pone plata.** El premio lo pone quien organiza o un patrocinador, nunca los participantes, así que nadie gana con la plata de otros participantes.
 - **El contrato no guarda fondos.** Guarda la huella de la lista y el resultado, nada más.
-- **Tinkazo nunca toca lo que se reparte.** Lo entrega quien organiza, como siempre, y Tinkazo no se queda con ninguna parte.
+- **Tinkazo nunca toca lo que se reparte.** Lo entrega quien organiza, como siempre, y Tinkazo no se queda con ninguna parte. En una campaña de empresa con premios en dólares digitales, la empresa le paga a Tinkazo el costo del servicio, un porcentaje del total de los premios con un mínimo, desde su propia cuenta y antes de abrir la inscripción: se suma a lo que carga y nunca sale de ellos. Participar sigue gratis, y quien ganó recibe el premio entero ([docs/premios.md](docs/premios.md)).
 
 Entrar a un sorteo es gratis, siempre, sin nada que comprar. El marco legal, país por país, está en [docs/legal.md](docs/legal.md). Algunos identificadores del contrato todavía dicen *raffle* (`tinkazo-raffle`, `raffle_id`), de antes de que el nombre se asentara. Son parte de la interfaz del contrato desplegado, así que quedan como están.
 
@@ -196,7 +196,7 @@ En mainnet, según [docs/deployments.md](docs/deployments.md):
 | Un sorteo de 100 ganadores | 0,331 | Proyectado |
 | Un sorteo de 300 ganadores | 0,647 | Proyectado |
 
-Las proyecciones valen mientras el estado vivo de la red siga bajo los 2.000 MB (el 11 de noviembre de 2026 estaba en 1.608 MB). Por encima, la renta se multiplica, y docs/deployments.md tiene la tabla de cada nivel. En el modo Oficial, con el cupón de un evento la comisión la cubre Tinkazo, y quien entra con su propia billetera la paga de ahí; en el modo Prueba la cubre Tinkazo. **Participar y verificar son gratis siempre.**
+Las proyecciones valen mientras el estado vivo de la red siga bajo los 2.000 MB (el 11 de noviembre de 2026 estaba en 1.608 MB). Por encima, la renta se multiplica, y docs/deployments.md tiene la tabla de cada nivel. En el modo Oficial, con el cupón de un evento la comisión la cubre Tinkazo, y quien entra con su propia billetera la paga de ahí; en el modo Prueba la cubre Tinkazo. **Participar y verificar son gratis siempre.** Las campañas de empresa, además, le pagan a Tinkazo el costo del servicio desde la cuenta de la empresa, antes de abrir la inscripción ([docs/premios.md](docs/premios.md)).
 
 ## Calidad
 

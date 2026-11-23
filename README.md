@@ -36,7 +36,7 @@ Tinkazo selects who receives something that is already being given away. Nobody 
 - **Entering is free, always.** No entry fees and nothing to buy. The [terms](https://tinkazo.app/terminos.html) forbid using Tinkazo for draws that charge to take part.
 - **Nobody puts money in.** The prize comes from the organizer or a sponsor, never from the participants, so nobody's winnings come out of other participants' pockets.
 - **The contract holds no funds.** It stores a list fingerprint and a result, nothing else.
-- **Tinkazo never touches what is shared out.** The organizer hands it over, as always, and Tinkazo takes no cut of it.
+- **Tinkazo never touches what is shared out.** The organizer hands it over, as always, and Tinkazo takes no cut of it. For a company campaign with prizes in digital dollars, the company pays Tinkazo a service fee, a percentage of the prize total with a minimum, straight from its own account and before sign-up opens: it is added on top of the prizes and never comes out of them. Taking part stays free, and the winner receives the full prize ([docs/premios.md](docs/premios.md)).
 
 Joining a draw is free, always, with nothing to buy. The legal framework, country by country, is in [docs/legal.md](docs/legal.md). A few identifiers in the contract still say *raffle* (`tinkazo-raffle`, `raffle_id`), from before the name settled. They are part of the deployed contract's interface, so they stay.
 
@@ -196,7 +196,7 @@ On mainnet, from [docs/deployments.md](docs/deployments.md):
 | A draw with 100 winners | 0.331 | Projected |
 | A draw with 300 winners | 0.647 | Projected |
 
-The projections hold while the network's live state stays under 2,000 MB (it was at 1,608 MB on November 11, 2026). Above that, rent multiplies, and docs/deployments.md has the table for each level. In Live mode, with an event coupon Tinkazo covers the fee, and an organizer who signs in with their own wallet pays it from there; in Test mode Tinkazo covers it. **Taking part and verifying are always free.**
+The projections hold while the network's live state stays under 2,000 MB (it was at 1,608 MB on November 11, 2026). Above that, rent multiplies, and docs/deployments.md has the table for each level. In Live mode, with an event coupon Tinkazo covers the fee, and an organizer who signs in with their own wallet pays it from there; in Test mode Tinkazo covers it. **Taking part and verifying are always free.** Company campaigns also pay Tinkazo a service fee, from the company's own account, before sign-up opens ([design](docs/premios.md)).
 
 ## Quality
 
