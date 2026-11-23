@@ -9,6 +9,7 @@
  */
 import { servir } from "./publica";
 import { registrador } from "./registro";
+import { pasoProtocolo } from "./vuelta-protocolo";
 import { type Entorno, vuelta } from "./vuelta";
 
 const registrar = registrador();
@@ -29,6 +30,8 @@ export default {
   async scheduled(_controlador: { scheduledTime: number; cron: string }, env: Entorno, _ctx: { waitUntil(promesa: Promise<unknown>): void }): Promise<void> {
     try {
       await vuelta(env, dependencias());
+      // La red de Stellar (issue #220): protocolo y costos contra la línea base, al lado de la vuelta del portero.
+      await pasoProtocolo(env, dependencias());
     } catch (e) {
       // Una falla que la vuelta no esperaba: queda anotada y se deja subir para que Cloudflare la cuente como falla.
       registrar("error-interno", { donde: "vuelta", error: e instanceof Error ? e.name : "desconocido" });
