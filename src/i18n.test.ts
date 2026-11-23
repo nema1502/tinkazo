@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { T } from "./i18n";
 import { nameList } from "./i18n";
@@ -589,5 +590,58 @@ describe("Siguiente premio de a un lugar (issue #102)", () => {
     expect(T.es.sellarResumen(10, 3, "Termo", 10)).toContain("El número elige todos los lugares de una vez");
     expect(T.en.sellarResumen(10, 1, "Termo", 10)).not.toContain("picks every place");
     expect(T.en.sellarResumen(10, 3, "Termo", 10)).toContain("The number picks every place at once");
+  });
+});
+
+describe("el video de la portada", () => {
+  const carpeta = join(import.meta.dirname, "..", "public", "videos");
+
+  /** La duración real del mp4, leída de la caja mvhd del encabezado. */
+  const duracionDelVideo = (): number => {
+    const buf = readFileSync(join(carpeta, "llamita-explica.mp4"));
+    const marca = buf.indexOf("mvhd");
+    if (marca < 0) throw new Error("el mp4 no tiene caja mvhd");
+    // versión y banderas (4) + creación y modificación (4 u 8 cada una) + escala y duración
+    const version = buf[marca + 4];
+    const escala = version === 1 ? buf.readUInt32BE(marca + 24) : buf.readUInt32BE(marca + 16);
+    const duracion = version === 1 ? Number(buf.readBigUInt64BE(marca + 28)) : buf.readUInt32BE(marca + 20);
+    return duracion / escala;
+  };
+
+  // Separadores que la casa no usa en textos visibles (punto medio incluido,
+  // el defecto del video viejo de la portada).
+  const prohibido = /[·•—–―→←↑↓⇒⟶➜]/;
+
+  it("la leyenda dice la duración real del video, en los dos idiomas", () => {
+    const segundos = Math.round(duracionDelVideo());
+    for (const [l, patron] of [
+      ["es", /(\d+) segundos?/],
+      ["en", /(\d+) seconds?/],
+    ] as const) {
+      const dicho = (T[l].confVideo as string).match(patron)?.[1];
+      expect(dicho, `confVideo en ${l}`).toBe(String(segundos));
+    }
+  });
+
+  it("la leyenda no usa separadores raros", () => {
+    for (const l of ["es", "en"] as const) expect(T[l].confVideo as string).not.toMatch(prohibido);
+  });
+
+  it("las dos pistas de subtítulos existen y cubren el video entero", () => {
+    const segundos = duracionDelVideo();
+    for (const idioma of ["es", "en"] as const) {
+      const pista = readFileSync(join(carpeta, `llamita-explica.${idioma}.vtt`), "utf8");
+      expect(pista.trim().split("\n")[0]).toBe("WEBVTT");
+      expect(pista, `pista ${idioma}`).not.toMatch(prohibido);
+      const finales = [...pista.matchAll(/--> (\d+):(\d+):(\d+)\.(\d+)/g)].map(
+        (m) => Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(`0.${m[4]}`),
+      );
+      expect(finales.length, `frases de la pista ${idioma}`).toBeGreaterThan(5);
+      const ultima = finales[finales.length - 1] ?? Number.NaN;
+      expect(
+        Math.abs(ultima - segundos),
+        `la pista ${idioma} llega hasta el final del video`,
+      ).toBeLessThan(1.5);
+    }
   });
 });
