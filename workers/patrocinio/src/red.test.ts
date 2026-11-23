@@ -17,6 +17,24 @@ function rpc(resultado: unknown) {
   return { red: new RpcRed(["https://rpc.prueba"], pedir), pedidos };
 }
 
+/**
+ * Varios RPC de mentira, uno por nodo, en el orden de la lista: cada nodo contesta `resultado`, un error del propio
+ * RPC (`error`), `estado` como código HTTP, o corta el pedido (`corte`). Anota cada método que se le pidió a alguno.
+ */
+function rpcVarios(nodos: Array<{ resultado?: unknown; error?: unknown; estado?: number; corte?: boolean }>) {
+  const pedidos: string[] = [];
+  let i = 0;
+  const pedir = (async (_url: string, init?: RequestInit) => {
+    const n = nodos[i++] ?? { error: { message: "sin guion" } };
+    pedidos.push(String(JSON.parse(String(init?.body)).method));
+    if (n.corte) throw new Error("corte de prueba");
+    if (n.estado) return new Response("no", { status: n.estado });
+    if (n.error !== undefined) return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, error: n.error }), { status: 200 });
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: n.resultado ?? null }), { status: 200 });
+  }) as unknown as typeof fetch;
+  return { red: new RpcRed(nodos.map((_, n) => `https://rpc${n}.prueba`), pedir), pedidos };
+}
+
 describe("la simulación completa", () => {
   it("devuelve los recursos para armar la transacción y el valor que devuelve el contrato", async () => {
     const retorno = nativeToScVal(7n, { type: "u64" }).toXDR("base64");
@@ -40,6 +58,32 @@ describe("la simulación completa", () => {
     const s = await red.simular("xdr");
     expect(s).toMatchObject({ ok: false, motivo: "fallaria" });
     expect(s).not.toHaveProperty("codigoContrato");
+  });
+});
+
+describe("el error JSON-RPC de un nodo", () => {
+  it("ante un error del nodo pregunta al siguiente y da su resultado", async () => {
+    const { red, pedidos } = rpcVarios([{ error: { code: -32000, message: "algo" } }, { resultado: { minResourceFee: "100" } }]);
+    expect(await red.simular("xdr")).toEqual({ ok: true, minResourceFee: 100 });
+    expect(pedidos).toEqual(["simulateTransaction", "simulateTransaction"]);
+  });
+
+  it("si todos contestan error JSON-RPC, el aviso sigue siendo rpc-error, no una falla de red", async () => {
+    const { red, pedidos } = rpcVarios([{ error: { message: "uno" } }, { error: { message: "dos" } }]);
+    await expect(red.simular("xdr")).rejects.toMatchObject({ name: "ErrorDeRed", message: "rpc-error" });
+    expect(pedidos.length).toBe(2);
+  });
+
+  it("mezcla con cortes: un corte, después un error JSON-RPC y el último bien", async () => {
+    const { red, pedidos } = rpcVarios([{ corte: true }, { error: { message: "x" } }, { resultado: { minResourceFee: "7" } }]);
+    expect(await red.simular("xdr")).toEqual({ ok: true, minResourceFee: 7 });
+    expect(pedidos.length).toBe(3);
+  });
+
+  it("un envío con error JSON-RPC no se le pregunta al segundo nodo", async () => {
+    const { red, pedidos } = rpcVarios([{ error: { message: "no" } }, { resultado: { status: "PENDING" } }]);
+    await expect(red.enviar("xdr")).rejects.toMatchObject({ name: "ErrorDeRed", message: "rpc-error" });
+    expect(pedidos.length).toBe(1);
   });
 });
 
