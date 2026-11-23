@@ -142,7 +142,7 @@ export function planAmigo(ctx: Contexto): Plan<Datos> {
   }
   for (const [persona, veces] of lineasPorPersona) {
     if (veces > 1) {
-      throw new Error(`amigo secreto: «${persona}» está ${veces} veces en la lista; cada persona va una sola vez`);
+      throw new Error(`amigo secreto: ${persona} está ${veces} veces en la lista. Cada persona va una sola vez`);
     }
   }
   // La ronda de regalos sale del protocolo (`reparto` en src/modos/amigo.ts): el amigo secreto es un
