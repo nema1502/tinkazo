@@ -8,8 +8,9 @@ import { T } from "../i18n";
  * La i del selector de modos (20 de noviembre de 2026). Debajo de Sortear premios, Orden de turnos y Amigo secreto se
  * leían uno o dos párrafos de ayuda, y en el celular eran demasiado texto. Ahora lo que hace el modo elegido va plegado
  * detrás de una i pegada al marco: cerrada de entrada, se abre y se cierra con un toque, y abierta muestra la del modo
- * que esté elegido. Lo que frena algo no se pliega: la lista que no entra en el tope, que con 2 o 3 personas no hay
- * secreto y la persona repetida de un Amigo secreto se ven cuando pasan.
+ * que esté elegido. Desde el issue #95 la nota del tope de la red se ve ya al elegir el modo (con la i cerrada, al
+ * elegir Orden de turnos o Amigo secreto hay un párrafo a la vista), y lo que frena algo no se pliega: la lista que
+ * no entra, que con 2 o 3 personas no hay secreto y la persona repetida de un Amigo secreto se ven cuando pasan.
  */
 
 const h = vi.hoisted(() => ({ tope: 300 }));
@@ -176,22 +177,22 @@ describe("abrir y cerrar", () => {
   });
 });
 
-describe("sin párrafos a la vista con la i cerrada", () => {
-  it("en Sortear premios", async () => {
+describe("con la i cerrada solo se ve la nota del modo", () => {
+  it("en Sortear premios no se ve nada", async () => {
     await montar(nombres(10));
     expect(parrafosALaVista()).toEqual([]);
   });
 
-  it("en Orden de turnos", async () => {
+  it("en Orden de turnos, el tope de la red (issue #95: se ve ya al elegir)", async () => {
     await montar(nombres(10));
     boton("btn-turnos").click();
-    expect(parrafosALaVista()).toEqual([]);
+    expect(parrafosALaVista()).toEqual([String(T.es.turnsCap).replace("{n}", String(h.tope))]);
   });
 
-  it("en Amigo secreto, ni la ayuda ni lo que el modo no protege", async () => {
+  it("en Amigo secreto, su tope, y ni la ayuda ni lo que el modo no protege", async () => {
     await montar(nombres(10));
     boton("btn-amigo").click();
-    expect(parrafosALaVista()).toEqual([]);
+    expect(parrafosALaVista()).toEqual([String(T.es.amigoCap).replace("{n}", String(h.tope))]);
     expect(panel().contains($("amigo-privacidad"))).toBe(true);
   });
 });
@@ -203,20 +204,20 @@ describe("abierta, muestra el modo elegido", () => {
     expect(parrafosALaVista()).toEqual([T.es.modoSorteoAyuda]);
   });
 
-  it("al pasar a Orden de turnos sigue abierta y dice la del orden", async () => {
+  it("al pasar a Orden de turnos sigue abierta y dice la del orden, con el tope debajo", async () => {
     await montar(nombres(10));
     laI().click();
     boton("btn-turnos").click();
     expect(panel().hidden).toBe(false);
-    expect(parrafosALaVista()).toEqual([T.es.turnsHelp]);
+    expect(parrafosALaVista()).toEqual([T.es.turnsHelp, String(T.es.turnsCap).replace("{n}", String(h.tope))]);
   });
 
-  it("al pasar a Amigo secreto dice la ayuda y que el reparto se puede calcular", async () => {
+  it("al pasar a Amigo secreto dice la ayuda, que el reparto se puede calcular y su tope", async () => {
     await montar(nombres(10));
     laI().click();
     boton("btn-amigo").click();
     expect(panel().hidden).toBe(false);
-    expect(parrafosALaVista()).toEqual([T.es.amigoHelp, T.es.amigoPrivacidad]);
+    expect(parrafosALaVista()).toEqual([T.es.amigoHelp, T.es.amigoPrivacidad, String(T.es.amigoCap).replace("{n}", String(h.tope))]);
   });
 
   it("al volver a Sortear premios ya no dice lo del Amigo secreto", async () => {

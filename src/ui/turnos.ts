@@ -27,6 +27,9 @@ import { actualizarLugares, bloquearLugares, ponerPremio, premiosDeLosCampos, re
  * - Si la lista pasa de lo que admite el contrato de esta red, no se puede sellar: un orden incompleto nunca se presenta
  *   como un orden, ni un Amigo secreto a medias como un Amigo secreto. No es un aviso, es que el botón de sellar queda
  *   apagado (`ordenNoCabe`).
+ * - El tope de la red se ve ya al elegir el modo (issue #95): la nota del selector lo dice con la cifra de esta red
+ *   aunque la lista todavía entre, y cuando la lista lo pasa pasa a decir por qué no se puede sellar. La cifra se lee
+ *   en cada pintado; un cambio de red recompone la página, así que no hay estado de la red que actualizar aparte.
  * - El título del paso dice lo que va a pasar. Lo que hace el modo elegido va plegado detrás de la i de debajo del
  *   selector (`#btn-modo-info`, desde el 20 de noviembre de 2026: dos párrafos a la vista eran demasiado texto en el
  *   celular). En el Amigo secreto el pliegue trae una línea más (`#amigo-privacidad`), lo que el modo no protege: quien
@@ -256,22 +259,23 @@ function animarElCambio(): void {
 }
 
 /**
- * La nota del selector, a la vista y nunca plegada, sale solo cuando pasa algo que hay que saber antes de sellar: que
- * la lista no entra en lo que admite esta red (el orden y el Amigo secreto llegan hasta N: cuenta las líneas, no las
- * personas) o, en un Amigo secreto, que con 2 o 3 personas no hay secreto. Lo que el modo no protege con 4 o más va
- * en el pliegue de la i, junto a la ayuda.
+ * La nota del selector, a la vista y nunca plegada, sale ya al elegir el modo y dice, en orden de urgencia: por qué la
+ * lista no se puede sellar (el orden y el Amigo secreto llegan hasta N, cuenta las líneas, no las personas), que en un
+ * Amigo secreto con 2 o 3 personas no hay secreto, o — issue #95 — el tope de esta red aunque la lista entre. Lo que el
+ * modo no protege con 4 o más va en el pliegue de la i, junto a la ayuda.
  */
 function pintarAviso(): void {
   const nota = $id("turnos-nota");
   if (nota) {
     const excede = ordenNoCabe();
     const sinSecreto = encendido && amigo && noHaySecreto(personas);
+    const alElegir = encendido && !excede && !sinSecreto ? t(amigo ? "amigoCap" : "turnsCap").replace("{n}", String(topeDeGanadores())) : "";
     nota.textContent = excede
       ? t("turnsLimit").replace("{n}", String(topeDeGanadores()))
       : sinSecreto
         ? t("amigoPrivacidadPoca")
-        : "";
-    nota.hidden = !excede && !sinSecreto;
+        : alElegir;
+    nota.hidden = !excede && !sinSecreto && !alElegir;
   }
   // La línea de privacidad (S3), en el pliegue: con el Amigo secreto elegido, lo que se decidió.
   const linea = armarLineaDePrivacidad();

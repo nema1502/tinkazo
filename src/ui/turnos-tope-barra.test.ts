@@ -5,9 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { T } from "../i18n";
 
 /**
- * Un orden de turnos más largo de lo que admite la red (32 en la red de prueba) deja el botón de sellar apagado. La barra
- * de «lo que sigue» y el resumen junto al botón tienen que decir por qué: antes la barra decía «Sellando la lista», que es
- * falso, y el motivo quedaba lejos, dentro del pliegue de las opciones.
+ * Un orden más largo de lo que admite la red deja el botón de sellar apagado. La barra de «lo que sigue» y el resumen
+ * junto al botón tienen que decir por qué: antes la barra decía «Sellando la lista», que es falso, y el motivo quedaba
+ * lejos, dentro del pliegue de las opciones.
+ *
+ * El tope de cada red (issue #95): 32 en Prueba y 300 en Oficial (`maxWinners` de `src/stellar/deployments.json`; el
+ * criterio `ordenNoCabe` es `encendido && n > topeDeGanadores()`, `src/ui/turnos.ts`). El número real de cada red lo
+ * fijan las pruebas de `config-tope.test.ts`; acá se usa ese mismo número con el mock de siempre.
  */
 
 const h = vi.hoisted(() => ({ tope: 300 }));
@@ -22,6 +26,7 @@ const resumen = (): string => $("sellar-resumen").textContent ?? "";
 
 interface Modulos {
   siguiente: typeof import("./siguiente");
+  turnos: typeof import("./turnos");
 }
 
 /** Arma la herramienta como `main.ts`: la lista, el modo de turnos prendido y la barra, con `n` personas en el cuadro. */
@@ -43,7 +48,7 @@ async function montar(n: number, tope: number): Promise<Modulos> {
   turnos.ponerModoTurnos(true);
   poner(n);
   siguiente.actualizarPaso();
-  return { siguiente };
+  return { siguiente, turnos };
 }
 
 /** Pone `n` personas en el cuadro, como si se pegaran. */
@@ -104,6 +109,22 @@ describe("la barra de lo que sigue con un orden que no entra", () => {
     const { siguiente } = await montar(1, 32);
     siguiente.actualizarPaso();
     expect(barra()).not.toContain("no se puede sellar");
+  });
+});
+
+describe("el tope de cada red al elegir un orden (issue #95)", () => {
+  it("con la red principal (tope 300) y 40 personas, ordenNoCabe da falso y se puede sellar", async () => {
+    const { turnos } = await montar(40, 300);
+    expect(turnos.ordenNoCabe()).toBe(false);
+    expect(($("btn-freeze") as HTMLButtonElement).disabled).toBe(false);
+    expect(barra()).toBe("Paso 2 de 4: lista de 40 personas");
+  });
+
+  it("con la red de pruebas (tope 32) y 33 personas, ordenNoCabe da verdadero y no se puede sellar", async () => {
+    const { turnos } = await montar(33, 32);
+    expect(turnos.ordenNoCabe()).toBe(true);
+    expect(($("btn-freeze") as HTMLButtonElement).disabled).toBe(true);
+    expect(barra()).toBe("Paso 2 de 4: no se puede sellar, el orden llega hasta 32 turnos");
   });
 });
 

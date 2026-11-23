@@ -400,19 +400,22 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
     expect(sellar().disabled).toBe(true);
   });
 
-  it("con 32 entra, con 33 no; al volver a una lista que entra, el aviso se va y se puede sellar", async () => {
+  it("con 32 entra, con 33 no; al volver a una lista que entra, la nota queda con el tope y se puede sellar", async () => {
     const { turnos } = await prender(32, 32);
     expect(turnos.ordenNoCabe()).toBe(false);
     expect(sellar().disabled).toBe(false);
-    expect(nota().hidden).toBe(true);
+    // Issue #95: ya al elegir el modo se ve el tope de la red, aunque la lista entre.
+    expect(nota().hidden).toBe(false);
+    expect(nota().textContent).toBe("El orden llega hasta 32 turnos.");
     poner(33);
     expect(turnos.ordenNoCabe()).toBe(true);
     expect(sellar().disabled).toBe(true);
     expect(nota().hidden).toBe(false);
     poner(20);
     expect(sellar().disabled).toBe(false);
-    expect(nota().hidden).toBe(true);
-    expect(nota().textContent).toBe("");
+    // La nota no se va: queda con el tope de la red, que sigue siendo útil.
+    expect(nota().hidden).toBe(false);
+    expect(nota().textContent).toBe("El orden llega hasta 32 turnos.");
   });
 
   it("apagar el modo con una lista que no entra deja sellar como siempre", async () => {
@@ -435,6 +438,63 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
     expect(turnos.ordenNoCabe()).toBe(false);
     expect(sellar().disabled).toBe(false);
     expect(campo().value).toBe("300");
+  });
+});
+
+describe("la nota del tope de la red ya al elegir el modo (issue #95)", () => {
+  const prender = async (n: number, tope = 300): Promise<Modulos> => {
+    history.replaceState(null, "", "/?modo=turnos");
+    const m = await montar(n, tope);
+    boton().click();
+    return m;
+  };
+
+  it("al elegir el orden, la nota dice el tope de la red aunque la lista entre", async () => {
+    await prender(12, 300);
+    expect(nota().hidden).toBe(false);
+    expect(nota().textContent).toBe("El orden llega hasta 300 turnos.");
+  });
+
+  it("al elegir el Amigo secreto dice el tope de participantes; de vuelta a Sortear premios, la nota se apaga", async () => {
+    const { turnos } = await prender(12, 300);
+    turnos.ponerModoAmigo(true);
+    expect(nota().hidden).toBe(false);
+    expect(nota().textContent).toBe("Hasta 300 personas pueden participar.");
+    turnos.ponerModoAmigo(false);
+    expect(nota().hidden).toBe(true);
+    expect(nota().textContent).toBe("");
+  });
+
+  it("el tope es el de la red de ahora, no uno fijo", async () => {
+    await prender(12, 32);
+    expect(nota().textContent).toBe("El orden llega hasta 32 turnos.");
+  });
+
+  it("en inglés también", async () => {
+    await prender(12, 300);
+    const { setLang } = await import("../i18n");
+    setLang("en");
+    expect(nota().textContent).toBe("The order goes up to 300 turns.");
+    setLang("es");
+  });
+
+  it("cuando la lista no entra, el aviso de siempre (por qué no se puede sellar) sigue ganando", async () => {
+    await prender(40, 32);
+    expect(nota().textContent).toBe(String(T.es.turnsLimit).replace("{n}", "32"));
+    expect(nota().textContent).not.toContain("320");
+  });
+
+  it("en el Amigo secreto con 2 o 3 personas, el aviso de que no hay secreto sigue ganando", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    await montar(3, 300);
+    amigoBtn()?.click();
+    expect(nota().textContent).toBe(String(T.es.amigoPrivacidadPoca));
+  });
+
+  it("sin el modo elegido la nota no dice nada, como siempre", async () => {
+    await montar(12, 300);
+    expect(nota().hidden).toBe(true);
+    expect(nota().textContent).toBe("");
   });
 });
 
@@ -662,8 +722,9 @@ describe("la línea de privacidad antes de sellar (S3)", () => {
       expect($("modo-info").contains(nota()), `${n} personas`).toBe(false);
     }
     await prenderAmigo(4);
-    expect(nota().hidden).toBe(true);
-    expect(nota().textContent).not.toMatch(/no hay secreto/i);
+    // Issue #95: con una lista que entra la nota toma lo del tope de la red, no el de que no hay secreto.
+    expect(nota().hidden).toBe(false);
+    expect(nota().textContent).toBe(String(T.es.amigoCap).replace("{n}", "300"));
   });
 
   it("no esconde nada: nombra a quien organiza y a la lista con el número, en los dos idiomas", async () => {
