@@ -13,7 +13,8 @@ import type { LecturaDeCotizacion, LoQueFalta, PasoDeVerificacion, PrecioDeCarga
 import { ingresoPlanB } from "./ingreso-bandera";
 import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 import type { SignedTx, WalletAdapter } from "./wallet";
-import { contarEntrada, contarVentanaDeGoogle, marcarEntrada, tomarEntrada } from "../contar";
+import { contarVentanaDeGoogle, marcarEntrada, tomarEntrada } from "../contar";
+import { contarEntradaConRed, contarPasoOficial } from "../ui/contadores";
 import { ceremoniaDelNavegador, hayPasskeys } from "./passkey";
 import { enNavegadorDeApp } from "../navegador";
 import { cargaOpcional } from "../carga-opcional";
@@ -1893,8 +1894,9 @@ class PollarWallet implements SubmittingWallet {
       if (!(await this.#marcaViva(client, listo)) && !this.#entrando) this.#olvidarMarca();
       return null;
     }
-    // Volvió de Google con la cuenta: para el contador es una cuenta conectada, no una sesión retomada.
-    if (tomarEntrada()) contarEntrada(this.#via === "email" ? "email" : "google");
+    // Volvió de Google con la cuenta: para el contador es una cuenta conectada, no una sesión retomada. La red va con
+    // la entrada (issue #83): Google en la red principal y en prueba se suman por separado.
+    if (tomarEntrada()) contarEntradaConRed(this.#via === "email" ? "email" : "google", network.name);
     return this.address;
   }
 
@@ -3334,6 +3336,7 @@ class PollarWallet implements SubmittingWallet {
     await client.refreshWalletState().catch(() => null);
     if (cuentaCreada(client.getWallet())) {
       memoria.activacion = true;
+      contarPasoOficial("activada", network.name);
       return "activada";
     }
     // 3. El tope de votos fallados de esta pestaña.
@@ -3410,6 +3413,7 @@ class PollarWallet implements SubmittingWallet {
       }
       memoria.activacion = true;
       avisarCambioDeLaCuenta();
+      contarPasoOficial("activada", network.name);
       return "activada";
     }
     if (votamos) sumarVotoFallado();
@@ -3462,6 +3466,8 @@ class PollarWallet implements SubmittingWallet {
     if (activacion === "lista") memoria.activacion = true;
     const prot = proteccion ?? { proteccion: "lista" as const, correoConfirmado: false, tieneLlaves: false, unicoNavegador: false, correoDeLaCuenta: null };
     if (prot.proteccion === "lista") memoria.proteccion = true;
+    // El paso de la cuenta (issue #83): la lectura de verdad dijo que la cuenta quedó lista por todo.
+    if (activacion === "lista" && prot.proteccion === "lista") contarPasoOficial("lista", network.name);
     return { activacion, ...prot };
   }
 
@@ -3718,6 +3724,7 @@ class PollarWallet implements SubmittingWallet {
   async protegerConPasskey(): Promise<boolean> {
     const client = await this.#ensureClient();
     const s = await client.cosign.recovery.addPasskey({ name: "Tinkazo" });
+    if (s.configured) contarPasoOficial("protegida", network.name);
     return s.configured;
   }
 
@@ -3731,6 +3738,7 @@ class PollarWallet implements SubmittingWallet {
   async confirmarCodigoDeProteccion(code: string): Promise<boolean> {
     const client = await this.#ensureClient();
     const s = await client.cosign.recovery.confirmEmail(code);
+    if (s.configured) contarPasoOficial("protegida", network.name);
     return s.configured;
   }
 }
