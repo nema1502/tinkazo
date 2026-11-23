@@ -197,14 +197,89 @@ describe("el panel y el paso de pasar la lista", () => {
     expect(principales(p)).toHaveLength(0);
   });
 
-  it("después de pasar dice cuántas personas hay y con qué botón seguir", async () => {
+  it("después de pasar dice cuántas personas hay y que al sellar el show empieza en pantalla completa", async () => {
     const m = mundo();
     m.deps.botonDeSellar = () => "Sellar la lista";
     espiar(m);
     const p = nuevoPanel(m);
     await cerrarConDos(m, p);
     ponerPaso({ paso: "en-el-sorteo", n: 2 });
-    expect(texto(p, "#cpo-linea")).toBe("2 personas en el sorteo. Seguí con Sellar la lista.");
+    expect(texto(p, "#cpo-linea")).toBe("2 personas en el sorteo. Al sellar, empieza el show en pantalla completa.");
+  });
+});
+
+describe("lo que pasa por detrás no queda mudo", () => {
+  it("leyendo, avisando, comprobando y guardando el resultado: la fila dice qué pasa y no se repite en la línea", async () => {
+    const m = mundo();
+    espiar(m);
+    const p = nuevoPanel(m);
+    await cerrarConDos(m, p);
+    const casos = [
+      [{ paso: "leyendo" }, "Leyendo la lista completa…"],
+      [{ paso: "avisando" }, "Avisando a los celulares…"],
+      [{ paso: "comprobando" }, "Comprobando si los celulares ya lo saben…"],
+      [{ paso: "mandando" }, "Guardando el resultado para los celulares"],
+    ] as const;
+    for (const [paso, dicho] of casos) {
+      ponerPaso(paso);
+      expect(texto(p, "#cpo-fila"), paso.paso).toBe(dicho);
+      expect(document.querySelector("#cpo-fila.fv-revisando .cc-gira"), paso.paso).not.toBeNull();
+      // La fila ocupa el lugar de la línea: el mismo texto no aparece dos veces.
+      expect(texto(p, "#cpo-linea"), paso.paso).toBe("");
+    }
+    // Con un paso que no es una espera, la fila se va.
+    ponerPaso({ paso: "en-el-sorteo", n: 2 });
+    expect(texto(p, "#cpo-fila")).toBe("");
+    expect(texto(p, "#cpo-linea")).toMatch(/^2 personas en el sorteo./);
+  });
+
+  it("al cerrar la lista, la fila dice Cerrando la lista y no quedan botones apagados", async () => {
+    const m = mundo();
+    espiar(m);
+    const p = nuevoPanel(m);
+    await abrirInscripcion(m, p);
+    await alta(m, 1, "Ana");
+    await alta(m, 2, "Nora");
+    await vi.waitFor(() => expect(document.querySelectorAll("#cpo-ul > li")).toHaveLength(2));
+    boton(p, "Cerrar la lista").click();
+    let soltar: () => void = () => undefined;
+    const fase = m.deps.fase;
+    m.deps.fase = async (s, f, c) => {
+      await new Promise<void>((r) => {
+        soltar = r;
+      });
+      return fase(s, f, c);
+    };
+    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe("Cerrando la lista"));
+    expect(p.raiz.querySelectorAll("#cpo-acciones button")).toHaveLength(0);
+    soltar();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+  });
+
+  it("mientras lee la lista completa antes de pasarla, la fila lo dice y no ofrece otro botón", async () => {
+    const m = mundo();
+    espiar(m);
+    const p = nuevoPanel(m);
+    await abrirInscripcion(m, p);
+    await alta(m, 1, "Ana");
+    await alta(m, 2, "Nora");
+    await vi.waitFor(() => expect(document.querySelectorAll("#cpo-ul > li")).toHaveLength(2));
+    boton(p, "Cerrar la lista").click();
+    let soltar: () => void = () => undefined;
+    const estado = m.deps.estado;
+    m.deps.estado = async (s) => {
+      await new Promise<void>((r) => {
+        soltar = r;
+      });
+      return estado(s);
+    };
+    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe("Leyendo la lista completa…"));
+    expect(vistaDe(p)).toBe("cerrada");
+    expect(principales(p)).toEqual([]);
+    soltar();
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe(""));
   });
 });
 
@@ -335,6 +410,58 @@ describe("el resultado en el panel", () => {
     const lista = texto(p, "#cpo-ganadoras");
     expect(lista).toContain("Le avisamos en su celular.");
     expect(lista).toContain("Puede recibir");
+  });
+
+  it("la primera ganadora por avisar lleva el botón principal del panel y las demás quedan como apoyo", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+    m.sala.fase = "sorteada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+    const filas = (avisadas: [boolean, boolean, boolean]): void =>
+      ponerPaso({
+        paso: "resultado",
+        otraBilletera: false,
+        filas: [
+          { cuenta: "GA", nombre: "Ana", avisada: avisadas[0], alta: "esperando" },
+          { cuenta: "GB", nombre: "Beto", avisada: avisadas[1], alta: "esperando" },
+          { cuenta: "GC", nombre: "Carla", avisada: avisadas[2], alta: "esperando" },
+        ],
+      });
+    filas([true, false, false]);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Avisar a Beto"]);
+    expect(boton(p, "Avisar a Carla").classList.contains("primary")).toBe(false);
+    // Al avisarle a Beto, lo principal pasa a quien sigue.
+    filas([true, true, false]);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Avisar a Carla"]);
+    // Con todas avisadas no queda ninguna acción principal.
+    filas([true, true, true]);
+    expect(principales(p)).toHaveLength(0);
+  });
+
+  it("el botón principal de avisar va arriba de la lista, con las acciones, y su fila no lo repite", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+    m.sala.fase = "sorteada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+    ponerPaso({
+      paso: "resultado",
+      otraBilletera: false,
+      filas: [
+        { cuenta: "GA", nombre: "Ana", avisada: true, alta: "esperando" },
+        { cuenta: "GB", nombre: "Beto", avisada: false, alta: "esperando" },
+        { cuenta: "GC", nombre: "Carla", avisada: false, alta: "esperando" },
+      ],
+    });
+    const acciones = p.raiz.querySelector("#cpo-acciones") as HTMLElement;
+    expect([...acciones.querySelectorAll("button.primary")].map((b) => b.textContent)).toEqual(["Avisar a Beto"]);
+    // Las acciones van antes que la lista de ganadoras: así el principal queda a la vista antes que las filas.
+    const lista = p.raiz.querySelector("#cpo-ganadoras") as HTMLElement;
+    expect(acciones.compareDocumentPosition(lista) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Beto no repite su botón en la fila, y Carla conserva el de apoyo.
+    expect([...lista.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Avisar a Carla"]);
+    expect(lista.textContent).toContain("Beto");
   });
 
   it("con otra billetera la línea de apoyo es una sola: avisarle a Tinkazo", async () => {

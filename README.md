@@ -23,7 +23,7 @@ Every community has things to share out: conference tickets, books, software lic
 
 **Tinkazo makes the draw checkable by anyone, from their phone.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen animated reveal, and anyone can re-run the whole draw in their browser from a link.
 
-**The contract has been live on Stellar's main network since November 11, 2026**, at [`CANQLUVT…VL3K`](https://stellar.expert/explorer/public/contract/CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K). The site opens in Test mode, on Stellar's test network, and Live mode is one tap away in the header.
+**The contract has been live on Stellar's main network since November 11, 2026**, at [`CANQLUVT…VL3K`](https://stellar.expert/explorer/public/contract/CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K). The published site opens in Live mode, on Stellar's main network, and Test mode, on the test network, is one tap away in the header or with `?red=prueba`. Locally, without the `VITE_STELLAR_NETWORK` variable, it opens in Test.
 
 Participants need nothing: no wallet, no account, no app. Only an event's team registration with a coupon needs an account: whoever signs up their team signs in with Google, because the coupon goes to that account.
 
@@ -86,7 +86,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 
 ## What is live today
 
-**Two modes.** The site opens in **Test** mode, on Stellar's test network: everything works the same and every draw can be checked, but Stellar wipes that network on December 16, 2026. **Live** mode, picked from the header, seals on Stellar's main network, for the draws that count. A link with `?red=oficial` opens straight in Live mode.
+**Two modes.** The published site opens in **Live** mode, which seals on Stellar's main network, for the draws that count. **Test** mode, picked from the header or with `?red=prueba`, uses Stellar's test network: everything works the same and every draw can be checked, but Stellar wipes that network on December 16, 2026. Locally, without the `VITE_STELLAR_NETWORK` variable, the site opens in Test, and a link with `?red=oficial` opens straight in Live mode.
 
 <div align="center">
 <img src="docs/capturas/readme/modo-hoja.webp" alt="The mode sheet: Live, for the draws that count, and Test, for trying things calmly, wiped on December 16" width="392">
@@ -243,7 +243,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?red=prueba|oficial` (Test or Live mode; the site opens in Test), `?demo=race|sapo|trompo|chovena|pinata|wheel|teleferico|oruro|guajojo|toborochi` (the games that left the selector, among them `quien` and `trueque`, still open with their identifier, listed in [docs/juegos.md](docs/juegos.md)), `?instant=1`, `?pose=1`, `?motor=clasico` (the previous engine) and `?grifo=0` (Test mode only: turns off the test-XLM faucet, to try things with a truly empty account; `?grifo=1` turns it back on).
+Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?red=prueba|oficial` (Test or Live mode; the published site opens in Live), `?demo=race|sapo|trompo|chovena|pinata|wheel|teleferico|oruro|guajojo|toborochi` (the games that left the selector, among them `quien` and `trueque`, still open with their identifier, listed in [docs/juegos.md](docs/juegos.md)), `?instant=1`, `?pose=1`, `?motor=clasico` (the previous engine) and `?grifo=0` (Test mode only: turns off the test-XLM faucet, to try things with a truly empty account; `?grifo=1` turns it back on).
 
 ## Repository
 

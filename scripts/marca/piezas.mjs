@@ -14,6 +14,7 @@ import { portada } from "./portada.mjs";
 import { rollUp, bannerMesa, cargarFotos, cargarFotosRed, JUEGOS_FOTO, SANGRE_IMPRESO, logoPared, VARIANTES_PARED, SPONSOR_FORMATOS, SPONSOR_CON_JUEGOS, escenaSponsor } from "./impresos.mjs";
 import { textosSponsorTxt, preguntasTxt } from "./textos-sponsor.mjs";
 import { EVENTOS_QR, rutaQrEvento, svgQrEvento } from "./eventos.mjs";
+import { generarLogosFondo } from "./logos-fondo.mjs";
 
 export const TEMAS_ARCHIVO = ["claro", "oscuro"];
 export const LANGS = ["es", "en"];
@@ -150,6 +151,9 @@ export function generarPiezas(escribir) {
     for (const ext of ["svg", "png", "pdf"]) sponsor.push([`logos/tinkazo-${nombre}.${ext}`, `${nombre}.${ext}`]);
     sponsor.push([`logos/tinkazo-${nombre}-2400.png`, `${nombre}-2400.png`]);
   }
+  // Los logos con fondo: las fotos de perfil y los cuadrados y horizontales sobre crema, blanco y oscuro. Al kit para
+  // sponsors entran los seis de 2400 px; los de 1080 y las fotos de perfil van en tinkazo-logos.zip.
+  for (const nombre of generarLogosFondo(escribir).sponsor) sponsor.push([`logos/tinkazo-${nombre}`, nombre]);
   for (const f of SPONSOR_FORMATOS) for (const tema of TEMAS_ARCHIVO) for (const lang of LANGS) {
     const nombre = `redes-${f.id}-${tema}-${lang}`;
     escribir(`${nombre}.png`, pngDe(escenaSponsor(f.id, tema, lang), f.w));

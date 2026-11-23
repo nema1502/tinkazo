@@ -1,7 +1,9 @@
 import { $ } from "../dom";
 import { eventoError, type AccionError } from "./error-accion";
 import { enEnsayo, enStand } from "../ensayo-modo";
-import { onLangChange, t } from "../i18n";
+import { getLang, onLangChange, t } from "../i18n";
+import { premioDelCuadroEnIdioma } from "../campana/formato";
+import { fijoPorCampana } from "./ganadores";
 import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
 import { type Paso, acortarPremio, claveDelPaso, claveEnElStand, detalleDeLista, lineaDelPaso, pasoDe, premioLimpio, premioQueEntra, relojDe, unirDetalle } from "./pasos";
@@ -268,7 +270,9 @@ function calcular(): Toca {
     // Con varios premios escritos (uno por lugar), cuántos son: nombrar solo el primero hacía creer que todos se lo llevaban.
     // Esa cuenta va entera o no va: cortada quedaba «3…».
     const varios = premiosEscritos().length > 1;
-    const texto = premioLimpio(premioDelResumen());
+    // Con una campaña, el premio del cuadro es el que se sella, en español: la barra lo dice en el idioma de la pantalla.
+    const escrito = premioDelResumen();
+    const texto = premioLimpio(fijoPorCampana() ? premioDelCuadroEnIdioma(escrito, getLang()) : escrito);
     detalle = detalleDeLista(lista, texto, enEnsayo() ? null : t("sigSinPremio"), Infinity);
     if (texto) premio = { texto, detalleCon: (p) => unirDetalle(lista, varios && p !== texto ? null : p) };
   }
@@ -371,6 +375,8 @@ function anunciar(s: Toca): void {
 
 function pintarBarra(s: Toca, mostrar: boolean): void {
   const bar = $("siguiente");
+  // El paso queda a la vista de la hoja de estilos: con el panel de una campaña en la página, el paso 1 no se ofrece (campana-sala.css).
+  bar.dataset.paso = String(s.paso);
   const btn = $<HTMLButtonElement>("sig-btn");
   if (s.boton) {
     // Sin cuenta, el botón de verdad ya dice "Entrar para sellar" (wallet-ui.ts): la barra copia lo que dice.

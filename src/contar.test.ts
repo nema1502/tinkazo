@@ -261,6 +261,21 @@ describe("una sola vez por pestaña", () => {
     ]);
   });
 
+  it("un comprobante de un contrato anterior no manda ni la apertura ni el veredicto: el Worker los rechazaría", () => {
+    const anterior = { net: "testnet", contract: deployments.testnet.anteriores[0]?.contractId ?? "", id: "165" } as const;
+    expect(anterior.contract).not.toBe("");
+    expect(anterior.contract).not.toBe(CONTRATO);
+    expect(contarApertura("long", anterior)).toBe(false);
+    expect(contarVeredicto("green", anterior)).toBe(false);
+    expect(contarVeredicto("red", anterior)).toBe(false);
+    expect(enviados).toHaveLength(0);
+    // Y no queda anotado: no es un conteo que salió.
+    expect(almacen.getItem("tinkazo.contados")).toBeNull();
+    // El vigente sí sale.
+    expect(contarApertura("long", REF)).toBe(true);
+    expect(enviados).toHaveLength(1);
+  });
+
   it("lo anotado vive en la pestaña y no lleva nada de nadie", () => {
     contarEntrada("test");
     contarApertura("qr", REF);

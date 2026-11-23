@@ -59,6 +59,11 @@ describe("la página para armar campañas, en el celular", () => {
     expect(regla(".ccp-monto")).toMatch(/min-height:\s*(?:5[6-9]|[6-9]\d)px\s*;/u);
   });
 
+  it("los contadores apagados se ven apagados", () => {
+    expect(css).toMatch(/\.ccp-paso-contador:disabled \{[^}]*color:\s*var\(--muted\)/u);
+    expect(css).toMatch(/\.ccp-paso-contador:disabled \{[^}]*cursor:\s*not-allowed/u);
+  });
+
   it("los seis círculos de paso se reparten el ancho para que entren en un celular de 360", () => {
     expect(regla(".ccp-circulo-item")).toMatch(/flex:\s*1\s*;/u);
     expect(regla(".ccp-circulo-item")).toMatch(/min-width:\s*0\s*;/u);
@@ -205,5 +210,12 @@ describe("lo que se corrigió después de mirar las capturas", () => {
   it("las tres horas comparten filas para que los campos queden alineados", () => {
     expect(regla(".ccp-horas")).toMatch(/grid-template-rows:\s*auto auto auto\s*;/u);
     expect(regla(".ccp-horas > .ccp-campo")).toMatch(/grid-template-rows:\s*subgrid\s*;/u);
+  });
+});
+
+describe("el aire antes de la barra fija", () => {
+  it("el paso deja 16 px abajo en el celular para que el último renglón no toque la barra, y ninguno en la laptop, donde la barra no es fija", () => {
+    expect(regla(".ccp-paso")).toMatch(/padding-bottom:\s*16px\s*;/u);
+    expect(bloqueDeLaptop()).toMatch(/\.ccp-paso \{[^}]*padding-bottom:\s*0\s*;/u);
   });
 });

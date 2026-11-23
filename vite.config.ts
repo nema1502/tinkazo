@@ -423,7 +423,6 @@ export default defineConfig({
         equipos: resolve(__dirname, "equipos.html"),
         participar: resolve(__dirname, "participar.html"),
         "crear-campana": resolve(__dirname, "crear-campana.html"),
-        empresa: resolve(__dirname, "empresa.html"),
         evento: resolve(__dirname, "evento.html"),
         confirmar: resolve(__dirname, "confirmar.html"),
         c: resolve(__dirname, "c.html"),

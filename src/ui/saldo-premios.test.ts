@@ -171,7 +171,7 @@ describe("el modo premios, con una cuenta de Google", () => {
   it("con la cuenta lista para recibir y con saldo: el saldo arriba, un título, una línea y Cerrar. Sin Mandar, dirección ni QR", async () => {
     const m = mundo();
     await abrir(m);
-    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("Tenés 12,5 dólares digitales.");
+    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("Tenés 12,50 dólares digitales.");
     expect(titulos(), "con el saldo arriba no se repite que la cuenta está lista").toEqual([]);
     expect(lineas()).toHaveLength(1);
     expect(principal().textContent).toBe(t("acctClose"));
@@ -329,7 +329,7 @@ describe("el modo premios, con una cuenta de Google", () => {
 
     document.body.innerHTML = "";
     await abrir(mundo());
-    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("You have 12.5 digital dollars.");
+    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("You have 12.50 digital dollars.");
     expect(titulos(), "con el saldo arriba no se repite que la cuenta está lista").toEqual([]);
     expect(document.querySelector(".saldo-mas")?.textContent).toContain(T.en.saldoPremioRetirarLuego as string);
     expect(principal().textContent).toBe("Close");
@@ -384,7 +384,7 @@ describe("el modo premios, con una billetera propia", () => {
   it("sin XLM libre, dice cuánto falta bajo el título del premio", async () => {
     await abrir(propia({ lectura: mirada({ xlm: "1.2000000" }) }));
     expect(document.querySelector(".saldo-titulo")?.textContent).toBe(T.es.saldoPremioRecibirTitulo);
-    expect(cuerpo()).toContain("0,5001 XLM libres y tiene 0,2");
+    expect(cuerpo()).toContain("0,51 XLM libres y tiene 0,20");
     expect(principal().textContent).toBe(t("saldoVolverAMirar"));
   });
 });

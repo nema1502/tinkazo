@@ -33,7 +33,7 @@ import { tomarLogoEntrante } from "./enlace-corto";
 import { pintarFranja } from "./ui/logo-franja";
 import { montarConfianza } from "./ui/confianza";
 import { contarApertura, contarVeredicto, quitarMarca, refDe, viaDe } from "./contar";
-import { type PropsDe, type Ref, contratoOficial } from "../workers/enlaces/src/conteo";
+import type { PropsDe, Ref } from "../workers/enlaces/src/conteo";
 // Solo la bandera: el panel de ganadores y sus textos se cargan únicamente si está prendida.
 import { pagosActivos } from "./stellar/pagos-bandera";
 import { htmlDeLosPremios } from "./ui/premios-del-comprobante";
@@ -90,12 +90,12 @@ function repartoParaVerificacion(nombres: readonly string[]): boolean {
 /**
  * Cómo terminó la verificación, para el contador: verde, amarillo, rojo, o que
  * no se pudo terminar. Lo decide la verificación estricta (`src/protocol/verificacion.ts`):
- * su verde ya exige un contrato oficial; un verde de otro contrato, si llegara, se
- * cuenta como rojo (§4.5 de la arquitectura de métricas), y el Worker no cuenta
- * sorteos de otros contratos. Se cuenta lo primero que se le muestra a la persona.
+ * su verde ya exige un contrato oficial. El contador del sitio no manda nada de un
+ * sorteo de otro contrato (un comprobante de un contrato anterior), que el Worker
+ * rechazaría (`contar.ts`). Se cuenta lo primero que se le muestra a la persona.
  */
 function contarFin(verdict: PropsDe<"proof_verdict">["verdict"]): void {
-  if (ref) contarVeredicto(verdict === "green" && !contratoOficial(ref) ? "red" : verdict, ref);
+  if (ref) contarVeredicto(verdict, ref);
 }
 
 function paint(): void {

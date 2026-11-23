@@ -511,6 +511,38 @@ describe("con la bandera prendida, una falla de la persona no la ofrece", () => 
     expect(salida(), volcado()).toHaveLength(0);
   });
 
+  it("Google en una campaña: bloqueada, ofrece probar de nuevo con Google y no el correo", async () => {
+    const abiertas: number[] = [];
+    vi.stubGlobal("open", () => {
+      abiertas.push(1);
+      return abiertas.length < 2 ? null : ventanaFalsa();
+    });
+    const { ui, t } = await cargar();
+    await ui.entrar({ soloGoogle: true });
+    await asentar();
+    const texto = aviso()?.textContent ?? "";
+    expect(texto, volcado()).toContain(t("cuentaBloqueadaSoloGoogle"));
+    expect(texto).not.toMatch(/correo|email/iu);
+    const botones = [...(aviso()?.querySelectorAll("button") ?? [])].map((b) => b.textContent);
+    expect(botones).toContain(t("loginProbarGoogle"));
+    expect(botones).not.toContain(t("loginOtraVia"));
+    expect(botones).not.toContain(t("loginRecargar"));
+    // El toque en el botón es un gesto nuevo: vuelve a abrir la ventana de Google.
+    ([...(aviso()?.querySelectorAll("button") ?? [])].find((b) => b.textContent === t("loginProbarGoogle")))?.click();
+    await vi.waitFor(() => expect(abiertas.length).toBe(2), esperar);
+    expect(document.querySelector(".wallet-notice.bad"), volcado()).toBeNull();
+  });
+
+  it("Google sin el parámetro de la campaña: el aviso sigue siendo el de siempre", async () => {
+    vi.stubGlobal("open", () => null);
+    const { ui, t } = await cargar();
+    await ui.entrar();
+    await asentar();
+    const botones = [...(aviso()?.querySelectorAll("button") ?? [])].map((b) => b.textContent);
+    expect(botones).toContain(t("loginOtraVia"));
+    expect(botones).not.toContain(t("loginProbarGoogle"));
+  });
+
   it.each([
     ["el código estaba mal", "EMAIL_CODE_INVALID"],
     ["el código venció", "EMAIL_CODE_EXPIRED"],

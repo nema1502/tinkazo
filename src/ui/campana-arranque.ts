@@ -91,7 +91,16 @@ export function arrancar(): void {
   // herramienta. En Prueba con un borrador no: el aviso de la portada lleva a la campaña en el modo oficial.
   if (!avisa && (conCampana || (porActivar && enOficial))) abrirLaHerramienta();
   if (conCampana || hayCampanaActiva() || (porActivar && enOficial)) {
-    void import("./campana-sala").then((m) => m.montarPanelDeCampana()).catch(() => undefined);
+    // El panel baja aparte y tarda unos cuadros: hasta que existe, la página marca que viene y el editor del sorteo común no se pinta
+    // (`campana-sala.css`). La marca se saca en cuanto el panel está o no se pudo montar, para que el editor nunca quede escondido.
+    const viene = !params.has("demo");
+    if (viene) document.documentElement.dataset.campana = "";
+    void import("./campana-sala")
+      .then((m) => m.montarPanelDeCampana())
+      .catch(() => undefined)
+      .finally(() => {
+        if (viene) delete document.documentElement.dataset.campana;
+      });
   }
 }
 

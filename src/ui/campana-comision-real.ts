@@ -76,6 +76,32 @@ export async function cambiarDeCuentaReal(abrir: () => Promise<void>): Promise<v
   await abrir();
 }
 
+/** ¿La persona acaba de tocar algo? Sin la API (navegadores viejos) se supone que sí: el navegador decide. */
+const hayGesto = (): boolean => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive ?? true;
+
+/**
+ * Entrar con Google desde el panel de una campaña, que solo acepta Google. Con una cuenta del proveedor abierta (correo), se
+ * cierra y se entra directo con Google: si el navegador bloquea la ventana, el aviso ofrece probar de nuevo con Google y no el
+ * correo. Con otra billetera abierta, o donde Google no entra (el navegador de una app, sin la llave de Pollar), queda la
+ * ventana de siempre.
+ */
+export async function entrarConGoogleReal(): Promise<void> {
+  const [{ activeWallet }, { submitsItself }, { entraConGoogle, entrar, openPicker }] = await Promise.all([
+    import("../stellar/wallet-lite"),
+    import("../stellar/wallet-pollar"),
+    import("./wallet-ui"),
+  ]);
+  const w = activeWallet();
+  if (!entraConGoogle() || (w !== null && !submitsItself(w))) return cambiarDeCuentaReal(openPicker);
+  await cambiarDeCuentaReal(async () => {
+    // Cerrar la sesión puede tardar (pedidos de red), y con un navegador de gesto corto el toque ya venció: la ventana de
+    // Google saldría bloqueada en el primer intento. Si el gesto venció, el panel queda sin sesión con su botón de Google
+    // y el próximo toque abre la ventana sin error. Sin la API (navegadores viejos) se intenta igual.
+    if (!hayGesto()) return;
+    await entrar({ soloGoogle: true });
+  });
+}
+
 export function depsDeComisionReales(): DepsDeComision {
   return {
     comision: () => (network.name === "mainnet" ? comisionDelBuild(entornoDelBuild()) : null),
@@ -108,7 +134,7 @@ export function depsDeComisionReales(): DepsDeComision {
       // Llegó, y entonces solo se vuelve a ofrecer si el listado consistente de la cuenta no muestra el pago.
       return (await pruebaDeSecuencia(origen, ahora, nota)).tipo === "al-dia";
     },
-    cargar: (cuenta, alCerrar) => void import("./pagar-premio").then((m) => m.cargarEnSaldo(cuenta, alCerrar)),
+    cargar: (cuenta, alCerrar, falta) => void import("./pagar-premio").then((m) => m.cargarEnSaldo(cuenta, alCerrar, falta)),
     candado: async (nombre, f) => {
       const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
       return locks ? locks.request(nombre, { mode: "exclusive" }, f) : f();

@@ -312,7 +312,7 @@ function marcarQueVaASortear(): void {
  * era vieja caía en "Para sellar, entrá con tu cuenta" sin que Google se
  * hubiera abierto nunca: "Entrar con Google a veces lleva al sorteo sin pasar por Pollar".
  */
-export async function entrar(): Promise<void> {
+export async function entrar(opciones: { soloGoogle?: boolean } = {}): Promise<void> {
   if (session || conectando) return;
   // Quien entra va a sortear: al terminar, la página abre la herramienta (main.ts).
   marcarQueVaASortear();
@@ -335,7 +335,13 @@ export async function entrar(): Promise<void> {
     // Cancelar mientras se terminaba de entrar no es un error: la puerta vuelve a como estaba, sin aviso.
     if (!esCancelada(e)) {
       // Primero el aviso, al instante. La salida se suma cuando contesta el chequeo de internet.
-      void sumarSalidaAlAviso(notice(await walletErrorText(e), true), e, "google");
+      const texto = await walletErrorText(e, opciones.soloGoogle === true);
+      // Una campaña que solo acepta Google no manda a entrar con el correo: ofrece probar de nuevo con Google.
+      // El toque en el botón es un gesto nuevo, así que el navegador deja abrir la ventana.
+      const aviso = opciones.soloGoogle === true
+        ? notice(texto, true, () => void entrar({ soloGoogle: true }), false, t("loginProbarGoogle"))
+        : notice(texto, true);
+      void sumarSalidaAlAviso(aviso, e, "google");
     }
   } finally {
     conectando = false;
@@ -565,6 +571,11 @@ async function activate(
   render();
   refreshFreezeLabel();
   precargarSello();
+  // Si el perfil (y con él el correo) todavía no llegó, se espera como al retomar la sesión: el paso de la cuenta lee el
+  // correo de la sesión cuando lo necesita y no tiene que pedir que lo escriban.
+  if (!prof && typeof (wallet as { profile?: unknown }).profile === "function") {
+    esperarPerfil(wallet as unknown as Parameters<typeof esperarPerfil>[0]);
+  }
   // En modo Oficial, con una cuenta nueva, el paso «Dejá tu cuenta lista» se abre enseguida y dice él quién entró.
   if (!restoring) {
     entradaCallada = pasoAlEntrar(wallet);
@@ -1965,7 +1976,7 @@ async function disconnect(): Promise<void> {
   }
 }
 
-async function walletErrorText(e: unknown): Promise<string> {
+async function walletErrorText(e: unknown, soloGoogle = false): Promise<string> {
   // El clasificador tampoco puede depender de que la descarga que falló vuelva a funcionar.
   const WALLET_ERRORS = await lite().then((w) => w.WALLET_ERRORS).catch(() => null);
   if (!WALLET_ERRORS) return t("walletUnknown");
@@ -1975,9 +1986,9 @@ async function walletErrorText(e: unknown): Promise<string> {
   if (msg === WALLET_ERRORS.friendbot) return t("friendbotFailed");
   if (msg === WALLET_ERRORS.guestTestnetOnly) return t("guestTestnetOnly");
   // La ventana de Google que el navegador no dejó abrir, o que la persona cerró antes de entrar (wallet-pollar.ts).
-  if (msg === WALLET_ERRORS.popupBlocked) return t("cuentaBloqueada");
+  if (msg === WALLET_ERRORS.popupBlocked) return t(soloGoogle ? "cuentaBloqueadaSoloGoogle" : "cuentaBloqueada");
   if (msg === WALLET_ERRORS.popupClosed) return t("cuentaCerrada");
-  if (msg === WALLET_ERRORS.popupNoSession) return t("cuentaSinSesion");
+  if (msg === WALLET_ERRORS.popupNoSession) return t(soloGoogle ? "cuentaSinSesionSoloGoogle" : "cuentaSinSesion");
   return t(esDeRed(e) ? "loginConexion" : "walletUnknown");
 }
 
@@ -1993,7 +2004,7 @@ async function walletErrorText(e: unknown): Promise<string> {
  * o tecla, después de que el toque llegó a su botón (si la página se moviera
  * antes, el toque caería en otro lado), o a los diez segundos.
  */
-function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = true): HTMLElement {
+function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = true, rotuloDeReintento?: string): HTMLElement {
   document.querySelector(".wallet-notice")?.remove();
   const el = document.createElement("div");
   el.className = `wallet-notice${bad ? " bad" : " arriba"}`;
@@ -2006,7 +2017,7 @@ function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = t
     const acciones = document.createElement("div");
     acciones.className = "wallet-notice-acciones";
     if (reintentar) {
-      acciones.append(button(t("loginRecargar"), "ghost", () => { el.remove(); reintentar(); }));
+      acciones.append(button(rotuloDeReintento ?? t("loginRecargar"), "ghost", () => { el.remove(); reintentar(); }));
     } else if (otraVia && !login) {
       // Con la ventana de ingreso abierta las otras formas ya están ahí, a la vista: el aviso solo se cierra.
       acciones.append(button(t("loginOtraVia"), "ghost", () => { el.remove(); void openPicker({ otras: true }); }));

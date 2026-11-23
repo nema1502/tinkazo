@@ -28,6 +28,15 @@ describe("los textos del panel de quien organiza", () => {
     expect(claves.every((c) => c.startsWith("cpo"))).toBe(true);
   });
 
+  it("la línea de la lista pasada avisa antes de sellar que el show empieza en pantalla completa", () => {
+    expect(TEXTOS_SALA_CAMPANA.es.cpoEnElSorteo).toContain("pantalla completa");
+    expect(TEXTOS_SALA_CAMPANA.en.cpoEnElSorteo).toContain("full screen");
+    // La frase no nombra el botón: dentro de la oración, sin marcarlo, se leía como una oración rota.
+    for (const idioma of IDIOMAS) expect(TEXTOS_SALA_CAMPANA[idioma].cpoEnElSorteo, idioma).not.toContain("{boton}");
+    expect(TEXTOS_SALA_CAMPANA.es.cpoEnElSorteo).toBe("{n} personas en el sorteo. Al sellar, empieza el show en pantalla completa.");
+    expect(TEXTOS_SALA_CAMPANA.en.cpoEnElSorteo).toBe("{n} people in the draw. Once you seal, the show starts in full screen.");
+  });
+
   it("cada texto lleva los mismos huecos en los dos idiomas", () => {
     for (const [clave, es] of Object.entries(TEXTOS_SALA_CAMPANA.es)) {
       expect(huecos(TEXTOS_SALA_CAMPANA.en[clave] ?? ""), clave).toEqual(huecos(es));

@@ -42,6 +42,8 @@ const fila = (n: number): EquipoDeSala => ({ n, cuenta: cuentaDePrueba(n), d: `d
 interface Mundo {
   d: DepsDelPaso;
   registro: string[];
+  /** La palabra con que se pusieron las etiquetas cada vez. */
+  etiquetasDe: (string | undefined)[];
   pasos: PasoDelPuente[];
   cuadro: { lista: string; premio: string; ganadores: number; fijo: boolean; bloqueada: boolean; turnos: boolean; sorteado: boolean };
   entradas: Map<string, SorteoDeCampana>;
@@ -61,6 +63,7 @@ function mundo(): Mundo {
   const m: Mundo = {
     d: undefined as never,
     registro: [],
+    etiquetasDe: [],
     pasos: [],
     cuadro: { lista: "", premio: "", ganadores: 1, fijo: false, bloqueada: false, turnos: false, sorteado: false },
     entradas: new Map(),
@@ -98,7 +101,10 @@ function mundo(): Mundo {
       m.registro.push(`turnos:${si}`);
       m.cuadro.turnos = si;
     },
-    ponerEtiquetas: (e) => void m.registro.push(`etiquetas:${e.size}`),
+    ponerEtiquetas: (e, de) => {
+      m.registro.push(`etiquetas:${e.size}`);
+      m.etiquetasDe.push(de);
+    },
     setList: (texto) => {
       m.registro.push("lista");
       m.cuadro.lista = texto;
@@ -272,6 +278,13 @@ describe("pasar la lista al cuadro del sorteo", () => {
     m.filas = [[fila(1), fila(2)]];
     await crearPaso(m.d).correr(SALA, contexto(m));
     expect(m.registro.indexOf("etiquetas:2")).toBeLessThan(m.registro.indexOf("lista"));
+  });
+
+  it("las etiquetas son de personas: la lista de una campaña no se cuenta como equipos", async () => {
+    const m = mundo();
+    m.filas = [[fila(1), fila(2)]];
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(m.etiquetasDe).toEqual(["personas"]);
   });
 
   it("los nombres son etiquetas y no entran en lo que se sella: la lista son solo cuentas", async () => {

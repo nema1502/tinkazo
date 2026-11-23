@@ -242,7 +242,9 @@ async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
       },
       {
         para,
-        correo: sesion?.mail,
+        // Una función y no el valor de ahora: una sesión retomada de Google trae el correo después de la dirección, y el
+        // paso ya abierto lo tiene que ver llegar. Es el correo que el proveedor verificó, nunca uno escrito por la persona.
+        correo: () => ui.currentSession()?.mail,
         viaCorreo: porCorreo,
         direccion: sesion?.address ?? null,
         puedeUsarDesbloqueo: () => wp.puedeUsarDesbloqueo(),

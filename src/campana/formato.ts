@@ -17,6 +17,29 @@ export function montoTexto(unidades: bigint, idioma: Lang): string {
   }).format(numero);
 }
 
+/** Cómo se redondea un monto que no cae en un centavo justo: hacia abajo, hacia arriba (lo que hay que mandar) o sin recortar. */
+export type RedondeoDeMonto = "abajo" | "arriba" | "exacto";
+
+const UN_CENTAVO = 100000n;
+
+/**
+ * Un monto de plata como se lo muestra a la persona: siempre con dos decimales, con coma en español y punto en inglés.
+ * Lo que no llega a un centavo se recorta con enteros, nunca con decimales sueltos, y por defecto hacia abajo para no
+ * inventar plata. Lo que hay que mandar se pide con "arriba" para no quedarse corto. Un monto con más precisión que un
+ * centavo se dice exacto (con hasta siete decimales) si se pide "exacto", o si es menor que un centavo, para que nunca
+ * diga 0,00 cuando algo llegó.
+ */
+export function montoConCentavos(unidades: bigint, idioma: Lang, redondeo: RedondeoDeMonto = "abajo"): string {
+  const local = idioma === "es" ? "es-BO" : "en-US";
+  const resto = unidades % UN_CENTAVO;
+  if (resto !== 0n && (redondeo === "exacto" || (redondeo === "abajo" && unidades < UN_CENTAVO))) {
+    return new Intl.NumberFormat(local, { minimumFractionDigits: 2, maximumFractionDigits: 7 }).format(Number(unidades) / 1e7);
+  }
+  const centavos = unidades / UN_CENTAVO + (redondeo === "arriba" && resto !== 0n ? 1n : 0n);
+  const numero = Number(centavos / 100n) + Number(centavos % 100n) / 100;
+  return new Intl.NumberFormat(local, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numero);
+}
+
 /**
  * El premio de una campaña como se pone en el cuadro del sorteo: siempre en español y sin separador de miles, con coma para
  * los centavos. Quien paga el premio lee el monto de ese texto, y "1.000" se leería como 1.
@@ -28,6 +51,22 @@ export function premioParaElCuadro(unidades: bigint): string {
   return (TEXTOS_CAMPANA.es.cpPremio1 ?? "").replace("{monto}", monto);
 }
 
+/**
+ * El premio que `premioParaElCuadro` puso en el cuadro (siempre en español, es lo que se sella), dicho en el idioma de la pantalla.
+ * Solo para mostrarlo, por ejemplo en la barra de abajo: lo que se sella no cambia. Un texto que no tiene esa forma vuelve igual.
+ */
+export function premioDelCuadroEnIdioma(texto: string, idioma: Lang): string {
+  if (idioma === "es") return texto;
+  const molde = (TEXTOS_CAMPANA.es.cpPremio1 ?? "").split("{monto}");
+  if (molde.length !== 2) return texto;
+  const [antes = "", despues = ""] = molde;
+  const t = texto.trim();
+  if (!t.startsWith(antes) || !t.endsWith(despues) || t.length < antes.length + despues.length) return texto;
+  const monto = t.slice(antes.length, t.length - despues.length);
+  if (!/^[0-9]+(,[0-9]{2})?$/.test(monto)) return texto;
+  return (TEXTOS_CAMPANA[idioma].cpPremio1 ?? "").replace("{monto}", monto.replace(",", "."));
+}
+
 /** Junta montos sin coma de serie en inglés y sin ambigüedad entre decimales en español. */
 function listaDeMontos(montos: readonly string[], idioma: Lang): string {
   if (montos.length < 2) return montos[0] ?? "";
@@ -37,9 +76,12 @@ function listaDeMontos(montos: readonly string[], idioma: Lang): string {
   return `${iniciales} ${idioma === "es" ? "y" : "and"} ${ultimo}`;
 }
 
-/** Arma el texto del premio según la cantidad y si todos los montos coinciden. */
-export function premiosTexto(premios: readonly bigint[], idioma: Lang): string {
-  const montos = premios.map((premio) => montoTexto(premio, idioma));
+/**
+ * Arma el texto del premio según la cantidad y si todos los montos coinciden. Con "conCentavos" cada monto lleva dos decimales,
+ * como los demás montos de plata del panel del servicio. Sin él, como siempre: un monto entero no lleva decimales.
+ */
+export function premiosTexto(premios: readonly bigint[], idioma: Lang, conCentavos = false): string {
+  const montos = premios.map((premio) => (conCentavos ? montoConCentavos(premio, idioma) : montoTexto(premio, idioma)));
   const lista = listaDeMontos(montos, idioma);
   const clave = premios.length === 1
     ? "cpPremio1"

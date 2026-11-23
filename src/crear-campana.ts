@@ -12,6 +12,7 @@ import { zonaDelNavegador } from "./campana/crear/horas";
 import { sufijoNuevo } from "./campana/crear/estado";
 import { costoDelRetiroTexto } from "./costo-del-retiro";
 import { guardarBorrador } from "./campana/borrador";
+import { direccionDelPanel } from "./campana/direccion-del-panel";
 import { comisionDelBuild } from "./stellar/comision-config";
 import { comisionDelArmado } from "./campana/crear/costo";
 import { entornoDelBuild } from "./stellar/venta-piloto";
@@ -64,7 +65,8 @@ function compartirConElSistema(): DepsDelCreador["compartir"] {
  */
 function activarEnElPanel(texto: string): boolean {
   if (!guardarBorrador(almacenLocal(), texto)) return false;
-  location.assign("/?campana&red=oficial");
+  // El idioma y el tema de esta dirección viajan al panel: sin ellos abría con los de la memoria y el sistema.
+  location.assign(direccionDelPanel(location.search));
   return true;
 }
 

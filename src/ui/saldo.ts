@@ -9,6 +9,7 @@ import { type NetworkName, network } from "../stellar/config";
 import { modoDeRampa, pagarConGoogle, practicaDeRampa, urlDeCuenta, votoPorContenido } from "../stellar/cuenta-config";
 import { passphraseDe } from "../stellar/oficiales";
 import { stroopsDe } from "../stellar/pagos";
+import { montoConCentavos, type RedondeoDeMonto } from "../campana/formato";
 import {
   type BaseDeLlegadas,
   type BilleteraParaRecibir,
@@ -24,6 +25,7 @@ import {
   usdcDeLaRed,
 } from "../stellar/usdc-cuenta";
 import { type Dialogo, abrirDialogo, botonPrincipal, copiar, lineaDeEstado } from "./dialogo";
+import { type FilaViva, crearFilaViva } from "./fila-viva";
 import { con } from "./monedas-vista";
 import { pintarQr } from "./qr";
 
@@ -200,6 +202,8 @@ export type Vista = "inicio" | "traer";
 interface Ventana {
   d: Dialogo;
   estadoLinea: HTMLParagraphElement;
+  /** La fila viva del pie: vive dentro de la línea de estado y ocupa su lugar mientras espera. */
+  fila: FilaViva;
   boton: HTMLButtonElement;
   cuenta: string;
   deps: DepsDeSaldo;
@@ -216,13 +220,24 @@ interface Ventana {
   armandoBase: Promise<void> | null;
   /** El último pago que llegó, cuando «Ya lo mandé» no vio uno nuevo. */
   ultimo: { monto: bigint; ms: number } | null;
-  /** «Ya lo mandé» vio llegar dólares: la principal pasa a Cerrar. */
+  /** «Ya lo mandé» vio llegar dólares: la principal pasa a Seguir. */
   llegaron: boolean;
   /** Ya se pidió activar en esta ventana: no se ofrece pedirlo otra vez, solo volver a mirar. */
   activado: boolean;
   /** Un error ocupa el lugar de la línea del paso: se dice en el pie y la línea no se repite arriba. */
   conFallo: boolean;
   accion: (() => void) | null;
+  /** Cuánto falta mandar, para decirlo en el título de la dirección. Null si quien abrió no lo sabe. */
+  falta: string | null;
+  /** Si la ventana mira sola la llegada, y si esa mirada ya está corriendo. */
+  vigilar: boolean;
+  vigilando: boolean;
+  /** Pasaron los cinco minutos de mirar sola sin ver nada: se dice y se ofrece volver a mirar. */
+  sinVer: boolean;
+  /** La última mirada callada no pudo hablar con la red: se dice, y la mirada sigue. */
+  sinRed: boolean;
+  /** Lo que dice la fila mientras espera el envío. Después de «Ya lo mandé» sin novedad, lleva también el aviso de no mandar de nuevo. */
+  textoEspera: string | null;
 }
 
 interface Pantalla {
@@ -241,11 +256,18 @@ interface Pantalla {
   conSaldo?: boolean;
 }
 
-const formatoDeMonto = (stroops: bigint): string => new Intl.NumberFormat(getLang(), { maximumFractionDigits: 7 }).format(Number(stroops) / 1e7);
+/** Escribe un texto en la línea de estado. Una línea de texto ocupa el lugar de la fila viva, nunca las dos. */
+function decir(v: Ventana, texto: string): void {
+  v.fila.limpiar();
+  v.estadoLinea.textContent = texto;
+}
 
-const legible = (monto: string): string => {
+/** Todo monto de plata de la ventana lleva dos decimales (coma en español, punto en inglés). Ver montoConCentavos. */
+const formatoDeMonto = (stroops: bigint, redondeo: RedondeoDeMonto = "abajo"): string => montoConCentavos(stroops, getLang(), redondeo);
+
+const legible = (monto: string, redondeo: RedondeoDeMonto = "abajo"): string => {
   try {
-    return formatoDeMonto(stroopsDe(monto));
+    return formatoDeMonto(stroopsDe(monto), redondeo);
   } catch {
     return monto;
   }
@@ -293,12 +315,15 @@ const bloquea = (e: EstadoParaRecibir, red: NetworkName): boolean =>
 function pantallaDe(v: Ventana, e: EstadoParaRecibir): Pantalla {
   const volverAMirar = { texto: t("saldoVolverAMirar"), accion: () => void mirar(v) };
   const cerrar = { texto: t("acctClose"), accion: () => v.d.cerrar() };
+  // Llegó el envío: la ventana no se cierra sola, y lo que sigue es seguir con el panel.
+  const seguir = { texto: t("saldoSeguir"), accion: () => v.d.cerrar() };
+  const volverAEsperar = { texto: t("saldoVolverAMirar"), accion: () => void volverAMirarElEnvio(v) };
   const volver = {
     id: "volver",
     texto: t("clVolver"),
     accion: () => {
       v.vista = "inicio";
-      v.estadoLinea.textContent = "";
+      decir(v, "");
       pintar(v);
     },
   };
@@ -369,24 +394,22 @@ function pantallaDe(v: Ventana, e: EstadoParaRecibir): Pantalla {
       plegado: { resumen: t("cargaComoSaco"), textos: [t("cargaComoSacoTexto"), ...textoDelCostoDelRetiro(v)] },
       principal: {
         texto: t("cargaYaTengo"),
-        accion: () => {
-          v.vista = "traer";
-          v.estadoLinea.textContent = "";
-          pintar(v);
-        },
+        accion: () => irATraer(v),
       },
     };
   }
 
   switch (e.estado) {
     case "puede":
+      // Llegó el envío: el cuerpo ya no pide mandar. Sin dirección ni QR que inviten a mandar de nuevo; la fila dice cuánto.
+      if (v.llegaron) return { conSaldo: true, titulo: t("saldoLlegoT"), principal: seguir };
       return {
         conSaldo: true,
-        titulo: t("saldoRecibirTitulo"),
+        titulo: tituloDeCargar(v),
         linea: t("saldoRecibirOjo"),
         datos: datosParaRecibir(v),
         plegado: { resumen: t("saldoMasDetalles"), textos: [t("saldoRecibirComo"), t("saldoDirAyuda")] },
-        principal: v.llegaron ? cerrar : { texto: t("saldoYaMande"), accion: () => void yaLoMande(v) },
+        principal: v.llegaron ? seguir : v.sinVer ? volverAEsperar : { texto: t("saldoYaMande"), accion: () => void yaLoMande(v) },
         secundarios: [volver],
       };
     case "falta-activar": {
@@ -403,7 +426,7 @@ function pantallaDe(v: Ventana, e: EstadoParaRecibir): Pantalla {
     case "activandose":
       return { titulo: t("saldoActivarTitulo"), linea: t("saldoActivandoEspera"), principal: volverAMirar, secundarios: [volver] };
     case "falta-xlm":
-      return { titulo: t("saldoActivarTitulo"), linea: con(t("saldoFaltaXlm"), { n: legible(e.necesita), m: legible(e.tiene) }), principal: volverAMirar, secundarios: [volver] };
+      return { titulo: t("saldoActivarTitulo"), linea: con(t("saldoFaltaXlm"), { n: legible(e.necesita, "arriba"), m: legible(e.tiene) }), principal: volverAMirar, secundarios: [volver] };
     case "no-recibe-mas":
       return { conSaldo: true, titulo: t("saldoNoMandesTitulo"), linea: t("saldoNoRecibeMas"), principal: cerrar, secundarios: [volver] };
     default:
@@ -432,12 +455,14 @@ const conCarga = (v: Ventana): boolean => v.premios && v.billetera?.tipo === "go
 function pantallaDelPremio(v: Ventana, e: EstadoParaRecibir): Pantalla {
   const volverAMirar = { texto: t("saldoVolverAMirar"), accion: () => void mirar(v) };
   const cerrar = { texto: t("acctClose"), accion: () => v.d.cerrar() };
+  const seguir = { texto: t("saldoSeguir"), accion: () => v.d.cerrar() };
+  const volverAEsperar = { texto: t("saldoVolverAMirar"), accion: () => void volverAMirarElEnvio(v) };
   const volver = {
     id: "volver",
     texto: t("clVolver"),
     accion: () => {
       v.vista = "inicio";
-      v.estadoLinea.textContent = "";
+      decir(v, "");
       pintar(v);
     },
   };
@@ -457,14 +482,16 @@ function pantallaDelPremio(v: Ventana, e: EstadoParaRecibir): Pantalla {
   switch (e.estado) {
     case "puede": {
       if (carga && v.vista === "traer") {
+        // Llegó el envío: el cuerpo ya no pide mandar. Sin dirección ni QR que inviten a mandar de nuevo; la fila dice cuánto.
+        if (v.llegaron) return { conSaldo: false, titulo: t("saldoLlegoT"), principal: seguir };
         // Cargar: la dirección de la cuenta con su QR, y «Ya lo mandé». Una sola principal, y Volver.
         return {
           conSaldo: false,
-          titulo: t("saldoRecibirTitulo"),
+          titulo: tituloDeCargar(v),
           linea: t("saldoCargarOjo"),
           datos: datosParaRecibir(v),
           plegado: { resumen: t("saldoMasDetalles"), textos: [t("saldoCargarComo")] },
-          principal: v.llegaron ? cerrar : { texto: t("saldoYaMande"), accion: () => void yaLoMande(v) },
+          principal: v.llegaron ? seguir : v.sinVer ? volverAEsperar : { texto: t("saldoYaMande"), accion: () => void yaLoMande(v) },
           secundarios: [volver],
         };
       }
@@ -480,11 +507,7 @@ function pantallaDelPremio(v: Ventana, e: EstadoParaRecibir): Pantalla {
         secundarios.push({
           id: "cargar",
           texto: t("saldoCargarBtn"),
-          accion: () => {
-            v.vista = "traer";
-            v.estadoLinea.textContent = "";
-            pintar(v);
-          },
+          accion: () => irATraer(v),
         });
       }
       // Mandar, solo con Google, el voto a mano y algo para mandar: es el retiro, con su costo a la vista.
@@ -525,7 +548,7 @@ function pantallaDelPremio(v: Ventana, e: EstadoParaRecibir): Pantalla {
     case "activandose":
       return { titulo: t(carga ? "saldoPrepTitulo" : "saldoPremioRecibirTitulo"), linea: t("saldoActivandoEspera"), principal: volverAMirar };
     case "falta-xlm":
-      return { titulo: t("saldoPremioRecibirTitulo"), linea: con(t("saldoFaltaXlm"), { n: legible(e.necesita), m: legible(e.tiene) }), principal: volverAMirar };
+      return { titulo: t("saldoPremioRecibirTitulo"), linea: con(t("saldoFaltaXlm"), { n: legible(e.necesita, "arriba"), m: legible(e.tiene) }), principal: volverAMirar };
     case "no-recibe-mas":
       return { conSaldo: true, titulo: t("saldoNoMandesTitulo"), linea: t("saldoNoRecibeMas"), principal: cerrar };
     default:
@@ -559,7 +582,7 @@ function fallar(v: Ventana, texto: string): void {
   pintar(v);
   v.estadoLinea.classList.remove("ok");
   v.estadoLinea.classList.add("bad");
-  v.estadoLinea.textContent = texto;
+  decir(v, texto);
 }
 
 function pintar(v: Ventana): void {
@@ -606,6 +629,7 @@ function pintar(v: Ventana): void {
   v.boton.textContent = p.principal.texto;
   v.boton.disabled = false;
   v.accion = p.principal.accion;
+  if (v.vigilar && v.vista === "traer" && e.estado === "puede" && !v.llegaron && !v.sinVer) void vigilarLlegada(v);
 }
 
 /** Junta lo que hace falta saber de la cuenta y decide. Nunca lanza: lo que falla es `no-se-sabe`. */
@@ -641,11 +665,11 @@ async function mirar(v: Ventana): Promise<void> {
   v.boton.disabled = !(v.premios && v.estado === null);
   v.conFallo = false;
   v.estadoLinea.classList.remove("ok", "bad");
-  v.estadoLinea.textContent = t("saldoMirandoCuenta");
+  v.fila.revisando(t("saldoMirandoCuenta"));
   const e = await leerEstado(v);
   if (!v.abierta) return;
   v.estado = e;
-  v.estadoLinea.textContent = "";
+  decir(v, "");
   // En el modo premios no hay «Ya lo mandé», salvo al cargar con pagar con Google: sin eso no se pide el historial de pagos.
   if (e.estado === "puede" && (!v.premios || conCarga(v))) v.armandoBase ??= armarBase(v);
   pintar(v);
@@ -660,7 +684,7 @@ async function activar(v: Ventana): Promise<void> {
   v.accion = null;
   v.conFallo = false;
   v.estadoLinea.classList.remove("ok", "bad");
-  v.estadoLinea.textContent = t(v.billetera?.tipo === "propia" ? "saldoActivarAprobar" : "saldoActivando");
+  v.fila.revisando(t(v.billetera?.tipo === "propia" ? "saldoActivarAprobar" : "saldoActivando"));
   const r: ResultadoDeActivacion = await v.deps.activar().catch(() => "no-salio" as const);
   if (!v.abierta) return;
   if (r === "no-aprobada" || r === "ahora-no") {
@@ -685,9 +709,8 @@ async function activar(v: Ventana): Promise<void> {
   }
   if (!v.abierta) return;
   if (v.estado?.estado === "puede" && (r === "activada" || r === "hecho")) {
-    v.estadoLinea.textContent = t("saldoActivadoOk");
-    v.estadoLinea.classList.add("ok");
-  } else if (r === "hecho" || r === "en-curso" || r === "enviada") v.estadoLinea.textContent = t("saldoActivandoEspera");
+    v.fila.llego(t("saldoActivadoOk"));
+  } else if (r === "hecho" || r === "en-curso" || r === "enviada") decir(v, t("saldoActivandoEspera"));
   else if (r === "no-patrocina") fallar(v, t("saldoNoPuedeApp"));
   else if (r === "no-salio") fallar(v, t("saldoActivarNoSalio"));
 }
@@ -703,24 +726,111 @@ async function armarBase(v: Ventana): Promise<void> {
   guardarBase(v.deps.red, v.cuenta, { ms: Date.now(), ultimoTx: r.valor.find((p) => esLlegada(p, v.cuenta))?.tx ?? null }, false);
 }
 
+/** El título de la dirección para cargar: con el monto que falta si quien abrió lo sabe, y si no el de siempre. */
+const tituloDeCargar = (v: Ventana): string => (v.falta ? con(t("saldoMandaT"), { n: v.falta }) : t("saldoRecibirTitulo"));
+
+/**
+ * Entra a la dirección para cargar. Si antes pasaron los cinco minutos sin ver nada, empieza de nuevo: la fila vuelve a decir
+ * que espera y, con sinVer apagado, `pintar` relanza la mirada sola. Si la mirada anterior sigue viva (volvió antes de que
+ * terminara su pausa), esa misma sigue y solo hace falta que la fila lo diga. No cambia qué se mira ni cada cuánto.
+ */
+function irATraer(v: Ventana): void {
+  v.vista = "traer";
+  v.sinVer = false;
+  decir(v, "");
+  pintar(v);
+  if (v.vigilando && !v.llegaron) mostrarEspera(v);
+}
+
+/** Lo que dice la fila mientras la ventana mira sola: o que espera el envío, o que la red no contestó. */
+function mostrarEspera(v: Ventana): void {
+  if (v.sinRed) v.fila.noSalio(t("saldoVigilaSinRed"));
+  else v.fila.revisando(v.textoEspera ?? t("saldoEsperando"));
+}
+
+/** Pasados los cinco minutos sin ver nada, «Volver a mirar» empieza de nuevo: mira ya y sigue mirando sola. */
+async function volverAMirarElEnvio(v: Ventana): Promise<void> {
+  v.sinVer = false;
+  v.sinRed = false;
+  v.textoEspera = null;
+  await mirarSiLlego(v, false);
+}
+
+/** Cada cuánto mira sola si llegaron dólares, y hasta cuántas veces: unos cinco minutos con la dirección a la vista. */
+const VIGILAR_CADA_MS = 6_000;
+const VUELTAS_DE_VIGILAR = 50;
+
+/**
+ * Con la dirección para cargar a la vista, mira sola si llegaron dólares: quien mandó no tiene que volver a tocar nada. Es
+ * la misma cuenta de «Ya lo mandé», callada: mientras no ve nada nuevo no dice nada ni toca el botón.
+ */
+async function vigilarLlegada(v: Ventana): Promise<void> {
+  if (v.vigilando) return;
+  v.vigilando = true;
+  // Mientras espera, la fila lo dice: no queda una pantalla quieta que parezca colgada.
+  mostrarEspera(v);
+  try {
+    let vueltas = 0;
+    while (vueltas < VUELTAS_DE_VIGILAR && v.abierta && !v.llegaron && v.vista === "traer") {
+      vueltas++;
+      await v.deps.pausa(VIGILAR_CADA_MS);
+      // Con «Ya lo mandé» corriendo (el botón apagado) no se mira dos veces a la vez.
+      if (!v.abierta || v.llegaron || v.vista !== "traer" || v.boton.disabled) continue;
+      await mirarSiLlego(v, true);
+    }
+    // Cinco minutos sin ver nada: se dice y se ofrece volver a mirar, en lugar de dejar de mirar en silencio.
+    if (vueltas >= VUELTAS_DE_VIGILAR && v.abierta && !v.llegaron && v.vista === "traer") {
+      v.sinVer = true;
+      pintar(v);
+      v.fila.noSalio(t("saldoSigueSinVer"));
+    }
+  } finally {
+    v.vigilando = false;
+  }
+}
+
 /** «Ya lo mandé»: qué llegó desde la base. Nunca invita a mandar de nuevo. */
-async function yaLoMande(v: Ventana): Promise<void> {
-  v.boton.disabled = true;
-  v.estadoLinea.classList.remove("ok", "bad");
-  v.estadoLinea.textContent = t("saldoMirando");
+const yaLoMande = (v: Ventana): Promise<void> => mirarSiLlego(v, false);
+
+/**
+ * Mira qué llegó desde la base. `callado` es la mirada que corre sola: no apaga el botón, no dice que está mirando y, si
+ * no llegó nada o la red falló, deja la pantalla como estaba.
+ */
+async function mirarSiLlego(v: Ventana, callado: boolean): Promise<void> {
+  if (!callado) {
+    v.boton.disabled = true;
+    v.estadoLinea.classList.remove("ok", "bad");
+    v.fila.revisando(t("saldoMirando"));
+  }
   await v.armandoBase?.catch(() => undefined);
   const base = leerBase(v.deps.red, v.cuenta);
   const tope = base.valor?.ultimoTx ?? null;
   const parar = tope ? (ps: Pago[]): boolean => ps.some((p) => p.tx === tope) : (ps: Pago[]): boolean => ps.some((p) => esLlegada(p, v.cuenta));
   const [r, lectura] = await Promise.all([v.deps.pagos(v.cuenta, parar).catch(() => ({ ok: false }) as const), v.deps.mirar(v.cuenta).catch(() => "sin-red" as const)]);
   if (!v.abierta) return;
-  if (typeof lectura === "object") v.lectura = lectura;
+  if (callado && (v.llegaron || v.boton.disabled)) return;
   if (!r.ok) {
+    // La mirada callada no deja la pantalla quieta si la red falla: lo dice y sigue mirando.
+    if (callado) {
+      v.sinRed = true;
+      mostrarEspera(v);
+      return;
+    }
+    if (typeof lectura === "object") v.lectura = lectura;
     pintar(v);
-    v.estadoLinea.textContent = t("saldoError");
+    v.fila.noSalio(t("saldoError"));
     return;
   }
+  v.fila.mirada();
+  if (v.sinRed) {
+    v.sinRed = false;
+    if (callado) mostrarEspera(v);
+  }
+  // Un error de «Ya lo mandé» no se queda en la fila si la mirada sola ya volvió a ver la red: vuelve a decir que espera.
+  if (v.vigilando && v.fila.estado() === "no-salio") mostrarEspera(v);
   const l = queLlego(r.valor, v.cuenta, base.valor);
+  if (callado && l.tipo !== "llegaron") return;
+  if (typeof lectura === "object") v.lectura = lectura;
   if (l.tipo === "llegaron") {
     guardarBase(v.deps.red, v.cuenta, { ms: Date.now(), ultimoTx: l.ultimoTx }, true);
     let texto = con(t("saldoLlegaron"), { n: formatoDeMonto(l.monto) });
@@ -732,15 +842,24 @@ async function yaLoMande(v: Ventana): Promise<void> {
     v.ultimo = null;
     v.llegaron = true;
     pintar(v);
-    v.estadoLinea.textContent = texto;
-    v.estadoLinea.classList.add("ok");
+    // La ventana no se cierra sola: el tilde y cuánto llegó quedan a la vista hasta que la persona toque Seguir.
+    v.fila.llego(texto);
     return;
   }
   v.ultimo = l.tipo === "ultimo" ? { monto: l.monto, ms: l.ms } : null;
-  pintar(v);
   // Sin una base guardada de antes no se sabe si el último es el que acaba de mandar: no se dice que no hay uno nuevo.
-  if (l.tipo === "ultimo") v.estadoLinea.textContent = base.confiable ? `${t("saldoNoVemosNuevo")} ${t("saldoEsperaNoMandes")}` : t("saldoEsperaNoMandes");
-  else v.estadoLinea.textContent = `${t("saldoNoLlegoTodavia")} ${t("saldoEsperaNoMandes")}`;
+  const sinNovedad =
+    l.tipo === "ultimo"
+      ? base.confiable
+        ? `${t("saldoNoVemosNuevo")} ${t("saldoEsperaNoMandes")}`
+        : t("saldoEsperaNoMandes")
+      : `${t("saldoNoLlegoTodavia")} ${t("saldoEsperaNoMandes")}`;
+  // Con la mirada sola andando, el aviso de no mandar de nuevo ocupa el lugar de la espera: el pago doble se evita igual.
+  v.textoEspera = sinNovedad;
+  v.sinVer = false;
+  pintar(v);
+  if (v.vigilando) mostrarEspera(v);
+  else v.fila.noSalio(sinNovedad);
 }
 
 /** Lo que quien abre la ventana puede pedir además de la cuenta. */
@@ -753,6 +872,10 @@ export interface OpcionesDeSaldo {
   vista?: Vista;
   /** Se llama cuando la ventana se cierra, para que quien la abrió vuelva a leer el saldo. */
   alCerrar?: () => void;
+  /** Cuánto falta mandar, ya escrito para mostrar (por ejemplo 1,50). Con esto la dirección para cargar lo dice en su título. */
+  falta?: string;
+  /** Mirar sola si llegaron dólares mientras la dirección está a la vista, sin esperar a que toquen Ya lo mandé. */
+  vigilar?: boolean;
 }
 
 /**
@@ -762,9 +885,11 @@ export function abrirSaldo(o: { address: string }, deps: Partial<DepsDeSaldo> = 
   const modo = modoDeRampa();
   if (modo === "apagada") return;
   const premios = modo === "premios";
+  const estadoLinea = lineaDeEstado();
   const v: Ventana = {
     d: undefined as unknown as Dialogo,
-    estadoLinea: lineaDeEstado(),
+    estadoLinea,
+    fila: crearFilaViva(estadoLinea, { hace: (n) => con(t("saldoHace"), { n }) }),
     boton: botonPrincipal(t(premios ? "acctClose" : "cargaYaTengo")),
     cuenta: o.address,
     deps: { ...depsDelSitio(), ...deps },
@@ -781,11 +906,18 @@ export function abrirSaldo(o: { address: string }, deps: Partial<DepsDeSaldo> = 
     activado: false,
     conFallo: false,
     accion: null,
+    falta: opciones.falta ?? null,
+    vigilar: opciones.vigilar === true,
+    vigilando: false,
+    sinVer: false,
+    sinRed: false,
+    textoEspera: null,
   };
   v.d = abrirDialogo({
     titulo: t("saldoTitle"),
     onCerrar: () => {
       v.abierta = false;
+      v.fila.detener();
       opciones.alCerrar?.();
     },
   });

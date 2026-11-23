@@ -278,17 +278,17 @@ describe("con pagar con Google", () => {
     expect(principal().textContent).toBe(t("saldoCargarBtn"));
   });
 
-  it("Ya lo mandé ve un pago nuevo, dice cuánto llegó y la principal pasa a Cerrar", async () => {
+  it("Ya lo mandé ve un pago nuevo, dice cuánto llegó y la principal pasa a Seguir", async () => {
     const m = mundo({ lista: [pago(TX("a"))] });
     await abrir(m);
     toque("cargar");
     m.lista = [pago(TX("b"), { monto: 100_000_000n }), pago(TX("a"))];
     m.lectura = conUsdc("22.5000000");
     principal().click();
-    await vi.waitFor(() => expect(estado()).toBe("Llegaron 10 dólares digitales."));
+    await vi.waitFor(() => expect(estado()).toBe("Llegaron 10,00 dólares digitales."));
     // La vista de cargar no repite el saldo arriba: el pie dice cuánto llegó.
     expect(document.querySelector('[data-saldo="total"]')).toBeNull();
-    expect(principal().textContent).toBe(t("acctClose"));
+    expect(principal().textContent).toBe(t("saldoSeguir"));
   });
 
   it("Ya lo mandé, sin nada nuevo, no invita a mandar de nuevo", async () => {
@@ -306,6 +306,252 @@ describe("con pagar con Google", () => {
     expect(titulos()).toEqual([T.es.saldoRecibirTitulo]);
     expect(document.querySelector('[data-saldo="dir"]')?.textContent).toBe(YO);
     expect(principal().textContent).toBe(t("saldoYaMande"));
+  });
+
+  it("si quien la abre sabe cuánto falta, el título de la dirección lo dice", async () => {
+    await abrir(mundo(), { vista: "traer", falta: "1,50" });
+    expect(titulos()).toEqual(["Mandá 1,50 dólares digitales"]);
+    expect(document.querySelector('[data-saldo="dir"]')?.textContent).toBe(YO);
+    expect(principal().textContent).toBe(t("saldoYaMande"));
+    setLang("en");
+    document.body.innerHTML = "";
+    await abrir(mundo(), { vista: "traer", falta: "1.50" });
+    expect(titulos()).toEqual(["Send 1.50 digital dollars"]);
+  });
+
+  /** Una pausa que la prueba suelta a mano: cada vuelta de la mirada sola espera acá. */
+  const pausaAMano = (): { pausa: () => Promise<void>; soltar: () => void; esperando: () => number } => {
+    let pendientes: Array<() => void> = [];
+    return {
+      pausa: () => new Promise<void>((r) => void pendientes.push(r)),
+      soltar: () => {
+        const ps = pendientes;
+        pendientes = [];
+        for (const r of ps) r();
+      },
+      esperando: () => pendientes.length,
+    };
+  };
+
+  it("mirando sola, ve llegar los dólares sin que nadie toque Ya lo mandé", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    // Mientras espera se ve que está mirando sola: la ruedita y qué espera, no una pantalla quieta.
+    expect(estado()).toBe(t("saldoEsperando"));
+    expect(document.querySelector(".dlg-estado.fv-revisando .cc-gira")).not.toBeNull();
+    m.lista = [pago(TX("b"), { monto: 15_000_000n }), pago(TX("a"))];
+    m.lectura = conUsdc("14.0000000");
+    reloj.soltar();
+    await vi.waitFor(() => expect(estado()).toBe("Llegaron 1,50 dólares digitales."));
+    // Llegó: el tilde y cuánto llegó, y la ventana no se cierra sola.
+    expect(document.querySelector(".dlg-estado.fv-llego")).not.toBeNull();
+    expect(document.querySelector(".dlg-estado .cc-gira")).toBeNull();
+    expect(dialogo()).not.toBeNull();
+    expect(principal().textContent).toBe(t("saldoSeguir"));
+    // Con la plata vista, deja de mirar: no queda ninguna vuelta esperando.
+    reloj.soltar();
+    await Promise.resolve();
+    expect(reloj.esperando()).toBe(0);
+  });
+
+  it("cuando llega, el cuerpo deja de pedir que mande: sin dirección ni QR, y un título de llegada", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", falta: "1,50", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    expect(titulos()).toEqual(["Mandá 1,50 dólares digitales"]);
+    m.lista = [pago(TX("b"), { monto: 15_000_000n }), pago(TX("a"))];
+    reloj.soltar();
+    await vi.waitFor(() => expect(estado()).toBe("Llegaron 1,50 dólares digitales."));
+    expect(titulos()).toEqual([T.es.saldoLlegoT]);
+    expect(lineas()).toEqual([]);
+    expect(hay("dir")).toBe(false);
+    expect(hay("qr")).toBe(false);
+    expect(hay("copiar")).toBe(false);
+    expect(principal().textContent).toBe(t("saldoSeguir"));
+    expect(T.en.saldoLlegoT).toBe("Your transfer arrived");
+  });
+
+  it("la línea de espera dice que acá se avisa cuando llegue", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    expect(estado()).toBe("Esperando tu envío. Acá te avisamos cuando llegue.");
+  });
+
+  it("la línea de espera dice lo mismo en inglés", async () => {
+    setLang("en");
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    expect(estado()).toBe("Waiting for your transfer. We'll tell you here when it arrives.");
+  });
+
+  it("todo monto lleva dos decimales, también en inglés, con punto", async () => {
+    setLang("en");
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    m.lista = [pago(TX("b"), { monto: 15_000_000n }), pago(TX("a"))];
+    reloj.soltar();
+    await vi.waitFor(() => expect(estado()).toBe("1.50 digital dollars arrived."));
+  });
+
+  it("un envío con más precisión que un centavo no inventa plata: se recorta", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    m.lista = [pago(TX("b"), { monto: 12_345_678n }), pago(TX("a"))];
+    reloj.soltar();
+    await vi.waitFor(() => expect(estado()).toBe("Llegaron 1,23 dólares digitales."));
+  });
+
+  it("mirando sola, mientras no llega nada sigue diciendo que espera y no cambia el botón", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    reloj.soltar();
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    expect(estado()).toBe(t("saldoEsperando"));
+    expect(principal().textContent).toBe(t("saldoYaMande"));
+    expect(principal().disabled).toBe(false);
+  });
+
+  it("mirando sola, una falla de la red se dice, sigue mirando y, al volver, vuelve a decir que espera", async () => {
+    const reloj = pausaAMano();
+    let cae = false;
+    const m: Mundo = mundo({
+      lista: [pago(TX("a"))],
+      pausa: reloj.pausa,
+      pagos: async () => (cae ? { ok: false as const } : { ok: true as const, valor: [...m.lista] }),
+    });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    cae = true;
+    reloj.soltar();
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    expect(estado()).toBe(t("saldoVigilaSinRed"));
+    expect(document.querySelector(".dlg-estado.fv-no-salio")).not.toBeNull();
+    expect(principal().textContent).toBe(t("saldoYaMande"));
+    cae = false;
+    reloj.soltar();
+    await vi.waitFor(() => expect(estado()).toBe(t("saldoEsperando")));
+    expect(reloj.esperando()).toBe(1);
+  });
+
+  it("un error de Ya lo mandé no se queda en la fila cuando la mirada sola ya volvió a ver la red", async () => {
+    const reloj = pausaAMano();
+    let cae = false;
+    const m: Mundo = mundo({
+      lista: [pago(TX("a"))],
+      pausa: reloj.pausa,
+      pagos: async () => (cae ? { ok: false as const } : { ok: true as const, valor: [...m.lista] }),
+    });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    cae = true;
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toBe(t("saldoError")));
+    // La red vuelve y la mirada sola lo ve: sin novedad, la fila deja el aviso y vuelve a decir que espera, con la ruedita.
+    cae = false;
+    reloj.soltar();
+    await vi.waitFor(() => expect(estado()).toBe(t("saldoEsperando")));
+    expect(document.querySelector(".dlg-estado.fv-revisando .cc-gira")).not.toBeNull();
+    expect(document.querySelector(".dlg-estado.fv-no-salio")).toBeNull();
+  });
+
+  it("pasados los cinco minutos sin ver nada lo dice y ofrece Volver a mirar, que empieza de nuevo", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    for (let i = 0; i < 50; i++) {
+      await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+      reloj.soltar();
+    }
+    await vi.waitFor(() => expect(estado()).toBe(t("saldoSigueSinVer")));
+    expect(principal().textContent).toBe(t("saldoVolverAMirar"));
+    expect(reloj.esperando()).toBe(0);
+    // Volver a mirar mira ya y sigue mirando sola.
+    principal().click();
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    expect(principal().textContent).toBe(t("saldoYaMande"));
+    expect(estado()).toContain(t("saldoEsperaNoMandes"));
+    expect(document.querySelector(".dlg-estado.fv-revisando")).not.toBeNull();
+  });
+
+  it("pasados los cinco minutos, si vuelve atrás y entra otra vez a la dirección, la fila vuelve y mira sola", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    for (let i = 0; i < 50; i++) {
+      await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+      reloj.soltar();
+    }
+    await vi.waitFor(() => expect(estado()).toBe(t("saldoSigueSinVer")));
+    expect(principal().textContent).toBe(t("saldoVolverAMirar"));
+    toque("volver");
+    expect(estado()).toBe("");
+    toque("cargar");
+    expect(principal().textContent).toBe(t("saldoYaMande"));
+    expect(estado()).toBe(t("saldoEsperando"));
+    expect(document.querySelector(".dlg-estado.fv-revisando .cc-gira")).not.toBeNull();
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+  });
+
+  it("si vuelve atrás y entra otra vez antes de la siguiente vuelta, la fila no queda vacía", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    toque("volver");
+    expect(estado()).toBe("");
+    toque("cargar");
+    expect(estado()).toBe(t("saldoEsperando"));
+    expect(document.querySelector(".dlg-estado.fv-revisando")).not.toBeNull();
+    // La misma mirada sigue: no se lanza una segunda.
+    reloj.soltar();
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+  });
+
+  it("si la espera termina con lo que Ya lo mandé dijo, el aviso de no mandar de nuevo no se pierde", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toContain(t("saldoEsperaNoMandes")));
+    expect(document.querySelector(".dlg-estado.fv-revisando .cc-gira")).not.toBeNull();
+    reloj.soltar();
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    expect(estado()).toContain(t("saldoEsperaNoMandes"));
+  });
+
+  it("sin pedirlo, la ventana no mira sola: solo con Ya lo mandé", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer" });
+    await Promise.resolve();
+    expect(reloj.esperando()).toBe(0);
+  });
+
+  it("al cerrar la ventana, la mirada sola se detiene", async () => {
+    const reloj = pausaAMano();
+    const m = mundo({ lista: [pago(TX("a"))], pausa: reloj.pausa });
+    await abrir(m, { vista: "traer", vigilar: true });
+    await vi.waitFor(() => expect(reloj.esperando()).toBe(1));
+    document.querySelector<HTMLButtonElement>("[data-dlg='x']")?.click();
+    const llamadas = (m.pagos as ReturnType<typeof vi.fn>).mock.calls.length;
+    reloj.soltar();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect((m.pagos as ReturnType<typeof vi.fn>).mock.calls.length).toBe(llamadas);
   });
 
   it("abierta directo en traer, sin la línea, primero prepara la cuenta", async () => {

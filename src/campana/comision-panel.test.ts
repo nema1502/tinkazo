@@ -56,7 +56,7 @@ describe("el orden de prioridad", () => {
 
 describe("pagar con la cuenta", () => {
   it("con el saldo justo de los premios más la comisión, lista", () => {
-    expect(estadoDeComision(con({ saldo: d(122.4) }))).toEqual({ tipo: "lista", sale: d(2.4) });
+    expect(estadoDeComision(con({ saldo: d(122.4) }))).toEqual({ tipo: "lista", sale: d(2.4), saldo: d(122.4) });
   });
 
   it("un centavo menos, falta cargar con lo que falta", () => {
@@ -91,7 +91,7 @@ describe("pagar con la cuenta", () => {
 
   it("el ensayo de un dólar paga el mínimo: 1,50 y se cargan 2,50", () => {
     const e = estadoDeComision(con({ premios: d(1), comision: d(1.5), umbral: d(1), saldo: d(2.5) }));
-    expect(e).toEqual({ tipo: "lista", sale: d(1.5) });
+    expect(e).toEqual({ tipo: "lista", sale: d(1.5), saldo: d(2.5) });
     expect(estadoDeComision(con({ premios: d(1), comision: d(1.5), umbral: d(1), saldo: d(2.49) }))).toMatchObject({ cargar: d(2.5) });
   });
 });
@@ -132,7 +132,7 @@ describe("una cuenta que entró con correo", () => {
   });
 
   it("con un archivo firmado paga con un toque como antes: ahí no hay sala que pida Google", () => {
-    expect(estadoDeComision(con({ billetera: "correo" }))).toEqual({ tipo: "lista", sale: d(2.4) });
+    expect(estadoDeComision(con({ billetera: "correo" }))).toEqual({ tipo: "lista", sale: d(2.4), saldo: d(150) });
     expect(estadoDeComision(con({ billetera: "correo", soloGoogle: false, saldo: 0n }))).toMatchObject({ tipo: "falta-cargar" });
   });
 
@@ -143,7 +143,7 @@ describe("una cuenta que entró con correo", () => {
   });
 
   it("la de Google con un borrador sigue pudiendo pagar", () => {
-    expect(estadoDeComision(con({ soloGoogle: true }))).toEqual({ tipo: "lista", sale: d(2.4) });
+    expect(estadoDeComision(con({ soloGoogle: true }))).toEqual({ tipo: "lista", sale: d(2.4), saldo: d(150) });
   });
 
   it("sin poder mirar la red, a la de Google no se le dice que su cuenta no sirve", () => {
@@ -160,7 +160,7 @@ describe("el pago a medias", () => {
   it("con una parte llegada y un resto de un dólar o más, paga el resto más el costo", () => {
     expect(loQueSale(BASE, d(0.8))).toBe(d(1.1) + d(0.5));
     const e = estadoDeComision(con({ red: { tipo: "no-pagada", suma: d(0.8) }, saldo: d(500) }));
-    expect(e).toEqual({ tipo: "lista", sale: d(1.6) });
+    expect(e).toEqual({ tipo: "lista", sale: d(1.6), saldo: d(500) });
   });
 
   it("con un resto de menos de un dólar solo queda el pago desde otra billetera, con ese resto", () => {
