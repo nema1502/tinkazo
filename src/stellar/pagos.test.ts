@@ -5,6 +5,7 @@ import {
   USDC_MAINNET,
   USDC_TESTNET,
   activoDePagos,
+  cuentasDescartadasDe,
   cuentasQuePagan,
   esDireccionG,
   estadoDelPago,
@@ -90,6 +91,13 @@ describe("el activo con que se paga", () => {
     expect(cuentasQuePagan(`${ORG}, ${GANA};${ORG} basura GABC`)).toEqual([ORG, GANA]);
     expect(cuentasQuePagan("")).toEqual([]);
     expect(cuentasQuePagan(undefined)).toEqual([]);
+  });
+
+  it("cuenta las que se descartaron porque no son una dirección", () => {
+    expect(cuentasDescartadasDe(`${ORG}, ${GANA};${ORG} basura GABC`)).toBe(2);
+    expect(cuentasDescartadasDe(`, , basura`), "una sola basura").toBe(1);
+    expect(cuentasDescartadasDe(`${ORG};${GANA}`)).toBe(0);
+    expect(cuentasDescartadasDe(undefined)).toBe(0);
   });
 });
 
