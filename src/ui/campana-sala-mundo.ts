@@ -386,8 +386,3 @@ export function botonDeFila(p: Panel, n: number, rotulo: string): HTMLButtonElem
   return b;
 }
 
-/** Confirma el cierre con el segundo toque ya fuera de la guarda del doble toque. */
-export async function confirmarCierre(m: Mundo, p: Panel, rotulo: string): Promise<void> {
-  await m.correr(700);
-  boton(p, rotulo).click();
-}

@@ -20,7 +20,6 @@ import {
   boton,
   botones,
   cerrarTodos,
-  confirmarCierre,
   equipoDe,
   filaDe,
   mundo,
@@ -52,7 +51,6 @@ async function cerrarConDos(m: Mundo, p: Panel): Promise<void> {
   await alta(m, 2, "Nora");
   await vi.waitFor(() => expect(document.querySelectorAll("#cpo-ul > li")).toHaveLength(2));
   boton(p, "Cerrar la lista").click();
-  await confirmarCierre(m, p, "Cerrar con 2 personas");
   await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
 }
 
@@ -240,15 +238,14 @@ describe("volver a abrir y dejar la campaña", () => {
     expect(pasoDelPuente()).toEqual({ paso: "nada" });
   });
 
-  it("dejar la campaña le avisa a la herramienta", async () => {
+  it("armar otra campaña desde la lista cerrada le avisa a la herramienta", async () => {
     const m = mundo();
     espiar(m);
     const olvidar = vi.fn();
     m.deps.alOlvidar = olvidar;
     const p = nuevoPanel(m);
     await cerrarConDos(m, p);
-    boton(p, "Elegir otro archivo").click();
-    boton(p, "Sí, dejarla").click();
+    boton(p, "Armar otra campaña").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
     expect(olvidar).toHaveBeenCalledTimes(1);
   });

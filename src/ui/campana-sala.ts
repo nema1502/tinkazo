@@ -279,7 +279,6 @@ type Vista =
   | "elegir"
   | "previa"
   | "abierta"
-  | "confirmar"
   | "olvidar"
   | "cerrada"
   | "sellada"
@@ -354,8 +353,7 @@ const VENTANA_DEL_PASE_MS = 120_000;
 const HOLGURA_DEL_RELOJ_MS = 30_000;
 /** Un pase vale entre 14 y 16 minutos: pasados 12 sin uno nuevo, el QR se saca antes de que la sala lo rechace. */
 const VIGENCIA_DEL_PASE_MS = 12 * 60_000;
-/** Un doble toque en Cerrar no puede confirmar solo: el segundo toque cae sobre el botón de confirmar. */
-const GUARDA_DE_CONFIRMAR_MS = 600;
+/** Con la lista cerrada se lee entera hasta 4 veces antes de rendirse: se compara con el total que dice la sala. */
 const VUELTAS_AL_CERRAR = 4;
 const ESPERA_AL_LEER_MS = 1_000;
 /** Un archivo firmado pesa menos de 90.000 bytes: lo que pasa de eso no es una campaña y no se lee entero. */
@@ -510,7 +508,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let sinLeer = false;
   /** Mientras se cierra y se lee la lista desde esta pantalla: no es "retomada", no hace falta tocar Pasar la lista. */
   let cerrandoAhora = false;
-  let entroAConfirmar = 0;
   let ultimoEnlace = "";
   let pararDespertar: (() => void) | null = null;
   let dejarElPuente: (() => void) | null = null;
@@ -765,7 +762,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     grande.pintar();
   }
 
-  const conPase = (): boolean => vista === "abierta" || vista === "confirmar";
+  const conPase = (): boolean => vista === "abierta";
 
   function pedirElPase(): void {
     pararPase?.();
@@ -810,7 +807,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     });
   }
 
-  /** Vuelve a pedir el pase si nadie lo está esperando ni lo tiene programado: pasa al volver de confirmar o de un fallo. */
+  /** Vuelve a pedir el pase si nadie lo está esperando ni lo tiene programado: pasa al volver de una salida o de un fallo. */
   function asegurarPase(): void {
     if (!pararPase && !paseEnCurso) pedirElPase();
   }
@@ -840,11 +837,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       if (activacion.tipo === "temprano") volverDeTemprano();
     }
     if (!sala) return;
-    if (vista === "abierta" || vista === "confirmar") {
+    if (vista === "abierta") {
       pedirElPase();
       programarCierre();
     }
-    if (vista === "abierta" || vista === "confirmar" || vista === "cerrada") {
+    if (vista === "abierta" || vista === "cerrada") {
       pintar();
       grande.pintar();
       void escucha?.consultar();
@@ -1319,13 +1316,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pintarQrs();
   }
 
-  function volverAAbierta(): void {
-    vista = "abierta";
-    asegurarPase();
-    programarCierre();
-    pintar();
-  }
-
   /** Quitar dos veces es lo mismo que una: si la respuesta se perdió, se manda otra vez y la sala dice que ya no estaba. */
   function mandarQuitar(n: number): Promise<boolean> {
     const previo = vuelo.get(n);
@@ -1423,38 +1413,32 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     grande.pintar();
   }
 
-  function pedirCerrar(): void {
-    mensaje = "";
-    if (visibles().length < 2) return aviso(tx("cpoPocos"));
-    vista = "confirmar";
-    entroAConfirmar = deps.ahora();
-    pintar();
-  }
-
+  /**
+   * Cierra la lista en un toque, como el QR del stand: nada que confirmar dos veces. La consecuencia queda dicha en la
+   * pantalla de cerrado, y Deshacer ahí (Volver a abrir la lista) la reabre. Con menos de dos personas no cierra: lo dice.
+   * Un doble toque no cierra dos veces: el primer toque pone `trabajando` y el botón queda apagado o fuera del DOM.
+   */
   async function cerrarLista(): Promise<void> {
     const s = sala;
     if (!s || trabajando) return;
-    if (deps.ahora() - entroAConfirmar < GUARDA_DE_CONFIRMAR_MS) return;
+    if (visibles().length < 2) return aviso(tx("cpoPocos"));
     trabajando = true;
     mensaje = "";
     pintar();
     const m = marca;
-    // Lo que quien organiza ya decidió sacar sale antes de cerrar: así la lista que se confirmó es la que queda.
+    // Lo que quien organiza ya decidió sacar sale antes de cerrar: así la lista que se cerró es la que queda.
     for (const n of [...pendientes.keys()]) void mandarQuitar(n);
     await Promise.all([...vuelo.values()]);
     if (m !== marca) return void (trabajando = false);
     if (enviando.size > 0) {
       trabajando = false;
       mensaje = tx("cpoSinConexion");
-      return volverAAbierta();
+      return pintar();
     }
     const r = await aplicarFase(s, "cerrada", null, "abierta");
     trabajando = false;
     if (m !== marca) return;
-    if (!r.ok) {
-      if (vista === "confirmar") volverAAbierta();
-      return;
-    }
+    if (!r.ok) return;
     pasada = false;
     cerrandoAhora = true;
     irA("cerrada", r.cierraMs);
@@ -1667,7 +1651,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   function pintarAcciones(): void {
     const hora = pasoLaHora();
-    const n = visibles().length;
     const paso = pasoDelPuente();
     const firma = [
       vista,
@@ -1678,7 +1661,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       sinLeer,
       !!sala,
       deps.idioma(),
-      vista === "confirmar" ? n : 0,
       JSON.stringify(paso),
       listaTrabada(),
       vista === "previa" ? (cm?.firma() ?? "") : "",
@@ -1742,7 +1724,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       }
     } else if (vista === "abierta") {
       const abrirGrande = (b: HTMLButtonElement): void => grande.abrir(b);
-      const cerrar = (): void => pedirCerrar();
+      const cerrar = (): void => void cerrarLista();
       if (hora) {
         botones.push(principal(tx("cpoCerrar"), cerrar, trabajando));
         botones.push(boton(tx("cpoGrande"), "ghost", abrirGrande));
@@ -1752,9 +1734,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       }
       botones.push(boton(tx("cpoMas15"), "ghost", () => void masQuince(), trabajando));
       botones.push(otroArchivo());
-    } else if (vista === "confirmar") {
-      botones.push(principal(fmt("cpoCerrarCon", { n }), () => void cerrarLista(), trabajando));
-      botones.push(boton(tx("cpoSeguirAbierta"), "ghost", () => volverAAbierta(), trabajando));
     } else if (vista === "olvidar") {
       botones.push(principal(tx("cpoOlvidarSi"), () => void confirmarOlvidar(), trabajando));
       botones.push(boton(tx("cpoCancelar"), "ghost", () => cancelarOlvidar()));
@@ -1765,7 +1744,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       else if (retomada) botones.push(principal(tx("cpoPasar"), () => void (sala && leerListaCompleta(sala))));
       botones.push(boton(tx("cpoGrande"), "ghost", (b) => grande.abrir(b)));
       if (!listaTrabada()) botones.push(boton(tx("cpoReabrir"), "enlace", () => void reabrir(), trabajando));
-      botones.push(otroArchivo());
+      // Armar otra campaña en el mismo lugar: un toque y elige el archivo de la siguiente, sin pasar por ninguna pregunta.
+      botones.push(boton(tx("cpoOtra"), "enlace", () => { olvidar(); elegir(); }));
     } else if (vista === "sellada" || vista === "sorteada") {
       const delBoton = principalDelPaso();
       if (delBoton) botones.push(delBoton);
@@ -1814,7 +1794,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   const TITULOS: Partial<Record<Vista, string>> = {
     elegir: "cpoTitulo",
-    confirmar: "cpoCerrarT",
     olvidar: "cpoOlvidarT",
     cerrada: "cpoCerradaT",
     sellada: "cpoSellada",
@@ -1830,7 +1809,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     let titulo = tx(TITULOS[vista] ?? "cpoTitulo");
     let linea = "";
     if (vista === "elegir") linea = tx("cpoElegirLinea");
-    if (vista === "confirmar") linea = tx("cpoCerrarLinea");
+    if (vista === "cerrada") linea = tx("cpoCerrarLinea");
     if (vista === "cerrada" && sinLeer) linea = tx("cpoNoLeyo");
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? lineaDelPaso(pasoDelPuente()) : null;
     if (delPaso) linea = fmt(delPaso.clave, { ...delPaso.vars, boton: deps.botonDeSellar?.() ?? t("freeze") });
@@ -1954,7 +1933,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pieEl.hidden = vista !== "cerrada" || !sala || !campana;
     if (sala && campana && vista === "cerrada") {
       const fecha = fechaTexto(sala.vence, campana.zona, deps.idioma());
-      pieEl.textContent = fmt("cpoSeBorra", { fecha, hora: horaTexto(sala.vence, campana.zona, deps.idioma()) });
+      // La consecuencia dicha en simple: la lista queda a la vista, sin palabras que asusten.
+      pieEl.textContent = fmt("cpoSeBorra", { fecha });
     }
     pintarPlegado();
   }

@@ -33,7 +33,6 @@ import {
   botones,
   bus,
   cerrarTodos,
-  confirmarCierre,
   elegirArchivo,
   equipoDe,
   filaDe,
@@ -441,7 +440,7 @@ describe("el pase del QR", () => {
     expect(capa.querySelector(".cg-sinqr")?.textContent).toBe("Sin conexión. Reconectando…");
   });
 
-  it("sigue renovándose mientras se confirma el cierre y al volver a abierta", async () => {
+  it("al cerrar deja de renovar el pase y al volver a abrir lo pide de nuevo", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
     await abrirInscripcion(m, p);
@@ -449,12 +448,11 @@ describe("el pase del QR", () => {
     await alta(m, 2, "Nora");
     await vi.waitFor(() => expect(texto(p, "#cpo-n")).toBe("2"));
     boton(p, "Cerrar la lista").click();
-    expect(vistaDe(p)).toBe("confirmar");
-    await m.correr(120_000);
-    expect(m.pases).toBe(2);
-    boton(p, "Seguir abierta").click();
-    await m.correr(14 * 60_000);
-    expect(m.pases).toBe(9);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+    const antesDeAbrir = m.pases;
+    boton(p, "Volver a abrir la lista").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+    await vi.waitFor(() => expect(m.pases).toBeGreaterThan(antesDeAbrir));
   });
 });
 
@@ -630,10 +628,8 @@ describe("quitar a alguien con su motivo", () => {
     await vi.waitFor(() => expect(filasDe(p)).toHaveLength(3));
     botonDeFila(p, 3, "Quitar").click();
     botonDeFila(p, 3, "Otro").click();
-    boton(p, "Cerrar la lista").click();
-    expect(vistaDe(p)).toBe("confirmar");
     m.respuestasAQuitar.push({ falla: "red", llega: false });
-    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    boton(p, "Cerrar la lista").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
     expect(m.fases.filter(([f]) => f === "cerrada")).toHaveLength(0);
     expect(texto(p, "#cpo-aviso")).toBe("Sin conexión. Probá de nuevo.");
@@ -650,7 +646,6 @@ describe("quitar a alguien con su motivo", () => {
     botonDeFila(p, 3, "Quitar").click();
     botonDeFila(p, 3, "Cuenta repetida").click();
     boton(p, "Cerrar la lista").click();
-    await confirmarCierre(m, p, "Cerrar con 2 personas");
     await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
     expect(m.quitadas).toEqual([[3, "repetida"]]);
     expect(m.fases[m.fases.length - 1]).toEqual(["cerrada", null]);
@@ -702,7 +697,7 @@ describe("cerrar la lista", () => {
     expect(vistaDe(p)).toBe("abierta");
   });
 
-  it("con dos pide confirmar, cierra, lo guarda y llama a alCerrar con las dos", async () => {
+  it("con dos cierra al tocar Cerrar la lista, en un toque y sin confirmar, y llama a alCerrar con las dos", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
     await abrirInscripcion(m, p);
@@ -710,19 +705,20 @@ describe("cerrar la lista", () => {
     await alta(m, 2, "Nora");
     await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
     boton(p, "Cerrar la lista").click();
-    expect(texto(p, "#cpo-h")).toBe("¿Cerrar la lista?");
-    expect(texto(p, "#cpo-linea")).toBe("Nadie más va a poder anotarse.");
-    expect(principales(p).map((b) => b.textContent)).toEqual(["Cerrar con 2 personas"]);
-    await confirmarCierre(m, p, "Cerrar con 2 personas");
     await vi.waitFor(() => expect(m.cerradas).toHaveLength(1));
     expect(m.fases[m.fases.length - 1]).toEqual(["cerrada", null]);
     expect(leerOrg(m.almacen, AHORA, "testnet")?.fase).toBe("cerrada");
     expect(m.cerradas[0]?.filas.map((f) => [f.n, f.nombre])).toEqual([[2, "Nora"], [1, "Ana"]]);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
     expect(texto(p, "#cpo-h")).toBe("Lista cerrada");
+    // La consecuencia dicha en simple, sin susto.
+    expect(texto(p, "#cpo-linea")).toBe("Nadie más va a poder anotarse.");
+    expect(texto(p, "#cpo-pie")).toBe("La lista queda guardada hasta el 22 de noviembre.");
+    expect(texto(p, "#cpo-pie")).not.toContain("borra");
     expect(principales(p)).toHaveLength(0);
   });
 
-  it("un doble toque no confirma el cierre sin querer", async () => {
+  it("desde cerrada, Armar otra campaña en el mismo lugar olvida la campaña en un toque", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
     await abrirInscripcion(m, p);
@@ -730,10 +726,28 @@ describe("cerrar la lista", () => {
     await alta(m, 2, "Nora");
     await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
     boton(p, "Cerrar la lista").click();
-    boton(p, "Cerrar con 2 personas").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+    expect(botones(p).map((b) => b.textContent)).toContain("Armar otra campaña");
+    expect(texto(p, "#cpo-aviso")).not.toBe("La sala se cerró y se borró todo.");
+    boton(p, "Armar otra campaña").click();
+    expect(vistaDe(p)).toBe("elegir");
+    expect(m.almacen.getItem(CLAVE_ORG)).toBeNull();
+    expect(boton(p, "Elegir el archivo")).toBeTruthy();
+  });
+
+  it("un doble toque no cierra dos veces: el segundo golpe cae sobre el cierre en curso", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await abrirInscripcion(m, p);
+    await alta(m, 1, "Ana");
+    await alta(m, 2, "Nora");
+    await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
+    const b = boton(p, "Cerrar la lista");
+    b.click();
+    b.click();
     await suelta();
-    expect(m.fases.filter(([f]) => f === "cerrada")).toHaveLength(0);
-    expect(vistaDe(p)).toBe("confirmar");
+    expect(m.fases.filter(([f]) => f === "cerrada")).toHaveLength(1);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
   });
 
   it("al cerrar muestra cuándo se borra y deja volver a abrir", async () => {
@@ -744,9 +758,8 @@ describe("cerrar la lista", () => {
     await alta(m, 2, "Nora");
     await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
     boton(p, "Cerrar la lista").click();
-    await confirmarCierre(m, p, "Cerrar con 2 personas");
     await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
-    expect(texto(p, "#cpo-pie")).toBe("La lista se borra el 22 de noviembre a las 14:00.");
+    expect(texto(p, "#cpo-pie")).toBe("La lista queda guardada hasta el 22 de noviembre.");
     boton(p, "Volver a abrir la lista").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
     expect(m.fases[m.fases.length - 1]?.[0]).toBe("abierta");
@@ -759,9 +772,8 @@ describe("cerrar la lista", () => {
     await alta(m, 1, "Ana");
     await alta(m, 2, "Nora");
     await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
-    boton(p, "Cerrar la lista").click();
     m.respuestasAFase.push({ falla: "red", llega: true });
-    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    boton(p, "Cerrar la lista").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
     expect(m.fases.filter(([f]) => f === "cerrada")).toHaveLength(1);
     await vi.waitFor(() => expect(m.cerradas).toHaveLength(1));
@@ -783,9 +795,8 @@ describe("cerrar la lista", () => {
     await alta(m, 1, "Ana");
     await alta(m, 2, "Nora");
     await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
-    boton(p, "Cerrar la lista").click();
     m.paginas.push([await equipoDe(m, 3, "Beto")]);
-    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    boton(p, "Cerrar la lista").click();
     await vi.waitFor(() => expect(m.cerradas).toHaveLength(1));
     expect(m.cerradas[0]?.filas.map((f) => f.n)).toEqual([3, 2, 1]);
     expect(texto(p, "#cpo-n")).toBe("3");
@@ -799,7 +810,6 @@ describe("cerrar la lista", () => {
     await alta(m, 2, "Nora");
     await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
     boton(p, "Cerrar la lista").click();
-    await confirmarCierre(m, p, "Cerrar con 2 personas");
     await vi.waitFor(() => expect(m.cerradas).toHaveLength(1));
     botonDeFila(p, 1, "Quitar").click();
     botonDeFila(p, 1, "Otro").click();
@@ -815,9 +825,8 @@ describe("cerrar la lista", () => {
     await alta(m, 1, "Ana");
     await alta(m, 2, "Nora");
     await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
-    boton(p, "Cerrar la lista").click();
     m.sala.enSala.add(99);
-    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    boton(p, "Cerrar la lista").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
     for (let i = 0; i < 6; i++) await m.correr(1_000);
     expect(m.cerradas).toHaveLength(0);
@@ -1127,7 +1136,6 @@ describe("la pantalla grande", () => {
     await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
     boton(p, "Mostrar en grande").click();
     boton(p, "Cerrar la lista").click();
-    await confirmarCierre(m, p, "Cerrar con 2 personas");
     await vi.waitFor(() => expect(m.cerradas).toHaveLength(1));
     const capa = document.querySelector<HTMLElement>(".campana-grande") as HTMLElement;
     expect(capa.querySelector(".cg-cerro")?.textContent).toBe("Lista cerrada");
