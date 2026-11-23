@@ -13,6 +13,7 @@ import { soltarPantallaCompleta } from "./pantalla-completa";
 import { etiquetasSonDePersonas, nombreDelEquipo, paraMostrar } from "../equipos/etiquetas";
 import { hayModoOficial, network } from "../stellar/config";
 import { atencionPrendida } from "../estilos-atencion";
+import { presentarTeaser } from "./games-teaser";
 import { armarQrDeEspectador, datosDeLaEspera, esconderQrDeEspectador, figuraDelQrHtml } from "./espectador-enlace";
 import { isTurnOrder } from "../modos/turnos";
 import { isSecretSanta } from "../modos/amigo";
@@ -327,6 +328,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     // El QR del espectador (ui/espectador.ts): quien lo escanea ve la misma cuenta y el mismo show. Lleva solo el
     // enlace corto, que llega aparte (enlace-corto.ts): hasta entonces dice que se está preparando.
     (conEspectador ? figuraDelQrHtml() : "") +
+    // La presentación de la lista sellada durante la cuenta (issue #78, games-teaser.ts): los nombres de las cintas, de a una tarjeta por persona.
+    `<div class="espera-teaser-caja"></div>` +
     `<div class="espera-nombres">${cintas(f.names)}</div>` +
     // Sin sello (la red no dejó sellar) no dice "sellada": la sala lo lee desde el fondo y no debe creer que se puede comprobar.
     `<p class="espera-pie">${esc(
@@ -378,6 +381,21 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     });
   };
   armarQr();
+  /**
+   * La presentación de la lista sellada durante la cuenta (issue #78): una
+   * tarjeta por persona, con el gancho visual del juego elegido. Sale solo de
+   * la lista sellada (`f.names`, con su orden, ya lista para mostrar como las
+   * cintas): nada del resultado, que todavía no existe, y nada que cambie la
+   * selección. Muere con la capa; si el juego cambia en medio de la cuenta, se
+   * rearma con el gancho del juego nuevo.
+   */
+  const armarTeaser = (): void => {
+    if (!back.isConnected || !app.frozen || amigo) return;
+    // El juego elegido, de la misma fuente que pintarNombre: lo que muestra la sala.
+    const elegido = sorteo.juegos().find((j) => j.elegido)?.game ?? app.game;
+    presentarTeaser(back.querySelector<HTMLElement>(".espera-teaser-caja"), elegido, paraMostrar(app.frozen.names));
+  };
+  armarTeaser();
   // Que entre en la pantalla: ahora, cuando cambia el tamaño (un proyector que se conecta, un zoom) y cuando llegan las letras.
   const ajusta = (): void => ajustar(back);
   ajusta();
@@ -501,7 +519,11 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   };
   // El juego o la duración cambiaron desde la página (la duración del selector): el nombre y el QR se rehacen.
   const alCambiar = (): void => {
-    if (back.isConnected && fase === "cuenta") pintarNombre();
+    if (back.isConnected && fase === "cuenta") {
+      pintarNombre();
+      // Con otro juego en el show, la presentación presenta con el gancho del juego nuevo.
+      armarTeaser();
+    }
   };
   document.addEventListener("tinkazo:cambio-con-qr", alCambiar);
   document.addEventListener("tinkazo:ritmo", alCambiar);
