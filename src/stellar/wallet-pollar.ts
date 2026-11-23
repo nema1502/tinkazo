@@ -11,7 +11,7 @@ import { entornoDelBuild } from "./venta-piloto";
 import { errorKey, esDeRed } from "./errores";
 import type { LecturaDeCotizacion, LoQueFalta, PasoDeVerificacion, PrecioDeCarga, QueSeAprueba, RutaDeBolivia } from "./rampa-pollar";
 import { ingresoPlanB } from "./ingreso-bandera";
-import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
+import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, VENTANA_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 import type { SignedTx, WalletAdapter } from "./wallet";
 import { contarVentanaDeGoogle, marcarEntrada, tomarEntrada } from "../contar";
 import { contarEntradaConRed, contarPasoOficial } from "../ui/contadores";
@@ -112,8 +112,25 @@ export interface Profile {
   avatar: string;
 }
 
-/** Cuánto se espera al SDK a que lea su sesión guardada, que no necesita la red salvo para renovar una vencida. */
+/**
+ * Cuánto se espera a la primera mirada de que la sesión de Pollar quedó leída, que no necesita la red salvo para renovar
+ * una vencida. Si el proveedor todavía no contestó, el retomo sigue esperando (`VENTANA_RETOMA_MS`): no entrega
+ * "no hay cuenta" a la primera.
+ */
 export const LISTO_MS = 8_000;
+
+/**
+ * Cuánto sigue mirando al proveedor el retomo de la cuenta después de la primera mirada: la ventana paciente (issue 89).
+ * Con la red cargada de un stand, la `ready()` del kit puede contestar a los 10 o 12 segundos, y devolver
+ * "no hay cuenta" al primer vencido dejaba a quien ya entró con la página sin sesión, aunque la marca siguiera.
+ *
+ * Espera creciente: la primera espera es `LISTO_MS`, cada vuelta repite el doble de la anterior sin pasar de lo que
+ * queda de la ventana, y en cada vuelta se gana apenas el proveedor contesta (la carrera con su `ready()` se resuelve
+ * sola, sin que la gane el temporizador). Mientras espera, la marca no se toca: solo el chequeo del final, con el kit ya
+ * listo y sin sesión, la puede olvidar, como antes. Si el proveedor sigue afuera después de la ventana, `restore`
+ * devuelve `null` con la marca en pie: la próxima recarga lo vuelve a intentar y la página queda con su salida clara.
+ */
+export const VENTANA_RETOMA_MS = 30_000;
 
 /** Lo que quedó de una entrada que no se completó, para que la pantalla diga qué pasó y se pueda reintentar. */
 export const ENTRADA_BLOQUEADA = "popup-blocked";
@@ -1098,8 +1115,8 @@ function conTope<T>(p: Promise<T>, ms: number): Promise<T> {
 /** Cuánto se espera, al cerrar sesión, a sacar este navegador de la cuenta, y a una confirmación que esté en curso. */
 export const TOPE_SACAR_NAVEGADOR_MS = 10_000;
 export const TOPE_CONFIRMACION_EN_CURSO_MS = 20_000;
-/** Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token (`tokenDeSesion`): `pollar-config.ts`. */
-export { TOPE_TOKEN_MS };
+/** Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token (`tokenDeSesion`), y hasta cuándo en total: `pollar-config.ts`. */
+export { TOPE_TOKEN_MS, VENTANA_TOKEN_MS };
 
 /**
  * ¿Se puede usar el desbloqueo de este celular o compu (huella, cara o clave) para la cuenta? Hace falta que el navegador
@@ -2074,9 +2091,13 @@ class PollarWallet implements SubmittingWallet {
    * Retoma la sesión al recargar la página (o al volver del redirect de Google, en el SDK anterior).
    *
    * Le pregunta al SDK, que lee su propia sesión guardada al armarse (`ready()`): no hay que esperar ocho segundos a ver
-   * si aparece una cuenta que no existe. Y si el SDK terminó y no tiene ninguna (la sesión venció, se borró, o la marca
-   * de acá era de otra época), la marca se olvida: antes quedaba para siempre y cada carga repetía ocho segundos de
-   * "Retomando…" para caer en "Para sellar, entrá con tu cuenta" (diagnóstico del 26 de octubre de 2026).
+   * si aparece una cuenta que no existe, ni volver a pedir entrar. Con la wifi lenta de un stand, el proveedor puede
+   * tardar más de la primera mirada en contestar: entonces el retomo tiene su ventana paciente (`VENTANA_RETOMA_MS`),
+   * con espera creciente, y abre la cuenta apenas llega, sin que la persona toque nada. Y si el SDK terminó y no tiene
+   * ninguna cuenta (la sesión venció, se borró, o la marca de acá era de otra época), la marca se olvida: antes quedaba
+   * para siempre y cada carga repetía ocho segundos de "Retomando…" para caer en "Para sellar, entrá con tu cuenta"
+   * (diagnóstico del 26 de octubre de 2026). Si el proveedor sigue afuera después de la ventana, sale con `null` y la
+   * marca en pie: salida honesta, y la próxima recarga lo vuelve a intentar.
    */
   async restore(): Promise<string | null> {
     let via: string | null = null;
@@ -2092,7 +2113,7 @@ class PollarWallet implements SubmittingWallet {
     // Retomar la sesión son pedidos al servicio de cuentas (validarla, renovarla): un rechazo por límite queda anotado, así la
     // página del celular lo dice con la verdad. El mirador vive lo que vive el cliente.
     this.#sinMirarLimites ??= mirarLimites(client, (segundos) => this.anotarLimite(segundos));
-    const listo = await Promise.race([client.ready().then(() => true, () => false), new Promise<boolean>((r) => setTimeout(() => r(false), LISTO_MS))]);
+    const listo = await this.#esperarElListo(client);
     if (listo) this.#leidos.add(client);
     const wallet = client.getWallet();
     this.address = wallet?.address ?? null;
@@ -2105,6 +2126,28 @@ class PollarWallet implements SubmittingWallet {
     // la entrada (issue #83): Google en la red principal y en prueba se suman por separado.
     if (tomarEntrada()) contarEntradaConRed(this.#via === "email" ? "email" : "google", network.name);
     return this.address;
+  }
+
+  /**
+   * Espera paciente a que el kit termine de leer su sesión (`restore`): la primera mirada espera `LISTO_MS` y, si el
+   * proveedor todavía no contestó, la ventana paciente (`VENTANA_RETOMA_MS`), con espera creciente. La carrera de cada
+   * vuelta se gana apenas el proveedor contesta, aunque el temporizador de esa vuelta siga andando; el temporizador solo
+   * acota (y si el kit falla, sale enseguida con falso, como siempre).
+   */
+  async #esperarElListo(client: PollarClient): Promise<boolean> {
+    let gastado = 0;
+    let pausa = LISTO_MS;
+    for (;;) {
+      const ancho = Math.min(pausa, VENTANA_RETOMA_MS - gastado);
+      const listo = await Promise.race([
+        client.ready().then(() => true, () => false),
+        new Promise<boolean>((r) => setTimeout(() => r(false), ancho)),
+      ]);
+      if (listo) return true;
+      gastado += ancho;
+      if (gastado >= VENTANA_RETOMA_MS) return false;
+      pausa = Math.min(pausa * 2, VENTANA_RETOMA_MS - gastado);
+    }
   }
 
   /** Mira lo que el SDK guardó (`pollar:<huella>:session`) para saber si la marca de esta app sigue valiendo. */
@@ -4009,10 +4052,14 @@ class PollarWallet implements SubmittingWallet {
 
   /**
    * El token de la sesión de Pollar, solo con la sesión verificada por Pollar (`verified: true`): una sesión que el kit
-   * retomó de lo guardado y todavía no revalidó no sirve. Si no está verificada, espera hasta `tope` a que lo esté; si
-   * no, `null`. Es lo que pide el servidor de las altas (`alta-api.ts`) para saber quién es. No se guarda ni se anota:
-   * se pide cada vez, y nunca va en una dirección, en la consola ni en un mensaje de error. Sin token no se le pregunta
-   * nada al servidor. No toca la firma ni lo que se aprueba: solo lee la sesión.
+   * retomó de lo guardado y todavía no revalidó no sirve. Si no está verificada, espera: la primera mirada hasta
+   * `tope`; si cuando vence el kit dice que la sesión sigue abierta pero sin verificar, la ventana paciente
+   * (`VENTANA_TOKEN_MS`, issue 88) con espera creciente — una sesión recién creada es justo la que tarda en verificarse,
+   * y entregar `null` al primer vencido tiraba al paso «Dejá tu cuenta lista» a ofrecer «Entrar de nuevo» a quien ya
+   * entró. Cuando el kit dice que la sesión ya no existe, sí sale con `null` al toque: ahí conviene entrar de nuevo. No
+   * borra nunca la marca de la sesión. Es lo que pide el servidor de las altas (`alta-api.ts`) para saber quién es. No
+   * se guarda ni se anota: se pide cada vez, y nunca va en una dirección, en la consola ni en un mensaje de error. Sin
+   * token no se le pregunta nada al servidor. No toca la firma ni lo que se aprueba: solo lee la sesión.
    */
   tokenDeSesion(tope = TOPE_TOKEN_MS): Promise<string | null> {
     const client = this.#client;
@@ -4032,8 +4079,13 @@ class PollarWallet implements SubmittingWallet {
     if (ya) return Promise.resolve(ya);
     if (typeof client.onAuthStateChange !== "function") return Promise.resolve(null);
     return new Promise<string | null>((resolve) => {
+      // El esperado total lo fija quien llamó, o la ventana paciente: el más largo de los dos.
+      const total = Math.max(tope, VENTANA_TOKEN_MS);
+      let gastado = 0;
+      let pausa = tope;
       let listo = false;
       let soltar: (() => void) | null = null;
+      let reloj: ReturnType<typeof setTimeout> | undefined;
       const terminar = (v: string | null): void => {
         if (listo) return;
         listo = true;
@@ -4045,7 +4097,37 @@ class PollarWallet implements SubmittingWallet {
         }
         resolve(v);
       };
-      const reloj = setTimeout(() => terminar(null), tope);
+      /** Cada vencido vuelve a mirar la sesión de verdad (`getAuthState`), no solo a los avisos: si el kit dice que la
+       * sesión ya no existe, no hay token y se sale; si sigue abierta sin verificar y queda ventana paciente, se sigue
+       * esperando con espera creciente. */
+      const alVencer = (): void => {
+        let viva: boolean;
+        let tk: string | null = null;
+        try {
+          const s = client.getAuthState();
+          viva = (s as { step?: unknown } | null)?.step === "authenticated";
+          if (viva) tk = deLaSesion(s);
+        } catch {
+          terminar(null);
+          return;
+        }
+        if (!viva) {
+          terminar(null);
+          return;
+        }
+        if (tk) {
+          terminar(tk);
+          return;
+        }
+        gastado += pausa;
+        if (gastado >= total) {
+          terminar(null);
+          return;
+        }
+        pausa = Math.min(pausa * 2, total - gastado);
+        reloj = setTimeout(alVencer, pausa);
+      };
+      reloj = setTimeout(alVencer, pausa);
       try {
         // El kit repite el estado al suscribirse: puede contestar antes de que `soltar` exista.
         soltar = client.onAuthStateChange((s) => {

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLang, t } from "../i18n";
 import { type CanjeDeCupon, type ErrorDeAlta, ESPERA_MS, type EstadoDeAlta, type ResultadoDeAlta } from "../stellar/alta-api";
-import { TOPE_TOKEN_MS } from "../stellar/pollar-config";
+import { TOPE_TOKEN_MS, VENTANA_TOKEN_MS } from "../stellar/pollar-config";
 import type { EstadoOficial } from "../stellar/wallet-pollar";
 import {
   type AccesoDelPaso,
@@ -944,8 +944,9 @@ describe("con la wifi lenta de un stand", () => {
   });
 
   it("el tope de una lectura del servidor sale de los dos de adentro, un segundo detrás", () => {
-    expect(TOPE_LECTURA_SERVIDOR_MS).toBe(TOPE_TOKEN_MS + ESPERA_MS + 1_000);
-    expect(TOPE_LECTURA_SERVIDOR_MS).toBe(17_000);
+    // La ventana paciente del token (#88) rige el tope de la lectura: el más largo de los dos topes del token.
+    expect(TOPE_LECTURA_SERVIDOR_MS).toBe(Math.max(TOPE_TOKEN_MS, VENTANA_TOKEN_MS) + ESPERA_MS + 1_000);
+    expect(TOPE_LECTURA_SERVIDOR_MS).toBe(29_000);
   });
 
   it("una lectura del servidor que no contesta nunca se corta igual, y deja «Probar de nuevo»", async () => {
