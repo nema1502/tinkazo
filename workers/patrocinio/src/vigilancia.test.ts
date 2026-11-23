@@ -148,6 +148,9 @@ describe("PuertaAltas.vigilancia, para /v1/patrocinio/estado", () => {
       firmasSinExplicar: 2,
       firmas: { cobradas: 3, explicadas: 1, sellos: 1, sorteos: 0, activaciones: 0, compras: 0, pagosConSaldo: 0, completo: true, desde: T0 - DIA_MS },
       patrocinioPollar: { esperado: true, prendidos: [] },
+      // El bloque de las cuentas nuevas por hora (#177): con un wallet.created en los movimientos,
+      // el conteo trae su hora; las formas exactas las fija la prueba de rutas-altas.
+      cuentas: { porHora: expect.any(Array), completo: true },
     });
     // Nunca negativo: más explicadas que cobradas es cero.
     m.pm.movimientos = [];
