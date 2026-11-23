@@ -350,7 +350,8 @@ export function sesionDeGoogle(o: {
     sigueLaSesion: async (cuenta) => {
       try {
         const m = await import("../stellar/wallet-pollar");
-        return m.pollarWallet.address === cuenta;
+        // Una sesión que el proveedor ya cerró no sigue, aunque la cuenta siga en la página: ahí hay que entrar de nuevo.
+        return m.pollarWallet.address === cuenta && m.pollarWallet.sesionPerdida?.() !== true;
       } catch {
         return false;
       }

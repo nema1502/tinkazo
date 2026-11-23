@@ -259,6 +259,145 @@ describe("soltar el cliente después de anotarse y volver a armarlo", () => {
     expect(h.miradores).toHaveLength(0);
   });
 
+  it("la sesión está perdida solo si el proveedor terminó de leer y no le quedó ninguna, o si no hay marca", async () => {
+    // Sin cliente: con la marca de una entrada hay algo que retomar, y sin ella no.
+    expect(pollarWallet.sesionPerdida()).toBe(false);
+    localStorage.removeItem("tinkazo.pollar.intent.mainnet");
+    expect(pollarWallet.sesionPerdida()).toBe(true);
+    localStorage.setItem("tinkazo.pollar.intent.mainnet", "google");
+    await pollarWallet.asegurarLaSesion();
+    expect(pollarWallet.sesionPerdida()).toBe(false);
+    // Guardada pero sin verificar (un límite, la red lenta): no está perdida.
+    h.paso = "idle";
+    expect(pollarWallet.sesionPerdida()).toBe(false);
+    // El kit la cerró al frenar su renovación: ya no le queda ninguna.
+    h.billetera = null;
+    expect(pollarWallet.sesionPerdida()).toBe(true);
+  });
+
+  it("mientras el cliente todavía lee su sesión guardada, no se da por perdida", async () => {
+    let terminar: () => void = () => undefined;
+    h.impl.ready = () => new Promise<void>((r) => {
+      terminar = r;
+    });
+    h.billetera = null;
+    h.paso = "idle";
+    const retomada = pollarWallet.asegurarLaSesion();
+    for (let vuelta = 0; vuelta < 20; vuelta += 1) await Promise.resolve();
+    expect(h.construidos).toBe(1);
+    expect(pollarWallet.sesionPerdida()).toBe(false);
+    terminar();
+    expect(await retomada).toBeNull();
+    expect(pollarWallet.sesionPerdida()).toBe(true);
+  });
+
+  it("una retomada que quedó sin verificar (un límite, la red lenta) se vuelve a pedir en el pedido siguiente", async () => {
+    // Pasado el límite que anotó la prueba de los rechazos: la hora de estas pruebas está quieta.
+    vi.setSystemTime(AHORA + 3_700_000);
+    h.verificada = false;
+    await pollarWallet.asegurarLaSesion();
+    expect(h.construidos).toBe(1);
+    // El kit solo volvería a probar al volver a la pestaña: el pedido siguiente arma el cliente de nuevo y retoma.
+    expect(await pollarWallet.asegurarLaSesion()).toBe(P);
+    expect(h.construidos).toBe(2);
+    expect(h.llamadas.filter((l) => l === "destroy")).toHaveLength(1);
+    expect(h.llamadas).not.toContain("logout");
+    // Ya verificada, no se pide nada más.
+    h.verificada = true;
+    await pollarWallet.asegurarLaSesion();
+    expect(h.construidos).toBe(2);
+  });
+
+  it("no la vuelve a pedir con una renovación o una retomada en vuelo, ni sin una sesión guardada", async () => {
+    vi.setSystemTime(AHORA + 3_750_000);
+    h.verificada = false;
+    await pollarWallet.asegurarLaSesion();
+    // Soltar el cliente en medio de una renovación pierde el token nuevo.
+    h.renovando = new Promise(() => undefined);
+    await pollarWallet.asegurarLaSesion();
+    h.renovando = null;
+    h.retomando = new Promise(() => undefined);
+    await pollarWallet.asegurarLaSesion();
+    h.retomando = null;
+    // Sin sesión guardada no hay nada que volver a probar.
+    h.billetera = null;
+    h.paso = "idle";
+    await pollarWallet.asegurarLaSesion();
+    expect(h.construidos).toBe(1);
+    expect(h.llamadas).not.toContain("destroy");
+  });
+
+  it("con un límite vigente no la vuelve a pedir: solo sumaría otro rechazo", async () => {
+    // Pasado el límite de la prueba de los rechazos, para que el único vigente sea el de acá.
+    vi.setSystemTime(AHORA + 3_800_000);
+    h.verificada = false;
+    await pollarWallet.asegurarLaSesion();
+    pollarWallet.anotarLimite(30);
+    await pollarWallet.asegurarLaSesion();
+    expect(h.construidos).toBe(1);
+    vi.setSystemTime(AHORA + 3_831_000);
+    await pollarWallet.asegurarLaSesion();
+    expect(h.construidos).toBe(2);
+  });
+
+  it("esperar la retomada espera la lectura de la sesión y una renovación en vuelo, con tope, y sin cliente no espera nada", async () => {
+    const orden: string[] = [];
+    // Sin cliente no hay nada a medias.
+    await pollarWallet.esperarLaRetomada(5_000).then(() => orden.push("sin-cliente"));
+    let terminarLectura: () => void = () => undefined;
+    h.impl.ready = () => new Promise<void>((r) => {
+      terminarLectura = r;
+    });
+    const retomada = pollarWallet.asegurarLaSesion();
+    for (let vuelta = 0; vuelta < 20; vuelta += 1) await Promise.resolve();
+    let terminarRenovacion: () => void = () => undefined;
+    h.renovando = new Promise<void>((r) => {
+      terminarRenovacion = r;
+    });
+    const espera = pollarWallet.esperarLaRetomada(5_000).then(() => orden.push("listo"));
+    for (let vuelta = 0; vuelta < 20; vuelta += 1) await Promise.resolve();
+    expect(orden).toEqual(["sin-cliente"]);
+    terminarLectura();
+    for (let vuelta = 0; vuelta < 20; vuelta += 1) await Promise.resolve();
+    // La sesión ya se leyó, pero la renovación sigue: todavía no.
+    expect(orden).toEqual(["sin-cliente"]);
+    terminarRenovacion();
+    await espera;
+    expect(orden).toEqual(["sin-cliente", "listo"]);
+    await retomada;
+    // Con algo que no termina nunca, sale por su tope: si no, la prueba no terminaría.
+    h.renovando = new Promise(() => undefined);
+    await expect(pollarWallet.esperarLaRetomada(30)).resolves.toBeUndefined();
+  });
+
+  it("no suelta el cliente si el kit guarda la sesión solo en memoria: soltarlo sería perderla", async () => {
+    h.almacenDegradado = "probe-failed";
+    await pollarWallet.asegurarLaSesion();
+    expect(pollarWallet.soltarElCliente()).toBe(false);
+    expect(h.llamadas).not.toContain("destroy");
+    expect(await pollarWallet.tokenDeSesion(10)).toBe(h.token);
+  });
+
+  it("no suelta el cliente si la llave del navegador no quedó guardada, ni mientras todavía se mira", async () => {
+    let contestar: (guardada: boolean) => void = () => undefined;
+    h.llaveGuardada = () => new Promise<boolean>((r) => {
+      contestar = r;
+    });
+    await pollarWallet.asegurarLaSesion();
+    expect(pollarWallet.soltarElCliente()).toBe(false);
+    contestar(false);
+    for (let vuelta = 0; vuelta < 10; vuelta += 1) await Promise.resolve();
+    expect(pollarWallet.soltarElCliente()).toBe(false);
+    expect(h.llamadas).not.toContain("destroy");
+  });
+
+  it("con la llave guardada y el almacenamiento bien, lo suelta como siempre", async () => {
+    h.llaveGuardada = async () => true;
+    await pollarWallet.asegurarLaSesion();
+    for (let vuelta = 0; vuelta < 10; vuelta += 1) await Promise.resolve();
+    expect(pollarWallet.soltarElCliente()).toBe(true);
+  });
+
   it("oír los cambios de la cuenta sin armar no retoma la sesión", () => {
     const aviso = vi.fn();
     const soltar = pollarWallet.alCambiarLaCuenta(aviso, { armar: false });

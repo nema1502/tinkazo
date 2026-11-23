@@ -11,6 +11,7 @@ import { AHORA, CUENTA, SESION, asentar, lectura, lecturasDe, pasar as pasarElRe
 import { guardarMemoria } from "./memoria";
 import { TEXTOS_LIMITE } from "./limite";
 import { TEXTOS_CAMPANA } from "./textos";
+import { TEXTOS_CONFIRMAR } from "./textos-confirmar";
 
 // La tarjeta se baja con import(): con el módulo ya cargado, la espera de la prueba son unos pocos turnos.
 await import("./confirmar");
@@ -184,6 +185,95 @@ describe("después de anotarse, ni un pedido más al proveedor", () => {
     expect(soltarSesion).toHaveBeenCalledTimes(1);
   });
 
+  it("un código que tarda más que la espera mantiene la sesión armada hasta que contesta: el código que llega tarde sirve", async () => {
+    const soltarSesion = vi.fn();
+    let contestar: () => void = () => undefined;
+    const acciones = {
+      puedeDesbloqueo: vi.fn(async () => false),
+      mandarCodigo: vi.fn(() => new Promise<void>((r) => {
+        contestar = r;
+      })),
+      confirmarCodigo: vi.fn(async () => lectura("lista", { protegida: true, correoDeLaSesionConfirmado: true, puedeMandar: true })),
+      usarDesbloqueo: vi.fn(async () => true),
+      alCambiar: vi.fn(() => () => undefined),
+    };
+    const cada: DepsDelCelular["cada"] = (f, ms) => {
+      const reloj = setInterval(f, ms);
+      return () => clearInterval(reloj);
+    };
+    const mundo = await preparar({
+      sesion: async () => SESION,
+      yo: async () => propio(),
+      cada,
+      cuenta: { leer: lecturasDe(lectura("falta", { puedeMandar: true, correoTapado: "a•••@ejemplo.com" })), confirmar: async () => acciones },
+      soltarSesion,
+    });
+    await pasar(3_000);
+    expect(soltarSesion).toHaveBeenCalledTimes(1);
+    (mundo.raiz.querySelector("#cmp-cuenta .primary") as HTMLButtonElement).click();
+    await pasar(100);
+    expect(acciones.mandarCodigo).toHaveBeenCalledTimes(1);
+    // Pasada la espera la tarjeta dice que tarda, pero el pedido sigue en vuelo: el código pendiente vive en la sesión.
+    await pasar(61_000);
+    expect(mundo.raiz.querySelector("#cmp-cuenta .cmp-cuenta-nota")?.textContent).toBe(TEXTOS_CONFIRMAR.es.ccTarda);
+    expect(soltarSesion).toHaveBeenCalledTimes(1);
+    // El código sale tarde: la tarjeta lo acepta y la sesión sigue armada para confirmarlo.
+    contestar();
+    await pasar(100);
+    expect(mundo.raiz.querySelector("#cmp-cuenta .cmp-cuenta-t")?.textContent).toBe(TEXTOS_CONFIRMAR.es.ccCodigoT);
+    expect(soltarSesion).toHaveBeenCalledTimes(1);
+  });
+
+  it("un pedido de la tarjeta que tarda y después falla deja soltar la sesión cuando contesta", async () => {
+    const soltarSesion = vi.fn();
+    let fallar: (e: Error) => void = () => undefined;
+    const acciones = {
+      puedeDesbloqueo: vi.fn(async () => false),
+      mandarCodigo: vi.fn(() => new Promise<void>((_, rechazar) => {
+        fallar = rechazar;
+      })),
+      confirmarCodigo: vi.fn(async () => lectura("lista")),
+      usarDesbloqueo: vi.fn(async () => true),
+      alCambiar: vi.fn(() => () => undefined),
+    };
+    const cada: DepsDelCelular["cada"] = (f, ms) => {
+      const reloj = setInterval(f, ms);
+      return () => clearInterval(reloj);
+    };
+    const mundo = await preparar({
+      sesion: async () => SESION,
+      yo: async () => propio(),
+      cada,
+      cuenta: { leer: lecturasDe(lectura("falta", { puedeMandar: true, correoTapado: "a•••@ejemplo.com" })), confirmar: async () => acciones },
+      soltarSesion,
+    });
+    await pasar(3_000);
+    (mundo.raiz.querySelector("#cmp-cuenta .primary") as HTMLButtonElement).click();
+    await pasar(61_100);
+    expect(soltarSesion).toHaveBeenCalledTimes(1);
+    fallar(new Error("rota"));
+    await pasar(100);
+    expect(soltarSesion).toHaveBeenCalledTimes(2);
+  });
+
+  it("en Ganaste, sin saber cómo está la cuenta, la lee al llegar y no otra vez en cada consulta del minuto", async () => {
+    const leer = lecturasDe(lectura("no-se-sabe"));
+    const mundo = await preparar({ sesion: async () => SESION, yo: async () => propio(), cuenta: { leer }, soltarSesion: vi.fn() });
+    await pasar(60 * 60_000);
+    expect(leer).toHaveBeenCalledTimes(13);
+    mundo.deps.yo = async () => ({ ...propio("sorteada"), gano: true });
+    await mundo.disparar(15_000);
+    await pasar(50);
+    expect(mundo.raiz.querySelector("#cmp-estado h1")?.textContent).toBe(es.cpGanaste);
+    expect(leer).toHaveBeenCalledTimes(14);
+    // Ganaste sigue consultando cada minuto (puede haber otro premio), pero eso no vuelve a armar la sesión del proveedor.
+    for (let vuelta = 0; vuelta < 5; vuelta += 1) {
+      await mundo.disparar(60_000);
+      await pasar(50);
+    }
+    expect(leer).toHaveBeenCalledTimes(14);
+  });
+
   it("al llegar a Ganaste sin saber cómo está la cuenta la vuelve a pedir, y después la suelta de nuevo", async () => {
     const soltarSesion = vi.fn();
     const leer = lecturasDe(...Array.from({ length: 13 }, () => lectura("no-se-sabe")), lectura("otro-con-correo"));
@@ -258,6 +348,33 @@ describe("quien ya está anotada y recarga no retoma la sesión del proveedor", 
     sessionStorage.setItem("tinkazo.cmp.cuenta.evento-ejemplo", JSON.stringify({ c: CUENTA, e: "otro-con-correo", p: false, k: false, m: true, t: null }));
     const leer = lecturasDe(lectura("sin-forma"));
     await preparar({ memoria, yo: async () => ({ ...propio("sorteada"), gano: true }), cuenta: { leer } });
+    expect(leer).not.toHaveBeenCalled();
+  });
+
+  it("con la tarjeta quieta de lo recordado, volver a la pestaña o recuperar la conexión no retoma la sesión", async () => {
+    const memoria = almacen();
+    recuerdoDe(memoria);
+    sessionStorage.setItem("tinkazo.cmp.cuenta.evento-ejemplo", JSON.stringify({ c: CUENTA, e: "falta", p: false, k: false, m: true, t: "a•••@ejemplo.com" }));
+    let aviso: (origen?: "canal" | "kit" | "vista") => void = () => undefined;
+    const acciones = {
+      puedeDesbloqueo: vi.fn(async () => false),
+      mandarCodigo: vi.fn(async () => undefined),
+      confirmarCodigo: vi.fn(async () => lectura("lista")),
+      usarDesbloqueo: vi.fn(async () => true),
+      alCambiar: vi.fn((cb: (origen?: "canal" | "kit" | "vista") => void) => {
+        aviso = cb;
+        return () => undefined;
+      }),
+    };
+    const leer = lecturasDe(lectura("falta", { puedeMandar: true }));
+    const mundo = await preparar({ memoria, yo: async () => propio(), cuenta: { leer, confirmar: async () => acciones } });
+    await pasar(100);
+    expect((mundo.raiz.querySelector("#cmp-cuenta") as HTMLElement).hidden).toBe(false);
+    // La primera vuelta a la pestaña después de recargar, y las siguientes: ninguna lee la cuenta.
+    for (let vuelta = 0; vuelta < 5; vuelta += 1) {
+      aviso("vista");
+      await pasar(90_000);
+    }
     expect(leer).not.toHaveBeenCalled();
   });
 

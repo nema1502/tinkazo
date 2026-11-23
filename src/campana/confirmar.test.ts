@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LecturaDelCelular } from "../stellar/wallet-pollar";
 import type { AccionesDeLaCuenta } from "./celular";
 import { montarTarjeta, RELEER_SI_NACIENDO_MS, RELEER_SI_NO_QUEDO_MS, type DepsDeLaTarjeta, type TarjetaMontada } from "./confirmar";
-import { CODIGO_VENCE_A_LOS_MS, HECHO_VISIBLE_MS, MARCA_DEL_CODIGO, PROMESA_VERIFICADA } from "./confirmar-estado";
+import { AZAR_DEL_LIMITE_MS, CODIGO_VENCE_A_LOS_MS, ESPERA_POR_LIMITE_MS, HECHO_VISIBLE_MS, MARCA_DEL_CODIGO, PROMESA_VERIFICADA } from "./confirmar-estado";
+import { textoDeLimite } from "./limite";
 import { TEXTOS_CONFIRMAR } from "./textos-confirmar";
 
 const AHORA = Date.UTC(2026, 10, 22, 15);
@@ -260,16 +261,52 @@ describe("mandar el código", () => {
     expect(principal(m).disabled).toBe(false);
   });
 
-  it("si el servicio dice que fueron muchos, lo dice y apaga la principal unos minutos", async () => {
+  it("si el servicio frena por límite, dice cuánto falta con los segundos que dio y apaga la principal solo ese tiempo", async () => {
     const limite = errorDelKit("SDK_COSIGN_TURNKEY_REJECTED", { turnkeyStatus: 429 });
-    const m = await montar({ acciones: { mandarCodigo: vi.fn(async () => { throw limite; }) } });
+    const m = await montar({
+      acciones: { mandarCodigo: vi.fn(async () => { throw limite; }), segundosDeLimite: vi.fn(() => 20) },
+      deps: { azar: () => 0 },
+    });
     principal(m).click();
     await pasar(10);
-    expect(nota(m).textContent).toBe(es.ccMuchos);
+    // El límite es de la conexión que comparten todos: no se le dice a nadie que pidió muchos códigos.
+    expect(nota(m).textContent).toBe(textoDeLimite("es", 20));
+    expect(nota(m).textContent).not.toBe(es.ccMuchos);
     expect(principal(m).disabled).toBe(true);
-    await pasar(5 * 60_000 + 2_000);
+    await pasar(10_000);
+    expect(nota(m).textContent).toBe(textoDeLimite("es", 10));
+    // Un segundo de margen: la tarjeta se pinta con su reloj de un segundo.
+    await pasar(11_000);
     expect(principal(m).disabled).toBe(false);
     expect(nota(m).hidden).toBe(true);
+  });
+
+  it("sin los segundos del servicio espera la espera corta más unos segundos al azar, no cinco minutos", async () => {
+    const limite = errorDelKit("SDK_COSIGN_TURNKEY_REJECTED", { turnkeyStatus: 429 });
+    const m = await montar({ acciones: { mandarCodigo: vi.fn(async () => { throw limite; }) }, deps: { azar: () => 1 } });
+    principal(m).click();
+    await pasar(10);
+    expect(nota(m).textContent).toBe(textoDeLimite("es", (ESPERA_POR_LIMITE_MS + AZAR_DEL_LIMITE_MS) / 1000));
+    await pasar(ESPERA_POR_LIMITE_MS + AZAR_DEL_LIMITE_MS + 1_000);
+    expect(principal(m).disabled).toBe(false);
+  });
+
+  it("un límite al confirmar deja pedir otro código pasado el límite", async () => {
+    const limite = errorDelKit("SDK_COSIGN_TURNKEY_REJECTED", { turnkeyStatus: 429 });
+    const m = await montar({
+      acciones: { confirmarCodigo: vi.fn(async () => { throw limite; }), segundosDeLimite: vi.fn(() => 15) },
+      deps: { azar: () => 0 },
+    });
+    await conCodigo(m);
+    await pasar(61_000);
+    escribir(m, "ABCD12345");
+    principal(m).click();
+    await pasar(10);
+    expect(nota(m).textContent).toBe(textoDeLimite("es", 15));
+    expect(secundaria(m).hidden).toBe(true);
+    await pasar(16_000);
+    expect(secundaria(m).hidden).toBe(false);
+    expect(secundaria(m).textContent).toBe(es.ccOtroCodigo);
   });
 
   it("con la cuenta recién creada, la tarjeta se va sin decir nada y se vuelve a leer a los 10 segundos", async () => {
@@ -563,6 +600,33 @@ describe("la página que se recarga y el que se va a mirar el correo", () => {
     campo(m).dispatchEvent(new Event("focus"));
     expect(m.pagina.classList.contains("cmp-teclado")).toBe(true);
     campo(m).dispatchEvent(new Event("blur"));
+    expect(m.pagina.classList.contains("cmp-teclado")).toBe(false);
+  });
+
+  it("con el campo apagado mientras confirma, la página no se queda plegada como si el teclado siguiera abierto", async () => {
+    let contestar: (l: LecturaDelCelular) => void = () => undefined;
+    const m = await montar({ acciones: { confirmarCodigo: vi.fn(() => new Promise<LecturaDelCelular>((r) => { contestar = r; })) } });
+    await conCodigo(m);
+    campo(m).dispatchEvent(new Event("focus"));
+    expect(m.pagina.classList.contains("cmp-teclado")).toBe(true);
+    escribir(m, "ABCD12345");
+    principal(m).click();
+    await pasar(10);
+    expect(campo(m).disabled).toBe(true);
+    // El navegador no siempre avisa que un campo apagado perdió el foco: sin esto la espera y el pie quedaban escondidos.
+    expect(m.pagina.classList.contains("cmp-teclado")).toBe(false);
+    contestar(LISTA);
+    await pasar(10);
+  });
+
+  it("con la tarjeta oculta tampoco queda el teclado marcado", async () => {
+    const m = await montar({ acciones: { confirmarCodigo: vi.fn(async () => { throw new Error("sin-sesion"); }) } });
+    await conCodigo(m);
+    campo(m).dispatchEvent(new Event("focus"));
+    escribir(m, "ABCD12345");
+    principal(m).click();
+    await pasar(10);
+    expect(m.seccion.hidden).toBe(true);
     expect(m.pagina.classList.contains("cmp-teclado")).toBe(false);
   });
 

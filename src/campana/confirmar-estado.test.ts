@@ -8,10 +8,12 @@ import {
   CODIGO_VENCE_A_LOS_MS,
   DESBLOQUEO_TARDA_MS,
   ENVIOS_PERMITIDOS,
+  ESPERA_POR_LIMITE_MS,
   enCurso,
   iniciar,
   limpiarElCodigo,
   marcaVigente,
+  NOTA_DEL_LIMITE,
   OTRO_CODIGO_A_LOS_MS,
   PAUSA_POR_MUCHOS_MS,
   PROMESA_VERIFICADA,
@@ -315,14 +317,41 @@ describe("los pedidos de código y sus topes", () => {
     expect(tarde.mandadoEn).toBe(T0 + 62_000);
   });
 
-  it("un servicio que dice muchos al mandar apaga la acción un rato", () => {
+  it("un límite del servicio al mandar apaga la acción lo que dice el límite, con la cuenta de lo que falta", () => {
     const t = recorrer(iniciar(T0, { ofreceDesbloqueo: false, recargado: false }), [
       [{ tipo: "pedir-codigo" }, T0],
-      [{ tipo: "fallo-al-mandar", falla: "muchos" }, T0 + 500],
+      [{ tipo: "fallo-al-mandar", falla: "limite", espera: 12_000 }, T0 + 500],
     ]);
-    expect(vistaDe(t, T0 + 500).nota).toBe("ccMuchos");
+    // No dice que fueron muchos códigos: el límite es de la conexión compartida, no de lo que pidió esta persona.
+    expect(vistaDe(t, T0 + 500).nota).toBe(NOTA_DEL_LIMITE);
+    expect(vistaDe(t, T0 + 500).limiteEn).toBe(12);
+    expect(vistaDe(t, T0 + 4_600).limiteEn).toBe(8);
     expect(vistaDe(t, T0 + 500).principal?.apagada).toBe(true);
-    expect(vistaDe(t, T0 + 500 + PAUSA_POR_MUCHOS_MS).principal?.apagada).toBe(false);
+    expect(vistaDe(t, T0 + 12_499).principal?.apagada).toBe(true);
+    expect(vistaDe(t, T0 + 12_500).principal?.apagada).toBe(false);
+    expect(vistaDe(t, T0 + 12_500).nota).toBeNull();
+    expect(vistaDe(t, T0 + 12_500).limiteEn).toBeNull();
+  });
+
+  it("sin la espera del límite apaga la acción la espera corta de siempre, no cinco minutos", () => {
+    const t = recorrer(iniciar(T0, { ofreceDesbloqueo: false, recargado: false }), [
+      [{ tipo: "pedir-codigo" }, T0],
+      [{ tipo: "fallo-al-mandar", falla: "limite" }, T0],
+    ]);
+    expect(vistaDe(t, T0 + ESPERA_POR_LIMITE_MS - 1).principal?.apagada).toBe(true);
+    expect(vistaDe(t, T0 + ESPERA_POR_LIMITE_MS).principal?.apagada).toBe(false);
+    expect(ESPERA_POR_LIMITE_MS).toBeLessThan(PAUSA_POR_MUCHOS_MS);
+  });
+
+  it("un límite al confirmar deja pedir otro código pasado el límite, no a los cinco minutos", () => {
+    const t = recorrer(conCodigo(), [
+      [{ tipo: "confirmar" }, T0 + 70_000],
+      [{ tipo: "fallo-al-confirmar", falla: "limite", espera: 15_000 }, T0 + 70_000],
+    ]);
+    expect(t.estado).toBe("codigo");
+    expect(vistaDe(t, T0 + 70_000).nota).toBe(NOTA_DEL_LIMITE);
+    expect(vistaDe(t, T0 + 70_000).secundaria).toBeNull();
+    expect(vistaDe(t, T0 + 85_000).secundaria?.accion).toBe("pedir");
   });
 
   it("si la cuenta se está creando o el servicio no está, la tarjeta se oculta y no dice nada", () => {
@@ -461,12 +490,13 @@ describe("cómo se entiende lo que contesta el servicio de cuentas", () => {
     expect(clasificarFallaAlMandar(e)).toBe("falla");
   });
 
-  it("el rechazo del servicio que habla del código es un código malo, y uno por límite es muchos", () => {
+  it("el rechazo del servicio que habla del código es un código malo, y uno por límite es un límite, no muchos códigos", () => {
     const malo = errorDelKit("SDK_COSIGN_TURNKEY_REJECTED", { turnkeyStatus: 400, message: "the OTP code has either expired or is invalid" });
     expect(clasificarFallaAlConfirmar(malo)).toBe("codigo-malo");
     const limite = errorDelKit("SDK_COSIGN_TURNKEY_REJECTED", { turnkeyStatus: 429, message: "too many requests" });
-    expect(clasificarFallaAlMandar(limite)).toBe("muchos");
-    expect(clasificarFallaAlConfirmar(limite)).toBe("muchos");
+    expect(clasificarFallaAlMandar(limite)).toBe("limite");
+    expect(clasificarFallaAlConfirmar(limite)).toBe("limite");
+    expect(clasificarFallaAlMandar(errorDelKit("RATE_LIMITED"))).toBe("limite");
     // Otro estado del servicio al mandar es una falla, no un problema de quien escribe.
     expect(clasificarFallaAlMandar(errorDelKit("SDK_COSIGN_TURNKEY_REJECTED", { turnkeyStatus: 500, message: "boom" }))).toBe("falla");
   });

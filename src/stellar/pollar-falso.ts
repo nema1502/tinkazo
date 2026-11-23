@@ -50,6 +50,13 @@ export interface EstadoPollarFalso {
   kitTomaElVotoAMano: boolean;
   /** Los que miran los pedidos y las respuestas del cliente de la API (`_api.use` y `_api.eject`), como en el kit. */
   miradores: Array<{ onRequest?: (...a: any[]) => unknown; onResponse?: (...a: any[]) => unknown }>;
+  /** La renovación del token y la retomada de la sesión en vuelo (`_refreshPromise` y `_resumePromise` del kit), o null. */
+  renovando: Promise<unknown> | null;
+  retomando: Promise<unknown> | null;
+  /** Por qué el kit guarda la sesión solo en memoria (lo que avisa `onStorageDegrade`), o null si la guarda bien. */
+  almacenDegradado: string | null;
+  /** Lo que contesta `_keyManager.ensurePersisted` (si la llave del navegador quedó guardada), o null: un kit sin esa comprobación. */
+  llaveGuardada: (() => Promise<boolean>) | null;
 }
 
 export const PASSPHRASE_MAINNET = "Public Global Stellar Network ; September 2015";
@@ -74,6 +81,10 @@ export function estadoPollarFalso(): EstadoPollarFalso {
     alConfirmar: null,
     kitTomaElVotoAMano: true,
     miradores: [],
+    renovando: null,
+    retomando: null,
+    almacenDegradado: null,
+    llaveGuardada: null,
   };
 }
 
@@ -101,6 +112,10 @@ export function reiniciar(h: EstadoPollarFalso): void {
   h.alConfirmar = null;
   h.kitTomaElVotoAMano = true;
   h.miradores.length = 0;
+  h.renovando = null;
+  h.retomando = null;
+  h.almacenDegradado = null;
+  h.llaveGuardada = null;
 }
 
 /** Lo que devuelve `getAuthState()`: el paso, si Pollar ya revalidó la sesión, y su token. */
@@ -171,6 +186,22 @@ export function clienteFalso(h: EstadoPollarFalso): new (config: Record<string, 
     };
     /** Como el kit (`this._cosignManual = config.cosignManual === true`), salvo que la prueba diga que no lo toma. */
     _cosignManual?: boolean;
+    /** La renovación y la retomada en vuelo, como las guarda el kit mientras duran. */
+    get _refreshPromise(): Promise<unknown> | null {
+      return h.renovando;
+    }
+    get _resumePromise(): Promise<unknown> | null {
+      return h.retomando;
+    }
+    /** La llave del navegador, solo con lo que la prueba diga de si quedó guardada. */
+    get _keyManager(): { ensurePersisted: () => Promise<boolean> } | undefined {
+      return h.llaveGuardada ? { ensurePersisted: h.llaveGuardada } : undefined;
+    }
+    /** Como el kit: quien se suscribe tarde recibe enseguida el aviso que ya hubo. */
+    onStorageDegrade(cb: (motivo: string) => void): () => void {
+      if (h.almacenDegradado) cb(h.almacenDegradado);
+      return () => undefined;
+    }
     constructor(config: Record<string, unknown>) {
       h.construidos++;
       h.config = config;

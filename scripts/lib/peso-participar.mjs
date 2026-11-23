@@ -36,10 +36,16 @@ const KB = 1024;
  * cuenta al ir a recibir y la lectura de la cuenta de la página, y el interruptor de la ventana rápida. Lo que se pudo bajar a
  * pedido se bajó: el reparto del primer pedido va con la cuenta regresiva, la comparación de sesiones con lo de Ganaste y la
  * lectura de la sesión del navegador con la tarjeta. La entrada sigue en 13,8 de 15 KB.
+ *
+ * Pasó de 26,7 a 28,5 KB al unir la página con lo que ya estaba en producción: el formato compartido de montos y fechas
+ * (src/campana/formato.ts) creció allá y solo con eso la suma medía 27.383 bytes, 43 por encima del tope anterior. El resto
+ * del margen es para los arreglos de la revisión de la página: que la sesión del proveedor no se pierda por un error pasajero
+ * y que la página no le vuelva a pedir nada al proveedor después de anotarse. Lo que se puede bajar a pedido se baja a pedido.
+ * El tope que manda es el de la entrada, lo que baja un celular antes de mostrar nada, y ese no se mueve de 15 KB.
  */
 export const TOPES = {
   entrada: 15 * KB,
-  celular: 26.7 * KB,
+  celular: 28.5 * KB,
   html: 8 * KB,
   hoja: 5 * KB,
 };

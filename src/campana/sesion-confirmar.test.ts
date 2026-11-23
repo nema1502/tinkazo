@@ -18,12 +18,16 @@ const billetera = vi.hoisted(() => ({
   alCambiarLaCuenta: vi.fn(),
   asegurarLaSesion: vi.fn(),
   sesionViva: vi.fn(),
+  sesionPerdida: vi.fn(),
+  esperarLaRetomada: vi.fn(),
 }));
 const puedeUsarDesbloqueo = vi.hoisted(() => vi.fn());
 
 vi.mock("../stellar/wallet-pollar", () => ({ pollarWallet: billetera, puedeUsarDesbloqueo }));
 
-const { accionesDeLaCuenta, laSesionEs } = await import("./sesion-confirmar");
+const { accionesDeLaCuenta, laSesionEs, TOPE_DE_LA_COMPARACION_MS, TOPE_DE_LA_RENOVACION_MS } = await import("./sesion-confirmar");
+const { SIN_RESPUESTA } = await import("../ui/proteger-cuenta");
+const { clasificarFallaAlConfirmar, clasificarFallaAlMandar } = await import("./confirmar-estado");
 
 beforeEach(() => {
   billetera.address = CUENTA;
@@ -35,6 +39,8 @@ beforeEach(() => {
   billetera.alCambiarLaCuenta.mockReset().mockReturnValue(() => undefined);
   billetera.asegurarLaSesion.mockReset().mockResolvedValue(CUENTA);
   billetera.sesionViva.mockReset().mockReturnValue(true);
+  billetera.sesionPerdida.mockReset().mockReturnValue(false);
+  billetera.esperarLaRetomada.mockReset().mockResolvedValue(undefined);
   puedeUsarDesbloqueo.mockReset().mockResolvedValue(true);
 });
 
@@ -48,6 +54,38 @@ describe("si la sesión del navegador es de la cuenta", () => {
     expect(await laSesionEs(CUENTA)).toBe("no-se-sabe");
     billetera.asegurarLaSesion.mockRejectedValue(new Error("falla"));
     expect(await laSesionEs(CUENTA)).toBe("no-se-sabe");
+  });
+
+  it("si la sesión tarda en retomarse, pasado su tope no se sabe, pero antes espera lo que esté a medias", async () => {
+    vi.useFakeTimers();
+    try {
+      billetera.asegurarLaSesion.mockReturnValue(new Promise(() => undefined));
+      let terminar: () => void = () => undefined;
+      billetera.esperarLaRetomada.mockReturnValue(new Promise<void>((r) => {
+        terminar = r;
+      }));
+      let dicho: string | null = null;
+      void laSesionEs(CUENTA).then((d) => {
+        dicho = d;
+      });
+      await vi.advanceTimersByTimeAsync(TOPE_DE_LA_COMPARACION_MS - 1);
+      expect(billetera.esperarLaRetomada).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      // Pasado el tope: se espera la renovación que esté en vuelo, con su propio tope, y recién después se sigue.
+      expect(billetera.esperarLaRetomada).toHaveBeenCalledWith(TOPE_DE_LA_RENOVACION_MS);
+      expect(dicho).toBeNull();
+      terminar();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(dicho).toBe("no-se-sabe");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("si la sesión contesta a tiempo no espera nada más", async () => {
+    billetera.asegurarLaSesion.mockResolvedValue(OTRA);
+    expect(await laSesionEs(CUENTA)).toBe("otra");
+    expect(billetera.esperarLaRetomada).not.toHaveBeenCalled();
   });
 
   it("solo retoma la sesión: no pide el token ni manda nada", async () => {
@@ -110,8 +148,11 @@ describe("mandar el código", () => {
     expect(orden).toEqual(["token", "perfil"]);
   });
 
-  it("sin la sesión verificada no manda nada", async () => {
+  it("sin la sesión verificada no manda nada: si la sesión sigue guardada se puede repetir, y si se perdió no", async () => {
     billetera.tokenDeSesion.mockResolvedValue(null);
+    // La verificación no llegó a tiempo (un límite, la red lenta): la tarjeta dice que tarda y deja probar de nuevo.
+    await expect((await accionesDeLaCuenta(CUENTA)).mandarCodigo()).rejects.toBe(SIN_RESPUESTA);
+    billetera.sesionPerdida.mockReturnValue(true);
     await expect((await accionesDeLaCuenta(CUENTA)).mandarCodigo()).rejects.toThrow("sin-sesion");
     expect(billetera.mandarCodigoDeProteccion).not.toHaveBeenCalled();
   });
@@ -138,6 +179,7 @@ describe("mandar el código", () => {
 
   it("con la sesión cerrada por el proveedor lo dice enseguida, sin esperar un token que no va a llegar", async () => {
     billetera.sesionViva.mockReturnValue(false);
+    billetera.sesionPerdida.mockReturnValue(true);
     const acciones = await accionesDeLaCuenta(CUENTA);
     await expect(acciones.mandarCodigo()).rejects.toThrow("sin-sesion");
     await expect(acciones.confirmarCodigo("ABCD12345")).rejects.toThrow("sin-sesion");
@@ -146,6 +188,30 @@ describe("mandar el código", () => {
     expect(billetera.mandarCodigoDeProteccion).not.toHaveBeenCalled();
     expect(billetera.confirmarCorreoDelCelular).not.toHaveBeenCalled();
     expect(billetera.protegerConPasskey).not.toHaveBeenCalled();
+  });
+
+  it("si la retomada no terminó a tiempo (todavía sin la cuenta), dice que tarda y la tarjeta se puede repetir", async () => {
+    billetera.address = "";
+    billetera.asegurarLaSesion.mockResolvedValue(null);
+    billetera.sesionViva.mockReturnValue(false);
+    const acciones = await accionesDeLaCuenta(CUENTA);
+    const fallas: unknown[] = [];
+    for (const accion of [() => acciones.mandarCodigo(), () => acciones.confirmarCodigo("ABCD12345"), () => acciones.usarDesbloqueo()]) {
+      await accion().catch((e: unknown) => fallas.push(e));
+    }
+    expect(fallas).toEqual([SIN_RESPUESTA, SIN_RESPUESTA, SIN_RESPUESTA]);
+    expect(clasificarFallaAlMandar(fallas[0])).toBe("tarda");
+    expect(clasificarFallaAlConfirmar(fallas[1])).toBe("tarda");
+    expect(billetera.tokenDeSesion).not.toHaveBeenCalled();
+    expect(billetera.mandarCodigoDeProteccion).not.toHaveBeenCalled();
+  });
+
+  it("con la sesión guardada pero sin verificar todavía (un límite o la red), dice que tarda y no la da por perdida", async () => {
+    billetera.sesionViva.mockReturnValue(false);
+    const acciones = await accionesDeLaCuenta(CUENTA);
+    await expect(acciones.mandarCodigo()).rejects.toBe(SIN_RESPUESTA);
+    await expect(acciones.confirmarCodigo("ABCD12345")).rejects.toBe(SIN_RESPUESTA);
+    expect(billetera.mandarCodigoDeProteccion).not.toHaveBeenCalled();
   });
 
   it("con la sesión viva sigue como siempre", async () => {
