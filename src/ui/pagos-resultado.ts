@@ -2,7 +2,13 @@ import { roundTime } from "../protocol/quicknet";
 import { app } from "../state";
 import { sinGrabar } from "../ensayo-modo";
 import { network } from "../stellar/config";
-import { activoDePagos, cuentasQuePagan, esDireccionG, pagosActivos } from "../stellar/pagos";
+import {
+  activoDePagos,
+  cuentasDescartadasDe,
+  cuentasQuePagan,
+  esDireccionG,
+  pagosActivos,
+} from "../stellar/pagos";
 import { crearLectorDePagos } from "../stellar/pagos-red";
 import { hayCuentas, montarGanadores } from "./panel-ganadores";
 import { pagarPremioEn } from "./pagar-premio";
@@ -63,5 +69,14 @@ export function mostrarPagosDelResultado(): void {
     lector,
     ...(sesion ? { pagar: pagarPremioEn({ red: network.name, raffleId, premio: frozen.prize, activo, pagadoras, desde, destinoDe }) } : {}),
   });
+  // Un typo en la lista de cuentas que pagan no se paga solo: si la bandera está prendida y la
+  // configuración trae algo que no es una dirección, se dice en el panel (montarGanadores rellena
+  // la caja: el aviso va después, para que no lo borre).
+  if (cuentasDescartadasDe() > 0 && cuentasQuePagan().length === 0) {
+    const aviso = document.createElement("p");
+    aviso.dataset.pagos = "sin-cuentas";
+    aviso.textContent = "No hay ninguna cuenta de evento válida en VITE_PAGOS_CUENTAS: arreglo la configuración y recargo.";
+    caja.append(aviso);
+  }
   caja.style.display = "block";
 }

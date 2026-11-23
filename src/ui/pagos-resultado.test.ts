@@ -55,6 +55,16 @@ describe("el panel de ganadores en el resultado", () => {
     expect(pedidos).toEqual([]);
   });
 
+  it("con la bandera prendida y ninguna cuenta configurada válida, avisa antes de que nadie pague", async () => {
+    vi.stubEnv("VITE_PAGOS", "1");
+    vi.stubEnv("VITE_PAGOS_CUENTAS", "G, 1x");
+    sortear([cuenta()], [0]);
+    mostrarPagosDelResultado();
+    const aviso = document.querySelector('[data-pagos="sin-cuentas"]');
+    expect(aviso, "el aviso de la cuenta que falta").not.toBeNull();
+    expect(aviso?.textContent).toContain("VITE_PAGOS_CUENTAS");
+  });
+
   it("con la bandera prendida y ganadores con cuenta, muestra una fila por ganador y mira la red de cada cuenta", async () => {
     vi.stubEnv("VITE_PAGOS", "1");
     const [a, b] = [cuenta(), cuenta()] as [string, string];
