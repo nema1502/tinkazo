@@ -544,7 +544,7 @@ export async function completarLaCuentaDeLaMemoria(
     if (org === null || esCuentaValida(org)) {
       // Mientras se leía pudo cambiar la memoria: solo se completa la que sigue sin saber de quién es.
       const actual = leerOrg(a, ahora, red, conectada);
-      if (actual && actual.cuenta === undefined) guardarOrg(a, { ...actual, cuenta: org });
+      if (actual && actual.cuenta === undefined) guardarOrg(a, { ...actual, cuenta: org }, ahora);
       return;
     }
     if (intento < 2) await esperar(2_000);
@@ -646,7 +646,9 @@ const conPlazoDeTus = (dep: DependenciasOrg): DependenciasOrg => ({ ...dep, sena
  * Si la sala tiene Tus campañas, antes de ofrecerla. Se le manda el pedido de la lista con el cuerpo vacío, que no verifica ninguna
  * sesión ni gasta nada: con la función prendida contesta 400 forma, con los permisos de origen. Una sala que todavía no la tiene
  * (404 sin permisos de origen, que el navegador ve como falla de red, o un 503 apagada) no ofrece nada. Vuelve `true` o `false`
- * cuando la sala contestó, y `null` si no hubo respuesta (sin red o pasado el plazo): en ese caso se puede volver a preguntar.
+ * cuando la sala contestó, y `null` si no hubo respuesta (sin red o pasado el plazo) o si lo que llegó es una caída pasajera (un
+ * 5xx que no es el 503 apagada, un 429 o un 403 sin motivo, como los de una publicación en curso o un intermediario): en ese
+ * caso se puede volver a preguntar.
  */
 export async function salaTieneTusCampanas(dep: DependenciasOrg = {}, servicio = servicioDeSala()): Promise<boolean | null> {
   const r = await llamar(
@@ -655,9 +657,12 @@ export async function salaTieneTusCampanas(dep: DependenciasOrg = {}, servicio =
     pedidoDeTus({}),
   );
   if (!r) return null;
-  if (r.status !== 400) return false;
   const x: unknown = await r.json().catch(() => null);
-  return esObjeto(x) && x.error === "forma";
+  const error = esObjeto(x) && typeof x.error === "string" ? x.error : undefined;
+  if (r.status === 400) return error === "forma";
+  if (r.status === 503 && error === "apagada") return false;
+  if (r.status >= 500 || r.status === 429 || (r.status === 403 && error === undefined)) return null;
+  return false;
 }
 
 /**
@@ -719,7 +724,10 @@ export async function recuperarCampana(
   const dicho = esObjeto(x) ? x : {};
   if (r.status !== 200) {
     const error = typeof dicho.error === "string" ? dicho.error : undefined;
-    if (r.status === 404) return { ok: false, motivo: error === "no-existe" ? "no-existe" : "sin-funcion" };
+    // Acá se llega solo con la ruta ya confirmada (la pregunta de Tus campañas contestó que sí), y la sala contesta todo 404 de esta
+    // ruta con `no-existe`. Un 404 sin eso viene de un intermediario: es una falla pasajera y se puede probar de nuevo. Lo único que
+    // apaga la función en la pestaña es el 503 apagada.
+    if (r.status === 404) return { ok: false, motivo: error === "no-existe" ? "no-existe" : "red" };
     if (r.status === 409 && (error === "terminada" || error === "sellada" || error === "ocupado")) return { ok: false, motivo: error };
     if (r.status === 503 && error === "apagada") return { ok: false, motivo: "sin-funcion" };
     return { ok: false, motivo: motivoComun(r.status, error) ?? "red" };
@@ -909,8 +917,11 @@ function escribirTodo(a: Almacen | null, todo: Record<string, unknown>): void {
  * nuevas primero. Así crear o tomar una campaña con una cuenta no pisa lo que otra cuenta dejó en esta compu.
  */
 export const CLAVE_DE_LAS_OTRAS_SALAS = "otras";
-/** Cuántas salas de otras cuentas se recuerdan por red. */
-const MAX_OTRAS_SALAS = 3;
+/**
+ * Cuántas salas de otras cuentas se recuerdan por red. Las vencidas no cuentan: se sacan antes. Si aun así no entran, sale la
+ * que vence primero, nunca una cualquiera en silencio.
+ */
+const MAX_OTRAS_SALAS = 6;
 
 const cuentaDeLaMemoria = (x: unknown): string | null => (esObjeto(x) && esCuentaValida(x.cuenta) ? x.cuenta : null);
 
@@ -930,38 +941,56 @@ function ponerLasOtras(todo: Record<string, unknown>, red: RedDeCampana, lista: 
 }
 
 /**
- * Guarda la sala de su red. La de la otra red no se toca: cada red tiene la suya. Si en esa red hay una sala de otra cuenta, no
- * se pisa: pasa a las de un costado y vuelve cuando esa cuenta la retome.
+ * Las de un costado que siguen sirviendo: sin las vencidas ni las que no se entienden, y como mucho `MAX_OTRAS_SALAS`. Si sobran,
+ * salen las que vencen primero, y las que quedan siguen en su orden.
  */
-export function guardarOrg(a: Almacen | null, m: MemoriaDeOrg): void {
+function recortarLasOtras(lista: unknown[], red: RedDeCampana, ahora: number): unknown[] {
+  const vivas = lista.flatMap((x) => {
+    const memoria = leerMemoria(x, red, ahora);
+    return memoria ? [{ x, vence: memoria.sala.vence }] : [];
+  });
+  const quedan = new Set([...vivas].sort((p, q) => q.vence - p.vence).slice(0, MAX_OTRAS_SALAS));
+  return vivas.filter((v) => quedan.has(v)).map((v) => v.x);
+}
+
+/**
+ * Guarda la sala de su red. La de la otra red no se toca: cada red tiene la suya. Si en esa red hay una sala de otra cuenta, no
+ * se pisa: pasa a las de un costado y vuelve cuando esa cuenta la retome. `ahora` decide qué ya venció.
+ */
+export function guardarOrg(a: Almacen | null, m: MemoriaDeOrg, ahora: number = Date.now()): void {
   const todo = leerTodo(a);
   const red = m.sala.red;
   const duenaDeLaActual = cuentaDeLaMemoria(todo[red]);
   const cuenta = typeof m.cuenta === "string" ? m.cuenta : null;
   // Lo de un costado de la misma cuenta ya no vale: esta es la que sigue.
   let otras = leerLasOtras(todo, red).filter((x) => cuenta === null || cuentaDeLaMemoria(x) !== cuenta);
-  // La sala en curso es de otra cuenta (y se entiende): se aparta en lugar de pisarse. Si venció se descarta al leerla.
-  if (duenaDeLaActual !== null && duenaDeLaActual !== cuenta && leerMemoria(todo[red], red, 0) !== null) {
+  // La sala en curso es de otra cuenta, se entiende y no venció: se aparta en lugar de pisarse.
+  if (duenaDeLaActual !== null && duenaDeLaActual !== cuenta && leerMemoria(todo[red], red, ahora) !== null) {
     otras = [todo[red], ...otras.filter((x) => cuentaDeLaMemoria(x) !== duenaDeLaActual)];
   }
   todo[red] = m;
-  ponerLasOtras(todo, red, otras);
+  ponerLasOtras(todo, red, recortarLasOtras(otras, red, ahora));
   escribirTodo(a, todo);
 }
 
+/** El id de la sala de una memoria guardada, sin comprobar nada más. */
+const idDeLaMemoria = (x: unknown): string | null => (esObjeto(x) && esObjeto(x.sala) && typeof x.sala.id === "string" ? x.sala.id : null);
+
 /**
  * Saca la sala de esa red. La de la otra queda. Sin `cuenta`, sale la sala en curso. Con `cuenta` (la conectada, o `null` sin
- * sesión), sale la que esa cuenta ve: la sala en curso si es suya y, si no, la suya de las de un costado.
+ * sesión), sale la que esa cuenta ve: la sala en curso si es suya y, si no, la suya de las de un costado. Sin sesión las de un
+ * costado son todas de otras cuentas: sale solo la de `id` (la que estaba a la vista), y sin `id` no sale ninguna.
  */
-export function borrarOrg(a: Almacen | null, red: RedDeCampana, cuenta?: string | null): void {
+export function borrarOrg(a: Almacen | null, red: RedDeCampana, cuenta?: string | null, id?: string): void {
   const todo = leerTodo(a);
   if (cuenta === undefined || (todo[red] !== undefined && seVeDesde(cuentaDeLaMemoria(todo[red]), cuenta))) {
     delete todo[red];
   } else {
+    const sale = (x: unknown): boolean => (cuenta === null ? id !== undefined && idDeLaMemoria(x) === id : seVeDesde(cuentaDeLaMemoria(x), cuenta));
     ponerLasOtras(
       todo,
       red,
-      leerLasOtras(todo, red).filter((x) => !seVeDesde(cuentaDeLaMemoria(x), cuenta)),
+      leerLasOtras(todo, red).filter((x) => !sale(x)),
     );
   }
   escribirTodo(a, todo);

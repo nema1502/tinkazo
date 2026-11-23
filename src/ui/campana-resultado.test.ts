@@ -749,6 +749,35 @@ describe("una sala que esta cuenta todavía no puede mover: no se calla", () => 
     expect(m.pedidos).toHaveLength(1);
   });
 
+  it("si completar la cuenta alcanzó, la retomada siguiente sigue con el resultado y no se gasta en el sello ya avisado", async () => {
+    let c: { listo: () => boolean; completar: () => void } | null = null;
+    c = conLaCuentaPendiente(() => c?.completar());
+    m.respuestasAlSello = ["ok"];
+    sellar();
+    await suelta(5);
+    expect(m.pedidos).toHaveLength(1);
+    // El aviso quedó hecho y llegó el comprobante, pero el resultado todavía no salió.
+    conAvisoHecho({ resultado: "pendiente", comprobante: "https://tinkazo.app/verificar.html?c=1#lista" });
+    retomarAlArrancar(m.d);
+    await suelta(5);
+    expect(m.resultados).toHaveLength(1);
+    expect(m.pedidos).toHaveLength(1);
+  });
+
+  it("si la retomada encuentra el sello por avisar y el aviso ya estaba hecho, sigue con el resto en la misma vuelta", async () => {
+    const c = conLaCuentaPendiente();
+    m.respuestasAlSello = ["ok"];
+    sellar();
+    expect(pasoDelPuente()).toEqual({ paso: "entrar-para-seguir" });
+    // Otra pestaña avisó y dejó el resultado por mandar: esta retoma sin volver a avisar y manda el resultado.
+    conAvisoHecho({ resultado: "pendiente", comprobante: "https://tinkazo.app/verificar.html?c=1#lista" });
+    c.completar();
+    retomarAlArrancar(m.d);
+    await suelta(5);
+    expect(m.pedidos).toHaveLength(0);
+    expect(m.resultados).toHaveLength(1);
+  });
+
   it("sin sesión el paso queda a la vista y no sale ningún pedido", async () => {
     conLaCuentaPendiente();
     sellar();

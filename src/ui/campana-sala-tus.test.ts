@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -15,7 +16,7 @@ import { fechaTexto, horaTexto } from "../campana/formato";
 import { ponerPaso, reiniciarElPuente } from "../campana/puente";
 import { cifrarEquipo } from "../equipos/datos";
 import type { CampanaDeCuenta, FaseDeSala, MotivoDeRecuperar, ResultadoDeMisCampanas, ResultadoDeRecuperar } from "../sala/campana-org";
-import { guardarOrg, leerOrg, tokenDeEvento } from "../sala/campana-org";
+import { guardarOrg, leerOrg, recuperarCampana, tokenDeEvento } from "../sala/campana-org";
 import { cabeAbrirYa, desdeCuandoSePuedePreparar } from "./campana-sala";
 import {
   $,
@@ -286,6 +287,30 @@ describe("la sala que todavía no tiene Tus campañas", () => {
     expect(vistaDe(p)).toBe("tus");
   });
 
+  it("si la sala no contesta dos veces seguidas, no se le vuelve a preguntar en cada inicio de sesión por unos minutos", async () => {
+    // Es la sala de hoy, sin la ruta: el navegador ve una falla de red y la pregunta vuelve sin respuesta.
+    const x = armar({ lista: { ok: true, campanas: [viva("abierta")] }, hay: null });
+    const p = await abrir(x);
+    expect(x.preguntas).toBe(1);
+    document.dispatchEvent(new CustomEvent("tinkazo:sesion", { detail: CUENTA }));
+    await suelta(8);
+    expect(x.preguntas).toBe(2);
+    // La barra de la cuenta avisa la sesión en cada dibujo: ninguno de esos avisos vuelve a preguntar.
+    for (let i = 0; i < 5; i++) {
+      document.dispatchEvent(new CustomEvent("tinkazo:sesion", { detail: CUENTA }));
+      await suelta(4);
+    }
+    expect(x.preguntas).toBe(2);
+    expect(textosDeBotones(p)).not.toContain("Ver tus campañas");
+    // Pasado el rato, se vuelve a preguntar una vez, y si la sala ya la tiene, la lista se pide sola.
+    x.m.ahora += 5 * 60_000 + 1;
+    x.hay = true;
+    document.dispatchEvent(new CustomEvent("tinkazo:sesion", { detail: CUENTA }));
+    await suelta(8);
+    expect(x.preguntas).toBe(3);
+    expect(vistaDe(p)).toBe("tus");
+  });
+
   it("con la sala que sí la tiene, el enlace sale y la lista se pide aunque llegue antes que la respuesta", async () => {
     const x = armar({ lista: { ok: true, campanas: [viva("lista")] } });
     const p = await abrir(x);
@@ -416,6 +441,30 @@ describe("lo que dice cada fila", () => {
     ]);
     expect(principales(p)).toHaveLength(1);
     expect(p.raiz.querySelector("#cpo-tus .cpo-tus-primera .cpo-tus-nombre")?.textContent).toBe("Dos");
+  });
+
+  it("la marca magenta del costado sale solo con más de una campaña que se puede usar, como el nombre en el botón", async () => {
+    // El selector de la marca, tal cual está en la hoja: lo que se compara es lo que pinta el navegador.
+    const hoja = readFileSync("src/campana/campana-sala.css", "utf8");
+    const renglon = hoja.split(/\r?\n/u).find((l) => l.includes("border-left: 6px solid var(--magenta)") && l.includes("cpo-tus"));
+    const selector = renglon?.slice(0, renglon.indexOf("{")).trim() ?? "";
+    expect(selector).not.toBe("");
+    const marcadas = (p: Panel): string[] => [...p.raiz.querySelectorAll(selector)].map((li) => li.querySelector(".cpo-tus-nombre")?.textContent ?? "");
+
+    // Una sola que se puede usar, con otra terminada y el enlace de Hacer otro sorteo al pie: sin marca.
+    const una = armar({ lista: { ok: true, campanas: [viva("abierta", { empresa: "Sola" }), terminada()] } });
+    const p1 = await abrir(una);
+    expect(filasTus(p1).map((f) => f.empresa)).toEqual(["Sola", "Café Sucre"]);
+    expect(principales(p1).map((b) => b.textContent)).toEqual(["Usar en esta compu"]);
+    expect(marcadas(p1)).toEqual([]);
+    cerrarTodos();
+    document.body.innerHTML = "";
+
+    // Dos que se pueden usar: la del botón principal lleva la marca.
+    const dos = armar({ lista: { ok: true, campanas: [viva("abierta", { evento: "uno-k3f9", empresa: "Uno" }), fila({ evento: "dos-k3f9", empresa: "Dos" })] } });
+    const p2 = await abrir(dos);
+    expect(principales(p2).map((b) => b.textContent)).toEqual(["Usar Uno en esta compu"]);
+    expect(marcadas(p2)).toEqual(["Uno"]);
   });
 
   it("ordena la que tiene su sala abierta primero, después las activadas por la hora de abrir y al final las terminadas", async () => {
@@ -935,6 +984,29 @@ describe("la campaña que tomó otra compu", () => {
     expect(principales(p).map((b) => b.textContent)).toEqual(["Dejar esta campaña"]);
     expect(textosDeBotones(p)).toEqual(["Dejar esta campaña"]);
     expect(x.usadas).toHaveLength(1);
+  });
+
+  it("si al tocar Usar llega un 404 sin motivo, lo dice y deja probar de nuevo: no es la función apagada", async () => {
+    const x = armar({ conDireccion: false });
+    // La respuesta pasa por la lectura de verdad: un 404 de texto plano, como el de un intermediario.
+    let llamadas = 0;
+    const deUnIntermediario = (async () => {
+      llamadas++;
+      return new Response("no encontrada", { status: 404 });
+    }) as unknown as typeof fetch;
+    const tus = x.m.deps.tus as NonNullable<typeof x.m.deps.tus>;
+    x.m.deps.tus = {
+      ...tus,
+      recuperar: (sesion, evento) => recuperarCampana({ sesion, evento }, { fetch: deUnIntermediario, senal: () => new AbortController().signal }, "https://s.test"),
+    };
+    const p = await tomada(x);
+    boton(p, "Usar en esta compu").click();
+    boton(p, "Sí, usarla aquí").click();
+    await vi.waitFor(() => expect(texto(p, "#cpo-aviso")).toBe("No pudimos abrirla aquí. Probá de nuevo."));
+    expect(llamadas).toBe(1);
+    expect(vistaDe(p)).toBe("tomada");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Usar en esta compu"]);
+    expect(textosDeBotones(p)).toContain("Dejar esta campaña");
   });
 
   it("sin la cuenta conectada, o en Prueba, el único botón es Dejar esta campaña, como antes", async () => {

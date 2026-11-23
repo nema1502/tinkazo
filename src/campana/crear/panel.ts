@@ -9,6 +9,7 @@ import { network } from "../../stellar/config";
 import type { ValidacionDeCampana } from "../../sala/validar-campana";
 import { fechaTexto, horaTexto, premiosTexto } from "../formato";
 import type { ColorDeCampana, TipoDePaso } from "../modelo";
+import { direccionDelPanel } from "../direccion-del-panel";
 import { sustituir } from "../sustituir";
 import { PANTALLAS, VISTA_LISTA, VISTA_PREVIA, type MensajeDeVista, type PantallaDeVista } from "../vista-protocolo";
 import {
@@ -79,6 +80,11 @@ export interface DepsDelCreador {
    * (las pruebas de siempre) están desde el principio. Una sala que todavía no la tiene los deja sin mostrar.
    */
   tusDisponible?: () => Promise<boolean | null>;
+  /**
+   * La consulta de la dirección de esta página (`location.search`): el enlace a Tus campañas lleva su idioma y su tema, como
+   * Activar mi campaña. Sin esto, la dirección de siempre.
+   */
+  consulta?: string;
   /** El origen con que se habla con la vista. */
   origen: string;
   /** El tema forzado por la dirección de la página, para que la vista lo repita. */
@@ -448,7 +454,8 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
 
   function enlaceDeTusCampanas(clase: string, id: string): HTMLAnchorElement {
     const a = el("a", clase, tx("ccTusCampanas"));
-    a.href = DIRECCION_DE_TUS_CAMPANAS;
+    // El idioma y el tema de esta dirección viajan al panel, como al activar: sin ellos abría con los de la memoria y el sistema.
+    a.href = direccionDelPanel(deps.consulta ?? "");
     a.id = id;
     return a;
   }

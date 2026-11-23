@@ -442,7 +442,7 @@ export async function verificarQuienOrganiza(sesion: string, d: DepsDeVerificar)
 export interface TopesDeCuenta {
   /** Rechazos de la conexión y de la ficha, y el ritmo del grupo propio de la conexión (una sesión conocida no lo suma). */
   antes(ip: string, ficha: string, conocida: boolean): Promise<AntesDeActivar>;
-  /** Una sesión que el proveedor rechazó: las mismas tablas de rechazos que usa activar. */
+  /** Una sesión que el proveedor rechazó: la ficha es la de activar, y la conexión suma en su grupo propio. */
   rechazo(ip: string, ficha: string): Promise<void>;
   /** Los listados y las tomas por cuenta, ya verificada la sesión. */
   tope(cuenta: string, tipo: TipoDeTope): Promise<{ ok: true } | { ok: false; esperaS: number }>;
@@ -456,17 +456,27 @@ export interface DepsDeCuenta {
 }
 
 /**
+ * Si el texto tiene la forma de una sesión del proveedor de cuentas: un JWT de tres partes (`formaDeToken` ya mira la carga y
+ * el vencimiento). La sesión que da el proveedor es un JWT: un texto sin puntos no lo es, y no se lo verifica.
+ */
+export function formaDeSesionDeTresPartes(t: unknown, ahora: number): t is string {
+  return formaDeToken(t, ahora) && t.split(".").length === 3;
+}
+
+/**
  * La cuenta de quien pide listar o usar una campaña en otra compu. Es la verificación de activar con tres cosas más, en este
- * orden: sin forma de token no se cuenta nada ni se llama a nadie (401 sesion), el ritmo de la conexión tiene su grupo propio y
- * una sesión que el proveedor ya dio por buena no lo suma, y después de verificar hay un tope por cuenta (429 cupo-cuenta).
- * Sin cuenta, 409 sin-billetera. Una cuenta sin campañas y una que nunca existió reciben lo mismo: eso lo decide quien llama.
+ * orden: sin forma de sesión de tres partes no se cuenta nada ni se llama a nadie (401 sesion), así un vecino de la misma
+ * conexión con textos inventados no llena los topes de la conexión. El ritmo y los rechazos de la conexión tienen su grupo
+ * propio, aparte de los de activar, y una sesión que el proveedor ya dio por buena no los suma. Después de verificar hay un tope
+ * por cuenta (429 cupo-cuenta). Sin cuenta, 409 sin-billetera. Una cuenta sin campañas y una que nunca existió reciben lo mismo:
+ * eso lo decide quien llama.
  */
 export async function verificarCuentaDeCampanas(
   sesion: unknown,
   tipo: TipoDeTope,
   d: DepsDeCuenta,
 ): Promise<{ ok: true; cuenta: string } | { ok: false; respuesta: RespuestaDeActivar }> {
-  if (typeof sesion !== "string" || !formaDeToken(sesion, d.ahora)) return { ok: false, respuesta: error(401, "sesion") };
+  if (!formaDeSesionDeTresPartes(sesion, d.ahora)) return { ok: false, respuesta: error(401, "sesion") };
   if (d.proveedor === null) return { ok: false, respuesta: error(503, "sin-pollar") };
   const conocida = await d.proveedor.conocida(sesion);
   const quien = await verificarQuienOrganiza(sesion, {

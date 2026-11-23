@@ -12,7 +12,7 @@ import { horaDeLaToma, textoDelCorreoDeToma } from "../../workers/sala/src/corre
 import type { EnlaceDeCorreo } from "../../workers/sala/src/correo";
 import { recuperarCampana, type DepsDeTus } from "../../workers/sala/src/tus-campanas";
 import { HORA_DE_LA_PRUEBA, montarMundoDeActivar, type MundoDeActivar } from "./activar-mundo";
-import { firmarParaLaPrueba, personaDePrueba, type PersonaDePrueba } from "./mundo-sala";
+import { firmarParaLaPrueba, personaDePrueba, sesionDePrueba, type PersonaDePrueba } from "./mundo-sala";
 
 vi.mock("cloudflare:workers", async () => await import("./cloudflare-falso"));
 /** Lo que el Worker lee del contrato: las pruebas de rutas con el token viejo lo necesitan para llegar a la comprobación. */
@@ -58,10 +58,17 @@ const cerrarSala = async (s: { id: string; token: string }): Promise<void> => {
   expect(r.status).toBe(204);
 };
 
+/**
+ * El aviso por correo de una toma prendido, como va en la publicación: sin él, Usar en esta compu contesta apagada. El enlace de
+ * correo de mentira no manda nada a nadie.
+ */
+const CON_EL_AVISO_DE_TOMA = { CORREO_GANADORAS: "1", CORREO_DE: "sorteos@example.org", CORREO_TOMA: "1" };
+
 async function armar(extra: Record<string, string> = {}): Promise<void> {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(AHORA);
-  m = await montarMundoDeActivar({ TUS_CAMPANAS: "1", ...extra });
+  m = await montarMundoDeActivar({ TUS_CAMPANAS: "1", ...CON_EL_AVISO_DE_TOMA, ...extra });
+  m.mundo.env.CORREO = { send: async () => ({ messageId: "m0" }) };
   b = personaDePrueba(m.mundo, 2);
 }
 
@@ -423,7 +430,7 @@ describe("el aviso por correo de cada toma", () => {
   });
 
   async function armarConCorreo(extra: Record<string, string> = {}): Promise<void> {
-    await armar({ CORREO_GANADORAS: "1", CORREO_DE: "sorteos@example.org", CORREO_TOMA: "1", ...extra });
+    await armar(extra);
     enviados = [];
     enlace = { send: vi.fn(async (msg: Mensaje) => (enviados.push(msg), { messageId: "m1" })) };
     m.mundo.env.CORREO = enlace;
@@ -487,19 +494,39 @@ describe("el aviso por correo de cada toma", () => {
     expect(enviados).toHaveLength(2);
   });
 
-  it("no sale con el interruptor apagado ni sin el correo prendido, y la toma anda igual", async () => {
-    await armarConCorreo({ CORREO_TOMA: "0" });
-    expect((await recuperar(m.organizadora.token)).status).toBe(200);
-    await m.mundo.esperarSegundoPlano();
-    expect(enviados).toHaveLength(0);
-    await armarConCorreo({ CORREO_GANADORAS: "0" });
-    expect((await recuperar(m.organizadora.token)).status).toBe(200);
-    await m.mundo.esperarSegundoPlano();
-    expect(enviados).toHaveLength(0);
-    await armarConCorreo({ CORREO_TOMA: "" });
-    expect((await recuperar(m.organizadora.token)).status).toBe(200);
-    await m.mundo.esperarSegundoPlano();
-    expect(enviados).toHaveLength(0);
+  it("con Tus campañas prendida y el aviso por correo sin poder salir, usar en esta compu contesta apagada y no toca la sala", async () => {
+    // Decisión del 22 de noviembre de 2026: antes la toma andaba igual sin el aviso, que es la defensa de quien perdió su sesión.
+    const casos: [string, () => Promise<void>][] = [
+      ["el interruptor apagado", () => armarConCorreo({ CORREO_TOMA: "0" })],
+      ["el interruptor vacío", () => armarConCorreo({ CORREO_TOMA: "" })],
+      ["el correo a quien gana apagado", () => armarConCorreo({ CORREO_GANADORAS: "0" })],
+      ["sin remitente", () => armarConCorreo({ CORREO_DE: "" })],
+      [
+        "sin el enlace de correo",
+        async () => {
+          await armarConCorreo();
+          delete m.mundo.env.CORREO;
+        },
+      ],
+    ];
+    for (const [caso, preparar] of casos) {
+      await preparar();
+      const r = await recuperar(m.organizadora.token);
+      expect(r.status, caso).toBe(503);
+      expect(await r.json(), caso).toEqual({ error: "apagada" });
+      expect(r.headers.get("Access-Control-Allow-Origin"), caso).toBe("https://tinkazo.app");
+      await m.mundo.esperarSegundoPlano();
+      expect(enviados, caso).toHaveLength(0);
+      // El código fijo queda en el registro, sin nada de la persona.
+      const todo = registro.join("\n");
+      expect(todo, caso).toContain('"evento":"tus-campanas"');
+      expect(todo, caso).toContain('"codigo":"sin-correo-de-toma"');
+      for (const secreto of [m.organizadora.cuenta, m.organizadora.token, sala.token]) expect(todo, caso).not.toContain(secreto);
+      // La sala sigue con su token: no se tomó nada.
+      expect((await m.mundo.pedir(`/v1/sala/${sala.id}/campana/pase`, { metodo: "GET", cabeceras: auth(sala.token) })).status, caso).toBe(200);
+      // La lista de la cuenta sigue: solo usar en esta compu necesita el aviso.
+      expect((await m.mundo.pedir("/v1/mis-campanas", { cuerpo: { sesion: m.organizadora.token } })).status, caso).toBe(200);
+    }
   });
 
   it("no sale en la rama de la campaña activada ni cuando la toma no se hace", async () => {
@@ -565,7 +592,7 @@ describe("el texto del correo de toma", () => {
 
 describe("las ramas que el mundo de pruebas no puede provocar", () => {
   const CUENTA = Keypair.random().publicKey();
-  const SESION = "tok_buena_" + "x".repeat(30);
+  const SESION = sesionDePrueba("buena");
   const ficha = (cambios: Partial<FichaDeCampana> = {}): FichaDeCampana => ({
     texto: "{}",
     firma: "f",

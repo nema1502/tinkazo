@@ -97,6 +97,8 @@ function depsReales(): DepsDelCreador {
     activar: cobro === null ? undefined : activarEnElPanel,
     // Tus campañas se ofrece solo si la sala de afuera la tiene: se le pregunta una vez, sin gastar nada. La demostración no la ofrece.
     tusDisponible: demo ? () => Promise.resolve(false) : () => import("./sala/campana-org").then((m) => m.salaTieneTusCampanas()),
+    // El enlace a Tus campañas lleva el idioma y el tema de esta dirección, como Activar mi campaña.
+    consulta: location.search,
     // El resumen dice el servicio y el total a poner antes de pedir nada, calculados para esta campaña.
     comision: comisionDelArmado(cobro),
     origen: location.origin,

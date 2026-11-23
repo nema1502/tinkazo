@@ -315,10 +315,20 @@ export interface PersonaDePrueba {
   llave: string;
 }
 
+const base64url = (texto: string): string => Buffer.from(texto).toString("base64url");
+
+/**
+ * Un token de sesión con la forma del que da el proveedor de cuentas: un JWT de tres partes (encabezado, carga y firma). La firma
+ * es inventada: lo que dice si vale es el proveedor de mentira.
+ */
+export function sesionDePrueba(nombre: string): string {
+  return `${base64url('{"alg":"ES256","typ":"JWT"}')}.${base64url(JSON.stringify({ sub: nombre }))}.${base64url(`firma-de-prueba-${nombre}`)}`;
+}
+
 /** Da de alta una sesión en el proveedor de mentira. `contenido` pisa lo que dice el verify (por ejemplo `authProvider`). */
 export function personaDePrueba(mundo: MundoDeSala, n: number, contenido: Record<string, unknown> = {}): PersonaDePrueba {
   const usuario = `usuario${n}`;
-  const token = `tok_${usuario}_${"x".repeat(24)}`;
+  const token = sesionDePrueba(usuario);
   const cuenta = Keypair.random().publicKey();
   mundo.proveedor.sesiones.set(token, { usuario, contenido: { wallet: cuenta, ...contenido } });
   return { usuario, token, cuenta, llave: `llave${n}`.padEnd(22, "x") };

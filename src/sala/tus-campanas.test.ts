@@ -17,7 +17,7 @@ import { confirmarEventoSql, reservarEventoSql } from "../../workers/sala/src/ca
 import type { Ejecutar } from "../../workers/sala/src/registro";
 import { MAX_CAMPANAS_EN_LA_LISTA, leerPedidoDeTus, tusCampanasPrendido } from "../../workers/sala/src/tus-campanas";
 import { HORA_DE_LA_PRUEBA, montarMundoDeActivar, type MundoDeActivar } from "./activar-mundo";
-import { altaDe, firmarParaLaPrueba, personaDePrueba, type PersonaDePrueba } from "./mundo-sala";
+import { altaDe, firmarParaLaPrueba, personaDePrueba, sesionDePrueba, type PersonaDePrueba } from "./mundo-sala";
 
 vi.mock("cloudflare:workers", async () => await import("./cloudflare-falso"));
 
@@ -300,10 +300,25 @@ describe("los permisos y los rechazos", () => {
   });
 
   it("una sesión con forma pero que el proveedor no reconoce es 401 y cuenta un rechazo", async () => {
-    const r = await listar("tok_desconocida_" + "z".repeat(24));
+    // La forma es la de la sesión del proveedor, un JWT de tres partes: un texto sin puntos ya no llega al proveedor.
+    const r = await listar(sesionDePrueba("desconocida"));
     expect(r.status).toBe(401);
     expect(await r.json()).toEqual({ error: "sesion" });
     expect(m.mundo.ejecutar("cupos", "SELECT n FROM activar_ficha")).toEqual([{ n: 1 }]);
+    // El rechazo de la conexión se cuenta en el grupo de Tus campañas, aparte del de activar.
+    const grupos = m.mundo.ejecutar("cupos", "SELECT grupo FROM activar_rechazos") as { grupo: string }[];
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0]?.grupo.startsWith("cuenta|")).toBe(true);
+  });
+
+  it("un texto sin forma de sesión de tres partes es 401 sin llamar al proveedor ni contar nada", async () => {
+    const antes = { ...m.mundo.proveedor.llamadas };
+    const r = await listar("tok_desconocida_" + "z".repeat(24));
+    expect(r.status).toBe(401);
+    expect(await r.json()).toEqual({ error: "sesion" });
+    expect(m.mundo.proveedor.llamadas).toEqual(antes);
+    expect(m.mundo.ejecutar("cupos", "SELECT * FROM activar_ficha")).toEqual([]);
+    expect(m.mundo.ejecutar("cupos", "SELECT * FROM activar_rechazos")).toEqual([]);
   });
 
   it("quien no entró por Google es 403 no-google, quien no tiene cuenta es 409 sin-billetera y el proveedor caído es 502 red", async () => {

@@ -82,7 +82,7 @@ export type PedidoDeTus =
 
 /**
  * Lee el cuerpo. Sin JSON o sin `sesion` de texto es 400; un evento con otra forma, 400 con el campo `evento`. La forma de
- * la sesión como token no se mira acá: sin forma de token es 401 y no cuenta contra nadie (`verificarCuentaDeCampanas`).
+ * la sesión como token no se mira acá: sin forma de sesión de tres partes es 401 y no cuenta contra nadie (`verificarCuentaDeCampanas`).
  */
 export function leerPedidoDeTus(cuerpo: unknown, conEvento: boolean): PedidoDeTus {
   if (!esObjeto(cuerpo)) return { ok: false, respuesta: error(400, "forma", { campo: "cuerpo" }) };

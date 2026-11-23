@@ -375,6 +375,8 @@ export const desdeCuandoSePuedePreparar = (sorteoMs: number): number => sorteoMs
 
 /** Cuántas campañas muestra Tus campañas: el panel ocupa la pantalla sola, y tres filas entran a la vista en el celular. */
 const MAX_FILAS_DE_TUS = 3;
+/** Tras dos preguntas seguidas sin respuesta sobre Tus campañas, cuánto se espera antes de volver a preguntar. */
+const ESPERA_DE_TUS_SIN_RESPUESTA_MS = 5 * 60_000;
 const RANGO_DE_TUS: Record<EstadoDeCampanaDeCuenta, number> = { viva: 0, activada: 1, terminada: 2 };
 
 /** Primero la que tiene su sala abierta, después las activadas por la hora de abrir, y al final las terminadas, la más nueva primero. */
@@ -639,6 +641,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let pararCierre: (() => void) | null = null;
   let pararVencimiento: (() => void) | null = null;
   let reintentar: (() => void) | null = null;
+  /**
+   * El id de la sala guardada que se está retomando mientras `sala` todavía no la tiene: la que se borró o la de la pantalla sin
+   * conexión. Sin sesión, Dejar saca esa y ninguna otra.
+   */
+  let idEnVista: string | null = null;
   let retomada = false;
   /** Si ya se pasó la lista cerrada al sorteo: desde entonces cada cambio la vuelve a pasar. */
   let pasada = false;
@@ -660,8 +667,13 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   /**
    * Si la sala de afuera tiene Tus campañas. Se le pregunta una vez por pestaña, con un pedido que no gasta nada, y recién con un
    * sí se ofrece algo. Con una sala que no contestó se vuelve a preguntar la próxima vez, y mientras tanto no se ofrece nada.
+   * Tras dos sin respuesta seguidas (la sala de hoy, sin la ruta, se ve así) se deja de preguntar por `ESPERA_DE_TUS_SIN_RESPUESTA_MS`:
+   * la barra de la cuenta avisa la sesión en cada dibujo, y cada aviso no puede ser otro pedido que falla.
    */
   let tusServidor: "sin-saber" | "preguntando" | "si" | "no" = deps.tus?.disponible ? "sin-saber" : "si";
+  /** Cuántas preguntas seguidas volvieron sin respuesta, y hasta cuándo no se vuelve a preguntar. */
+  let tusSinRespuesta = 0;
+  let tusNoPreguntarHasta = 0;
   /** El evento que se está tomando: mientras tanto ningún otro botón de la lista actúa. */
   let tusTrabajando: string | null = null;
   /** A qué evento se le pregunta si se usa acá, y desde qué pantalla se volvió si se cancela. */
@@ -769,7 +781,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const memoria: MemoriaDeOrg = { sala, fase: faseSala, mostradas: [...mostradas], pendientes: sinConfirmar };
     if (duena !== undefined) memoria.cuenta = duena;
     if (recuperada) memoria.recuperada = true;
-    guardarOrg(deps.almacen, memoria);
+    guardarOrg(deps.almacen, memoria, deps.ahora());
   }
 
   /** Quienes se están quitando (en Deshacer o mandadas sin confirmar): la lista de la sala todavía los tiene. */
@@ -945,15 +957,12 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   /* --- de quién es la sala --- */
 
-  /** Hay una sala con dueña (o sin saber de quién es) y no hay sesión: se mira, pero lo que la cambia pide entrar. */
-  const sinEntrar = (): boolean => sala !== null && duena !== null && deps.cuenta() === null;
-
-  /** Con una acción que cambia la lista y sin sesión, abre la entrada con Google en lugar de actuar. `true` si la pidió. */
-  function pedirEntrada(): boolean {
-    if (!sinEntrar()) return false;
-    (deps.entrar ?? deps.cambiarDeCuenta)?.();
-    return true;
-  }
+  /*
+   * Sin ninguna cuenta conectada, lo que la sala acepta con el token guardado (cerrar, quitar, sumar 15 minutos, reabrir, la
+   * pantalla grande, el QR y pasar la lista) anda como siempre y no pide entrar: el evento no puede depender de un ingreso nuevo
+   * con Google en un wifi donde 150 personas entran a la vez, y mientras la sesión se retoma tras recargar nada abre el ingreso.
+   * Con otra cuenta conectada la campaña se aparta (`apartar`). Sellar, guardar el resultado y avisar piden la cuenta dueña.
+   */
 
   const esCuenta = (x: unknown): x is string => typeof x === "string" && /^G[A-Z2-7]{55}$/u.test(x);
 
@@ -985,7 +994,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (org !== null) {
       // Se anota de quién es aunque sea de otra cuenta: la próxima vez ni se pregunta.
       const g = leerOrg(deps.almacen, deps.ahora(), s.red, null);
-      if (g && g.cuenta === undefined) guardarOrg(deps.almacen, { ...g, cuenta: org });
+      if (g && g.cuenta === undefined) guardarOrg(deps.almacen, { ...g, cuenta: org }, deps.ahora());
       if (!seVeDesde(org, deps.cuenta())) return apartar();
     }
     duena = org;
@@ -1007,6 +1016,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     vaciarFilas();
     mostradas.clear();
     sala = null;
+    idEnVista = null;
     campana = null;
     pide = null;
     duena = null;
@@ -1072,10 +1082,13 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const d = deps.tus;
     if (!d || !tusDelModo() || tusServidor === "si" || tusServidor === "no") return Promise.resolve();
     if (tusPregunta) return tusPregunta;
+    if (deps.ahora() < tusNoPreguntarHasta) return Promise.resolve();
     tusServidor = "preguntando";
     tusPregunta = (async (): Promise<void> => {
       const hay = await Promise.resolve(d.disponible?.() ?? true).catch((): null => null);
       tusServidor = hay === true ? "si" : hay === false ? "no" : "sin-saber";
+      tusSinRespuesta = hay === null ? tusSinRespuesta + 1 : 0;
+      if (tusSinRespuesta >= 2) tusNoPreguntarHasta = deps.ahora() + ESPERA_DE_TUS_SIN_RESPUESTA_MS;
       tusPregunta = null;
       pintar();
     })();
@@ -1252,8 +1265,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   function terminarFallo(evento: string, desde: "tus" | "previa" | "tomada", motivo: MotivoDeRecuperar, texto?: string): void {
     tusTrabajando = null;
     seguirDe = null;
-    // La sala dice que no tiene la función (la ruta no existe o está apagada): no se vuelve a ofrecer, ni se deja un botón que
-    // prueba de nuevo para siempre. En la pantalla de tomada queda Dejar esta campaña, que sí sale del apuro.
+    // La sala dice que tiene la función apagada (el 503 apagada): no se vuelve a ofrecer, ni se deja un botón que prueba de nuevo
+    // para siempre. En la pantalla de tomada queda Dejar esta campaña, que sí sale del apuro. Un 404 sin motivo llega como `red` y
+    // deja probar de nuevo.
     const sinFuncion = motivo === "sin-funcion";
     if (sinFuncion) tusServidor = "no";
     const { clave, boton: boton1 } = sinFuncion && desde !== "tus" ? { clave: "cpoSeguirAunNoL", boton: null } : fallaAlUsar(motivo);
@@ -1296,7 +1310,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // La memoria se guarda antes de cualquier otra cosa: el token nuevo ya vale y el de la otra compu dejó de valer.
       const s: SalaDeCampana = { ...r.sala, clave: generarClave(), evento, red: deps.red() };
       const g: MemoriaDeOrg = { sala: s, fase: r.fase, cuenta, recuperada: true };
-      guardarOrg(deps.almacen, g);
+      guardarOrg(deps.almacen, g, deps.ahora());
       guardarTokenDeEvento(deps.almacen, { evento, token: s.token, cuenta });
       if (r.fase === "sorteada") await d.armarSorteo(s, cuenta).catch(() => false);
       tus = [];
@@ -1377,6 +1391,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       tusEl = ul;
     }
     tusEl.hidden = false;
+    // Con más de una que se puede usar, el botón de la barra dice el nombre de la empresa y su fila lleva la marca del costado.
+    tusEl.classList.toggle("cpo-tus-varias", filasDeTus.filter((x) => x.d.usable).length > 1);
     if (firma === firmaDeTus) return;
     firmaDeTus = firma;
     tusEl.replaceChildren(
@@ -2246,7 +2262,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   async function masQuince(): Promise<void> {
     const s = sala;
-    if (!s || trabajando || pedirEntrada()) return;
+    if (!s || trabajando) return;
     // Desde la hora de ahora si el cierre ya pasó: la sala pide un cierre entre 1 minuto y 12 horas desde ahora.
     const nuevo = Math.max(cierraMs, ahoraSala()) + QUINCE_MIN;
     trabajando = true;
@@ -2263,7 +2279,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   }
 
   function pedirCerrar(): void {
-    if (pedirEntrada()) return;
     mensaje = "";
     if (visibles().length < 2) return aviso(tx("cpoPocos"));
     vista = "confirmar";
@@ -2349,7 +2364,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   async function reabrir(): Promise<void> {
     const s = sala;
-    if (!s || trabajando || listaTrabada() || pedirEntrada()) return;
+    if (!s || trabajando || listaTrabada()) return;
     trabajando = true;
     mensaje = "";
     pintar();
@@ -2384,15 +2399,18 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // Mientras se leía la sala pudo entrar otra cuenta: la de otra cuenta no se retoma ni se borra.
     if (!seVeDesde(g.cuenta, deps.cuenta())) return apartar();
     recuperada = g.recuperada === true;
+    idEnVista = g.sala.id;
     if (e === "no-existe") return olvidar("cpoSeBorro");
     // La sala no reconoce el token guardado: otra compu tomó la campaña. Se dice, y lo guardado no se toca.
     if (e === "token" || (typeof e === "object" && e.tuya === false)) {
+      idEnVista = null;
       sala = g.sala;
       duena = g.cuenta;
       campana = typeof c === "string" ? null : c;
       return tomada();
     }
     if (typeof c === "string" || typeof e === "string") return ponerSinRed(g);
+    idEnVista = null;
     sala = g.sala;
     duena = g.cuenta;
     campana = c;
@@ -2427,6 +2445,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   /** No se pudo preguntarle a la sala: la memoria se conserva y se prueba de nuevo, a mano o al volver la red. */
   function ponerSinRed(g: MemoriaDeOrg): void {
     dejarDeEscuchar();
+    idEnVista = g.sala.id;
     vista = "sin-red";
     mensaje = "";
     reintentar = () => void retomar(g);
@@ -2450,6 +2469,10 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   function olvidar(clave?: string): void {
     const red = sala?.red ?? deps.red();
+    // La sala que estaba a la vista: sin sesión, es la única que se deja de recordar (las demás son de otras cuentas). Si se estaba
+    // retomando, `sala` todavía no la tiene y el id es el de la que se retomaba.
+    const id = sala?.id ?? idEnVista ?? undefined;
+    idEnVista = null;
     dejarDeEscuchar();
     marca++;
     pararDespertar?.();
@@ -2481,7 +2504,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     trabajando = false;
     pintadas = [];
     firmaDeLista = "";
-    borrarOrg(deps.almacen, red, deps.cuenta());
+    borrarOrg(deps.almacen, red, deps.cuenta(), id);
     deps.alOlvidar?.();
     ponerPaso({ paso: "nada" });
     ponerRechazo(null);
@@ -2612,7 +2635,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       vista === "previa" && activacion.tipo === "temprano" ? cabeAbrirYa(activacion.sorteoMs, deps.ahora()) : "",
       leyendoLaLista,
       enFila?.texto ?? "",
-      sinEntrar(),
       // En la vista de siempre el aviso de lo que pasó al pedir Tus campañas va arriba del botón, a la vista.
       vista === "elegir" ? mensaje : "",
       vista === "tus" || vista === "seguir"
@@ -2694,11 +2716,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     } else if (vista === "abierta") {
       const abrirGrande = (b: HTMLButtonElement): void => grande.abrir(b);
       const cerrar = (): void => pedirCerrar();
-      if (sinEntrar()) {
-        // Sin sesión la sala se mira (el QR, la lista, la pantalla grande) y lo que la cambia pide entrar primero.
-        botones.push(principal(tx("cpoEntrarParaCerrar"), () => void pedirEntrada(), false, true));
-        botones.push(boton(tx("cpoGrande"), "ghost", abrirGrande));
-      } else if (hora) {
+      if (hora) {
         botones.push(principal(tx("cpoCerrar"), cerrar, trabajando));
         botones.push(boton(tx("cpoGrande"), "ghost", abrirGrande));
       } else {
@@ -2719,8 +2737,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     } else if (vista === "cerrada") {
       const delBoton = principalDelPaso();
       if (delBoton) botones.push(delBoton);
-      else if (sinLeer) botones.push(principal(tx("cpoReintentar"), () => void (sala && !pedirEntrada() && leerListaCompleta(sala))));
-      else if (retomada && !leyendoLaLista) botones.push(principal(tx("cpoPasar"), () => void (sala && !pedirEntrada() && leerListaCompleta(sala))));
+      else if (sinLeer) botones.push(principal(tx("cpoReintentar"), () => void (sala && leerListaCompleta(sala))));
+      else if (retomada && !leyendoLaLista) botones.push(principal(tx("cpoPasar"), () => void (sala && leerListaCompleta(sala))));
       botones.push(boton(tx("cpoGrande"), "ghost", (b) => grande.abrir(b)));
       if (!listaTrabada()) botones.push(boton(tx("cpoReabrir"), "enlace", () => void reabrir(), trabajando));
       botones.push(otroArchivo());
@@ -3180,7 +3198,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const n = Number(b.dataset.n);
     const accion = b.dataset.accion;
     if (accion === "quitar") {
-      if (pedirEntrada()) return;
       // Una pregunta a la vez: abrir otra cierra la anterior.
       preguntando.clear();
       preguntando.add(n);
@@ -3269,7 +3286,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       if (borrador !== null && archivo === null && activacion.tipo === "error") activacion = { tipo: "esperando" };
       void cm?.mirar();
     }
-    // Entrar o salir cambia lo que se puede hacer con la sala (cerrar la lista pide la sesión de la dueña).
+    // Entrar o salir cambia lo que se ve: Tus campañas, el cobro y el paso del sorteo (sellar pide la cuenta dueña).
     pintar();
   };
   document.addEventListener("tinkazo:sesion", alCambiarLaSesion);

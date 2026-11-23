@@ -1133,12 +1133,61 @@ describe("la cuenta lista antes de pagar", () => {
     expect(m.creadas).toHaveLength(0);
     expect(c.pedidos).toHaveLength(0);
     expect(m.almacen.getItem(CLAVE_ORG)).toBeNull();
-    // Vuelve a la vista de pagar, con el mismo botón y sin marca de pago en el aire.
+    // Vuelve a la vista de pagar, con el mismo botón y sin marca de pago en el aire. Una línea dice que falta tocar Pagar.
     expect(principales(p).map((b) => b.textContent)).toEqual(["Pagar 2,40"]);
-    expect(texto(p, "#cpo-aviso")).toBe("");
+    expect(texto(p, "#cpo-aviso")).toBe("Tu cuenta quedó lista. Tocá Pagar.");
     await tocarPagar(p);
     expect(orden).toEqual(["cuenta", "cuenta", "sala", "pago"]);
     expect(c.pedidos).toHaveLength(1);
+    // Al pagar, la línea se va.
+    expect(texto(p, "#cpo-aviso")).toBe("");
+  });
+
+  it("mientras se revisa la cuenta, el botón se apaga y dice Revisando tu cuenta, y al terminar sigue el pago", async () => {
+    const x = conCompuerta([]);
+    let seguir: () => void = () => undefined;
+    x.c.deps.cuentaLista = (alRevisar) =>
+      new Promise<"lista">((r) => {
+        x.orden.push("cuenta");
+        alRevisar?.(true);
+        seguir = () => {
+          alRevisar?.(false);
+          r("lista");
+        };
+      });
+    const p = nuevoPanel(x.m);
+    await eligiendo(x.m, p);
+    boton(p, "Pagar 2,40").click();
+    await suelta(4);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Revisando tu cuenta…"]);
+    expect(principales(p)[0]?.disabled).toBe(true);
+    seguir();
+    await suelta(8);
+    expect(x.orden).toEqual(["cuenta", "sala", "pago"]);
+    expect(x.c.pedidos).toHaveLength(1);
+  });
+
+  it("si la revisión termina en el paso, el botón vuelve a Pagar y la línea dice que falta tocarlo", async () => {
+    const x = conCompuerta([]);
+    x.c.deps.cuentaLista = async (alRevisar) => {
+      x.orden.push("cuenta");
+      alRevisar?.(true);
+      await Promise.resolve();
+      alRevisar?.(false);
+      return "paso";
+    };
+    const p = nuevoPanel(x.m);
+    await eligiendo(x.m, p);
+    await tocarPagar(p);
+    expect(x.orden).toEqual(["cuenta"]);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Pagar 2,40"]);
+    expect(principales(p)[0]?.disabled).toBe(false);
+    expect(texto(p, "#cpo-aviso")).toBe("Tu cuenta quedó lista. Tocá Pagar.");
+  });
+
+  it("en inglés, Revisando tu cuenta y la línea del paso tienen su texto", () => {
+    expect(TEXTOS_SALA_CAMPANA.en.cpoCmRevisando).toBe("Checking your account…");
+    expect(TEXTOS_SALA_CAMPANA.en.cpoCmCuentaLista).toBe("Your account is ready. Tap Pay.");
   });
 
   it("si la persona dejó el paso, no se toca nada y se puede volver a tocar Pagar", async () => {

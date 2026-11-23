@@ -762,6 +762,19 @@ describe("abrir una campaña", () => {
     expect(q<HTMLAnchorElement>("#ccp-tus-mas").textContent).toBe("Tus campañas");
   });
 
+  it("Tus campañas lleva el idioma y el tema de la dirección de esta página, como Activar mi campaña", () => {
+    crear({ consulta: "?lang=en&theme=light" });
+    expect(q<HTMLAnchorElement>("#ccp-tus").getAttribute("href")).toBe("/?campana&red=oficial&lang=en&theme=light");
+    expect(q<HTMLAnchorElement>("#ccp-tus-mas").getAttribute("href")).toBe("/?campana&red=oficial&lang=en&theme=light");
+    document.body.innerHTML = "";
+    crear({ consulta: "?theme=dark" });
+    expect(q<HTMLAnchorElement>("#ccp-tus").getAttribute("href")).toBe("/?campana&red=oficial&theme=dark");
+    // Lo que no es un idioma ni un tema del sitio no viaja.
+    document.body.innerHTML = "";
+    crear({ consulta: "?demo=1&lang=fr" });
+    expect(q<HTMLAnchorElement>("#ccp-tus").getAttribute("href")).toBe("/?campana&red=oficial");
+  });
+
   it("con la sala que todavía no tiene Tus campañas, los dos enlaces no aparecen, y con la que sí, se suman sin dibujar los pasos", async () => {
     // Una sala sin la función (contesta que no) o que no contestó: ningún enlace que lleve a algo que no existe.
     for (const respuesta of [false, null]) {

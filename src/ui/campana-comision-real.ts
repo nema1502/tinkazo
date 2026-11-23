@@ -139,12 +139,13 @@ export function depsDeComisionReales(): DepsDeComision {
       const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
       return locks ? locks.request(nombre, { mode: "exclusive" }, f) : f();
     },
-    cuentaLista: async () => {
+    cuentaLista: async (alRevisar) => {
       // El cobro solo existe en la red principal: fuera de ahí no se baja nada.
       if (network.name !== "mainnet") return "lista";
       const { cuentaListaParaGrabar } = await import("./cuenta-lista-flujo");
       let abrio = false;
-      const sigue = await cuentaListaParaGrabar("pago", { alAbrir: () => void (abrio = true) });
+      // Mientras se revisa la cuenta en la red, el botón de pagar se apaga y lo dice, como al sellar.
+      const sigue = await cuentaListaParaGrabar("pago", { alAbrir: () => void (abrio = true), ...(alRevisar ? { alRevisar } : {}) });
       return !sigue ? "no" : abrio ? "paso" : "lista";
     },
   };
