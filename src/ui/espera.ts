@@ -250,6 +250,165 @@ export function tieneCaptura(game: string): boolean {
 /** El tramo de personas con su unidad: "2–200" se lee "2 a 200 personas". Sin la unidad parece un marcador. */
 export const rangoConUnidad = (rango: string): string => rangoParaLeer(rango, t("espRangoPersonas"), t("recRangoUnion"));
 
+/* ------------------------------------------------- vista previa en movimiento */
+/*
+ * La vista previa de un juego en el panel de elección (issue #116): ver cada juego en movimiento unos segundos antes de
+ * elegirlo, con el propio juego en tamaño reducido (o un video liviano), en lugar de depender solo de la captura.
+ *
+ * Es una frontera entre la espera y los juegos: la espera arma el marco (el canvas chico de la tarjeta, la regla de
+ * cuándo entra y cuándo sale de la vista, el corte por tiempo y la vuelta a la captura) y cada juego trae su dibujo,
+ * registrado por su id desde acá o desde el propio juego en una tarea con autorización de `src/games` (la de hoy no
+ * alcanza: los lanzadores `Lanzador` corren en el estadio entero, con la baliza del sorteo, y no saben nacer chicos).
+ * Sin registro para un juego (hoy todos) queda la captura estática de siempre, exactamente como estaba: nada se baja,
+ * nada se monta y la carga de la página no cambia.
+ */
+
+/** Cuántos segundos corre la vista previa de un juego que no declare lo suyo: corta, que es lo que la sala mira. */
+const PREVIA_SEGUNDOS = 8;
+/** Qué tan dentro de la vista tiene que estar la tarjeta para montar su vista: más de la mitad. */
+const PREVIA_EN_VISTA = 0.6;
+
+/** Una vista previa en movimiento que un juego registra: miniatura chiquita del propio juego o un video liviano. */
+export interface VistaPreviaJuego {
+  /** El id del juego en el catálogo (`race`, `wheel`…). */
+  game: string;
+  /** Cuántos segundos corre antes de volver a la captura. Sin dato, unos pocos. */
+  segundos?: number;
+  /**
+   * Monta la vista previa en el marco: un canvas de 320 x 180 con la clase `sel-img`, dentro de la tarjeta, con la
+   * captura escondida mientras corre. La misma regla del CSS que mide la captura lo mide a él: la tarjeta no crece y
+   * la acción de elegir no se corre. El contrato no se negocia: sin audio, sin interacción (el toque cae en el botón
+   * que elige, como siempre), sin tocar la elección ni el orden, y con lo propio del juego (código, texturas) bajado
+   * recién adentro de `montar` — nada pesado viaja en la página ni se pide por una tarjeta fuera de vista.
+   */
+  montar(marco: HTMLCanvasElement): { parar(): void; pausar(): void; reanudar(): void };
+}
+
+/** Las vistas previas registradas por juego. Un juego que no está acá no tiene vista: queda su captura. */
+const vistasPrevias = new Map<string, VistaPreviaJuego>();
+
+/** Registra (o reemplaza) la vista previa de un juego. No monta nada por sí solo: el panel lo arma cuando la ve. */
+export function registrarVistaPrevia(vista: VistaPreviaJuego): void {
+  vistasPrevias.set(vista.game, vista);
+}
+
+/** Saca la vista previa de un juego: vuelve a quedar con su captura estática. */
+export function quitarVistaPrevia(game: string): void {
+  vistasPrevias.delete(game);
+}
+
+/** La vista previa de un juego, o nada: `null` es el de siempre, la captura. */
+export const previaDe = (game: string): VistaPreviaJuego | null => vistasPrevias.get(game) ?? null;
+
+/** Lo que una vista previa corriendo deja anotado, para pausarla y soltarla entera. */
+interface Corriendo {
+  control: { parar(): void; pausar(): void; reanudar(): void };
+  canvas: HTMLCanvasElement;
+  capturas: HTMLImageElement[];
+  vencer: number;
+}
+
+/** El armado vigente: su observador de vista, lo que corre y las vistas que ya corrieron (una vez por apertura). */
+let armada: { observar: IntersectionObserver | null; corriendo: Map<string, Corriendo> } | null = null;
+
+/**
+ * Suelta una vista corriendo: la para, saca la miniatura y deja la captura como estaba, sin estilo puesto a mano.
+ * Si el juego falla al parar, la vista se suelta igual (la captura vuelve, que es lo que importa).
+ */
+function soltarVista(corriendo: Corriendo): void {
+  window.clearTimeout(corriendo.vencer);
+  try {
+    corriendo.control.parar();
+  } catch {
+    /* la vista ya corrió: soltar la captura no puede fallar por ella */
+  }
+  corriendo.canvas.remove();
+  for (const img of corriendo.capturas) img.style.removeProperty("display");
+}
+
+/**
+ * Para todas las vistas en movimiento y deja de mirar la vista: lo llama cerrar el panel, reabrirlo y cerrar la espera.
+ * Sin vistas armadas no hace nada, y llamarlo dos veces no cuelga nada.
+ */
+export function pararVistasPrevias(): void {
+  if (!armada) return;
+  armada.observar?.disconnect();
+  for (const corriendo of armada.corriendo.values()) soltarVista(corriendo);
+  armada.corriendo.clear();
+  armada = null;
+}
+
+/**
+ * Arma las vistas previas de un panel ya lleno: deja mirando la vista de cada tarjeta con vista registrada y monta la
+ * miniatura recién cuando la tarjeta entra en vista (más de la mitad); al salir la pausa, al volver la reanuda, al
+ * cumplir sus segundos suelta la miniatura y la captura vuelve. Solo un juego de los que están a la vista corre: nada
+ * se baja ni se pide fuera de vista, y con movimiento reducido (como la ruleta del panel) no hay nada en movimiento.
+ * Sin la API de vista (un navegador de pruebas), la captura estática se queda tal cual.
+ */
+export function armarVistasPrevias(panel: HTMLElement | null): void {
+  // Re abrir el panel rehace la lista: lo que quedaba de la apertura anterior se suelta entero antes de mirar de nuevo.
+  pararVistasPrevias();
+  if (!panel || vistasPrevias.size === 0) return;
+  // Movimiento reducido: nada en movimiento, igual que la ruleta del panel (matchMedia falta en el entorno de pruebas).
+  if (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (typeof IntersectionObserver === "undefined") return;
+  const corriendo = new Map<string, Corriendo>();
+  const tocadas = new Set<string>();
+  const estado = { observar: null as IntersectionObserver | null, corriendo };
+  const mirar = (tarjeta: HTMLElement, hook: VistaPreviaJuego, en: boolean, parte: number): void => {
+    // El armado se fue (el panel se cerró o se rehizo): lo que el observador viejo avise no cuenta.
+    if (estado !== armada) return;
+    const game = tarjeta.dataset.game ?? "";
+    const corriendoAhora = corriendo.get(game);
+    if (en && parte >= PREVIA_EN_VISTA) {
+      if (corriendoAhora) {
+        corriendoAhora.control.reanudar();
+        return;
+      }
+      // Una vista ya soltada por su tiempo no vuelve a montar: la vista previa es corta, una por apertura del panel.
+      if (tocadas.has(game)) return;
+      tocadas.add(game);
+      const canvas = document.createElement("canvas");
+      canvas.className = "sel-img previa-viva";
+      canvas.width = 320;
+      canvas.height = 180;
+      canvas.setAttribute("aria-hidden", "true");
+      const capturas = [...tarjeta.querySelectorAll<HTMLImageElement>("img")];
+      const primera = capturas[0];
+      if (primera) tarjeta.insertBefore(canvas, primera);
+      else tarjeta.append(canvas);
+      for (const img of capturas) img.style.setProperty("display", "none");
+      const control = hook.montar(canvas);
+      const anotar: Corriendo = { control, canvas, capturas, vencer: 0 };
+      anotar.vencer = window.setTimeout(() => {
+        soltarVista(anotar);
+        corriendo.delete(game);
+      }, (hook.segundos ?? PREVIA_SEGUNDOS) * 1000);
+      corriendo.set(game, anotar);
+    } else if (corriendoAhora) {
+      // Salir de la vista pausa; el tiempo de la vista previa sigue corriendo, que es lo que la mantiene corta.
+      corriendoAhora.control.pausar();
+    }
+  };
+  const observar = new IntersectionObserver(
+    (entradas) => {
+      for (const entrada of entradas) {
+        const tarjeta = entrada.target as HTMLElement;
+        const hook = previaDe(tarjeta.dataset.game ?? "");
+        if (!hook) continue;
+        mirar(tarjeta, hook, entrada.isIntersecting, entrada.intersectionRatio);
+      }
+    },
+    { root: panel, threshold: [PREVIA_EN_VISTA] },
+  );
+  estado.observar = observar;
+  for (const tarjeta of panel.querySelectorAll<HTMLElement>(".espera-juego-op[data-game].con-captura")) {
+    if (previaDe(tarjeta.dataset.game ?? "")) observar.observe(tarjeta);
+  }
+  // Recién con el observador listo es el armado válido: un aviso viejo que llegue antes no cuenta.
+  armada = estado;
+}
+
 /** Las opciones de la lista de juegos: la captura del juego en su tema cuando hay (elige la lista el juego, y su
  * tarjeta se ve como la del selector de la página), y el juego sin captura queda como el botón de texto de siempre.
  * El elegido va marcado, la estrella avisa qué encaja con esta cantidad de gente y el que no encaja se ve apagado. */
@@ -421,6 +580,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     window.clearInterval(timer);
     pararAzar();
     pararPase();
+    // La espera se cierra entera (el panel va con ella): también sus vistas previas (issue #116).
+    pararVistasPrevias();
     removeEventListener("resize", ajusta);
     removeEventListener("resize", medirBarra);
     removeEventListener("keydown", tecla);
@@ -475,6 +636,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     if (!panel || !lista) return;
     lista.innerHTML = opcionesHtml(sorteo.juegos());
     panel.hidden = false;
+    // Las vistas previas en movimiento vuelven a armarse cada vez que el panel abre (issue #116).
+    armarVistasPrevias(panel);
     // El pase de inactividad vuelve a armarse cada vez que el panel abre.
     armarPase();
     // Sorprendeme solo se ofrece si hay a dónde ir. Con más de doscientas personas no cabe ningún juego, y con uno solo la
@@ -495,6 +658,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     if (!panel || panel.hidden) return;
     pararAzar();
     pararPase();
+    // Las vistas previas en movimiento se sueltan con el panel: nada del juego queda corriendo detrás (issue #116).
+    pararVistasPrevias();
     panel.hidden = true;
     for (const b of botonesJuego) b.setAttribute("aria-expanded", "false");
     if (devolverFoco) botonJuego()?.focus({ preventScroll: true });
