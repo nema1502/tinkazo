@@ -1001,3 +1001,63 @@ describe("la calcomanía de la sala cuando nace el número", () => {
     expect(capa.getAttribute("aria-label")).toBe(T.en.espStickerYa);
   });
 });
+
+/**
+ * La presentación de la lista sellada durante la cuenta (`games-teaser.ts`,
+ * issue #78): el show de la espera en grande presenta a cada persona que
+ * participa, y todo lo que presenta sale de lo sellado — nada del resultado,
+ * que todavía no existe, y nada que cambie la selección del juego.
+ */
+describe("la presentación de la lista sellada durante la cuenta", () => {
+  /** Las tarjetas de la presentación, en el orden sellado. */
+  const tarjetas = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".espera-teaser-tarjeta")];
+
+  /** S3: con una lista sellada de 3, las tres presentaciones se ven durante la cuenta. */
+  it("con una lista sellada de 3, las tres presentaciones se muestran durante la cuenta, antes de que nazca la ronda", async () => {
+    const { setLang } = await import("../i18n");
+    const { T } = await import("../i18n");
+    setLang("es");
+    const { sortear } = await abrirEspera(1, { nombres: ["Ana", "Beto", "Cami"] });
+    expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(["Ana", "Beto", "Cami"]);
+    // La ronda no nació: el sorteo no arrancó y la sala sigue con el cartel de siempre.
+    expect(sortear).not.toHaveBeenCalled();
+    expect(document.querySelector(".espera .sticker")?.textContent).toBe(T.es.espSticker);
+    // La cuenta sigue y la presentación sigue en escena, sin adelantar nada.
+    vi.advanceTimersByTime(12_000);
+    expect(tarjetas()).toHaveLength(3);
+    expect(sortear).not.toHaveBeenCalled();
+  });
+
+  /** S4 (guard): en el show antes de la ronda no hay señal del ganador ni de la selección. */
+  it("guard: nada del resultado antes de la ronda, y la selección no se toca", async () => {
+    const { setLang } = await import("../i18n");
+    setLang("es");
+    const { elegirJuego, sortear } = await abrirEspera(1, { nombres: ["Ana", "Beto", "Cami"] });
+    const teaser = document.querySelector<HTMLElement>(".espera-teaser");
+    // La presentación habla de quiénes participan, no de quien va a salir: guarda su texto sin pistas.
+    expect(teaser?.dataset.fuente).toBe("sellada");
+    expect(teaser?.textContent).not.toMatch(/ganador|ganado|gana\b|winner/i);
+    // La selección del juego tampoco cambia mientras presenta.
+    expect(elegirJuego).not.toHaveBeenCalled();
+    // Nace la ronda: ahí sí arranca el sorteo, y la presentación no agrega nada nuevo después.
+    const { nacioElNumero } = await import("./espera");
+    nacioElNumero();
+    expect(sortear).toHaveBeenCalledTimes(1);
+    const alNacer = tarjetas();
+    vi.advanceTimersByTime(10_000);
+    expect(tarjetas()).toEqual(alNacer);
+  });
+
+  /** El juego elegido da el gancho visual: al cambiar de juego durante la cuenta, la presentación lo sigue. */
+  it("al cambiar de juego durante la cuenta, la presentación toma el gancho del juego nuevo", async () => {
+    const { elegirJuego } = await abrirEspera(1, { nombres: ["Ana", "Beto", "Cami"] });
+    expect(document.querySelector<HTMLElement>(".espera-teaser")?.dataset.juego).toBe("race");
+    // Se elige otro juego desde el panel (el camino de verdad), y la página de atrás lo publica.
+    (document.querySelector(".espera [data-juego]") as HTMLButtonElement).click();
+    (document.querySelector('.espera-juegos [data-game="sapo"]') as HTMLButtonElement).click();
+    document.dispatchEvent(new CustomEvent("tinkazo:cambio-con-qr"));
+    expect(elegirJuego.mock.calls[elegirJuego.mock.calls.length - 1]?.[0]).toBe("sapo");
+    expect(document.querySelector<HTMLElement>(".espera-teaser")?.dataset.juego).toBe("sapo");
+    expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(["Ana", "Beto", "Cami"]);
+  });
+});
