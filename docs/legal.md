@@ -79,6 +79,7 @@ Tinkazo ya cumple la parte difícil por diseño, y está medido en [amenazas.md]
 - **En la cadena viaja solo la huella** de la lista. El contrato nunca ve un nombre.
 - **Los nombres no llegan en claro a ningún servidor**: el comprobante viaja en el fragmento de la URL, el QR y los avatares se dibujan en el navegador. Al compartir o al mostrar el resultado en grande se arma un enlace corto (desde el 21 de octubre de 2026): en Cloudflare queda una copia del comprobante cifrada en el navegador, con la clave solo en el enlace. Tinkazo no la puede leer; la abre quien tenga el enlace o el QR, que dan la lista entera. No vence, para que el sorteo se pueda volver a comprobar, y la interfaz no ofrece borrarla, porque cortaría la verificación de todos los que ya la tienen: si alguien lo necesita, por ejemplo porque está en la lista, escribe a hola@tinkazo.app y Tinkazo la borra con el secreto del Worker ([workers/enlaces](../workers/enlaces/README.md)).
 - **Quien comparte el enlace comparte la lista**, y eso se dice: sin los nombres nadie puede recomputar.
+- **En una campaña de empresa**, el servicio de la sala guarda de cada persona anotada una huella (calculada con una clave propia de la sala, nunca su identificador), su cuenta y su nombre cifrado, que se borra con la sala, a las 24 horas de armada o antes si quien organiza la cierra ([workers/sala](../workers/sala/README.md)). El estado público solo cuenta las salidas por motivo, sin decir quiénes, y en la red queda sellada la lista de cuentas, sin nombres, en una lista pública. Que cada cuenta esté en la lista sellada lo comprueba el propio celular leyendo la red, sin creerle a ningún servidor.
 - **Pendiente para el GDPR:** "borrar cuando se termina" pide un plazo, y hoy la copia del enlace corto no tiene ninguno: dura hasta que alguien pida borrarla. Cloudflare la guarda donde elige (el código no fija una jurisdicción) y ve la dirección IP de quien la arma o la abre, como Vercel ve la de quien visita el sitio.
 
 Para los correos de Luma el plan de [premios.md](premios.md) sigue la misma línea: el CSV se lee en el navegador y los correos no salen de ahí.
@@ -86,7 +87,7 @@ Para los correos de Luma el plan de [premios.md](premios.md) sigue la misma lín
 ### Los premios en dinero
 
 - **El ganador tributa en su país.** En Estados Unidos, por ejemplo, un premio es ingreso por su valor de mercado el día que se recibe ([IRS, publicación 525](https://www.irs.gov/publications/p525)). Tinkazo no retiene ni reporta nada, porque nunca tiene el premio.
-- **Tinkazo no custodia premios.** El saldo reclamable de la propuesta va de la cuenta del organizador a la del ganador. Tinkazo no lo toca en ningún momento, y eso lo mantiene lejos de ser un intermediario financiero.
+- **Tinkazo no custodia premios.** El saldo reclamable de la propuesta va de la cuenta del organizador a la del ganador. Tinkazo no lo toca en ningún momento, y eso lo mantiene lejos de ser un intermediario financiero. El costo del servicio de una campaña de empresa se paga aparte: la empresa manda un pago directo desde su cuenta a la cuenta de cobros de Tinkazo antes de abrir la inscripción, con el número del evento como nota, y ese pago nunca va mezclado con el premio ([premios.md](premios.md)).
 - **Hay países donde los criptoactivos están prohibidos o muy restringidos.** Un premio en USDC no se ofrece a esos participantes sin revisar antes.
 - **Un premio en dinero con fines de propaganda es justo lo que regulan Brasil, Colombia y México.** Ahí, el patrocinador que fondea un premio necesita su permiso.
 
@@ -97,7 +98,7 @@ Para los correos de Luma el plan de [premios.md](premios.md) sigue la misma lín
 1. **Entrar a un sorteo es gratis, siempre.** Tinkazo nunca vende boletos, ni rifas, ni entradas a un sorteo, ni deja que se cobren por él. Es lo que nos deja del lado del "sorteo gratuito" en casi todo el mundo. Si algún día alguien quiere vender boletos, es otro producto, con licencia, y no es este.
 2. **Tinkazo es una herramienta, como un bolillero.** Quien sortea es el organizador, y responde por su sorteo: las bases, el premio, los permisos y los impuestos de su país. Esto se dice en unos términos de uso.
 3. **Nada de datos personales legibles en servidores.** Ya es así: el enlace corto guarda una copia cifrada que Tinkazo no puede leer, y la borra a pedido. Se mantiene cuando lleguen los correos.
-4. **Premios sin custodia.** El dinero va del organizador al ganador. Si Tinkazo cobra una comisión, se cobra en la misma transacción, a la vista, y antes se resuelve la pregunta 4.
+4. **Premios sin custodia.** El dinero va del organizador al ganador. El costo del servicio de una campaña se cobra aparte, con un pago directo desde la cuenta de la empresa antes de abrir la inscripción, a la vista en la red, y nunca sale del premio. Sigue abierta la pregunta de si ese cobro vuelve a Tinkazo un proveedor de servicios (pregunta 4).
 5. **No es de apuestas, y tiene que notarse desde afuera.** Los programas de fondos de ecosistemas y las tiendas de aplicaciones dejan fuera a los proyectos que "involve, facilitate, or promote gambling". Tinkazo no lo hace, pero en inglés un sorteo se lee *raffle*, y en Estados Unidos una *raffle* casi siempre es con boletos pagados. Por eso, desde el 28 de septiembre de 2026:
    - la interfaz en inglés dice *draw*, como el *free prize draw* británico;
    - la primera cláusula de los términos dice que no es para apuestas ni para sorteos con entrada paga, y que usarlo así va contra los términos;
@@ -118,5 +119,5 @@ Las dos cosas de esta sección están hechas desde el 26 de septiembre de 2026: 
 1. Un sorteo gratuito entre los asistentes de un evento de comunidad, sin fines de lucro, ¿entra en la exclusión del artículo 2 de la Ley 060?
 2. Si una empresa pone el premio, ¿es una promoción empresarial del artículo 7? Con la Ley 1733, ¿queda algún trámite o aviso?
 3. Si el premio es USDC, ¿cambia algo? ¿Qué tributa el ganador?
-4. Si Tinkazo cobra una comisión por cada premio, ¿eso lo vuelve un proveedor de servicios de activos virtuales ante la UIF?
+4. El cobro del servicio de una campaña ya existe: la empresa manda un pago directo desde su cuenta, antes de abrir la inscripción, aparte del premio. ¿Ese cobro vuelve a Tinkazo un proveedor de servicios de activos virtuales ante la UIF?
 5. Para unos términos de uso con alcance mundial, ¿desde dónde conviene que opere Tinkazo, y qué tiene que decir sí o sí?
