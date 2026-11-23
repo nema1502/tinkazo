@@ -460,7 +460,7 @@ describe("el portero que no contesta", () => {
   });
 
   it("sin la clave de operar no le pregunta nada al portero y avisa que falta", async () => {
-    const m = mundoFalso({ env: { PORTERO_ADMIN_TOKEN: undefined } });
+    const m = mundoFalso({ env: { PORTERO_ADMIN_TOKEN: undefined, PORTERO_TOKEN_LECTURA: undefined } });
     await m.vuelta();
     expect(m.portero.llamadas).toEqual([]);
     expect(m.correo.enviados).toHaveLength(1);

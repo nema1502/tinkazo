@@ -85,17 +85,20 @@ jobs:
       - name: Portero de mainnet
         env:
           PORTERO_URL: https://pm.tinkazo.app
+          # La clave de solo lectura del portero (#219): abre apenas /estado, no puede apagar nada. Si no está cargada, se usa la de administración como antes (el flujo sigue igual).
+          PORTERO_TOKEN_LECTURA: ${{ secrets.PORTERO_MAINNET_TOKEN_LECTURA }}
           PORTERO_ADMIN_TOKEN: ${{ secrets.PORTERO_MAINNET_ADMIN_TOKEN }}
           # Solo la corrida del reloj, en su primer intento, decide con lo que ya se avisó. Una corrida a mano o una
           # repetición no: con un problema, fallan siempre.
           USAR_MEMORIA: ${{ github.event_name == 'schedule' && github.run_attempt == 1 }}
         run: |
-          if [ -z "$PORTERO_ADMIN_TOKEN" ]; then
-            echo "Sin PORTERO_MAINNET_ADMIN_TOKEN (ni en el Environment vigilancia ni entre los secretos del repositorio): el portero de mainnet no se mira."
+          CLAVE="${PORTERO_TOKEN_LECTURA:-$PORTERO_ADMIN_TOKEN}"
+          if [ -z "$CLAVE" ]; then
+            echo "Sin PORTERO_MAINNET_TOKEN_LECTURA ni PORTERO_MAINNET_ADMIN_TOKEN (ni en el Environment vigilancia ni entre los secretos del repositorio): el portero de mainnet no se mira."
             exit 0
           fi
           rm -f estado-portero-mainnet.json
-          curl -fsS -m 30 --retry 2 -H "Authorization: Bearer $PORTERO_ADMIN_TOKEN" "$PORTERO_URL/v1/patrocinio/estado" -o estado-portero-mainnet.json || echo "El portero no contestó bien a /estado."
+          curl -fsS -m 30 --retry 2 -H "Authorization: Bearer $CLAVE" "$PORTERO_URL/v1/patrocinio/estado" -o estado-portero-mainnet.json || echo "El portero no contestó bien a /estado."
           opciones=(--anterior .estado-portero/avisado.json --guardar .estado-portero/avisado.json --resumen "$GITHUB_STEP_SUMMARY")
           if [ "$USAR_MEMORIA" != "true" ]; then
             opciones+=(--sin-memoria)

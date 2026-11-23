@@ -208,6 +208,13 @@ El objeto `Patrocinio` (SQLite, uno por red) guarda cuentas (G…), el mes y el 
 Con `Authorization: Bearer <ADMIN_TOKEN>` (secreto de 32 caracteres o más; si no está cargado, estos caminos no existen):
 
 | Pedido | Qué hace |
+
+## Lectura del estado
+
+Con `Authorization: Bearer <TOKEN_LECTURA>` (secreto de 32 caracteres o más, issue #219) se abre **solo** `GET /v1/patrocinio/estado`: quien solo mira el estado no puede apagar, cambiar ajustes ni exportar tablas. La clave de administración también abre el estado, como siempre. Si las dos se cargan iguales, la bitácora lo anota como `error-config` `claves-iguales`.
+
+Para cargarla: `wrangler secret put TOKEN_LECTURA` en cada red (y darla solo a quien lee: el flujo `vigilar-portero.yml` y el vigilante la usan si está cargada).
+
 | --- | --- |
 | `POST /v1/patrocinio/apagar` | Nadie patrocina: `503 apagado` |
 | `POST /v1/patrocinio/pollar` | Devuelve el patrocinio a Pollar: el portero no paga y `/cupo` dice `rige:"pollar"` |
