@@ -265,7 +265,7 @@ describe("cabeceras reales de testnet, anteriores al Protocolo 30", () => {
       expect(m.cabecera.ledger).toBe(m.ledger);
       expect(m.cabecera.hash).toBe(m.hash);
       expect(m.cabecera.hashCalculado).toBe(m.hash);
-      expect(m.cabecera.version).toBe(29); // PENDIENTE: probar con una cabecera posterior al 3-nov-2026 (Protocolo 30)
+      expect(m.cabecera.version).toBe(29); // cabeceras de antes de la votación: las de después están en su propia muestra
     }
   });
   it("la hora de cierre es la que Horizon dio para el mismo ledger", () => {
@@ -288,6 +288,30 @@ describe("cabeceras reales de testnet, anteriores al Protocolo 30", () => {
     expect(() => leerCabecera(Buffer.alloc(40))).toThrow(/SDK de Stellar/);
     const conCola = Buffer.concat([Buffer.from(del_sello.xdr, "base64"), Buffer.alloc(8)]);
     expect(() => leerCabecera(conCola)).toThrow(ErrorDeArchivo);
+  });
+});
+
+describe("cabeceras reales de testnet del Protocolo 30, después de la votación", () => {
+  const muestra = json("./muestras-archivo/cabeceras-testnet-5798144-5798207.json");
+  const leidas = muestra.cabeceras.map((c) => ({ ...c, cabecera: leerCabecera(Buffer.from(c.xdr, "base64")) }));
+
+  it("las 64 cabeceras del punto de control se leen con version 30 y su hash es el SHA-256 de su cabecera", () => {
+    expect(muestra.cabeceras).toHaveLength(64);
+    for (const m of leidas) {
+      expect(m.cabecera.version).toBe(30);
+      expect(m.cabecera.ledger).toBe(m.ledger);
+      expect(m.cabecera.hash).toBe(m.hash);
+      expect(m.cabecera.hashCalculado).toBe(m.hash);
+      expect(m.cabecera.cierre).toBe(m.cierre);
+    }
+  });
+  it("la cabecera del 5798179 está adentro", () => {
+    expect(muestra.cabeceras.some((c) => c.ledger === 5798179)).toBe(true);
+  });
+  it("las 64 encadenan: cada una apunta a la anterior y la hora no retrocede", () => {
+    expect(muestra.cabeceras[0].ledger).toBe(5798144);
+    expect(muestra.cabeceras[63].ledger).toBe(5798207);
+    expect(verificarEncadenado(leidas.map((m) => m.cabecera))).toEqual({ ok: true, problemas: [] });
   });
 });
 
