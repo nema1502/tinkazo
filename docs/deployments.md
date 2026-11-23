@@ -302,3 +302,52 @@ Mientras tanto la prueba sigue en pie: la atestación (caminos 2 y 3) y la recom
 | mainnet | `https://mainnet.sorobanrpc.com` (o un [proveedor](https://developers.stellar.org/docs/data/apis/rpc/providers)) | `Public Global Stellar Network ; September 2015` | 29 (el 30 se vota el 23 de noviembre) | 120 días |
 
 Testnet se reinicia trimestralmente: los sorteos de prueba desaparecen y hay que redesplegar.
+
+## Contrato de premios (`tinkazo-premios`)
+
+Registro de cada despliegue de `tinkazo-premios`, el contrato que custodia el premio de una promoción y lo paga a la cuenta que eligió un sorteo sellado en `tinkazo-raffle`. Como el del sorteo, no tiene administrador ni actualización, y lo que se le pasa al constructor (el contrato del sorteo, la tesorería, la comisión, los tokens aceptados y si se admite el modo especie) queda fijo para siempre: otra configuración es otra instancia y otra fila. `scripts/deploy-premios.sh` agrega la fila al desplegar.
+
+Una fila en esta tabla no designa el contrato. El comprobante solo acepta los de la tabla `premios` de `src/stellar/deployments.json`, y la designación es el issue #167 (sección [Contratos de premios](#contratos-de-premios), arriba): al cerrarlo, la fila del contrato designado de cada red es la de esta tabla, con su entrada en `deployments.json` en el mismo commit.
+
+| Fecha | Red | Dirección del contrato | WASM (sha256) | Commit | Cuenta de despliegue | Notas |
+|---|---|---|---|---|---|---|
+
+### Verificar un release de premios
+
+Son los mismos pasos que los de «Verificar la compilación», con otros nombres. El tag es `premios-vX.Y.Z` (por ejemplo `premios-v0.2.0`) y dispara `.github/workflows/release-premios.yml`; el del sorteo, `v*`, sigue disparando `release.yml`, y ningún patrón encaja con el tag del otro. El release se llama `premios-v0.2.0_tinkazo-premios_cli<versión>` y trae `tinkazo-premios_premios-v0.2.0.wasm` (el nombre exacto sale en el resumen de la corrida). La corrida corre las pruebas, incluida la que mide el presupuesto de la red con el `.wasm` real, compila con el workflow de StellarExpert, verifica la atestación, recompila en otra máquina y falla si el hash no es el mismo.
+
+```bash
+gh release download premios-v0.2.0_tinkazo-premios_cli28.1.0 --repo nema1502/tinkazo --pattern '*.wasm'
+gh attestation verify tinkazo-premios_premios-v0.2.0.wasm --repo nema1502/tinkazo \
+  --signer-repo stellar-expert/soroban-build-workflow
+stellar contract info build --contract-id <C…> --network mainnet     # con el contrato ya desplegado
+
+git checkout <commit del release>
+stellar contract build --optimize --package tinkazo-premios --out-dir recompilado \
+  --meta source_repo=github:nema1502/tinkazo
+sha256sum recompilado/tinkazo_premios.wasm      # el mismo que el del release
+stellar contract fetch --id <C…> --network mainnet --out-file red.wasm
+sha256sum red.wasm                              # y el mismo que el de la red
+```
+
+El que se despliega es el `.wasm` optimizado de `stellar contract build --optimize` (unos 28 KB). El que deja `cargo build --release` (unos 55 KB) solo sirve para la prueba del presupuesto, y `stellar contract optimize` da otro archivo, más grande y con otro hash. Los caminos 1 y 2 de «Verificar la compilación» (stellar.expert y Stellar Lab) valen igual para este contrato. Si StellarExpert no lo marca, el aviso se reenvía con el mismo workflow, indicando el paquete: `gh workflow run reenviar-verificacion.yml -f commit=<commit> -f corrida=<id de la corrida del release> -f hash=<sha256 del .wasm> -f paquete=tinkazo-premios`.
+
+### Desplegar con `scripts/deploy-premios.sh`
+
+```bash
+scripts/deploy-premios.sh <testnet|mainnet> --wasm tinkazo-premios_premios-v0.2.0.wasm \
+  --raffle C… --treasury G… --fee-bps N --tokens C…,C… --allow-in-kind true|false \
+  [--identity nombre] [--sha256 hash] [--dry-run]
+```
+
+- **Sin valores por defecto.** Los cinco argumentos del constructor son obligatorios y quedan fijos para siempre. En especial `--allow-in-kind`: la CLI de Stellar toma `--allow_in_kind` sin valor como verdadero, y ese descuido habilitaría el modo especie; el guion exige `true` o `false` y a la CLI siempre le pasa el valor explícito.
+- **`--dry-run` primero.** Valida todo sin subir nada: formato y dígito de control de las direcciones, comisión de 0 a 1000, entre 1 y 8 tokens sin repetidos, que el constructor del `.wasm` tenga los cinco argumentos esperados y que la red de la CLI tenga la passphrase de su nombre. Calcula el sha256 e imprime el comando exacto. Nunca se usa `deploy -- --help` para ver los argumentos: sube el `.wasm` y cuesta XLM; se ven con `stellar contract info interface --wasm <archivo>`.
+- **Mainnet** exige el `.wasm` del release, con su atestación verificada contra este repositorio y contra `release-premios.yml`; tokens de un conjunto conocido (USDC con su emisor y XLM nativo, recalculados con la CLI; para aceptar otro se edita el guion, a propósito); `--allow-in-kind false` en esta versión; y repetir el sha256 con `--sha256` (el `--dry-run` imprime cuál). También pide `--identity` explícita y distinta de `tinkazo-deployer`, que es la de la red de prueba, igual que `scripts/deploy.sh`.
+- **Al desplegar de verdad**, antes de subir comprueba que el contrato del sorteo responda (`next_id`): una dirección con el dígito de control bien pero que no sea el sorteo dejaría un contrato que nunca puede sellar, y `get_config` no lo notaría porque sería lo que se pidió. Después de desplegar lee `get_config` y compara los cinco valores con lo pedido, baja el `.wasm` de la red y compara el hash. Si algo no coincide sale con error, avisa «NO USAR ESTE CONTRATO» y no registra nada; si todo coincide, agrega la fila a la tabla de arriba, para revisarla y commitearla.
+- **Tokens y PowerShell.** El guion es de bash (Git Bash en Windows, Linux o macOS) y los tokens van separados por comas; desde PowerShell, entre comillas simples (`--tokens 'C…,C…'`). Al escribir a mano el comando de la CLI en PowerShell 5.1, las comillas dobles del JSON se pierden: se escapan (`--tokens '[\"C…\",\"C…\"]'`) o se pasa un archivo (`--tokens-file-path tokens.json`).
+
+Tres cosas de la operación que el guion repite al terminar:
+
+1. El primer `create` después del despliegue paga la renta del código y de la instancia: unos 16 XLM en mainnet (estimado) y unos 45 en testnet (medido el 5 de noviembre de 2026), con un tope de fee que lo cubra. Lo firma una cuenta de Tinkazo, no la de quien crea la promoción.
+2. `settle` lo corre siempre el servicio: con diez premios cuesta cerca de 1 XLM y supera el tope de 1 XLM de algunas billeteras.
+3. `extend` se corre al menos una vez por mes mientras haya una promoción sin cerrar o fondos en el contrato; sin eso las entradas se archivan (se restauran con `stellar contract restore`).
