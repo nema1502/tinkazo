@@ -47,6 +47,18 @@ describe("el tope de ganadores de una red", () => {
     for (const raro of [0, -5, 3.5, Number.NaN, "32", null, [], {}]) expect(topeDeLaRed({ maxWinners: raro }), String(raro)).toBe(MAX_WINNERS);
   });
 
+  // Issue #95: el resultado de `ordenNoCabe` (src/ui/turnos.ts) con cada red de verdad, el criterio es `n > topeDeGanadores()`.
+  // En Oficial, una lista de 40 personas para un orden entra; en Prueba, con 33 ya no cabe, porque el contrato de hoy
+  // declara 32. Los dos lados de la comparación van con los datos reales de la lista, no con supuestos.
+  it("con la lista de hoy: en Oficial 40 personas caben, en Prueba con 33 ya no cabe", () => {
+    const topeMainnet = topeDeLaRed(mainnetEnLista);
+    const topeTestnet = topeDeLaRed(deployments.testnet);
+    expect(topeMainnet).toBeGreaterThanOrEqual(40);
+    expect(40 > topeMainnet).toBe(false);
+    expect(topeTestnet).toBe(32);
+    expect(33 > topeTestnet).toBe(true);
+  });
+
   it.runIf(!conContratoEnMainnet)("mainnet todavía no tiene contrato: sin entrada, vale lo del protocolo", () => {
     expect(mainnetEnLista).toBeNull();
     expect(topeDeLaRed(mainnetEnLista)).toBe(MAX_WINNERS);
