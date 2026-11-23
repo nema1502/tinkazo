@@ -96,6 +96,7 @@ import { ErrorDeRed, type Red } from "./red";
 import type { Respuesta } from "./servicio";
 import { type SorteoEnRed, leerNumeroDeSorteo } from "./sorteadora";
 import { FIRMAS_SIN_EXPLICAR_MAX, contarFirmas, patrocinioEsperado } from "./vigilancia";
+import { contarCuentasPorHora } from "./lectura-cuentas";
 
 /** Códigos fallidos por persona y por hora. Pasado esto, 429 hasta que pase la hora. */
 export const FALLIDOS_POR_USUARIO_HORA = 5;
@@ -638,6 +639,9 @@ export class PuertaAltas {
     return {
       firmasSinExplicar: sinExplicar,
       firmas: { cobradas: cobradas?.firmas ?? null, explicadas, ...e, ...q, completo: cobradas?.completo ?? null, desde },
+      // Las cuentas nuevas y las activaciones por hora (issue 177), del mismo juego de movimientos que ya se pide y con
+      // el reloj de la puerta: con ellas el vigilante avisa las rondas de cuentas que pasan el umbral. Sin el juego, null.
+      cuentas: mov.ok ? contarCuentasPorHora(mov.movimientos, desde, this.reloj()) : null,
       // Aparte de `firmas`, y solo con los pagos prendidos o con alguno en el día: sin ellos, la vigilancia es la de siempre.
       ...(pagosPrendidos(cfg) || pg.premios + pg.retiros > 0 ? { firmasPagos: pg } : {}),
       patrocinioPollar: patrocinio,

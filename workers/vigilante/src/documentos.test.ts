@@ -296,6 +296,10 @@ describe("lo que la revisión lee del portero, tal como lo manda", () => {
     const vigilancia = rutas.slice(desdeVigilancia, rutas.indexOf("\n  async ", desdeVigilancia + 1));
     expect(vigilancia, "vigilancia() del portero cambió de forma").toContain("const q = this.d.compras?.firmas(desde) ?? { compras: 0, pagosConSaldo: 0 };");
     expect(vigilancia).toContain("firmas: { cobradas: cobradas?.firmas ?? null, explicadas, ...e, ...q, completo: cobradas?.completo ?? null, desde },");
+    // El bloque cuentas (issue 177): del mismo juego de movimientos, contado por lectura-cuentas.ts, para que el
+    // vigilante avise las rondas de cuentas por hora. Que no haya movimientos es null, no cero.
+    expect(rutas).toContain('import { contarCuentasPorHora } from "./lectura-cuentas";');
+    expect(vigilancia).toContain("cuentas: mov.ok ? contarCuentasPorHora(mov.movimientos, desde, this.reloj()) : null,");
     expect(leer("workers/patrocinio/src/compras.ts")).toContain("firmas(desde: number): { compras: number; pagosConSaldo: number } {");
     // Las dos partes llegan a /v1/patrocinio/estado junto con lo de servicio.ts.
     const index = leer("workers/patrocinio/src/index.ts");
