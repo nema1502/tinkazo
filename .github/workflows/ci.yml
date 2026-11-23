@@ -53,6 +53,16 @@ jobs:
         run: cargo test --workspace
       - name: Build WASM
         run: cargo build --release --target wasm32v1-none -p tinkazo-raffle
+      # El contrato de premios custodia plata: lo que vigila la CI es el .wasm que
+      # se despliega, no solo el código nativo de las pruebas. La prueba del
+      # presupuesto lo carga (y el del sorteo, que quedó compilado en el paso
+      # anterior), mide seal y settle con 1.000 cuentas y 10 premios, y falla si el
+      # .wasm no existe o es más viejo que la fuente. Va con #[ignore] para que
+      # `cargo test --workspace` no se ponga en rojo antes de compilarlo.
+      - name: Build WASM de premios
+        run: cargo build --release --target wasm32v1-none -p tinkazo-premios
+      - name: Presupuesto del WASM de premios
+        run: cargo test -p tinkazo-premios -- --ignored wasm_budget --nocapture
       - name: Tamaño del contrato
         run: ls -la target/wasm32v1-none/release/*.wasm
 
