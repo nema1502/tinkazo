@@ -591,3 +591,15 @@ describe("Siguiente premio de a un lugar (issue #102)", () => {
     expect(T.en.sellarResumen(10, 3, "Termo", 10)).toContain("The number picks every place at once");
   });
 });
+
+describe("la presentación durante la cuenta (issue #78)", () => {
+  it("las claves de presentar a los de la lista sellada existen en los dos idiomas y no adelantan el resultado", () => {
+    for (const l of ["es", "en"] as const) {
+      // El titular habla de quiénes participan: ninguna pista del ganador.
+      expect(T[l].espTeaserT).toBeTruthy();
+      expect(T[l].espTeaserT).not.toMatch(/ganador|ganado|gana\b|winner/gi);
+      // El lugar de cada persona en la lista sellada ("1 de 3"), con su palabra en cada idioma.
+      expect(T[l].espTeaserDe(1, 3)).toBe(l === "es" ? "1 de 3" : "1 of 3");
+    }
+  });
+});
