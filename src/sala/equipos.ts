@@ -65,13 +65,17 @@ export async function leerPublico(servicio: string, id: string, dep: Dependencia
 
 /**
  * Por qué no se anotó. `ajena`: la cuenta ya está anotada desde otro celular (la sala pide la llave del que la anotó);
+ * `cupon`: el cupón ya fue entregado a esta cuenta y no se puede cambiar (lo resuelve quien organiza);
  * `cupo-conexion`: desde esta red ya se anotaron muchos equipos en pocos minutos.
  */
-export type MotivoDeAlta = "cerrada" | "sin-registro" | "llena" | "rapido" | "forma" | "origen" | "red" | "ajena" | "cupo-conexion";
+export type MotivoDeAlta = "cerrada" | "sin-registro" | "llena" | "rapido" | "forma" | "origen" | "red" | "ajena" | "cupon" | "cupo-conexion";
 
 /**
  * El encargado anota su equipo. Con la misma cuenta otra vez y la misma `llave` (la que este celular guardó al
  * anotarla, `llaveDelCelular`), la sala cambia los datos y conserva el número y el estado; con otra, contesta `ajena`.
+ * `correccion` es la cuenta que el equipo tenía anotada cuando la página sabe que está corrigiendo (issue #119): la
+ * sala mueve la fila a la cuenta nueva en vez de sumar otra, siempre con la misma llave. Va al final (después de
+ * `dep`) para no romper a quien ya mandaba solo las dependencias.
  */
 export async function anotarEquipoEnSala(
   servicio: string,
@@ -80,9 +84,10 @@ export async function anotarEquipoEnSala(
   cifrado: string,
   llave: string,
   dep: Dependencias = {},
+  correccion?: string,
 ): Promise<{ ok: true; n: number; estado: EstadoEquipo } | { ok: false; motivo: MotivoDeAlta }> {
   try {
-    const r = await (dep.fetch ?? fetch)(`${servicio}/v1/sala/${id}/equipos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: aJson({ cuenta, d: cifrado, llave }) });
+    const r = await (dep.fetch ?? fetch)(`${servicio}/v1/sala/${id}/equipos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: aJson({ cuenta, d: cifrado, llave, ...(correccion ? { correccion } : {}) }) });
     if (r.status === 201) {
       const x = (await r.json()) as { n?: number; estado?: string };
       if (typeof x.n === "number" && esEstado(x.estado)) return { ok: true, n: x.n, estado: x.estado };
@@ -90,7 +95,7 @@ export async function anotarEquipoEnSala(
     }
     if (r.status === 404) return { ok: false, motivo: "cerrada" };
     const error = r.status === 409 || r.status === 429 ? ((await r.json().catch(() => ({}))) as { error?: string }).error : undefined;
-    if (r.status === 409) return { ok: false, motivo: error === "ajena" ? "ajena" : "sin-registro" };
+    if (r.status === 409) return { ok: false, motivo: error === "ajena" ? "ajena" : error === "cupon" ? "cupon" : "sin-registro" };
     if (r.status === 403) return { ok: false, motivo: "origen" };
     if (r.status === 429) return { ok: false, motivo: error === "llena" ? "llena" : error === "cupo-conexion" ? "cupo-conexion" : "rapido" };
     return { ok: false, motivo: "forma" };

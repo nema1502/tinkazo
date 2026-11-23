@@ -141,3 +141,17 @@ describe("el alto de las tarjetas", () => {
     expect(ol.style.gridAutoRows).toBe("200px");
   });
 });
+
+describe("la marca de nombre repetido en el proyector", () => {
+  it("un nombre repetido se ve marcado en la tarjeta, y el que no repite no lleva marca", () => {
+    const equipos = [equipo(1), { ...equipo(2), nombre: "Equipo 1" }, equipo(3)];
+    const { p } = armar({ enlace: "x", modo: "cupon", equipos, evidencias: new Map(), instante: null });
+    p.abrir();
+    const marcadas = p.raiz.querySelectorAll<HTMLElement>(".stp-equipo[data-repetido]");
+    expect(marcadas).toHaveLength(2);
+    for (const li of marcadas) expect(li.textContent).toContain(t("eqStRepetido"));
+    const limpia = p.raiz.querySelector('.stp-equipo:not([data-repetido]) .stp-nombre');
+    expect(limpia?.textContent).toBe("Equipo 3");
+    p.cerrar();
+  });
+});
