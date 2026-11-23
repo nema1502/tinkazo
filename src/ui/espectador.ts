@@ -789,6 +789,8 @@ export function abrirParticipante(d: DatosParticipante, lang: Lang = getLang()):
   let cerrada = false;
   let ronda: RondaViva | null = null;
   let vencida = false;
+  /** La señal a la sala está fallando: el aviso de reconexión ocupa el renglón de estado hasta que vuelva. */
+  let reconectando = false;
 
   /** La lista de nombres, siempre con `textContent`: nunca como HTML. */
   function pintarLista(nodo: HTMLElement): void {
@@ -851,11 +853,17 @@ export function abrirParticipante(d: DatosParticipante, lang: Lang = getLang()):
       return;
     }
     if (miNombre !== null) {
-      estadoEl.textContent = cerrada ? t("jiPCerrada") : t("jiPListo");
+      estadoEl.textContent = reconectando ? t("jiPReconectando") : cerrada ? t("jiPCerrada") : t("jiPListo");
       pintarLista(cuerpo);
       return;
     }
-    estadoEl.textContent = cerrada ? t("jiPCerrada") : nombres.size === 0 ? t("jiPEstadoEntra") : "";
+    estadoEl.textContent = reconectando
+      ? t("jiPReconectando")
+      : cerrada
+        ? t("jiPCerrada")
+        : nombres.size === 0
+          ? t("jiPEstadoEntra")
+          : "";
     // El formulario para sumarse, con el nombre filtrado acá mismo: lo que la pantalla va a
     // descartar no sale del celular.
     cuerpo.replaceChildren();
@@ -953,6 +961,15 @@ export function abrirParticipante(d: DatosParticipante, lang: Lang = getLang()):
       vencida = true;
       // No va a venir nada más de esta sala.
       vivo.parar();
+      pintar();
+    },
+    alReconectando: () => {
+      // Corte de red o error del servicio: la sala no se cerró, se avisa que se está reconectando.
+      reconectando = true;
+      pintar();
+    },
+    alReconecto: () => {
+      reconectando = false;
       pintar();
     },
   });

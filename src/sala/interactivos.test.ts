@@ -308,21 +308,25 @@ describe("el participante sigue la sala", () => {
     s.parar();
   });
 
-  it("tras cinco pedidos fallidos seguidos deja de mirar y lo avisa una vez", async () => {
+  it("con fallos seguidos la espera crece y avisa que reconecta, sin dar la sala por vencida", async () => {
     const f = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const alVencida = vi.fn();
-    const s = seguirVivo(sala.id, generarClave(), sala.servicio, { alNombre: vi.fn(), alVencida }, { fetch: f });
-    await vi.advanceTimersByTimeAsync(4 * 3_000 + 10);
-    expect(f).toHaveBeenCalledTimes(5);
-    expect(alVencida).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(f).toHaveBeenCalledTimes(5);
+    const alReconectando = vi.fn();
+    const s = seguirVivo(sala.id, generarClave(), sala.servicio, { alNombre: vi.fn(), alVencida, alReconectando }, { fetch: f });
+    await vi.advanceTimersByTimeAsync(10);
+    // 3 s, el doble en cada falla: 3, 6, 12, 24, 48 y después el tope de 60 s.
+    for (const [espera, pedidos] of [[3_000, 2], [6_000, 3], [12_000, 4], [24_000, 5], [48_000, 6], [60_000, 7], [60_000, 8]] as const) {
+      await vi.advanceTimersByTimeAsync(espera);
+      expect(f, `pedido ${pedidos} tras esperar ${espera}`).toHaveBeenCalledTimes(pedidos);
+      expect(alReconectando).toHaveBeenLastCalledWith(pedidos);
+      expect(alVencida).not.toHaveBeenCalled();
+    }
     s.parar();
   });
 
-  it("una respuesta buena vuelve a poner en cero la cuenta de fallos", async () => {
+  it("una respuesta buena vuelve a poner en cero la cuenta de fallos y limpia el aviso", async () => {
     let pedido = 0;
-    // Cuatro fallos, una buena y otros cuatro fallos: nunca cinco seguidos.
+    // Cuatro fallos con espera creciente (3+6+12+24), una buena y un corte nuevo: el reintento vuelve a los 3 s.
     const f = vi.fn().mockImplementation(async () => {
       pedido++;
       if (pedido === 5) return respuesta({ hay: 0, estado: "abierta", ronda: null, ns: [], nombres: [] });
@@ -330,10 +334,15 @@ describe("el participante sigue la sala", () => {
       return respuesta({ hay: 0, estado: "abierta", ronda: null, ns: [], nombres: [] });
     });
     const alVencida = vi.fn();
-    const s = seguirVivo(sala.id, generarClave(), sala.servicio, { alNombre: vi.fn(), alVencida }, { fetch: f });
-    await vi.advanceTimersByTimeAsync(9 * 3_000 + 10);
-    expect(f.mock.calls.length).toBeGreaterThanOrEqual(10);
+    const alReconecto = vi.fn();
+    const s = seguirVivo(sala.id, generarClave(), sala.servicio, { alNombre: vi.fn(), alVencida, alReconecto }, { fetch: f });
+    await vi.advanceTimersByTimeAsync(45_000 + 10);
+    expect(f).toHaveBeenCalledTimes(5);
+    expect(alReconecto).toHaveBeenCalledTimes(1);
     expect(alVencida).not.toHaveBeenCalled();
+    // Con la cuenta en cero, el sondeo vuelve al ritmo base.
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(f).toHaveBeenCalledTimes(6);
     s.parar();
   });
 
