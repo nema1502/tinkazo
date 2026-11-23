@@ -447,6 +447,41 @@ export function mensajeDeResumen(a: DatosDeResumen, c: Contexto): Mensaje {
   return { asunto, texto: texto.join("\n") };
 }
 
+export interface DatosDeCuentas {
+  /** Los motivos que pasaron el umbral en la hora, con su cifra y el umbral que cruzó cada uno. */
+  desbordados: Array<{ motivo: "cuentas-nuevas" | "activaciones"; hubo: number; umbral: number; hora: string }>;
+  /** `false` si el conteo de Pollar vino con la página llena: la cifra es lo menos. */
+  completo: boolean;
+  /** La hora del conteo, tal como la escribió el portero. */
+  hora: string;
+}
+
+/** El aviso por las cuentas nuevas y las activaciones por hora (issue 177): un correo por hora y por motivo. */
+export function mensajeDeCuentas(a: DatosDeCuentas, c: Contexto): Mensaje {
+  const paginaLlena = a.completo ? "" : "El conteo vino con la lista de movimientos de Pollar llena, así que puede ser más. ";
+  const CADA_UNO: Record<DatosDeCuentas["desbordados"][number]["motivo"], { asunto: string; frase: (d: DatosDeCuentas["desbordados"][number]) => string; hacer: string }> = {
+    "cuentas-nuevas": {
+      asunto: "Muchas cuentas nuevas en una hora",
+      frase: (d) => `Se abrieron ${miles(d.hubo)} cuentas nuevas en una hora, más que el umbral de ${miles(d.umbral)}. ${paginaLlena}Alguien podría estar creando cuentas con un guion, sin pasar por el stand.`,
+      hacer: "Pausá las altas de cuentas nuevas (docs/operacion.md) y mirá en el registro del portero qué cuenta se abrió en esa hora. Los pasos están en la hoja de operación.",
+    },
+    activaciones: {
+      asunto: "Muchas activaciones en una hora",
+      frase: (d) => `Hubo ${miles(d.hubo)} activaciones de cuentas en una hora, más que el umbral de ${miles(d.umbral)}. ${paginaLlena}Alguien podría estar activando cuentas con un guion.`,
+      hacer: "Pausá las altas de cuentas nuevas (docs/operacion.md) y mirá en el registro del portero qué cuenta se activó en esa hora. Los pasos están en la hoja de operación.",
+    },
+  };
+  const asunto = a.desbordados.length === 2 ? "Muchas cuentas nuevas y activaciones en una hora" : CADA_UNO[a.desbordados[0]?.motivo ?? "cuentas-nuevas"].asunto;
+  const texto: string[] = [];
+  a.desbordados.forEach((d, i) => {
+    texto.push(CADA_UNO[d.motivo].frase(d));
+    texto.push(`Qué hacer: ${CADA_UNO[d.motivo].hacer}`);
+    if (i < a.desbordados.length - 1) texto.push("");
+  });
+  texto.push("", ...cifras(c), "", horaDeBolivia(c.ahora), PIE);
+  return { asunto, texto: texto.join("\n") };
+}
+
 /** El aviso de prueba: sirve para comprobar que el correo llega, con las cifras de ahora. */
 export function mensajeDePrueba(a: { leyo: boolean }, c: Contexto): Mensaje {
   const texto = [

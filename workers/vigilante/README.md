@@ -23,6 +23,7 @@ Lo mismo que decide el flujo de GitHub:
 - un **problema nuevo**, o uno que **empeoró** (créditos bajos que pasan a bajo el piso, un tramo de cobros sin explicar que pasa al siguiente).
 - el **mismo problema que sigue** pasadas **23 horas** del último aviso (un recordatorio).
 - **el portero que no contesta dos vueltas seguidas**. Con una sola vuelta es un tropiezo y no avisa. Con dos, es un problema.
+- **las cuentas nuevas y las activaciones por hora** cuando pasan su umbral (issue 177). El portero cuenta, desde los movimientos de los créditos de Pollar, cuántas cuentas se abrieron y cuántas se activaron en cada hora, y manda el conteo en `/estado`; el vigilante manda un correo cuando una hora pasa el umbral, una sola vez por hora y por motivo (crear cuentas y activarlas, cada uno por su lado). Mientras sigue arriba, vuelve a avisar en la hora siguiente, no antes.
 - **un problema que se arregla** se olvida y manda un aviso corto de que se arregló. Si vuelve, es nuevo. Si el vigilante no puede entrar al portero (la clave no está, el portero la rechaza o contesta algo que no se entiende), no sabe cómo están las cosas: no da nada por arreglado y conserva lo avisado, así que al recuperar el acceso lo que seguía mal no se avisa otra vez.
 
 Los problemas que revisa están en la cabecera de `scripts/lib/revision-portero.mjs`: el portero que no paga los sellos ni los sorteos (apagado, devuelto a Pollar o sin decir su modo), el portero sin su llave (`llave` en null), créditos de Pollar bajos o bajo el piso o sin leer, créditos que no cubren lo reservado por las compras con QR en curso (`reservasCompras`), la cuenta que paga con poco saldo o casi sin saldo o sin leer, las altas pausadas, los cobros de Pollar sin explicar (por tramos), el patrocinio de la app prendido o sin leer, un portero que no es el de mainnet y una respuesta que no se entiende. A eso se suma uno propio del vigilante: que no tenga la clave para entrar al portero, o que el portero ya no se la acepte (`401` o `403`), que se avisa enseguida.
@@ -30,6 +31,12 @@ Los problemas que revisa están en la cabecera de `scripts/lib/revision-portero.
 ### El correo es privado, así que lleva las cifras
 
 A diferencia del registro de GitHub (público), el correo dice qué pasa, los créditos, el piso, el margen, lo reservado por las compras con QR en curso (si el portero lo manda), el saldo de la cuenta que paga y qué hacer, en frases cortas y sin tecnicismos. El asunto se entiende en la pantalla bloqueada del celular: lo que pasa primero, y "y 2 más" si hay varios. Los textos están en `src/mensaje.ts` y una prueba cuida que no lleven punto y coma, comillas angulares, rayas largas ni tecnicismos.
+
+## Las cuentas nuevas por hora
+
+Un guion puede crear o activar muchas cuentas sin pasar por el stand: con el QR del evento a la vista, el equipo tiene que enterarse en minutos, no al otro día (issue 177). El conteo lo hace el portero, que es quien lee los movimientos de los créditos de Pollar (`workers/patrocinio/src/lectura-cuentas.ts`), y lo manda en el bloque `cuentas` de `/estado`; el vigilante decide y manda el correo. La hora la marca el propio conteo, así que el reloj del vigilante no decide nada.
+
+El umbral son las dos variables de la tabla de abajo: `CUENTAS_UMBRAL` (60 por hora, el ejemplo del issue) fuera de un evento, y el cupo del evento en `CUENTAS_EVENTO_CUPO` el día del evento, que toma el lugar del umbral mientras esté puesta. Un valor raro vuelve al de siempre. Cada correo nombra qué pasó, la cifra de la hora y qué hacer (pausar las altas); con los dos motivos arriba, un solo correo nombra los dos.
 
 ## El resumen del día
 
@@ -84,6 +91,8 @@ Lo demás es `404`, y un método que no corresponde, `405`. Ninguna ruta manda c
 | `PORTERO_URL` | variable | `https://pm.tinkazo.app` |
 | `CORREO_USUARIO`, `CORREO_DOMINIO` | variables | Desde qué dirección sale el correo (`avisos` en `tinkazo.app`). La dirección entera no se escribe en el repositorio |
 | `RESUMEN_CADA_HORAS` | variable | `24` por defecto |
+| `CUENTAS_UMBRAL` | variable | El umbral por hora del aviso de cuentas nuevas y activaciones (issue 177). `60` por defecto |
+| `CUENTAS_EVENTO_CUPO` | variable | El cupo de cuentas del evento: con la variable puesta, ese cupo toma el lugar del umbral. Vacía, no hay evento y vale el umbral de siempre |
 | `MEMORIA` | KV | Se crea con `npx wrangler@4 kv namespace create MEMORIA` |
 | `CORREO` | `send_email` | El binding de correo de Cloudflare |
 

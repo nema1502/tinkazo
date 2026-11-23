@@ -24,9 +24,10 @@ import {
   revisarPortero,
 } from "../../../scripts/lib/revision-portero.mjs";
 import { type Canal, canalesActivos, faltaConfigurar, horasDeResumen, secreto, urlDelPortero } from "./config";
+import { MOTIVOS_CUENTAS, umbralDeCuentas, vigilarCuentas } from "./cuentas";
 import { codigoDe, enviarPor, motivoDe } from "./envio";
 import { olvidarMemoriaDeLaRuta } from "./memoria-ruta";
-import { type Contexto, type Mensaje, mensajeDeAlerta, mensajeDeArreglo, mensajeDeResumen } from "./mensaje";
+import { type Contexto, type Mensaje, mensajeDeAlerta, mensajeDeArreglo, mensajeDeCuentas, mensajeDeResumen } from "./mensaje";
 import type { Registrar } from "./registro";
 
 export { RESUMEN_HORAS_POR_DEFECTO } from "./config";
@@ -52,6 +53,10 @@ export interface Entorno {
   CORREO_USUARIO?: string;
   CORREO_DOMINIO?: string;
   RESUMEN_CADA_HORAS?: string;
+  /** El umbral por hora del aviso de cuentas nuevas y activaciones (issue 177). */
+  CUENTAS_UMBRAL?: string;
+  /** El cupo del evento, que toma el lugar del umbral mientras esté puesto (el día del evento). */
+  CUENTAS_EVENTO_CUPO?: string;
   /** Secretos (`wrangler secret put`). */
   PORTERO_ADMIN_TOKEN?: string;
   AVISAR_A?: string;
@@ -91,6 +96,8 @@ export interface Memoria {
   salioBien: boolean;
   /** El comienzo de la ranura del último resumen armado. */
   resumenEn: string | null;
+  /** Las cuentas por hora (issue 177): la última hora cuyo aviso se armó, y qué motivos se avisaron en ella. */
+  cuentasAviso: { hora: string; motivos: string[] } | null;
   pendientes: Aviso[];
 }
 
@@ -110,7 +117,7 @@ const HORA_MS = 3_600_000;
 /** Las ranuras del resumen se cuentan desde este instante, a las 12:00 UTC (las 8 de la mañana en Bolivia). */
 const ANCLA_DEL_RESUMEN = Date.UTC(2026, 0, 1, 12, 0, 0);
 
-export const memoriaVacia = (): Memoria => ({ v: 1, claves: [], avisadoEn: null, sinRespuesta: 0, ultimaVuelta: null, salioBien: false, resumenEn: null, pendientes: [] });
+export const memoriaVacia = (): Memoria => ({ v: 1, claves: [], avisadoEn: null, sinRespuesta: 0, ultimaVuelta: null, salioBien: false, resumenEn: null, cuentasAviso: null, pendientes: [] });
 
 /** El comienzo de la ranura del resumen a la que pertenece `ahora`: cada `horas` horas, contadas desde las 12:00 UTC. */
 export function inicioDeResumen(ahora: Date, horas: number): Date {
@@ -120,6 +127,16 @@ export function inicioDeResumen(ahora: Date, horas: number): Date {
 
 const fechaOnull = (x: unknown): string | null => (typeof x === "string" && !Number.isNaN(Date.parse(x)) ? new Date(Date.parse(x)).toISOString() : null);
 const entero = (x: unknown): number => (typeof x === "number" && Number.isSafeInteger(x) && x >= 0 ? x : 0);
+
+/** Lo que se recuerda de un aviso de cuentas, o null si lo guardado no se entiende. */
+function cuentasAvisoDe(x: unknown): { hora: string; motivos: string[] } | null {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  const o = x as Record<string, unknown>;
+  if (typeof o.hora !== "string" || o.hora.length > 40 || Number.isNaN(Date.parse(o.hora))) return null;
+  const motivos = Array.isArray(o.motivos) ? o.motivos.filter((m): m is string => typeof m === "string" && (MOTIVOS_CUENTAS as readonly string[]).includes(m)) : [];
+  if (motivos.length === 0) return null;
+  return { hora: o.hora, motivos };
+}
 const TIPOS: TipoDeAviso[] = ["alerta", "arreglo", "resumen"];
 const CANALES: Canal[] = ["correo", "telegram"];
 
@@ -152,6 +169,7 @@ export function memoriaDe(texto: string): Memoria | null {
     ultimaVuelta: fechaOnull(j.ultimaVuelta),
     salioBien: j.salioBien === true,
     resumenEn: fechaOnull(j.resumenEn),
+    cuentasAviso: cuentasAvisoDe(j.cuentasAviso),
     pendientes: Array.isArray(j.pendientes) ? j.pendientes.map(avisoDe).filter((a): a is Aviso => a !== null) : [],
   };
 }
@@ -298,6 +316,27 @@ export async function vuelta(env: Entorno, dep: Dependencias): Promise<Resultado
       });
     } else if (arreglados.length > 0) {
       nuevos.push({ tipo: "arreglo", mensaje: mensajeDeArreglo({ arreglados, siguen: actuales }, contexto) });
+    }
+  }
+
+  // 2b. Las cuentas nuevas y las activaciones por hora (issue 177): el portero las cuenta desde los movimientos de los
+  // créditos de Pollar (`lectura-cuentas.ts`) y las manda en el bloque `cuentas` de `/estado`. Un aviso por hora y por
+  // motivo: lo avisado en una hora queda anotado y la hora nueva manda el aviso de vuelta, si sigue arriba del umbral.
+  const bloqueDeCuentas = lectura.ok && estado && typeof estado === "object" && !Array.isArray(estado) ? (estado as Record<string, unknown>).cuentas : undefined;
+  if (canales.length > 0 && bloqueDeCuentas !== undefined) {
+    const decisionCuentas = vigilarCuentas({
+      cuentas: bloqueDeCuentas,
+      ...umbralDeCuentas(env),
+      recordado: { hora: m.cuentasAviso?.hora ?? null, motivos: m.cuentasAviso?.motivos ?? [] },
+    });
+    if (!decisionCuentas.conDatos && bloqueDeCuentas !== null) registrar("error-cuentas", { conteo: "sin-leer" });
+    if (decisionCuentas.avisar.length > 0) {
+      const horaDelConteo = decisionCuentas.hora ?? decisionCuentas.avisar[0]!.hora;
+      m.cuentasAviso = {
+        hora: horaDelConteo,
+        motivos: unicas([...(m.cuentasAviso && m.cuentasAviso.hora === horaDelConteo ? m.cuentasAviso.motivos : []), ...decisionCuentas.avisar.map((a) => a.motivo)]),
+      };
+      nuevos.push({ tipo: "alerta", mensaje: mensajeDeCuentas({ desbordados: decisionCuentas.avisar, completo: decisionCuentas.completo, hora: horaDelConteo }, contexto) });
     }
   }
 
