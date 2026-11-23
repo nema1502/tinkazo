@@ -577,3 +577,15 @@ Nace apagado. Se prende con `ALTAS = "1"`, `SORTEO_SERVIDOR = "1"`, `CUENTA_SORT
 - El contador de pedidos por dirección y la lista de cuentas vistas (400 días) no se pueden consultar desde afuera.
 - Falta ver con la custodia de mainnet de Pollar (dos firmas de dos, si se confirma) que una cuenta real firme como se espera; la lectura de firmantes y umbrales ya está probada con cuentas de testnet con la maestra en cero.
 - La oferta de inclusión del fee-bump es fija (`INCLUSION_BUMP_STROOPS`); no lee `getFeeStats`. Si la red sube mucho el precio de inclusión, la red rechaza el fee-bump (`txInsufficientFee`), el portero devuelve el cupo y da `400 rechazada`.
+
+## La línea base de la red, servida (issue 220)
+
+`GET /v1/patrocinio/linea-base` da, sin llaves y para cualquiera, la línea base del protocolo y de los 17 parámetros de costo de Soroban que compara `scripts/vigilar-red.mjs` (el detector de GitHub): el mismo archivo `scripts/vigilar-red.base.json`, importado por `src/linea-base.ts`, así que la línea base es una sola en el repositorio y no hay una segunda copia que diverge. La pide el vigilante cada diez minutos para su comparación del protocolo y los costos.
+
+- Es de lectura: cualquier otro método responde `405`. La respuesta se puede cachear un minuto (`Cache-Control: public, max-age=60`): el contenido no cambia cada segundo, solo el día que se commitea una base nueva.
+- `src/linea-base.ts` trae `RUTA_LINEA_BASE` y `atenderLineaBase(request)`, probado en `src/linea-base.test.ts` en Node.
+- El despacho de la ruta va en `src/index.ts`, en el despachador de rutas del Worker, al lado de las demás (junto con el paso del protocolo del vigilante, issue 220):
+
+```ts
+if (url.pathname === RUTA_LINEA_BASE && request.method === "GET") return atenderLineaBase(request);
+```

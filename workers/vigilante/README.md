@@ -119,3 +119,29 @@ Ya desplegado, se prueba que anda con `GET /` (la hora de la última vuelta) y `
 ## Qué hacer con cada aviso
 
 La tabla de los avisos, con qué quiere decir cada uno y qué hacer, está en [`docs/operacion.md`](../../docs/operacion.md), sección "El vigilante". Cada correo trae además el "Qué hacer" de su problema.
+
+## La red de Stellar, además del portero (issue 220)
+
+Además de la vuelta del portero, cada vuelta engancha un paso propio: el protocolo y los 17 parámetros de costo de Soroban de testnet y de mainnet, contra la línea base guardada en el servicio. Es la misma línea base que compara el detector de GitHub (`scripts/vigilar-red.mjs`, que queda de respaldo): el portero la sirve en `GET https://pm.tinkazo.app/v1/patrocinio/linea-base`, sin llaves, importada del mismo archivo (`scripts/vigilar-red.base.json`), así que no hay una segunda copia que diverge.
+
+La lógica vive en dos módulos que no tocan la vuelta ni `mensaje.ts`, siguiendo el patrón aditivo de las cuentas (issue 177):
+
+- `src/protocolo.ts`: la lógica, sin red ni KV ni Cloudflare. Las mismas reglas del detector (diferencia campo por campo contra la línea base, huella de cada estado con sha256 del JSON canónico, un aviso por cambio y una sola vez) y las pruebas comparan sus resultados una por una con `scripts/lib/vigilar-red.mjs`, para que no se separen. No lo importa directo porque esa librería usa cosas de Node (`node:crypto` y, por los umbrales, `node:fs`) que en un Worker no hay. La lectura de una red son dos pedidos chicos (`getLatestLedger` y los ajustes): el vigilante no mira los niveles del estado, solo el protocolo y los costos, así que no pide el ledger de ayer ni calcula pendientes.
+- `src/vuelta-protocolo.ts`: el paso (`pasoProtocolo(env, dep)`). Lee la línea base del portero, lee las dos redes en paralelo, decide, manda lo que sale y guarda. No se puede caer (todo queda anotado en el registro con `protocolo-…`) y no toca la memoria de la vuelta: lo avisado va en su entrada propia del KV (`protocolo`, al lado de `memoria`).
+
+El criterio, igual que en el detector:
+
+- protocolo y costos iguales a la línea base: no avisa nada, y la corrida termina sin pedir nada más;
+- un cambio de protocolo o de costo: un aviso por red, que nombra el parámetro con el antes y el luego, hasta que se actualice la base (con `node scripts/vigilar-red.mjs --actualizar-base --red <red>` y el despliegue del portero con la base nueva);
+- la red caída no es un cambio: dice por qué no pudo leer, no avisa, y lo que ya se avisó se conserva.
+
+Un aviso solo cuenta como avisado si salió por todos los canales: con un canal caído, la vuelta siguiente repite el aviso (mejor un aviso repetido que uno perdido).
+
+**El paso no corre solo**: hace falta el enchufe en el Cron Trigger, que quien integra o despliega agrega en `src/index.ts`, dentro de `scheduled` y al lado de la vuelta del portero:
+
+```ts
+// El paso del protocolo y de los costos de la red (issue 220), al lado de la vuelta del portero:
+await pasoProtocolo(env, dependencias());
+```
+
+Las pruebas (`pnpm exec vitest run workers/vigilante/src/protocolo.test.ts workers/vigilante/src/vuelta-protocolo.test.ts`) corren con la red simulada: un RPC de mentira que contesta lo que se le pide, una línea base de mentira, el KV, el correo y Telegram de mentira. Cubren el protocolo igual (sin aviso), el protocolo nuevo (un aviso, una sola vez), un costo que cambia (un aviso, una vez), la red caída (dice por qué y no avisa), la línea base que no contesta (no pide nada a la red), el envío fallido (se reintenta y no se marca nada por avisado) y las mismas reglas contra el detector.
