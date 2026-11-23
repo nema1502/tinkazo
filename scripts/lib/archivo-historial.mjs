@@ -31,8 +31,9 @@
  * cabecera del ledger cambia. Las cabeceras se leen con el XDR del SDK (17.3.0 o
  * posterior) y se exige que al volver a codificarlas den los mismos bytes, así que
  * una cabecera que el SDK no lee entera falla en voz alta y no con un hash falso.
- * PENDIENTE: probar con una cabecera posterior al 3-nov-2026 (la de las pruebas es
- * anterior: ledgerVersion 29).
+ * Probado con cabeceras reales de testnet de antes y de después de la votación: las pruebas leen
+ * las 64 del punto de control 5798207, con el ledger 5798179 ya con ledgerVersion 30. Falta lo
+ * propio en mainnet, después de su votación del 23-nov-2026.
  */
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
