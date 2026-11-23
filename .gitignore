@@ -58,3 +58,6 @@ workers/musica/camas/
 # Los videos de vista previa que deja scripts/capturas-video.mjs no se versionan
 /public/juegos/vistas-previas/**/*.mp4
 /public/juegos/vistas-previas/**/*.webm
+
+# Las pruebas de premios compilan el raffle desde su fuente y repiten sus pruebas
+contracts/premios/test_snapshots/test/tinkazo_raffle/
