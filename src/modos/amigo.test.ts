@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import vectors from "../../docs/vectors.json";
+import { T } from "../i18n";
 import { amigoSinComprobante, isSecretSanta, isSecretSantaPrize, noHaySecreto, paraQuien, reparto, secretPrize } from "./amigo";
 import { decodeAmigo, amigoUrl } from "../protocol/proof";
 import { isTurnOrder, isTurnPrize } from "./turnos";
@@ -27,6 +28,23 @@ describe("el nombre de un Amigo secreto", () => {
   it("exige la frase completa al principio y no admite que siga con otra letra", () => {
     const nombres = ["", "   ", "Amigo", "El amigo secreto", "Amigo secretos", "Amigo secretoS", "Secret", "Secret Santas", "Secret SantaClaus", "Turnos"];
     for (const nombre of nombres) expect(isSecretSantaPrize(nombre), nombre).toBe(false);
+  });
+});
+
+describe("el tope de la red ya al elegir el modo (issue #95)", () => {
+  it("turnosCap y amigoCap están en los dos idiomas, con la redacción aprobada", () => {
+    expect(T.es.turnsCap).toBe("El orden llega hasta {n} turnos.");
+    expect(T.en.turnsCap).toBe("The order goes up to {n} turns.");
+    expect(T.es.amigoCap).toBe("Hasta {n} personas pueden participar.");
+    expect(T.en.amigoCap).toBe("Up to {n} people can join.");
+  });
+  // La cifra ({n}) la pone quien dibuja la nota (`src/ui/turnos.ts`), con el tope de la red de ahora
+  // (`topeDeGanadores`): por eso el texto lleva el hueco y no un número.
+  it("las dos llevan el hueco de la cifra, en los dos idiomas", () => {
+    for (const clave of ["turnsCap", "amigoCap"] as const) {
+      expect(String(T.es[clave]), `es.${clave}`).toContain("{n}");
+      expect(String(T.en[clave]), `en.${clave}`).toContain("{n}");
+    }
   });
 });
 

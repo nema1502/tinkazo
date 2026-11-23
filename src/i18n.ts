@@ -3428,6 +3428,9 @@ export const T: Record<Lang, Dict> = {
     modoSorteoAyuda: "De la lista salen quienes ganan. Vos elegís cuántos.",
     modoInfo: "Qué hace esta opción",
     turnsLimit: "El orden llega hasta {n} turnos en este modo. Achicá la lista para poder sellar.",
+    // Issue #95: el tope de la red se ve ya al elegir el modo (la nota del selector), no solo cuando la lista lo pasó.
+    // La cifra la pone quien dibuja la nota (src/ui/turnos.ts), con el tope de esta red.
+    turnsCap: "El orden llega hasta {n} turnos.",
     turnsWord: "Turno",
     turnsResultTitle: "El orden de los turnos",
     turnsCopy: "Copiar el orden",
@@ -3496,6 +3499,8 @@ export const T: Record<Lang, Dict> = {
     amigoPrizeLabel: "Nombre del amigo secreto (opcional)",
     amigoPrize: "Amigo secreto",
     amigoMas: "Nombre del amigo secreto y subir CSV",
+    // Issue #95: el tope de participantes de esta red, a la vista ya al elegir el Amigo secreto.
+    amigoCap: "Hasta {n} personas pueden participar.",
     amigoHelp: "Cada uno recibe un enlace que dice solo a quién le regala.",
     amigoRulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige quién regala a quién antes de que se sepa, y dejan anotado cuál es el sorteo que vale.",
     // Las bases que se copian (`copyRules` y `copyRulesPre` de freeze.ts): cómo sale quién regala a quién, sin ganadores ni
@@ -6513,6 +6518,8 @@ export const T: Record<Lang, Dict> = {
     modoSorteoAyuda: "The winners come out of the list. You choose how many.",
     modoInfo: "What this option does",
     turnsLimit: "The order goes up to {n} turns in this mode. Shorten the list to seal it.",
+    // Issue #95: the network cap is visible as soon as the mode is picked (the selector's note), see the es block.
+    turnsCap: "The order goes up to {n} turns.",
     turnsWord: "Turn",
     turnsResultTitle: "The turn order",
     turnsCopy: "Copy the order",
@@ -6581,6 +6588,8 @@ export const T: Record<Lang, Dict> = {
     amigoPrizeLabel: "Name for the Secret Santa (optional)",
     amigoPrize: "Secret Santa",
     amigoMas: "Name for the Secret Santa and CSV upload",
+    // Issue #95: this network's participation cap, visible as soon as Secret Santa is picked.
+    amigoCap: "Up to {n} people can join.",
     amigoHelp: "Each person gets a link that says only who they give to.",
     amigoRulesNote: "Paste them on Luma, WhatsApp or wherever you announced the draw. They say how the gift exchange is chosen before anyone knows it, and put on record which draw counts.",
     // The rules that get copied (`copyRules` and `copyRulesPre` in freeze.ts): who gives to whom, no winners or prize.
