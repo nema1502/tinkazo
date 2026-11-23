@@ -115,7 +115,7 @@ describe("los secretos cargados con espacios o un salto de línea al final", () 
   });
 
   it("sin clave de verdad (solo espacios) la vuelta avisa que falta, como si no estuviera", async () => {
-    const m = mundoFalso({ env: { PORTERO_ADMIN_TOKEN: "  \n" } });
+    const m = mundoFalso({ env: { PORTERO_ADMIN_TOKEN: "  \n", PORTERO_TOKEN_LECTURA: " \t " } });
     await m.vuelta();
     expect(m.portero.llamadas).toEqual([]);
     expect(m.correo.avisos[0]!.subject).toMatch(/falta la clave/i);

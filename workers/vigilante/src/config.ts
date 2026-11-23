@@ -89,7 +89,8 @@ export function canalesActivos(env: Entorno): Canal[] {
 /** Los nombres (nunca los valores) de lo que falta para que el vigilante sirva. */
 export function faltaConfigurar(env: Entorno): string[] {
   const falta: string[] = [];
-  if (!secreto(env.PORTERO_ADMIN_TOKEN)) falta.push("PORTERO_ADMIN_TOKEN");
+  const leePortero = secreto(env.PORTERO_TOKEN_LECTURA) || secreto(env.PORTERO_ADMIN_TOKEN);
+  if (!leePortero) falta.push("PORTERO_TOKEN_LECTURA o PORTERO_ADMIN_TOKEN");
   if (canalesActivos(env).length === 0) {
     if (!env.CORREO) falta.push("CORREO");
     if (destinatarios(env.AVISAR_A).length === 0) falta.push("AVISAR_A");

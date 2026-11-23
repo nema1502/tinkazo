@@ -22,7 +22,7 @@ const vuelta = leer("workers/vigilante/src/vuelta.ts");
 const seccion = hoja.slice(hoja.indexOf("\n## El vigilante"));
 
 /** Los secretos que carga `wrangler secret put`, con los que lee el código: el único lugar donde se listan. */
-const SECRETOS = ["PORTERO_ADMIN_TOKEN", "AVISAR_A", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"];
+const SECRETOS = ["PORTERO_ADMIN_TOKEN", "PORTERO_TOKEN_LECTURA", "AVISAR_A", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"];
 const BINDINGS = ["MEMORIA", "CORREO"];
 
 /** Los campos de `interface Entorno` del código. */

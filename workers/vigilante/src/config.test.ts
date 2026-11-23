@@ -93,10 +93,12 @@ describe("canalesActivos y qué falta configurar", () => {
   it("dice los nombres de lo que falta, nunca sus valores", () => {
     const m = mundoFalso();
     expect(faltaConfigurar(m.env)).toEqual([]);
-    expect(faltaConfigurar({ ...m.env, PORTERO_ADMIN_TOKEN: undefined })).toEqual(["PORTERO_ADMIN_TOKEN"]);
+    expect(faltaConfigurar({ ...m.env, PORTERO_ADMIN_TOKEN: undefined, PORTERO_TOKEN_LECTURA: undefined })).toEqual(["PORTERO_TOKEN_LECTURA o PORTERO_ADMIN_TOKEN"]);
+    // Con la clave de solo lectura alcanza para servir: la de operar deja de ser necesaria para mirar.
+    expect(faltaConfigurar({ ...m.env, PORTERO_ADMIN_TOKEN: undefined })).toEqual([]);
     expect(faltaConfigurar({ ...m.env, AVISAR_A: undefined })).toEqual(["AVISAR_A"]);
     expect(faltaConfigurar({ ...m.env, CORREO: undefined })).toEqual(["CORREO"]);
-    expect(faltaConfigurar({ ...m.env, AVISAR_A: undefined, PORTERO_ADMIN_TOKEN: undefined })).toEqual(["PORTERO_ADMIN_TOKEN", "AVISAR_A"]);
+    expect(faltaConfigurar({ ...m.env, AVISAR_A: undefined, PORTERO_ADMIN_TOKEN: undefined, PORTERO_TOKEN_LECTURA: undefined })).toEqual(["PORTERO_TOKEN_LECTURA o PORTERO_ADMIN_TOKEN", "AVISAR_A"]);
     // Con Telegram prendido, aunque falte el correo, hay a quién avisar.
     const t = mundoFalso({ conTelegram: true });
     expect(faltaConfigurar({ ...t.env, AVISAR_A: undefined })).toEqual([]);

@@ -109,10 +109,10 @@ let ip = 0;
 /** Una dirección distinta en cada prueba: los contadores del Worker viven en la memoria del módulo. */
 const otraIp = () => `190.129.${++ip}.20`;
 
-function pedido(ruta: string, o: { metodo?: string; cuerpo?: unknown; ip?: string } = {}): Request {
+function pedido(ruta: string, o: { metodo?: string; cuerpo?: unknown; ip?: string; auth?: string } = {}): Request {
   const metodo = o.metodo ?? "POST";
   const cuerpo = o.cuerpo === undefined ? undefined : JSON.stringify(o.cuerpo);
-  const headers = { Origin: SITIO, "Content-Type": "application/json", "CF-Connecting-IP": o.ip ?? otraIp() };
+  const headers = { Origin: SITIO, "Content-Type": "application/json", "CF-Connecting-IP": o.ip ?? otraIp(), ...(o.auth ? { Authorization: `Bearer ${o.auth}` } : {}) };
   return new Request(`https://pm.tinkazo.app${ruta}`, { method: metodo, headers, ...(cuerpo !== undefined && metodo !== "GET" ? { body: cuerpo } : {}) });
 }
 
@@ -325,6 +325,64 @@ describe("los bloques de /cupo y /estado", () => {
     expect(Object.keys(await estadoDe(m))).not.toContain("pagos");
     m.sql.exec("INSERT OR REPLACE INTO ajustes (clave, valor, cambiado) VALUES ('retiros_pausado', '1', ?)", T0);
     expect(await estadoDe(m)).toMatchObject({ pagos: { retiro: { prendido: false, pausado: true }, premio: { pausado: false } } });
+  });
+});
+
+// ---------- la clave de solo lectura ----------
+
+/** La clave de solo lectura: abre apenas `GET /v1/patrocinio/estado` (issue #219). */
+const LECTURA = "l".repeat(40);
+
+describe("la clave de solo lectura", () => {
+  it("abre el estado, y las demás rutas de administración dan 401 sin tocar nada", async () => {
+    const m = montar({ TOKEN_LECTURA: LECTURA });
+    // El portero encendido, como queda después del encender de administración que va debajo.
+    const antes = await estadoDe(m);
+    expect((await correr(m, pedido("/v1/patrocinio/estado", { metodo: "GET", auth: LECTURA }))).cuerpo).toEqual(antes);
+    expect(await correr(m, pedido("/v1/patrocinio/apagar", { auth: LECTURA }))).toEqual({ estado: 401, cuerpo: { motivo: "clave" } });
+    expect(await correr(m, pedido("/v1/patrocinio/encender", { auth: LECTURA }))).toEqual({ estado: 401, cuerpo: { motivo: "clave" } });
+    expect(await correr(m, pedido("/v1/patrocinio/pollar", { auth: LECTURA }))).toEqual({ estado: 401, cuerpo: { motivo: "clave" } });
+    expect(
+      await correr(m, pedido("/v1/patrocinio/ajustes", { metodo: "PUT", cuerpo: { clave: "tope_general_stroops", valor: 1 }, auth: LECTURA })),
+    ).toEqual({ estado: 401, cuerpo: { motivo: "clave" } });
+    expect(await correr(m, pedido("/v1/patrocinio/exportar", { metodo: "GET", auth: LECTURA }))).toEqual({ estado: 401, cuerpo: { motivo: "clave" } });
+    // Los pedidos rechazados no escribieron nada: el estado de antes, comprobado con la de administración.
+    expect(await estadoDe(m)).toEqual(antes);
+  });
+
+  it("la de administración abre todo, también el estado, y otra clave da 401", async () => {
+    const m = montar({ TOKEN_LECTURA: LECTURA });
+    expect((await correr(m, pedido("/v1/patrocinio/estado", { metodo: "GET", auth: "o".repeat(40) }))).estado).toBe(200);
+    expect((await correr(m, pedido("/v1/patrocinio/exportar", { metodo: "GET", auth: "o".repeat(40) }))).estado).toBe(200);
+    expect(await correr(m, pedido("/v1/patrocinio/estado", { metodo: "GET", auth: "x".repeat(40) }))).toEqual({ estado: 401, cuerpo: { motivo: "clave" } });
+    expect((await correr(m, pedido("/v1/patrocinio/estado", { metodo: "GET" }))).estado).toBe(401);
+  });
+
+  it("sin la clave de lectura cargada, la ruta no cambia: el estado queda solo para la de administración", async () => {
+    const m = montar();
+    expect(await correr(m, pedido("/v1/patrocinio/estado", { metodo: "GET", auth: LECTURA }))).toEqual({ estado: 401, cuerpo: { motivo: "clave" } });
+    expect((await correr(m, pedido("/v1/patrocinio/estado", { metodo: "GET", auth: "o".repeat(40) }))).estado).toBe(200);
+  });
+
+  it("sin ninguna clave, el camino no existe (404), como siempre; con solo la de lectura, el estado existe y lo demás no", async () => {
+    const sinNada = montar({ ADMIN_TOKEN: undefined });
+    expect((await correr(sinNada, pedido("/v1/patrocinio/estado", { metodo: "GET", auth: LECTURA }))).estado).toBe(404);
+    const soloLectura = montar({ ADMIN_TOKEN: undefined, TOKEN_LECTURA: LECTURA });
+    expect((await correr(soloLectura, pedido("/v1/patrocinio/estado", { metodo: "GET", auth: LECTURA }))).estado).toBe(200);
+    expect((await correr(soloLectura, pedido("/v1/patrocinio/estado", { metodo: "GET", auth: "x".repeat(40) }))).estado).toBe(401);
+    expect((await correr(soloLectura, pedido("/v1/patrocinio/apagar", { auth: LECTURA }))).estado).toBe(404);
+  });
+
+  it("(config) con las dos claves iguales lo anota como error-config claves-iguales, como con las de cupones", async () => {
+    const m = montar({ TOKEN_LECTURA: "o".repeat(40) });
+    await estadoDe(m);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("claves-iguales"));
+  });
+
+  it("(config) con claves distintas no dice claves-iguales", async () => {
+    const m = montar({ TOKEN_LECTURA: LECTURA });
+    await estadoDe(m);
+    expect(console.error).not.toHaveBeenCalledWith(expect.stringContaining("claves-iguales"));
   });
 });
 
