@@ -2,6 +2,10 @@ import { acotar } from "../pixi/kit/azar";
 import { planoEntero, planoSobre } from "../pixi/kit/director";
 import { PRIORIDAD } from "../pixi/kit/guion";
 import { reparto } from "../../modos/amigo";
+import { nombreDePersona } from "../../participaciones";
+import { listHash } from "../../protocol/canonical";
+import { hexToBytes } from "../../protocol/quicknet";
+import { select } from "../../protocol/select";
 import type { Textos } from "../pixi/kit";
 import type { Caja, Contexto, Kit, LineaGuion, Momentos, Plan, Respuestas, TipoPaso } from "../pixi/kit/tipos";
 
@@ -18,8 +22,8 @@ import type { Caja, Contexto, Kit, LineaGuion, Momentos, Plan, Respuestas, TipoP
  *
  * Los tiempos: cada sobre abierto de a uno dura un golpe de show (1,2 s), con
  * el ganador al final. Con listas largas (más de diez) no se abre todo en
- * cámara: se abre un puñado de ejemplos y el resto se revela en grupo («mirá
- * tu sobre en el comprobante»), para que el show dure lo mismo con doscientas
+ * cámara: se abre un puñado de ejemplos y el resto se revela en grupo («ahora
+ * se abren todos los demás»), para que el show dure lo mismo con doscientas
  * que con doce.
  *
  * Además de lo que pasa, el plan declara lo que pide la regla del niño:
@@ -62,6 +66,11 @@ const T_PRESENTE = 3;
 const POR_SOBRE = 1.2;
 /** Cuántos sobres se abren de a uno; los demás van en la revelación en grupo. */
 const INDIVIDUALES_MAX = 9;
+
+/** ¿Son todos los puestos de una lista de `n`, cada uno una vez? El orden sellado de un amigo secreto de verdad. */
+function esPermutacionCompleta(ganadores: readonly number[], n: number): boolean {
+  return ganadores.length === n && new Set(ganadores).size === n && ganadores.every((g) => Number.isInteger(g) && g >= 0 && g < n);
+}
 /** Lo que dura la revelación en grupo. */
 const GRUPO_DUR = 2.6;
 /** Lo que respira el final, desde el último sobre hasta el golpe del premio. */
@@ -122,14 +131,39 @@ export function planAmigo(ctx: Contexto): Plan<Datos> {
   const n = ctx.nombres.length;
   const ganador = ctx.ganadores[0] ?? 0;
   if (n < 2) throw new Error("amigo secreto: con menos de dos personas no hay juego");
+  // Una persona con varias líneas («Ana Quispe (1/3)» y «Ana Quispe (2/3)») son dos entradas del
+  // orden sellado pero una sola persona: según la ronda, una línea le regalaría a la otra. El modo
+  // rechaza la lista, cierre o no como reparto (`cierraComoReparto` en src/participaciones.ts): en
+  // las dos, la persona está más de una vez, y el amigo secreto la quiere una sola vez.
+  const lineasPorPersona = new Map<string, number>();
+  for (const linea of ctx.nombres) {
+    const persona = nombreDePersona(linea);
+    lineasPorPersona.set(persona, (lineasPorPersona.get(persona) ?? 0) + 1);
+  }
+  for (const [persona, veces] of lineasPorPersona) {
+    if (veces > 1) {
+      throw new Error(`amigo secreto: «${persona}» está ${veces} veces en la lista; cada persona va una sola vez`);
+    }
+  }
   // La ronda de regalos sale del protocolo (`reparto` en src/modos/amigo.ts): el amigo secreto es un
   // sorteo en que ganan todas las personas, y `reparto` convierte ese orden en la ronda — quien ocupa
-  // el lugar j le regala a quien ocupa el j + 1, y el último a la primera. Nadie la elige y no hay
-  // generador propio: para la misma lista sellada, la misma respuesta del protocolo.
-  const todos = Array.from({ length: n }, (_, i) => i);
-  const rondaDeRegalos = reparto(ctx.nombres, todos);
+  // el lugar j del orden sellado le regala a quien ocupa el j + 1, y el último a la primera. En el
+  // juego real ese orden es `ctx.ganadores` tal cual: el que el protocolo ya selló y guardó en el
+  // comprobante (src/sorteo-local.ts). En la demo y la escena fija el sorteo trae menos ganadores, y
+  // el orden de todos se deriva de la ronda pública con el mismo `select` de src/protocol (§5): la
+  // misma respuesta que daría un amigo secreto de verdad con esa lista y ese número. Nadie la elige y
+  // no hay generador propio: para la misma lista y la misma ronda, la misma ronda de regalos.
+  const ordenDeTodos = esPermutacionCompleta(ctx.ganadores, n)
+    ? ctx.ganadores
+    : select(hexToBytes(ctx.ronda), listHash([...ctx.nombres]), n, n);
+  const rondaDeRegalos = reparto(ctx.nombres, ordenDeTodos);
   const puesto = new Map(ctx.nombres.map((nombre, i) => [nombre, i]));
-  const asignacion = rondaDeRegalos.map((regalo) => puesto.get(regalo.to) ?? -1);
+  // La asignación se indexa por puesto de la lista: `asignacion[i]` es el puesto de quien recibe el
+  // regalo de la persona i, aunque el orden sellado no coincida con el orden de la lista.
+  const asignacion = new Array<number>(n).fill(-1);
+  ordenDeTodos.forEach((de, j) => {
+    asignacion[de] = puesto.get(rondaDeRegalos[j]?.to ?? "") ?? -1;
+  });
 
   // La historia del director de emoción: su arco da el sabor de la cámara y del foco.
   const historia = ctx.historia(Math.max(2, n), ganador % Math.max(1, n));
@@ -305,7 +339,7 @@ export const TEXTOS = {
     abrir: "¡Se abre el primer sobre!",
     mas: "¡Otro sobre abierto!",
     abrirOtro: "¡Cada uno mira su sobre!",
-    grupo: "Mirá tu sobre en el comprobante.",
+    grupo: "Ahora se abren todos los demás.",
     ultimo: "¡El último sobre!",
     marcadorQuedan: "SOBRES",
     marcadorDe: "DE",
@@ -315,7 +349,7 @@ export const TEXTOS = {
     abrir: "The first envelope opens!",
     mas: "Another envelope open!",
     abrirOtro: "Everyone checks their envelope!",
-    grupo: "Check your envelope in the receipt.",
+    grupo: "Now the rest open, all together.",
     ultimo: "The last envelope!",
     marcadorQuedan: "ENVELOPES",
     marcadorDe: "OF",
