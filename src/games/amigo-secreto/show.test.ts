@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import vectors from "../../../docs/vectors.json";
 import { reparto } from "../../modos/amigo";
+import { listHash } from "../../protocol/canonical";
+import { hexToBytes } from "../../protocol/quicknet";
+import { select } from "../../protocol/select";
 import { writeStory } from "../drama";
 import { azarDe, sembrar } from "../pixi/kit/azar";
 import { problemasDeMomentos } from "../pixi/kit/director";
@@ -33,6 +36,10 @@ function contexto(n: number, ganadores: number[], semilla = 7, idioma: "es" | "e
 
 const LISTAS = [2, 3, 8, 9, 18, 40, 200];
 const ganadoresDe = (n: number): number[] => [Math.min(n - 1, 3)];
+
+/** El orden sellado de un amigo secreto: el select del protocolo (§5) para el sorteo en que ganan todas las personas. */
+const ordenDeTodos = (nombres: readonly string[]): number[] =>
+  select(hexToBytes(RONDA), listHash([...nombres]), nombres.length, nombres.length);
 const PANTALLAS: Pant[] = [
   { w: 1920, h: 1080, k: 1.5, top: 82, bottom: 974 },
   { w: 1280, h: 720, k: 1, top: 82, bottom: 614 },
@@ -57,21 +64,47 @@ describe("Amigo secreto: el plan", () => {
     }
   });
 
-  it("la ronda de regalos es la del protocolo: las parejas del show son las de reparto con las mismas entradas", () => {
-    // La lista de 18 del vector del protocolo y listas más cortas: cada sobre muestra a quien
-    // `reparto` de src/modos/amigo.ts asigna para las mismas entradas (en el sorteo de los
-    // regalos ganan todas las personas). Tienen que coincidir todas.
-    const listas: readonly string[][] = [vectors.list as string[], ...[2, 3, 8, 18, 40].map((n) => Array.from({ length: n }, (_, i) => `Persona ${i + 1}`))];
-    for (const nombres of listas) {
-      const p = planAmigo(contexto(nombres.length, ganadoresDe(nombres.length), 7, "es", nombres));
+  it("la ronda de regalos es la del protocolo: las parejas del show son las de reparto con el orden sellado", () => {
+    // La lista de 18 del vector del protocolo con el orden sellado de su caso k=18 (un sorteo en que
+    // ganan todas las personas), y listas más cortas con el orden que el select del protocolo da para
+    // esas entradas. Cada sobre muestra a quien `reparto` de src/modos/amigo.ts asigna con las mismas
+    // entradas: tienen que coincidir todas (issue #132, S5).
+    const nombres18 = vectors.list as string[];
+    const caso18 = vectors.cases.find((c) => c.k === nombres18.length);
+    expect(ordenDeTodos(nombres18), "el select del protocolo da el caso k=18 del vector").toEqual(caso18?.winners);
+    const listas: readonly { nombres: readonly string[]; orden: readonly number[] }[] = [
+      { nombres: nombres18, orden: caso18?.winners ?? [] },
+      ...[2, 3, 8, 18, 40].map((n) => {
+        const nombres = Array.from({ length: n }, (_, i) => `Persona ${i + 1}`);
+        return { nombres, orden: ordenDeTodos(nombres) };
+      }),
+    ];
+    for (const { nombres, orden } of listas) {
+      const p = planAmigo(contexto(nombres.length, [...orden], 7, "es", nombres));
       const todos = Array.from({ length: nombres.length }, (_, i) => i);
-      const esperado = reparto(nombres, todos);
+      // A quién le regala cada persona, según el reparto del protocolo con las mismas entradas.
+      const delReparto = new Map(reparto(nombres, orden).map((r) => [r.from, r.to]));
       const parejas = p.datos.asignacion.map((destino, i) => ({ from: nombres[i] ?? "", to: nombres[destino] ?? "" }));
-      expect(parejas, `con ${nombres.length} personas`).toEqual(esperado);
+      const esperadas = nombres.map((from) => ({ from, to: delReparto.get(from) ?? "" }));
+      expect(parejas, `con ${nombres.length} personas`).toEqual(esperadas);
       // El show hereda las garantías del reparto: nadie se regala a sí mismo y todos reciben una vez.
       for (let i = 0; i < nombres.length; i++) expect(p.datos.asignacion[i], `persona ${i} con n=${nombres.length}`).not.toBe(i);
       expect([...p.datos.asignacion].sort((a, b) => a - b)).toEqual(todos);
+      // Función pura de la lista y la ronda: en la demo y la escena fija el sorteo trae menos ganadores,
+      // y la ronda de regalos tiene que ser la misma que la del juego real con esas entradas.
+      const demo = planAmigo(contexto(nombres.length, ganadoresDe(nombres.length), 7, "es", nombres));
+      expect(demo.datos.asignacion, `demo con ${nombres.length} personas`).toEqual(p.datos.asignacion);
     }
+  });
+
+  it("rechaza la lista donde una persona tiene más de una línea", () => {
+    // «Ana Quispe (1/3)» y «Ana Quispe (2/3)» son dos entradas del orden sellado pero una sola persona:
+    // según la ronda, una línea le regalaría a la otra (issue #132, S3). Vale para la lista que cierra
+    // como reparto entero y para la que queda a medias: en las dos, la persona está más de una vez.
+    const aMedias = ["Ana Quispe (1/3)", "Beto", "Cami", "Ana Quispe (2/3)", "Dario"];
+    expect(() => planAmigo(contexto(aMedias.length, [0], 7, "es", aMedias))).toThrow(/Ana Quispe/);
+    const cerrado = ["Ana (1/2)", "Beto", "Ana (2/2)", "Cami", "Dario"];
+    expect(() => planAmigo(contexto(cerrado.length, [0], 7, "es", cerrado))).toThrow(/Ana/);
   });
 
   it("el juego no decide nada: quien gana es el que fijó el protocolo y su sobre es el último", () => {
@@ -245,6 +278,15 @@ describe("Amigo secreto: los textos", () => {
       const b = (TEXTOS.en as Record<string, unknown>)[clave];
       expect(typeof a).toBe(typeof b);
     }
+  });
+
+  it("la revelación en grupo no manda al comprobante: dice lo que pasa en la mesa, en los dos idiomas", () => {
+    // Hasta que exista la vista del sobre (issue #99), el relator no promete el comprobante: los sobres
+    // que quedan se abren en la mesa, y eso es lo que dice (issue #132, S2).
+    expect(TEXTOS.es.grupo).not.toMatch(/comprobante/i);
+    expect(TEXTOS.en.grupo).not.toMatch(/receipt/i);
+    expect(TEXTOS.es.grupo.trim()).not.toBe("");
+    expect(TEXTOS.en.grupo.trim()).not.toBe("");
   });
 
   it("ninguna frase queda vacía ni rompe la regla del niño en ninguno de los dos idiomas", () => {
