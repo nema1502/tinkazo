@@ -753,6 +753,14 @@ describe("la vista del participante", () => {
     expect([...vista().querySelectorAll("ol li")].map((li) => li.textContent)).toEqual(["Beto"]);
   });
 
+  it("mientras la señal falla avisa que reconecta, y al volver deja de decirlo", () => {
+    abrirParticipante(PARTICIPANTE, "es");
+    escucha().alReconectando?.(1);
+    expect(vista().textContent).toContain(T.es.jiPReconectando);
+    escucha().alReconecto?.();
+    expect(vista().textContent).not.toContain(T.es.jiPReconectando);
+  });
+
   it("un nombre con enlace no se manda, y el aviso lo dice", async () => {
     abrirParticipante(PARTICIPANTE, "es");
     input().value = "mira malo.xyz";

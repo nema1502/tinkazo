@@ -128,8 +128,12 @@ export async function leerVivo(id: string, desde: number, servicio: string, dep:
   }
 }
 
-/** Cuántos pedidos fallidos seguidos aguanta el celular antes de dar la sala por perdida. */
-export const FALLOS_ANTES_DE_RENDIRSE = 5;
+/**
+ * Tope de la espera entre reintentos después de una falla de red: 3 s, el doble en cada falla seguida
+ * (3, 6, 12, 24, 48…) y desde la sexta el reintentato queda fijo en un minuto. Elegido para que un
+ * evento con la lista cerrada siga poniéndose al día sin agotar el cupo diario del servicio.
+ */
+export const ESPERA_DE_REINTENTO_MAXIMA_MS = 60_000;
 
 export interface EscuchaDeParticipante {
   /** Llegó un nombre que esta clave sí descifra (nuevo, o al volver a pedir los que ya había). Cada `n` se avisa una sola vez. */
@@ -140,13 +144,22 @@ export interface EscuchaDeParticipante {
   alRonda?: (r: RondaViva) => void;
   /** La lista quedó cerrada: ya no entra nadie. */
   alCierre?: () => void;
-  /** La sala se cerró o venció: no hay más que mirar. */
+  /** La sala se cerró o venció: no hay más que mirar. Solo con la respuesta de un 404/410 de la sala: nunca por la red. */
   alVencida?: () => void;
+  /** El pedido a /vivo volvió a fallar (un corte de red, un error del servicio): el aviso de reconexión se enciende mientras siga sin señal. */
+  alReconectando?: (fallos: number) => void;
+  /** Volvió la señal: la primera respuesta buena después de una falla limpia el aviso. */
+  alReconecto?: () => void;
 }
 
 /**
  * Sigue la sala desde el celular: consulta cada 3 s lo que cambia y avisa los nombres descifrados
  * (los de otra clave no se muestran), la ronda compartida y el cierre de la lista. Devuelve cómo parar.
+ *
+ * El sondeo no corre para siempre: con la ronda compartida ya a la vista no hay nada más que mirar
+ * (el resultado de cada celular sale de la lista que ya tiene), y solo consulta mientras la pestaña
+ * está a la vista — con ella escondida se suelta, para no gastar el cupo diario del servicio, y al
+ * volver retoma solo.
  */
 export function seguirVivo(id: string, clave: string, servicio: string, e: EscuchaDeParticipante, dep: Dependencias = {}): { parar: () => void } {
   const poner = dep.setTimeout ?? setTimeout;
@@ -156,8 +169,35 @@ export function seguirVivo(id: string, clave: string, servicio: string, e: Escuc
   const vistos = new Set<number>();
   let ultimaRonda: RondaViva | null = null;
   let cerrada = false;
+  /** La ronda compartida ya llegó: a partir de acá el sondeo no se vuelve a pedir. */
+  let conRonda = false;
   let sondeo: ReturnType<typeof setTimeout> | undefined;
   let fallos = 0;
+
+  /** La pestaña está en segundo plano (en un entorno sin pestaña, como las pruebas de Node, no lo está). */
+  const oculta = (): boolean => typeof document !== "undefined" && document.hidden === true;
+
+  /** Agenda el próximo sondeo — y no agenda nada si ya no hay nada que mirar o nadie está mirando. */
+  const programar = (espera: number): void => {
+    if (parado || conRonda || oculta()) {
+      sondeo = undefined;
+      return;
+    }
+    sondeo = poner(mirar, espera);
+  };
+
+  /** La pestaña se esconde o vuelve: con ella escondida se suelta el sondeo, y al volver retoma enseguida. */
+  const alVisibilidad = (): void => {
+    if (parado) return;
+    if (oculta()) {
+      sacar(sondeo);
+      sondeo = undefined;
+      return;
+    }
+    if (sondeo !== undefined) return;
+    void mirar();
+  };
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", alVisibilidad);
 
   const mismaRonda = (a: RondaViva, b: RondaViva): boolean => a.r === b.r && a.k === b.k && a.randomness === b.randomness && a.listHash === b.listHash;
 
@@ -172,17 +212,19 @@ export function seguirVivo(id: string, clave: string, servicio: string, e: Escuc
       return;
     }
     if (v === null) {
-      // Un corte de red o un error suelto no saca a nadie: se vuelve a pedir, y recién tras varios seguidos se deja.
+      // Un corte de red o un error suelto no saca a nadie: la sala no dijo que se fue, así que se vuelve a
+      // pedir con espera creciente (3 s, el doble en cada falla, con tope de un minuto). Solo un 404/410
+      // de la sala da la partida por vencida: nunca por la red.
       fallos++;
-      if (fallos >= FALLOS_ANTES_DE_RENDIRSE) {
-        parado = true;
-        e.alVencida?.();
-        return;
-      }
-      sondeo = poner(mirar, SONDEO_PARTICIPANTE_MS);
+      e.alReconectando?.(fallos);
+      programar(Math.min(SONDEO_PARTICIPANTE_MS * 2 ** (fallos - 1), ESPERA_DE_REINTENTO_MAXIMA_MS));
       return;
     }
-    fallos = 0;
+    // Volvió la señal: la espera vuelve a lo normal y el aviso de reconexión se limpia.
+    if (fallos > 0) {
+      fallos = 0;
+      e.alReconecto?.();
+    }
     for (const { n, d } of v.nombres) {
       // Los que ya se avisaron no vuelven (el cursor manda, y un pedido repetido no repite el aviso).
       if (vistos.has(n)) continue;
@@ -207,13 +249,14 @@ export function seguirVivo(id: string, clave: string, servicio: string, e: Escuc
     }
     if (v.ronda && (!ultimaRonda || !mismaRonda(ultimaRonda, v.ronda))) {
       ultimaRonda = v.ronda;
+      conRonda = true;
       e.alRonda?.(v.ronda);
     }
     if (v.estado === "cerrada" && !cerrada) {
       cerrada = true;
       e.alCierre?.();
     }
-    if (!parado) sondeo = poner(mirar, SONDEO_PARTICIPANTE_MS);
+    programar(SONDEO_PARTICIPANTE_MS);
   };
 
   void mirar();
@@ -221,6 +264,7 @@ export function seguirVivo(id: string, clave: string, servicio: string, e: Escuc
     parar: (): void => {
       parado = true;
       sacar(sondeo);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", alVisibilidad);
     },
   };
 }
