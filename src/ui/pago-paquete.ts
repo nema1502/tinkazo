@@ -13,7 +13,7 @@ import {
   varsDelTotal,
 } from "../stellar/alta-oferta";
 import type { MotivoDelPago } from "../stellar/pago-con-saldo";
-import { TOPE_TOKEN_MS } from "../stellar/pollar-config";
+import { TOPE_TOKEN_MS, VENTANA_TOKEN_MS } from "../stellar/pollar-config";
 import { type SaldoDeDolares, alcanza, faltaPara } from "../stellar/saldo-dolares";
 import type { Texto } from "./cuenta-lista-estado";
 import { abrirDialogo, botonPrincipal, lineaDeEstado } from "./dialogo";
@@ -396,7 +396,7 @@ const TOPE_MS = 10_000;
  * va un segundo detrás de los dos, como en Dejá tu cuenta lista. Con 10 segundos, la wifi lenta de un stand daba error
  * de más.
  */
-const TOPE_SERVIDOR_MS = TOPE_TOKEN_MS + ESPERA_MS + 1_000;
+const TOPE_SERVIDOR_MS = Math.max(TOPE_TOKEN_MS, VENTANA_TOKEN_MS) + ESPERA_MS + 1_000;
 const SIN_SERVICIO: ErrorDeAlta = { ok: false, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 };
 
 function conTope<T>(p: Promise<T>, ms: number): Promise<T> {

@@ -49,9 +49,21 @@ export function leerMarcaPollar(almacen: Pick<Storage, "getItem">, name: Network
 }
 
 /**
- * Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token (`tokenDeSesion` de
- * `wallet-pollar.ts`). En un stand con la red lenta, verificarla puede tardar varios segundos, y alguien con un cupón
- * válido no tiene que ver «probá de nuevo». Vive acá, sin la billetera, para que el paso «Dejá tu cuenta lista» lo use
- * sin traerla.
+ * Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token en la primera mirada
+ * (`tokenDeSesion` de `wallet-pollar.ts`). En un stand con la red lenta, verificarla puede tardar varios segundos, y
+ * alguien con un cupón válido no tiene que ver «probá de nuevo». Vive acá, sin la billetera, para que el paso «Dejá tu
+ * cuenta lista» lo use sin traerla.
  */
 export const TOPE_TOKEN_MS = 8_000;
+
+/**
+ * Cuánto sigue esperando el token en total cuando la primera mirada vence y el kit dice que la sesión sigue abierta,
+ * pero todavía sin verificar: la ventana paciente (issue 88). Una sesión recién creada es justo la que puede tardar más
+ * de los 8 segundos de la primera mirada, y entregar `null` ahí tiraba a quien ya entró a «Entrar de nuevo».
+ *
+ * En cada vencido se vuelve a mirar la sesión (`getAuthState`): si el kit dice que ya no existe, el token sale con
+ * `null` al toque —ahí sí conviene entrar de nuevo—; si sigue abierta sin verificar, se espera de nuevo con espera
+ * creciente. Quien pide su propio tope más largo (la sala de campaña, `ESPERA_TOKEN_MS`) espera lo suyo: el esperado
+ * total es el más largo entre el tope pedido y esta ventana. Un vencimiento nunca toca la marca de la sesión.
+ */
+export const VENTANA_TOKEN_MS = 20_000;

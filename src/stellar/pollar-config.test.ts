@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { LEGACY_POLLAR_INTENT_KEY, hasPollarKey, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 
+describe("los topes de la espera del token", () => {
+  it("la primera espera no cambia: los que la componen en topes propios siguen enteros", async () => {
+    const { TOPE_TOKEN_MS } = await import("./pollar-config");
+    expect(TOPE_TOKEN_MS).toBe(8_000);
+  });
+
+  it("la ventana paciente existe, es finita y alcanza a un proveedor que verifica a los 10 segundos", async () => {
+    const { TOPE_TOKEN_MS, VENTANA_TOKEN_MS } = await import("./pollar-config");
+    expect(VENTANA_TOKEN_MS).toBeGreaterThan(TOPE_TOKEN_MS);
+    expect(VENTANA_TOKEN_MS).toBeGreaterThanOrEqual(10_000);
+    expect(VENTANA_TOKEN_MS).toBe(20_000);
+  });
+});
+
 describe("la llave de Pollar de cada red", () => {
   it("en Oficial vale solo la de Oficial y nunca cae a la de Prueba", () => {
     expect(pollarKeyFor("mainnet", { mainnetKey: "pub_oficial", testnetKey: "pub_prueba", legacyKey: "pub_vieja" })).toBe("pub_oficial");

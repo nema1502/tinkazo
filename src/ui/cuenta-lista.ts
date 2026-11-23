@@ -19,7 +19,7 @@ import type { Oferta, ProductoALaVenta } from "../stellar/alta-oferta";
 import { network } from "../stellar/config";
 import { mostrar, normalizar } from "../stellar/cupon-codigo";
 import { esDeRed } from "../stellar/errores";
-import { TOPE_TOKEN_MS } from "../stellar/pollar-config";
+import { TOPE_TOKEN_MS, VENTANA_TOKEN_MS } from "../stellar/pollar-config";
 import type { EstadoOficial, ResultadoDeActivar } from "../stellar/wallet-pollar";
 import { ocultarCorreo } from "./cuenta-estado";
 import {
@@ -283,7 +283,8 @@ const TOPE_LECTURA_MS = 10_000;
  * siempre deciden primero los de adentro: con la wifi lenta de un stand, un token de 7 segundos y un pedido de 4 terminan
  * bien y no dejan «Probar de nuevo».
  */
-export const TOPE_LECTURA_SERVIDOR_MS = TOPE_TOKEN_MS + ESPERA_MS + 1_000;
+// La lectura espera el token (con su ventana paciente de #88) y después el pedido: cubre el más largo de los dos topes del token.
+export const TOPE_LECTURA_SERVIDOR_MS = Math.max(TOPE_TOKEN_MS, VENTANA_TOKEN_MS) + ESPERA_MS + 1_000;
 /** Lo más que espera «Cerrar sesión» antes de cerrar el paso igual. */
 export const TOPE_CERRAR_MS = 12_000;
 /** Un toque en la principal no cuenta si cambió de acción hace menos que esto (o si el paso recién se abrió). */

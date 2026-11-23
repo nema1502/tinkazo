@@ -253,13 +253,20 @@ describe("retomar la sesión al cargar", () => {
     expect(datos.get("tinkazo.pollar.intent")).toBe("google");
   });
 
-  it("si el SDK no termina de leer en ocho segundos, se sigue sin cuenta y la marca queda", async () => {
+  it("si el SDK no termina de leer en la primera mirada, la retoma sigue paciente y la marca queda: solo al fin de la ventana entrega sin cuenta", async () => {
     vi.useFakeTimers();
     const datos = almacen({ "tinkazo.pollar.intent": "google" });
     h.ready = "nunca";
-    const { pollarWallet, LISTO_MS } = await modulo();
+    const { pollarWallet, LISTO_MS, VENTANA_RETOMA_MS } = await modulo();
     const r = pollarWallet.restore();
+    // A la primera mirada sin respuesta aún no hay cuenta entregada: la ventana sigue.
     await vi.advanceTimersByTimeAsync(LISTO_MS + 100);
+    let resuelto = false;
+    void r.then(() => { resuelto = true; });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(resuelto).toBe(false);
+    // Al fin de la ventana paciente entrega sin cuenta, sin borrar la marca.
+    await vi.advanceTimersByTimeAsync(VENTANA_RETOMA_MS);
     expect(await r).toBeNull();
     expect(datos.get("tinkazo.pollar.intent")).toBe("google");
   });
