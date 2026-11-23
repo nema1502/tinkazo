@@ -20,7 +20,8 @@ import { enPractica, sinGrabar } from "../ensayo-modo";
 import { enNavegadorDeApp as esDeApp } from "../navegador";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 import { hayCuentaGuardada } from "../stellar/cuenta-guardada";
-import { contarEntrada, tomarEntrada } from "../contar";
+import { tomarEntrada } from "../contar";
+import { contarEntradaConRed, contarPasoOficial } from "./contadores";
 import { crearChip } from "./cuenta-chip";
 import { MARCA_INGRESAR, MARCA_PRACTICAR, type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
 import { errorDeCodigo } from "./ingreso-errores";
@@ -635,8 +636,11 @@ function revisarLaCuentaOficial(origen: "entrada" | "retomar"): void {
     .then((m) => m.revisarCuentaOficial(origen))
     .then(
       (abrio) => {
-        if (abrio) entradaCallada = false;
-        else anunciarSiCallada();
+        if (abrio) {
+          entradaCallada = false;
+          // El contador del embudo: la etapa «se abrió» del paso de la cuenta (solo se abre en Oficial).
+          contarPasoOficial("abrio", network.name);
+        } else anunciarSiCallada();
       },
       () => {
         // El flujo mismo no bajó: la entrada se anuncia y se dice que hay que volver a cargar.
@@ -1931,7 +1935,8 @@ async function afterConnect(
   // lo distingue su etiqueta. Retomar una sesión no pasa por acá, y la vuelta
   // de Google la cuenta `wallet-pollar.ts`: la marca de ida ya no hace falta.
   tomarEntrada();
-  contarEntrada(pick === "guest" ? "test" : pick === "freighter" ? "freighter" : wallet.label === "Email" ? "email" : "google");
+  // La red va con la entrada: Google en Prueba y Google en Oficial se suman por separado (issue #83).
+  contarEntradaConRed(pick === "guest" ? "test" : pick === "freighter" ? "freighter" : wallet.label === "Email" ? "email" : "google", network.name);
   // Con `?grifo=0` la cuenta de prueba nace vacía: no se dice que tiene fondos.
   if (wallet.kind === "guest") notice(t(grifoApagado ? "guestReadyOff" : "guestReady"), false);
   // El diálogo no se cierra hasta saber si la cuenta puede pagar. Cerrarlo y
