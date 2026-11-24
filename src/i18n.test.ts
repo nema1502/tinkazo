@@ -638,7 +638,7 @@ describe("el video de la portada", () => {
     const segundos = duracionDelVideo();
     for (const idioma of ["es", "en"] as const) {
       const pista = readFileSync(join(carpeta, `llamita-explica.${idioma}.vtt`), "utf8");
-      expect(pista.trim().split("\n")[0]).toBe("WEBVTT");
+      expect(pista.trim().split(/\r?\n/)[0]).toBe("WEBVTT");
       expect(pista, `pista ${idioma}`).not.toMatch(prohibido);
       const finales = [...pista.matchAll(/--> (\d+):(\d+):(\d+)\.(\d+)/g)].map(
         (m) => Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(`0.${m[4]}`),
