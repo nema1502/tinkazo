@@ -27,6 +27,7 @@ describe("basesAutomaticas", () => {
         "Recibir el premio es gratis.",
         "En la pantalla del evento se ve tu primer nombre y la inicial de tu apellido. Tu correo se usa solo para avisarte si ganás.",
         "Alcancía Andina pone los premios y responde por ellos. Tinkazo es la herramienta que hace el sorteo.",
+        "La lista la sella la cuenta que organiza esta campaña, y solo vale el sello de la lista de personas anotadas que se ve en la pantalla. Un sello de otra cuenta o de otra lista no cuenta para esta campaña.",
       ].join("\n"),
     );
   });
@@ -41,6 +42,7 @@ describe("basesAutomaticas", () => {
         "Receiving the prize is free.",
         "The event screen shows your first name and the initial of your last name. Your email is used only to tell you if you win.",
         "Alcancía Andina provides the prizes and answers for them. Tinkazo is the tool that runs the draw.",
+        "The list is sealed by the account that runs this campaign, and only a seal of the list of signed-up people shown on the screen counts. A seal from another account or of another list does not count for this campaign.",
       ].join("\n"),
     );
   });
@@ -55,10 +57,21 @@ describe("basesAutomaticas", () => {
     expect(basesAutomaticas(datos(), dic).es.split("\n")[4]).toBe("Recibir el premio es gratis.");
   });
 
-  it("cada idioma tiene los siete renglones y entra en el tope del modelo", () => {
+  it("el último renglón dice quién sella la lista, igual que los Términos, en los dos idiomas", () => {
+    const b = basesAutomaticas(datos(), dic);
+    expect(b.es.split("\n")[7]).toBe(dic("es", "ccBase8"));
+    expect(b.en.split("\n")[7]).toBe(dic("en", "ccBase8"));
+    expect(b.es).toContain("La lista la sella la cuenta que organiza esta campaña");
+    expect(b.en).toContain("The list is sealed by the account that runs this campaign");
+    // Dice lo que el servicio garantiza: un sello de otra cuenta o de otra lista no cuenta.
+    expect(b.es).toContain("no cuenta para esta campaña");
+    expect(b.en).toContain("does not count for this campaign");
+  });
+
+  it("cada idioma tiene los ocho renglones y entra en el tope del modelo", () => {
     const b = basesAutomaticas(datos({ marca: "x".repeat(40), costo: { es: "0,50", en: "0.50" } }), dic);
-    expect(b.es.split("\n")).toHaveLength(7);
-    expect(b.en.split("\n")).toHaveLength(7);
+    expect(b.es.split("\n")).toHaveLength(8);
+    expect(b.en.split("\n")).toHaveLength(8);
     expect(b.es.length).toBeLessThanOrEqual(6000);
     expect(b.en.length).toBeLessThanOrEqual(6000);
   });

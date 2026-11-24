@@ -37,6 +37,7 @@ export const CLAVES_DE_LAS_BASES = [
   "ccBase5Costo",
   "ccBase6",
   "ccBase7",
+  "ccBase8",
 ] as const;
 
 function renglones(d: DatosDeLasBases, dic: Diccionario, idioma: Lang): string {
@@ -57,6 +58,7 @@ function renglones(d: DatosDeLasBases, dic: Diccionario, idioma: Lang): string {
     quinto,
     dicho("ccBase6"),
     dicho("ccBase7"),
+    dicho("ccBase8"),
   ].join("\n");
 }
 
