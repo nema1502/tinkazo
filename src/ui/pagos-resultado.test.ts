@@ -62,7 +62,19 @@ describe("el panel de ganadores en el resultado", () => {
     mostrarPagosDelResultado();
     const aviso = document.querySelector('[data-pagos="sin-cuentas"]');
     expect(aviso, "el aviso de la cuenta que falta").not.toBeNull();
-    expect(aviso?.textContent).toContain("VITE_PAGOS_CUENTAS");
+    expect(aviso?.textContent).toBe(TEXTOS_PAGOS.es.pgSinCuentas);
+    expect(aviso?.textContent).not.toContain("VITE_");
+  });
+
+  it("con una cuenta de evento buena y otra con error, avisa igual y no manda a recargar", async () => {
+    vi.stubEnv("VITE_PAGOS", "1");
+    vi.stubEnv("VITE_PAGOS_CUENTAS", `${cuenta()}, 1x`);
+    sortear([cuenta()], [0]);
+    mostrarPagosDelResultado();
+    const aviso = document.querySelector('[data-pagos="cuentas-descartadas"]');
+    expect(aviso, "el aviso de la cuenta descartada").not.toBeNull();
+    expect(aviso?.textContent).toBe(TEXTOS_PAGOS.es.pgCuentasDescartadas);
+    expect(aviso?.textContent).not.toMatch(/recarg/i);
   });
 
   it("con la bandera prendida y ganadores con cuenta, muestra una fila por ganador y mira la red de cada cuenta", async () => {

@@ -1,6 +1,7 @@
 import { roundTime } from "../protocol/quicknet";
 import { app } from "../state";
 import { sinGrabar } from "../ensayo-modo";
+import { getLang, textos } from "../idioma";
 import { network } from "../stellar/config";
 import {
   activoDePagos,
@@ -71,11 +72,12 @@ export function mostrarPagosDelResultado(): void {
   });
   // Un typo en la lista de cuentas que pagan no se paga solo: si la bandera está prendida y la
   // configuración trae algo que no es una dirección, se dice en el panel (montarGanadores rellena
-  // la caja: el aviso va después, para que no lo borre).
-  if (cuentasDescartadasDe() > 0 && cuentasQuePagan().length === 0) {
+  // la caja: el aviso va después, para que no lo borre). Avisa también cuando se descarta solo una de varias.
+  if (cuentasDescartadasDe() > 0) {
+    const ninguna = cuentasQuePagan().length === 0;
     const aviso = document.createElement("p");
-    aviso.dataset.pagos = "sin-cuentas";
-    aviso.textContent = "No hay ninguna cuenta de evento válida en VITE_PAGOS_CUENTAS: arreglo la configuración y recargo.";
+    aviso.dataset.pagos = ninguna ? "sin-cuentas" : "cuentas-descartadas";
+    aviso.textContent = textos(getLang())[ninguna ? "pgSinCuentas" : "pgCuentasDescartadas"] ?? "";
     caja.append(aviso);
   }
   caja.style.display = "block";
