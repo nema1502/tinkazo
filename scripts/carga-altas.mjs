@@ -73,10 +73,23 @@ const opt = (nombre, defecto) => {
   }
   return valor;
 };
-const ALTAS = Math.max(1, Number(opt("altas", "150")));
-const CAE_EN = Math.max(0, Number(opt("proveedor-cae-en", "100")));
-const EN_CORTE = Math.max(1, Number(opt("en-corte", "5")));
-const ESPERA_MS = Math.max(0, Number(opt("espera-ms", "25")));
+/**
+ * Una bandera numérica: un entero de `minimo` para arriba. Un texto que no es un número no se interpreta (con Number daría
+ * NaN y la corrida pasaría sin probar nada): el guion sale con 2 y dice cuál bandera estaba mal.
+ */
+const entero = (nombre, defecto, minimo) => {
+  const texto = String(opt(nombre, defecto));
+  const n = Number(texto);
+  if (!/^\d+$/.test(texto) || !Number.isSafeInteger(n) || n < minimo) {
+    process.stderr.write(`--${nombre} tiene que ser un número entero de ${minimo} para arriba, y llegó "${texto}"\n`);
+    process.exit(2);
+  }
+  return n;
+};
+const ALTAS = entero("altas", "150", 1);
+const CAE_EN = entero("proveedor-cae-en", "100", 0);
+const EN_CORTE = entero("en-corte", "5", 1);
+const ESPERA_MS = entero("espera-ms", "25", 0);
 const IP = String(opt("ip", "190.129.10.20"));
 
 /** La raíz del checkout, como ruta de archivo: de acá salen las rutas que puenten los hooks. */
@@ -477,7 +490,7 @@ if (buenas >= 2) {
     const codigo = clasificar(r.status, await r.json());
     anotar(codigo);
     if (codigo === "200 ya") sondas.ya += 1;
-    registrar(`sonda de reingreso: persona ${n} otra vez → ${codigo} (el celular dice «Listo, ya estabas»)`);
+    registrar(`sonda de reingreso: persona ${n} otra vez → ${codigo} (el celular dice «Ya estabas en la lista»)`);
   }
 }
 if (buenas >= 1) {
@@ -492,7 +505,7 @@ if (buenas >= 1) {
   const codigo = clasificar(respuesta.status, await respuesta.json());
   anotar(codigo);
   if (codigo === "409 cerrada") sondas.cerrada += 1;
-  registrar(`sonda de sala cerrada: la persona ${n} → ${codigo} (el celular dice «cerró»)`);
+  registrar(`sonda de sala cerrada: la persona ${n} → ${codigo} (el celular dice «La inscripción ya cerró.»)`);
   await servicio.pedir(`/v1/sala/${sala.id}/campana/fase`, {
     metodo: "PUT",
     cuerpo: { fase: "abierta" },
@@ -541,9 +554,12 @@ registrar(`ultima linea: el JSON con los conteos`);
 registrar(``);
 consoleReal(JSON.stringify(resumen, null, 2) + "\n");
 
-// La corrida queda coherente si: todo lo que el usuario iba a anotar está en
-// sala, el corte se recupera entero y las dos sondas de reingreso contestaron
-// «ya». Cualquier otra salida sale con código 1 y el detalle en el relato.
+// La corrida queda coherente si: salieron las altas pedidas (con más de las que caben en la sala no salen, y el resumen
+// lo muestra con sus códigos), todo lo anotado está en la sala, el corte se recupera entero y las dos sondas de
+// reingreso contestaron «ya». Cualquier otra salida sale con código 1 y el detalle en el relato.
 const estable =
-  totalFinal === buenas && (CAE_EN === 0 ? true : vueltas === enCorte) && sondas.ya === (buenas >= 2 ? 2 : 0);
+  buenas >= ALTAS &&
+  totalFinal === buenas &&
+  (CAE_EN === 0 ? true : vueltas === enCorte) &&
+  sondas.ya === (buenas >= 2 ? 2 : 0);
 process.exitCode = estable ? 0 : 1;
