@@ -7,7 +7,13 @@
  * X y corrige este comentario con lo que vea).
  * Va aparte, sin la página, para poder probarlo.
  */
-export function enNavegadorDeApp(ua: string): boolean {
+export function enNavegadorDeApp(
+  ua: string,
+  pantallaDeInicio: boolean = typeof navigator !== "undefined" && (navigator as { standalone?: boolean }).standalone === true,
+): boolean {
+  // Tinkazo instalado en la pantalla de inicio de un iPhone corre sin la marca Safari/ y se tomaría por la vista web de una
+  // app. No lo es: es el sitio mismo, así que Google se ofrece como siempre.
+  if (pantallaDeInicio) return false;
   const aplicaciones = /FBAN|FBAV|FB_IAB|Instagram|LinkedInApp|BytedanceWebview|musical_ly|TikTok/iu;
   const otras = /Snapchat|Pinterest|MicroMessenger|Telegram|\bGSA\/|\bLine\/|; wv\)/iu;
   if (aplicaciones.test(ua) || otras.test(ua)) return true;
