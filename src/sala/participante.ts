@@ -26,6 +26,10 @@ export interface Dependencias {
   fetch?: typeof fetch;
   setTimeout?: typeof setTimeout;
   clearTimeout?: typeof clearTimeout;
+  /** Un número entre 0 y 1, para que 150 celulares que recuperan la señal a la vez no pidan en el mismo segundo. Por defecto, Math.random. */
+  azar?: () => number;
+  /** Donde se oye que volvió la señal (el evento online). Por defecto, la ventana del navegador; sin ventana, como en Node, no se escucha nada. */
+  red?: Pick<EventTarget, "addEventListener" | "removeEventListener">;
   /** La llave de este celular. Por defecto, la que guarda el navegador para esa sala; en las pruebas, una por celular. */
   llave?: string;
 }
@@ -159,7 +163,8 @@ export interface EscuchaDeParticipante {
  * El sondeo no corre para siempre: con la ronda compartida ya a la vista no hay nada más que mirar
  * (el resultado de cada celular sale de la lista que ya tiene), y solo consulta mientras la pestaña
  * está a la vista — con ella escondida se suelta, para no gastar el cupo diario del servicio, y al
- * volver retoma solo.
+ * volver retoma solo. Si la red falla reintenta con espera creciente, y cuando el navegador avisa que volvió la
+ * señal pide enseguida en vez de esperar lo que quede del reintento (que puede ser un minuto).
  */
 export function seguirVivo(id: string, clave: string, servicio: string, e: EscuchaDeParticipante, dep: Dependencias = {}): { parar: () => void } {
   const poner = dep.setTimeout ?? setTimeout;
@@ -173,12 +178,17 @@ export function seguirVivo(id: string, clave: string, servicio: string, e: Escuc
   let conRonda = false;
   let sondeo: ReturnType<typeof setTimeout> | undefined;
   let fallos = 0;
+  /** El número del último pedido que salió: si sale otro con uno en camino, la respuesta del viejo se descarta. */
+  let epoca = 0;
+  const azar = dep.azar ?? Math.random;
 
   /** La pestaña está en segundo plano (en un entorno sin pestaña, como las pruebas de Node, no lo está). */
   const oculta = (): boolean => typeof document !== "undefined" && document.hidden === true;
 
   /** Agenda el próximo sondeo — y no agenda nada si ya no hay nada que mirar o nadie está mirando. */
   const programar = (espera: number): void => {
+    // Siempre hay una sola cadena: lo que estuviera agendado se cancela antes de agendar de nuevo.
+    sacar(sondeo);
     if (parado || conRonda || oculta()) {
       sondeo = undefined;
       return;
@@ -199,12 +209,27 @@ export function seguirVivo(id: string, clave: string, servicio: string, e: Escuc
   };
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", alVisibilidad);
 
+  /**
+   * Volvió la señal: no se espera lo que quede del reintento (hasta un minuto) y se pide enseguida, con un poco de azar
+   * para que 150 celulares que recuperan el Wi-Fi a la vez no pidan en el mismo segundo.
+   */
+  const alRed = (): void => {
+    if (parado || conRonda || oculta()) return;
+    sacar(sondeo);
+    sondeo = poner(mirar, Math.floor(azar() * 1000));
+  };
+  const red: Pick<EventTarget, "addEventListener" | "removeEventListener"> | undefined = dep.red ?? (typeof window !== "undefined" ? window : undefined);
+  red?.addEventListener("online", alRed);
+
   const mismaRonda = (a: RondaViva, b: RondaViva): boolean => a.r === b.r && a.k === b.k && a.randomness === b.randomness && a.listHash === b.listHash;
 
   const mirar = async (): Promise<void> => {
     if (parado) return;
+    // Un pedido nuevo deja sin efecto al que esté en camino (volvió la pestaña o la señal con uno colgado): su respuesta,
+    // si llega, se descarta. Así nunca hay dos cadenas de sondeo ni un nombre avisado dos veces.
+    const mio = ++epoca;
     const v = await leerVivo(id, desde, servicio, dep);
-    if (parado) return;
+    if (parado || mio !== epoca) return;
     if (v === "no-existe") {
       // La sala contestó que ya no está: se cerró o venció, y eso no vuelve.
       parado = true;
@@ -229,7 +254,7 @@ export function seguirVivo(id: string, clave: string, servicio: string, e: Escuc
       // Los que ya se avisaron no vuelven (el cursor manda, y un pedido repetido no repite el aviso).
       if (vistos.has(n)) continue;
       const nombre = await descifrarNombre(clave, d);
-      if (parado) return;
+      if (parado || mio !== epoca) return;
       if (nombre === null) continue;
       vistos.add(n);
       desde = Math.max(desde, n);
@@ -265,6 +290,7 @@ export function seguirVivo(id: string, clave: string, servicio: string, e: Escuc
       parado = true;
       sacar(sondeo);
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", alVisibilidad);
+      red?.removeEventListener("online", alRed);
     },
   };
 }

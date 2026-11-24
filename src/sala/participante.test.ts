@@ -141,4 +141,86 @@ describe("el sondeo del participante", () => {
     expect(alReconecto).toHaveBeenCalledTimes(1);
     s.parar();
   });
+
+  it("si la pestaña se esconde y vuelve con un pedido en camino, queda una sola cadena de sondeo", async () => {
+    let llamadas = 0;
+    let contestarElPrimero: (r: Response) => void = () => {};
+    const vacia = (): Response => respuesta({ hay: 0, estado: "abierta", ronda: null, ns: [], nombres: [] });
+    const f = vi.fn().mockImplementation(() => {
+      llamadas++;
+      // El primer pedido queda colgado, como en una red lenta.
+      if (llamadas === 1) return new Promise<Response>((res) => (contestarElPrimero = res));
+      return Promise.resolve(vacia());
+    });
+    const s = seguirVivo(SALA, "c".repeat(22), SERVICIO, { alNombre: vi.fn() }, { fetch: f });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(f).toHaveBeenCalledTimes(1);
+
+    // Se esconde y vuelve a verse con ese pedido todavía en camino: sale uno nuevo.
+    documento.cambiar(true);
+    documento.cambiar(false);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(f).toHaveBeenCalledTimes(2);
+
+    // El primero contesta tarde: su respuesta se descarta y no agenda nada.
+    contestarElPrimero(vacia());
+    await vi.advanceTimersByTimeAsync(10);
+    const hastaAca = f.mock.calls.length;
+
+    // Una sola cadena: un pedido cada 3 s. Con dos cadenas serían ocho.
+    await vi.advanceTimersByTimeAsync(SONDEO_PARTICIPANTE_MS * 4);
+    expect(f.mock.calls.length - hastaAca).toBe(4);
+    s.parar();
+  });
+
+  it("al volver la señal no espera lo que quede del reintento: pide enseguida, con un poco de azar", async () => {
+    let sinSenal = true;
+    const f = vi.fn().mockImplementation(async () => {
+      if (sinSenal) throw new TypeError("Failed to fetch");
+      return respuesta({ hay: 0, estado: "abierta", ronda: null, ns: [], nombres: [] });
+    });
+    const red = new EventTarget();
+    const alReconecto = vi.fn();
+    const s = seguirVivo(SALA, "c".repeat(22), SERVICIO, { alNombre: vi.fn(), alReconecto }, { fetch: f, red, azar: () => 0.5 });
+    await vi.advanceTimersByTimeAsync(10);
+    // Seis fallas seguidas: el próximo reintento quedaría a un minuto.
+    for (const espera of [3_000, 6_000, 12_000, 24_000, 48_000]) await vi.advanceTimersByTimeAsync(espera);
+    expect(f).toHaveBeenCalledTimes(6);
+
+    sinSenal = false;
+    red.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(499);
+    expect(f, "con el azar en 0,5 el pedido sale a los 500 ms, no antes").toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(f).toHaveBeenCalledTimes(7);
+    expect(alReconecto).toHaveBeenCalledTimes(1);
+
+    // Lo que había agendado para dentro de un minuto ya no está: el próximo pedido sale a los 3 s.
+    await vi.advanceTimersByTimeAsync(SONDEO_PARTICIPANTE_MS);
+    expect(f).toHaveBeenCalledTimes(8);
+    s.parar();
+  });
+
+  it("con la pestaña oculta, volver la señal no pide nada", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta({ hay: 0, estado: "abierta", ronda: null, ns: [], nombres: [] }));
+    const red = new EventTarget();
+    const s = seguirVivo(SALA, "c".repeat(22), SERVICIO, { alNombre: vi.fn() }, { fetch: f, red, azar: () => 0 });
+    await vi.advanceTimersByTimeAsync(10);
+    documento.cambiar(true);
+    red.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(SONDEO_PARTICIPANTE_MS * 3);
+    expect(f).toHaveBeenCalledTimes(1);
+    s.parar();
+  });
+
+  it("al parar no queda la escucha de la señal pegada", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta({ hay: 0, estado: "abierta", ronda: null, ns: [], nombres: [] }));
+    const red = new EventTarget();
+    const s = seguirVivo(SALA, "c".repeat(22), SERVICIO, { alNombre: vi.fn() }, { fetch: f, red, azar: () => 0 });
+    await vi.advanceTimersByTimeAsync(10);
+    s.parar();
+    red.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
 });
