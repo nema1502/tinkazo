@@ -54,16 +54,16 @@ export function activoDePagos(red: NetworkName = network.name, propio: unknown =
   return leerActivo(propio) ?? USDC_TESTNET;
 }
 
-/**
- * Las cuentas que pagan además de quien selló, separadas por comas (`VITE_PAGOS_CUENTAS`): la cuenta de un evento
- * que paga los premios sin ser la que selló los sorteos. Las que no son una dirección se descartan.
- */
 /** Cuántos elementos de la lista cruda no son una dirección válida: el typo de una cuenta de evento no es silencioso. */
 export function cuentasDescartadasDe(crudo: unknown = import.meta.env.VITE_PAGOS_CUENTAS): number {
   if (typeof crudo !== "string") return 0;
   return [...new Set(crudo.split(/[\s,;]+/).filter((e) => e.length > 0 && !esDireccionG(e)))].length;
 }
 
+/**
+ * Las cuentas que pagan además de quien selló, separadas por comas (`VITE_PAGOS_CUENTAS`): la cuenta de un evento
+ * que paga los premios sin ser la que selló los sorteos. Las que no son una dirección se descartan.
+ */
 export function cuentasQuePagan(crudo: unknown = import.meta.env.VITE_PAGOS_CUENTAS): string[] {
   if (typeof crudo !== "string") return [];
   return [...new Set(crudo.split(/[\s,;]+/).filter(esDireccionG))];
