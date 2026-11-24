@@ -2,8 +2,7 @@
 /**
  * El video corregido de la portada (issue #122), desde cero y determinista.
  *
- * Escenas armadas con el lenguaje visual de los juegos, según la skill
- * `.agents/skills/video-diseno/SKILL.md`: el atardecer de `carrera.ts`
+ * Escenas armadas con el lenguaje visual de los juegos, según las reglas visuales de la casa: el atardecer de `carrera.ts`
  (`pintarCielo`) por franjas, la luna crema arriba a la derecha, montañas a
  * dos capas, estrellas que titilan con sembrado `tk.rng` (nada de
  * `Math.random`), tarjetas con borde y sombra dura, y la llamita en magenta
@@ -76,7 +75,7 @@ for (const escena of ESCENAS) {
 const SEGUNDOS = acumulado;
 const CUADROS = Math.round(SEGUNDOS * FPS);
 
-/** El prng sembrado de la skill: misma semilla, misma secuencia, siempre. */
+/** El prng sembrado: misma semilla, misma secuencia, siempre. */
 const SEMILLA = 20261120;
 function sembrado() {
   let s = SEMILLA >>> 0;
@@ -171,7 +170,7 @@ export function fondo() {
 
 const TRAZO = 'fill="#ff5cb3" stroke="#191919" stroke-width="5.5" stroke-linejoin="round"';
 
-/** La llamita dibujada de cuerpo entero (patas incluidas), como pide la skill. */
+/** La llamita dibujada de cuerpo entero (patas incluidas), como pide la marca. */
 function llamitaSvg() {
   return `<svg class="llamita" width="128" height="160" viewBox="-10 -44 128 160" aria-hidden="true">
     <g class="patas g1">
@@ -319,7 +318,7 @@ export function pagina(jsonFondo, jsonEscenas) {
   .estrella { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #fff; }
   .confeti { position: absolute; top: 0; width: 11px; height: 17px; border-radius: 3px; opacity: 0; }
 
-  /* tarjetas y UI de la skill */
+  /* tarjetas y UI de la marca */
   .kicker { font-family: "Liberation Mono", monospace; font-size: 17px; text-transform: uppercase;
     letter-spacing: .18em; color: var(--muted); font-weight: 600; }
   .tarjeta { background: var(--card); border: 3px solid var(--ink); box-shadow: 8px 8px 0 rgba(10, 6, 28, .7);
