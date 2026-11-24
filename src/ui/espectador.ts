@@ -864,6 +864,9 @@ export function abrirParticipante(d: DatosParticipante, lang: Lang = getLang()):
         : nombres.size === 0
           ? t("jiPEstadoEntra")
           : "";
+    // Si el formulario ya está armado no se rehace: rehacerlo (un corte de red, un nombre nuevo en la lista) borra lo que
+    // la persona está escribiendo y le cierra el teclado. Solo cambió el renglón de estado, que ya se puso arriba.
+    if (cuerpo.querySelector(".ji-p-form")) return;
     // El formulario para sumarse, con el nombre filtrado acá mismo: lo que la pantalla va a
     // descartar no sale del celular.
     cuerpo.replaceChildren();
