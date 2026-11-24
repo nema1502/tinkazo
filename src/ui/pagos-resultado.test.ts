@@ -159,7 +159,7 @@ describe("los textos y la página", () => {
   });
 
   it("cada texto se usa en alguna parte, y cada clave que usa el código existe", () => {
-    const fuentes = [dir("src/ui/panel-ganadores.ts"), dir("src/ui/pagar-premio.ts"), dir("verificar.html")].join("\n");
+    const fuentes = [dir("src/ui/panel-ganadores.ts"), dir("src/ui/pagar-premio.ts"), dir("src/ui/pagos-resultado.ts"), dir("verificar.html")].join("\n");
     const usadas = new Set([...fuentes.matchAll(/["'](pg[A-Z][A-Za-z0-9]*)["']/g)].map((m) => m[1] as string));
     for (const k of Object.keys(TEXTOS_PAGOS.es)) expect(usadas.has(k), `sin uso: ${k}`).toBe(true);
     for (const k of usadas) expect(TEXTOS_PAGOS.es[k], `sin texto: ${k}`).toBeTruthy();
