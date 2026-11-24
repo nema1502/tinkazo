@@ -35,4 +35,10 @@ describe("el navegador de una app, donde Google no deja entrar", () => {
   ])("%s: no", (_, ua) => {
     expect(enNavegadorDeApp(ua)).toBe(false);
   });
+
+  it("Tinkazo instalado en la pantalla de inicio del iPhone no cuenta como app", () => {
+    const ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+    expect(enNavegadorDeApp(ua, false)).toBe(true);
+    expect(enNavegadorDeApp(ua, true)).toBe(false);
+  });
 });
