@@ -484,7 +484,7 @@ export const T: Record<Lang, Dict> = {
     p2SinSello: "Lista cerrada, sin sello",
     srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Desde Luma",
     // Debajo del botón de sellar cuando no hay cuenta (que dice "Entrar para sellar"): lo que tranquiliza a quien organiza.
-    sellarSinCuenta: "Tu gente no necesita crear cuenta.",
+    sellarSinCuenta: "Tu gente no necesita crear cuenta, salvo en una campaña con premio: ahí cada persona entra con su cuenta de Google.",
     // Con una lista de equipos, cada uno ya se anotó con la cuenta de su encargado (src/equipos/textos.ts, eqB).
     sellarSinCuentaEquipos: "Cada equipo ya se anotó con la cuenta de su encargado.",
     // Junto al cuadro, solo con una lista de equipos: lo que se ve en cada renglón.
@@ -1401,7 +1401,7 @@ export const T: Record<Lang, Dict> = {
     como1B: "Copiala de WhatsApp o de tu hoja de cálculo y tocá Pegar lista.",
     como2T: "Sellala",
     como2B: "Queda cerrada: desde ahí nadie entra ni sale sin que se note.",
-    como2N: "Para sellar entrás con tu cuenta. Tu gente no necesita crear cuenta. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.",
+    como2N: "Para sellar entrás con tu cuenta. Tu gente no necesita crear cuenta. Solamente piden una cuenta el registro de equipos de un evento con cupón (quien anota a su equipo entra con Google, porque el cupón va a esa cuenta) y la campaña con premio (cada persona entra una sola vez con su cuenta de Google, y el premio le llega a ella).",
     como3T: "Esperá cerca de un minuto y lanzá",
     como3B: "Sale un número que nadie conoce, ni vos.",
     como3N: "¿Hay proyector? Tocá Mostrar la espera en grande.",
@@ -1850,7 +1850,7 @@ export const T: Record<Lang, Dict> = {
     cfH1: "Cinco pasos, y cada uno se puede comprobar.",
     cfLead: "Así sale un ganador en Tinkazo, sin jerga. Si querés el detalle técnico, está en el protocolo y en la página de seguridad.",
     cf1t: "Juntás la lista",
-    cf1b: "Pegás los nombres o subís el CSV de Luma o de cualquier hoja de cálculo. Antes de sellar, la podés mostrar a la sala con un QR, para que cada uno se busque en su celular y avise si falta alguien o hay repetidos. Para verse ahí no necesitan nada: escanean el QR y escriben su nombre, sin cuenta ni registro, y para comprobar el resultado tampoco hace falta nada. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.",
+    cf1b: "Pegás los nombres o subís el CSV de Luma o de cualquier hoja de cálculo. Antes de sellar, la podés mostrar a la sala con un QR, para que cada uno se busque en su celular y avise si falta alguien o hay repetidos. Para verse ahí no necesitan nada: escanean el QR y escriben su nombre, sin cuenta ni registro, y para comprobar el resultado tampoco hace falta nada. Solamente piden una cuenta el registro de equipos de un evento con cupón (quien anota a su equipo entra con Google, porque el cupón va a esa cuenta) y la campaña con premio (cada persona entra una sola vez con su cuenta de Google, y el premio le llega a ella).",
     cf2t: "La lista se sella",
     cf2b: "Se le calcula una huella, como la huella digital de un archivo: si cambia una letra, cambia toda. La huella y la hora quedan grabadas en Stellar.",
     cf3t: "Se elige un número del futuro",
@@ -3647,7 +3647,7 @@ export const T: Record<Lang, Dict> = {
     p2SinSello: "List closed, no seal",
     srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "From Luma",
     // Under the seal button when there is no account: it says what is missing, and the button is aria-disabled.
-    sellarSinCuenta: "Your people don't need an account.",
+    sellarSinCuenta: "Your people don't need an account, except in a campaign with a prize: there each person signs in with their Google account.",
     sellarSinCuentaEquipos: "Each team already signed up with its lead's account.",
     listaCuentaNotaEquipos: "Each line is one team's account. Their names are below.",
     histTitle: "My draws",
@@ -4514,7 +4514,7 @@ export const T: Record<Lang, Dict> = {
     como1B: "Copy it from WhatsApp or your spreadsheet and tap Paste list.",
     como2T: "Seal it",
     como2B: "It's locked: from then on nobody gets in or out unnoticed.",
-    como2N: "To seal, you sign in. Your people don't need an account. Only an event's team registration with a coupon needs an account: whoever signs up their team signs in with Google, because the coupon goes to that account.",
+    como2N: "To seal, you sign in. Your people don't need an account. Only an event's team registration with a coupon (whoever signs up their team signs in with Google, because the coupon goes to that account) and a campaign with a prize (each person signs in once with their Google account, and the prize goes to them) need an account.",
     como3T: "Wait about a minute and run it",
     como3B: "A number nobody knows comes out, not even you.",
     como3N: "Have a projector? Tap Show the wait on the big screen.",
@@ -4960,7 +4960,7 @@ export const T: Record<Lang, Dict> = {
     cfH1: "Five steps, and every one of them can be checked.",
     cfLead: "This is how a winner comes out in Tinkazo, without jargon. For the technical detail, see the protocol and the security page.",
     cf1t: "You bring the list",
-    cf1b: "Paste the names or upload a CSV from Luma or any spreadsheet. Before sealing, you can show it to the room with a QR, so everyone can find their name on their phone and speak up if someone is missing or listed twice. To show up there they need nothing: they scan the QR and type their name, no account or sign-up, and checking the result needs nothing either. Only an event's team registration with a coupon needs an account: whoever signs up their team signs in with Google, because the coupon goes to that account.",
+    cf1b: "Paste the names or upload a CSV from Luma or any spreadsheet. Before sealing, you can show it to the room with a QR, so everyone can find their name on their phone and speak up if someone is missing or listed twice. To show up there they need nothing: they scan the QR and type their name, no account or sign-up, and checking the result needs nothing either. Only an event's team registration with a coupon (whoever signs up their team signs in with Google, because the coupon goes to that account) and a campaign with a prize (each person signs in once with their Google account, and the prize goes to them) need an account.",
     cf2t: "The list gets sealed",
     cf2b: "It gets a fingerprint, like a file's: change one letter and the whole thing changes. The fingerprint and the time are recorded on Stellar.",
     cf3t: "A number from the future is picked",

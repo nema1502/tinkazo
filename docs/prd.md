@@ -23,7 +23,7 @@ Toda comunidad hace sorteos: libros, licencias, entradas, swag. Las herramientas
 
 Tinkazo separa el show de la verdad. El show es una carrera de llamas o una ruleta en pantalla grande. La verdad es matemática: la lista de participantes se sella con un hash antes de que exista la semilla; la semilla la publica un faro público de aleatoriedad que ni quien organiza ni Tinkazo pueden elegir; el ganador es una función determinista de ambos. Con Stellar, el sello y el resultado quedan anclados en una red pública con timestamp, y un contrato verifica por sí mismo la firma del faro. Cualquiera puede leer la cadena y recomputar con sus propias herramientas.
 
-La verificación es gratis siempre. Anclar en Stellar cuesta centavos y lo paga el organizador. En el sorteo clásico a los participantes no se les pide cuenta ni wallet, y comprobar un resultado tampoco pide nada. La excepción es el registro de equipos de un evento con cupones: ahí cada equipo entra con su cuenta de Stellar (con Google), porque el cupón va a esa cuenta y la lista sellada son las cuentas con cupón.
+La verificación es gratis siempre. Anclar en Stellar cuesta centavos y lo paga el organizador. En el sorteo clásico a los participantes no se les pide cuenta ni wallet, y comprobar un resultado tampoco pide nada. La excepción es el registro de equipos de un evento con cupones: ahí cada equipo entra con su cuenta de Stellar (con Google), porque el cupón va a esa cuenta y la lista sellada son las cuentas con cupón. La otra excepción es la campaña con premio de una empresa: cada persona entra una sola vez con su cuenta de Google, y la lista sellada son las cuentas anotadas, sin nombres.
 
 ## 2. Usuario
 
@@ -74,7 +74,7 @@ Ana recibe el enlace de comprobante. Abre la página de verificación, que lee e
 - **Contrato**, El contrato Soroban de Tinkazo en Stellar. Guarda Sellos y Registros y verifica la firma del Faro.
 - **Anclaje**, Un Sorteo cuyo Sello y Registro viven en el Contrato. Lo opuesto es **Modo libre**: el mismo Protocolo, sin Contrato, sellado en el navegador.
 - **Organizador**, Quien crea el Sorteo. En Anclaje, la cuenta de Stellar que firma el Sello.
-- **Participante**, Cada entrada de la Lista canónica. En el sorteo clásico nunca necesita cuenta ni wallet. La excepción es el registro de equipos de un evento con cupones: ahí la entrada es la cuenta de quien anota al equipo, que entra con Google, porque el cupón va a esa cuenta.
+- **Participante**, Cada entrada de la Lista canónica. En el sorteo clásico nunca necesita cuenta ni wallet. La excepción es el registro de equipos de un evento con cupones: ahí la entrada es la cuenta de quien anota al equipo, que entra con Google, porque el cupón va a esa cuenta. En la campaña con premio de una empresa la entrada es la cuenta de Google de cada persona, verificada y una sola vez.
 - **Verificador**, Cualquier persona o programa que recomputa el resultado. No necesita permiso.
 - **Comprobante**, El enlace o archivo que contiene lo necesario para verificar: `id` del Sorteo, dirección del Contrato, red y Lista canónica.
 - **Protocolo**, La especificación normativa en [protocolo.md](protocolo.md). Versión actual: v2.
@@ -224,7 +224,7 @@ Entre que la lista se sella y que la ronda del faro existe pasan unos segundos, 
 ## 5. No objetivos
 
 - No custodiamos wallets ni llaves de nadie. No hay "cuenta Tinkazo".
-- No hay backend para sortear ni panel de administración. El registro de equipos de un evento con cupones pasa por la sala (`workers/sala`), que guarda la cuenta de cada equipo en claro (es la que recibe el cupón) y los datos del equipo cifrados con la clave del QR, y borra todo a las 10 horas; para el sorteo clásico no hay base de datos de participantes que Tinkazo pueda leer.
+- No hay backend para sortear ni panel de administración. El registro de equipos de un evento con cupones pasa por la sala (`workers/sala`), que guarda la cuenta de cada equipo en claro (es la que recibe el cupón) y los datos del equipo cifrados con la clave del QR, y borra todo a las 10 horas; para el sorteo clásico no hay base de datos de participantes que Tinkazo pueda leer. La campaña con premio de una empresa pasa por la misma sala y guarda de cada persona una huella, su cuenta y su nombre cifrado con la clave del QR, y todo se borra con la sala del evento, que vive 24 horas como máximo.
 - No hay dinero ni tokens en juego: el Contrato no mueve fondos.
 - No hay integración con Luma, Eventbrite o Meetup en v1.
 - No hay sponsor mode, white label ni cobro en v1.
