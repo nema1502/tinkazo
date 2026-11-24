@@ -77,7 +77,8 @@ export function mostrarPagosDelResultado(): void {
     const ninguna = cuentasQuePagan().length === 0;
     const aviso = document.createElement("p");
     aviso.dataset.pagos = ninguna ? "sin-cuentas" : "cuentas-descartadas";
-    aviso.textContent = textos(getLang())[ninguna ? "pgSinCuentas" : "pgCuentasDescartadas"] ?? "";
+    const texto = textos(getLang())[ninguna ? "pgSinCuentas" : "pgCuentasDescartadas"];
+    aviso.textContent = typeof texto === "string" ? texto : "";
     caja.append(aviso);
   }
   caja.style.display = "block";
