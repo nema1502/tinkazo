@@ -14,11 +14,13 @@ Corrida completa: 150 altas desde una sola conexión, un corte del proveedor des
 
 | Bandera | Defecto | Qué hace |
 | --- | --- | --- |
-| `--altas=N` | `150` | Cuántas altas nuevas personas. |
+| `--altas=N` | `150` | Cuántas altas de personas nuevas (de 1 a 300: la sala no admite más). |
 | `--proveedor-cae-en=N` | `100` | Cortar el proveedor después de N altas buenas (0 lo apaga). |
 | `--en-corte=K` | `5` | Cuántas altas se intentan con el proveedor caído. |
 | `--espera-ms=N` | `25` | Pausa entre altas; `0` va al toque. |
 | `--ip=X` | `190.129.10.20` | La única conexión desde donde salen las altas. |
+
+Las banderas numéricas son enteros: un texto que no es un número, un decimal o un negativo hace que el guion termine con código 2 y diga cuál bandera estaba mal, sin correr nada. El guion termina con código 0 si salieron las altas pedidas, el corte del proveedor se recuperó entero y los reingresos contestaron `200 ya`. En cualquier otro caso, por ejemplo si se piden más altas de las que caben en la sala, termina con código 1 y el resumen dice cuántas altas salieron y con qué códigos.
 
 ## Cómo está armado
 
