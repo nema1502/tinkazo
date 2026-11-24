@@ -793,6 +793,20 @@ describe("la vista del participante", () => {
     expect(vista().textContent).not.toContain(T.es.jiPErrOtro);
   });
 
+  it("un corte de red avisa que reconecta sin rehacer el formulario: lo que la persona escribe queda", () => {
+    abrirParticipante(PARTICIPANTE, "es");
+    const antes = input();
+    antes.value = "Ana";
+    escucha().alReconectando?.(1);
+    expect(vista().textContent).toContain(T.es.jiPReconectando);
+    expect(input()).toBe(antes);
+    expect(input().value).toBe("Ana");
+    escucha().alReconecto?.();
+    expect(vista().textContent).not.toContain(T.es.jiPReconectando);
+    expect(input()).toBe(antes);
+    expect(input().value).toBe("Ana");
+  });
+
   it("el cierre de lista se anuncia, y quien no alcanzó a sumarse se queda afuera", async () => {
     abrirParticipante(PARTICIPANTE, "es");
     escucha().alCierre?.();
