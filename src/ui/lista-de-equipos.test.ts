@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { T } from "../i18n";
 
 /**
  * Lo que se lee en la herramienta cuando la lista viene de los equipos con cupón (`participants.ts` con el markup de
@@ -130,7 +131,7 @@ describe("lo que se lee junto al cuadro cuando la lista es de equipos", () => {
     const { p, e } = await montar();
     // Con una lista de personas, el texto de siempre.
     p.setList(["Ana", "Beto"].join("\n"));
-    expect(sinCuenta()).toBe("Tu gente no necesita crear cuenta.");
+    expect(sinCuenta()).toBe(T.es.sellarSinCuenta);
     e.ponerEtiquetas(etiquetas());
     p.setList([CONDORES, VICUNAS].join("\n"));
     expect(sinCuenta()).toBe("Cada equipo ya se anotó con la cuenta de su encargado.");
@@ -144,9 +145,9 @@ describe("lo que se lee junto al cuadro cuando la lista es de equipos", () => {
     i.setLang("en");
     expect(sinCuenta()).toBe("Each team already signed up with its lead's account.");
     p.setList(["Ana", "Beto"].join("\n"));
-    expect(sinCuenta()).toBe("Your people don't need an account.");
+    expect(sinCuenta()).toBe(T.en.sellarSinCuenta);
     i.setLang("es");
-    expect(sinCuenta()).toBe("Tu gente no necesita crear cuenta.");
+    expect(sinCuenta()).toBe(T.es.sellarSinCuenta);
   });
 
   it("cada cuenta ocupa un solo renglón del cuadro y una nota dice que cada renglón es un equipo", async () => {
