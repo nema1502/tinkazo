@@ -1,6 +1,8 @@
 # Ensayo de carga de una campaña con el proveedor simulado
 
-Issue [#179](https://github.com/tinkazo/tinkazo/issues/179), S1 y S2: 150 altas desde un mismo grupo de conexión contra el servicio de pruebas, con el proveedor de cuentas simulado, y el proveedor cortado a propósito en medio de las altas. El guion vive en `scripts/carga-altas.mjs` y solo llama a la API del servicio: no cambia `src/campana`, `src/ui/campana-sala.ts` ni `workers/sala`.
+Issue [#179](https://github.com/nema1502/tinkazo/issues/179), S1 y S2: 150 altas desde un mismo grupo de conexión contra el servicio de pruebas, con el proveedor de cuentas simulado, y el proveedor cortado a propósito en medio de las altas. El guion vive en `scripts/carga-altas.mjs` y solo llama a la API del servicio: no cambia `src/campana`, `src/ui/campana-sala.ts` ni `workers/sala`.
+
+**Qué es y qué no es.** El guion corre en serie y en un solo proceso contra el servicio de pruebas en la compu, con el proveedor de cuentas simulado. Comprueba la lógica del servicio (códigos de respuesta, contador de la sala, qué pasa con el corte del proveedor), no la carga de 150 celulares reales a la vez: eso es el ensayo con aparatos del issue 179. Lo que muestra cada pantalla del celular no lo comprueba el guion: se mira a mano en ese ensayo.
 
 ## Correrlo
 
@@ -37,8 +39,8 @@ La tabla es la que traduce el cliente del celular (`src/sala/campana.ts`, `leerA
 
 | Respuesta | Qué significa | Qué hace el celular |
 | --- | --- | --- |
-| ● `201 {cuenta}` | Alta nueva aceptada. | Muestra «Listo». |
-| ● `200 {cuenta, ya}` | Esta persona ya estaba anotada (reingreso de otro celular o toque repetido). | Muestra «Listo, ya estabas». |
+| ● `201 {cuenta}` | Alta nueva aceptada. | Muestra «Ya estás adentro». |
+| ● `200 {cuenta, ya}` | Esta persona ya estaba anotada (reingreso de otro celular o toque repetido). | Muestra «Ya estabas en la lista». |
 | ● `502 {"error":"pollar"}` | El proveedor no contestó (aquí, el corte a propósito). | Familia `pollar`: reintenta a los 5, 10 y 20 segundos; si el proveedor vuelve, `201`; si no, el final es `proveedor`. |
 | `429 {"error":"rapido"}` | Más de 300 altas por minuto en la sala (`CAMPANA_POR_MINUTO`). | Familia `rapido`: 10, 20 y 30 s, estirada hasta el cambio de minuto. |
 | `429 {"error":"llena"}` | La sala llegó a 300 anotadas (`CAMPANA_MAX`). | Final `llena`. |
@@ -58,7 +60,7 @@ Con los topes de defecto, una corrida de 150 altas de a una **no toca ningún to
 
 Con `--proveedor-cae-en=N`, después de la alta N el guion pone `caido` en el proveedor simulado y lo que pasa es lo que un corte de Pollar produciría:
 
-- **Lo que ve el celular**: el alta contesta `502 {"error":"pollar"}`. El cliente del celular lo traduce en la familia `pollar` de reintentos (5 s, 10 s, 20 s, con un poco de azar): quien tocó ve «Mucha gente...» y espera. Si el proveedor vuelve, el toque repetido contesta `201` y la persona queda anotada. Si no vuelve, el final es el motivo `proveedor`: «El servicio del evento está caído». En la corrida del guion, las K altas del corte ven el `502` y, con el proveedor de vuelta, cada una repite el MISMO alta (misma sesión y mismo nombre cifrado, como hace el celular) y contesta `201`.
+- **Lo que ve el celular**: el alta contesta `502 {"error":"pollar"}`. El cliente del celular lo traduce en la familia `pollar` de reintentos (5 s, 10 s, 20 s, con un poco de azar): quien tocó ve «Hay mucha gente anotándose. Probamos de nuevo solos en unos segundos.» y espera. Si el proveedor vuelve, el toque repetido contesta `201` y la persona queda anotada. Si no vuelve, el final es el motivo `proveedor`: «No pudimos entrar con Google. Probá de nuevo en un momento.». En la corrida del guion, las K altas del corte ven el `502` y, con el proveedor de vuelta, cada una repite el MISMO alta (misma sesión y mismo nombre cifrado, como hace el celular) y contesta `201`.
 - **Lo que ve el stand**: el contador de la sala (`GET /v1/sala/<id>/campana/estado`) se detiene mientras el proveedor está caído — la corrida mide que queda exactamente en N — y sube de a K cuando las personas reintentan con el proveedor de vuelta. Nadie queda afuera por el corte: el estado final es el mismo que sin corte.
 
 **Qué error exacto aparece**: con el proveedor caído el único código del corte es `502 {"error":"pollar"}` (el Worker traduce la respuesta no entendida del proveedor en `pollar`, y `pollar` vale 502). El `401 sesion` no aparece en este escenario: ese código sale de un token vencido o rechazado por el proveedor, no de un corte. El `503 sin-pollar` tampoco: es el Worker sin el secreto de Pollar, no el proveedor caído. Los pedidos rechazados con `pollar` no suman al tope de rechazos de la conexión: repetir no deja a nadie sin tope.

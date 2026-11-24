@@ -447,10 +447,18 @@ if (CAE_EN > 0 && buenas >= hastaCorte && buenas < ALTAS) {
   registrar(``);
 }
 
-// Fase 3 (S1): el resto de las altas de la carga, con el proveedor de vuelta.
-while (buenas < ALTAS) {
+// Fase 3 (S1): el resto de las altas de la carga, con el proveedor de vuelta. Con más altas de las que caben en la sala
+// (CAMPANA_MAX, 300) nunca se llegaría a ALTAS buenas: se corta cuando la sala dice que está llena, o a los 3 intentos
+// por alta pedida, para que el guion nunca gire sin fin.
+let intentos = 0;
+while (buenas < ALTAS && intentos < ALTAS * 3) {
+  intentos += 1;
   const codigo = await intentar();
   if (codigo !== "201 alta") registrar(`esa alta no cuenta como alta nueva`);
+  if (codigo === "429 llena") {
+    registrar(`la sala llegó a su tope: no caben más altas, se corta acá`);
+    break;
+  }
 }
 
 /**
