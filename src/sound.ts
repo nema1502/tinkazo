@@ -12,7 +12,7 @@ let audioCtx: AudioContext | null = null;
 /**
  * Los estados desde los que un contexto de audio se puede reanudar. Chrome solo dice `suspended`; Safari en el
  * iPhone nombra `interrupted` a su estado de cortado (una llamada, el ahorro de batería). Si solo se mirara el
- * primero, después de una interrupción el sorteo entero corría mudo y nada lo volvía a prender (S1, S7).
+ * primero, después de una interrupción el sorteo entero corría mudo y nada lo volvía a prender.
  * `AudioContextState` no conoce `interrupted`, por eso se mira como cadena.
  */
 export function reanudarSiHaceFalta(ctx: AudioContext): void {
@@ -131,7 +131,7 @@ function chain(): { ctx: AudioContext; out: GainNode } | null {
 /**
  * Cuando la pestaña vuelve a la vista, el contexto puede haber quedado suspendido o interrumpido (el iPhone lo
  * corta al esconder la página, o con una llamada): se reanuda acá, en un solo lugar, para que la música y los
- * efectos vuelvan donde estaban y nada suene roto (S1).
+ * efectos vuelvan donde estaban y nada suene roto.
  */
 function alVolverALaVista(): void {
   if (document.visibilityState !== "visible") return;

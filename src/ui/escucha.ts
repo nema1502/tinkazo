@@ -16,9 +16,9 @@ import {
 import { idiomaDeLaEscucha, nombreDeJuego, texto, type IdiomaEscucha } from "./escucha-textos";
 
 /**
- * La página de escucha (T1, S5): las candidatas de música por juego, armadas con el secuenciador de
- * `src/music.ts` (síntesis, sin samples, S4), con su ruleta de votos manual y sin prender nada en el sitio:
- * ninguna música nueva suena en producción hasta que el dueño la escuche y la elija acá (S5).
+ * La página de escucha: las candidatas de música por juego, armadas con el secuenciador de
+ * `src/music.ts` (síntesis, sin samples), con su ruleta de votos manual y sin prender nada en el sitio:
+ * ninguna música nueva suena en producción hasta que el dueño la escuche y la elija acá.
  *
  * Está aparte del selector y de cualquier enlace del sitio: solo abre con `?escucha=1`, como la bandera
  * de `videoDescarga` en `src/flags.ts`. Por lo mismo no va en el build de producción: hay que sumarla a
