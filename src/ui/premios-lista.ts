@@ -1,7 +1,7 @@
 import { type EstadoVistoDelPremio, type VistaDeLosPremios } from "../campana/premios-de-la-cuenta";
 
 /**
- * La lista «Tus premios» de la pantalla de quien ganó (`premio-recibir.ts`), sin DOM ni red (como la vista
+ * La lista Tus premios de la pantalla de quien ganó, sin DOM ni red (como la vista
  * del paso de la cuenta en `cuenta-lista-estado.ts`): cada premio de esa cuenta en el orden en que la
  * promoción los guarda, con el texto de su estado (`textos-premios.ts`) y el monto como se ve en pantalla.
  *

@@ -1,8 +1,7 @@
 /**
- * La huella de las bases de una campaña (T1 de #182), compartida por la sala de pruebas y el DO del
- * servicio de campañas. El canon es el del depósito (el vector fijo de #170): el documento se escribe
- * como JSON canónico — claves ordenadas, sin espacios ni fin de línea, UTF-8 — y de esos bytes sale
- * SHA-256, en 64 hexadecimales. Así el sitio, el guion y el DO dan la misma cifra para las mismas
+ * La huella de las bases de una campaña. El canon es el del depósito: el documento se escribe
+ * como JSON canónico (claves ordenadas, sin espacios ni fin de línea, UTF-8) y de esos bytes sale
+ * SHA-256, en 64 hexadecimales. Así el sitio, un guion y un Worker dan la misma cifra para las mismas
  * bases, sin importar el orden en que cada uno armó el objeto.
  *
  * Este archivo no toca la red ni el DOM: lo puede usar el navegador, un guion de Node y un Worker.

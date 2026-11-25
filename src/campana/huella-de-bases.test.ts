@@ -1,9 +1,9 @@
 /**
- * La huella de las bases de una campaña (T1 de #182): el vector fijo que comparte #170.
+ * La huella de las bases de una campaña, con un vector fijo.
  * El canon es el del depósito: JSON canónico con claves ordenadas, sin espacios, UTF-8,
  * y encima SHA-256 en hexadecimal. Un vector fijo conocido, escrito a mano una vez, ata
  * el canon: si alguien cambia el orden de las claves o mete espacios, estas pruebas
- * se rompen antes de que el DO y la sala dejen de dar la misma cifra.
+ * se rompen antes de que dos implementaciones dejen de dar la misma cifra.
  */
 import { describe, expect, it } from "vitest";
 import { huellaDeBases } from "./huella-de-bases";

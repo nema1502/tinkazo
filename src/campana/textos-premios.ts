@@ -1,9 +1,8 @@
 import { type Lang, getLang } from "../idioma";
 
 /**
- * Textos de la pantalla de quien ganó un premio de una campaña (`premio-recibir.ts`), en español y en
- * inglés. Van aparte de `src/i18n.ts` (decisión del padre para no cruzar con la pieza de la pantalla
- * previa del celular) y se leen directo de este módulo con `textoDelPremio`. Primero van todas las
+ * Textos de la pantalla de quien ganó un premio de una campaña, en español y en
+ * inglés. Todavía no se muestran en ninguna pantalla. Van aparte de `src/i18n.ts` y se leen directo de este módulo con `textoDelPremio`. Primero van todas las
  * claves en español y después todas en inglés, en el mismo orden. Todas empezan con pr.
  */
 
