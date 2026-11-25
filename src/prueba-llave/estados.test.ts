@@ -106,13 +106,34 @@ describe("las pantallas", () => {
     expect(pantallaDe("sellando", { aparato: "cel", cancelada: true }, "es").linea).toBe(TEXTOS.es.sellandoLinea);
   });
 
-  it("esperar el desbloqueo nunca pasa de 65 s, y entrar da 20 s más para el índice", () => {
+  it("esperar el desbloqueo nunca pasa de 65 s, y buscar la cuenta da 30 s más", () => {
     expect(pantallaDe("mira-crear", { aparato: "cel" }, "es").topeMs).toBe(65_000);
     expect(pantallaDe("mira-sellar", { aparato: "cel" }, "es").topeMs).toBe(65_000);
-    expect(pantallaDe("entrando", { aparato: "cel" }, "es").topeMs).toBe(85_000);
+    expect(pantallaDe("entrando", { aparato: "cel" }, "es").topeMs).toBe(65_000);
+    expect(pantallaDe("buscando", { aparato: "cel" }, "es").topeMs).toBe(30_000);
     expect(pantallaDe("cargando", { aparato: "cel" }, "es").topeMs).toBe(15_000);
     expect(pantallaDe("armando", { aparato: "cel" }, "es").topeMs).toBe(90_000);
     expect(pantallaDe("sellando", { aparato: "cel" }, "es").topeMs).toBe(90_000);
+  });
+
+  it("las pantallas de entrar desde otro aparato dicen lo que pasó, en las dos lenguas, con un botón principal", () => {
+    expect(pantallaDe("buscando", { aparato: "cel" }, "es")).toMatchObject({ titulo: "Buscando tu cuenta", linea: "Tarda unos segundos." });
+    expect(pantallaDe("buscando", { aparato: "cel" }, "en").titulo).toBe("Finding your account");
+    expect(pantallaDe("buscando", { aparato: "cel" }, "es").principal).toBeUndefined();
+    for (const lang of LENGUAS) {
+      expect(pantallaDe("sin-cuenta", { aparato: "cel" }, lang).principal?.accion).toBe("reintentar-entrar");
+      expect(pantallaDe("sin-cuenta", { aparato: "cel" }, lang).secundario?.accion).toBe("crear-otra");
+      expect(pantallaDe("vencida", { aparato: "cel" }, lang).principal?.accion).toBe("crear-otra");
+      expect(pantallaDe("vencida", { aparato: "cel" }, lang).secundario).toBeUndefined();
+      expect(pantallaDe("no-se-comprobo", { aparato: "cel" }, lang).principal?.accion).toBe("crear-otra");
+      expect(pantallaDe("no-aparece", { aparato: "cel" }, lang).principal?.accion).toBe("reintentar-entrar");
+    }
+    expect(pantallaDe("vencida", { aparato: "cel" }, "es").titulo).toBe("Esta cuenta de prueba ya terminó");
+    expect(pantallaDe("no-se-comprobo", { aparato: "cel" }, "en").titulo).toBe("We couldn't check this account");
+  });
+
+  it("la línea de no encontrar la cuenta ya no habla de esperar al índice", () => {
+    for (const lang of LENGUAS) expect(TEXTOS[lang].noApareceLinea).not.toMatch(/minutos|minutes|índice|index/i);
   });
 });
 

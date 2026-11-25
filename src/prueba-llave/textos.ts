@@ -61,10 +61,26 @@ const ES = {
   listoPrincipal: "Comprobar el sorteo",
   listoSecundario: "Hacer otro sorteo",
 
+  buscandoTitulo: "Buscando tu cuenta",
+  buscandoLinea: "Tarda unos segundos.",
+
   noApareceTitulo: "No encontramos tu cuenta",
-  noApareceLinea: "Si creaste la llave hace poco, esperá unos minutos y probá de nuevo. Fijate de elegir la que dice <strong>Llave de prueba de Tinkazo</strong>.",
+  noApareceLinea: "No pudimos llegar a ella ahora. Probá de nuevo en un momento.",
   noAparecePrincipal: "Probar de nuevo",
   noApareceSecundario: "Crear otra llave",
+
+  sinCuentaTitulo: "No encontramos una cuenta con esta llave",
+  sinCuentaLinea: "Elegí la que dice <strong>Llave de prueba de Tinkazo</strong>. Si la creaste hace más de una semana, ya terminó y podés crear otra.",
+  sinCuentaPrincipal: "Probar de nuevo",
+  sinCuentaSecundario: "Crear otra llave",
+
+  vencidaTitulo: "Esta cuenta de prueba ya terminó",
+  vencidaLinea: "Las cuentas de esta prueba duran una semana. Podés crear una nueva.",
+  vencidaPrincipal: "Crear otra llave",
+
+  noSeComproboTitulo: "No pudimos comprobar esta cuenta",
+  noSeComproboLinea: "Por cuidado no la usamos. Podés crear una llave nueva.",
+  noSeComproboPrincipal: "Crear otra llave",
 
   canceladaLinea: "No se usó la llave. Probá de nuevo cuando quieras.",
 
@@ -176,10 +192,26 @@ const EN: Record<ClaveDePrueba, string> = {
   listoPrincipal: "Check the draw",
   listoSecundario: "Run another draw",
 
+  buscandoTitulo: "Finding your account",
+  buscandoLinea: "It takes a few seconds.",
+
   noApareceTitulo: "We couldn't find your account",
-  noApareceLinea: "If you created the key recently, wait a few minutes and try again. Make sure you pick <strong>Tinkazo test key</strong>.",
+  noApareceLinea: "We couldn't reach it right now. Try again in a moment.",
   noAparecePrincipal: "Try again",
   noApareceSecundario: "Create another key",
+
+  sinCuentaTitulo: "We couldn't find an account for this key",
+  sinCuentaLinea: "Pick the one called <strong>Tinkazo test key</strong>. If you created it more than a week ago, it has ended and you can create another.",
+  sinCuentaPrincipal: "Try again",
+  sinCuentaSecundario: "Create another key",
+
+  vencidaTitulo: "This test account has ended",
+  vencidaLinea: "Accounts in this test last one week. You can create a new one.",
+  vencidaPrincipal: "Create another key",
+
+  noSeComproboTitulo: "We couldn't check this account",
+  noSeComproboLinea: "To be safe we didn't use it. You can create a new key.",
+  noSeComproboPrincipal: "Create another key",
 
   canceladaLinea: "The key wasn't used. Try again whenever you want.",
 

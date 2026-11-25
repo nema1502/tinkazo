@@ -18,7 +18,11 @@ export type Estado =
   | "esperando"
   | "listo"
   | "entrando"
+  | "buscando"
   | "no-aparece"
+  | "sin-cuenta"
+  | "vencida"
+  | "no-se-comprobo"
   | "sin-fondos"
   | "cuenta-sin-armar"
   | "lento"
@@ -43,7 +47,11 @@ export const ESTADOS: readonly Estado[] = [
   "esperando",
   "listo",
   "entrando",
+  "buscando",
   "no-aparece",
+  "sin-cuenta",
+  "vencida",
+  "no-se-comprobo",
   "sin-fondos",
   "cuenta-sin-armar",
   "lento",
@@ -82,8 +90,8 @@ export interface DatosDeLaPantalla {
 
 /** Los 60 s del desbloqueo más 5. */
 export const TOPE_DEL_DESBLOQUEO_MS = 65_000;
-/** El desbloqueo más 20 s que se le dan al índice. */
-export const TOPE_DE_ENTRAR_MS = 85_000;
+/** Lo que se espera mientras se busca la cuenta en la red, después del desbloqueo. */
+export const TOPE_DE_BUSCAR_MS = 30_000;
 export const TOPE_DE_CARGAR_MS = 15_000;
 export const TOPE_DE_UNA_TRANSACCION_MS = 90_000;
 
@@ -107,7 +115,11 @@ const CLAVES: Partial<Record<Estado, Claves>> = {
   sellando: { titulo: "sellandoTitulo", linea: "sellandoLinea", topeMs: TOPE_DE_UNA_TRANSACCION_MS },
   esperando: { titulo: "esperandoTitulo", linea: "esperandoLinea", secundario: ["esperandoSecundario", "comprobante"] },
   listo: { titulo: "listoTitulo", linea: "listoLinea", principal: ["listoPrincipal", "comprobar"], secundario: ["listoSecundario", "otro"] },
+  buscando: { titulo: "buscandoTitulo", linea: "buscandoLinea", topeMs: TOPE_DE_BUSCAR_MS },
   "no-aparece": { titulo: "noApareceTitulo", linea: "noApareceLinea", principal: ["noAparecePrincipal", "reintentar-entrar"], secundario: ["noApareceSecundario", "crear-otra"] },
+  "sin-cuenta": { titulo: "sinCuentaTitulo", linea: "sinCuentaLinea", principal: ["sinCuentaPrincipal", "reintentar-entrar"], secundario: ["sinCuentaSecundario", "crear-otra"] },
+  vencida: { titulo: "vencidaTitulo", linea: "vencidaLinea", principal: ["vencidaPrincipal", "crear-otra"] },
+  "no-se-comprobo": { titulo: "noSeComproboTitulo", linea: "noSeComproboLinea", principal: ["noSeComproboPrincipal", "crear-otra"] },
   "sin-fondos": { titulo: "sinFondosTitulo", linea: "sinFondosLinea", principal: ["sinFondosPrincipal", "reintentar"] },
   "cuenta-sin-armar": { titulo: "cuentaSinArmarTitulo", linea: "cuentaSinArmarLinea", principal: ["cuentaSinArmarPrincipal", "rehacer-cuenta"] },
   lento: { titulo: "lentoTitulo", linea: "lentoLinea", principal: ["lentoPrincipal", "mirar"] },
@@ -122,7 +134,7 @@ const CLAVES: Partial<Record<Estado, Claves>> = {
 const MIRA: Partial<Record<Estado, { linea: ClaveDePrueba; topeMs: number }>> = {
   "mira-crear": { linea: "miraCrearLinea", topeMs: TOPE_DEL_DESBLOQUEO_MS },
   "mira-sellar": { linea: "miraSellarLinea", topeMs: TOPE_DEL_DESBLOQUEO_MS },
-  entrando: { linea: "entrandoLinea", topeMs: TOPE_DE_ENTRAR_MS },
+  entrando: { linea: "entrandoLinea", topeMs: TOPE_DEL_DESBLOQUEO_MS },
 };
 
 /** Las pantallas donde, si la persona no usó la llave, la línea lo dice. */
