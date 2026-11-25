@@ -3,10 +3,11 @@
  * de cuentas si todas sus filas son cuentas, y de personas si todas son líneas de persona. Una mezcla de las dos, o una
  * línea de persona junto a otra cosa, no se sortea nunca.
  *
- * Los dos reconocimientos son los de la sala (`esCuentaValida` y `esLineaDePersona`), importados como el sitio ya importa
- * `logica.ts`, así que el sitio y la sala no pueden discrepar sobre qué es una cuenta ni qué es una línea.
+ * El reconocimiento de la cuenta es el de la sala (`esCuentaValida`, importado como el sitio ya importa `logica.ts`).
+ * El de la línea de persona es `forma-persona.ts`, un archivo sin importaciones, y una prueba exige que dé lo mismo que el
+ * de la sala: así el sitio no arrastra la librería de firmas y los dos no pueden discrepar sobre qué es una línea.
  */
-import { esLineaDePersona } from "../../workers/sala/src/linea-persona";
+import { esLineaDePersona } from "./forma-persona";
 import { esCuentaValida } from "../../workers/sala/src/logica";
 
 /** Lo que es una lista cuando todas sus filas son de lo mismo. */

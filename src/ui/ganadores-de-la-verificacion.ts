@@ -1,6 +1,6 @@
 import { esc } from "../dom";
 import { hayLineasDePersona } from "../campana/forma-de-lista";
-import { esLineaDePersona } from "../../workers/sala/src/linea-persona";
+import { esLineaDePersona } from "../campana/forma-persona";
 import { texto as t } from "../idioma";
 import { isTurnOrder } from "../modos/turnos";
 import { cierraComoReparto, nombreDePersona, salieronVariasVeces } from "../participaciones";

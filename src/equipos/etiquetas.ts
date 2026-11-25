@@ -1,4 +1,4 @@
-import { esLineaDePersona } from "../../workers/sala/src/linea-persona";
+import { esLineaDePersona } from "../campana/forma-persona";
 import { texto as t } from "../idioma";
 import { canonicalList } from "../protocol/canonical";
 import { cuentaCorta } from "./modelo";

@@ -24,7 +24,7 @@ import {
   type RondaViva,
 } from "../sala/participante";
 import { etiquetaConCuenta, etiquetaDe, esListaDeEquipos, lugarEnLaLista, nombreOLugar, ponerEtiquetas } from "../equipos/etiquetas";
-import { esLineaDePersona } from "../../workers/sala/src/linea-persona";
+import { esLineaDePersona } from "../campana/forma-persona";
 import { contar as contarPersonas, nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { refDe } from "../contar";
 import { cuentaCorta } from "../equipos/modelo";

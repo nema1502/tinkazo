@@ -8,7 +8,7 @@ import { $, esc } from "./dom";
 import { pintarLeyenda } from "./ui/leyenda";
 import { filaVisible, htmlDeLosGanadores, lugarDeLaLista } from "./ui/ganadores-de-la-verificacion";
 import { hayLineasDePersona } from "./campana/forma-de-lista";
-import { esLineaDePersona } from "../workers/sala/src/linea-persona";
+import { esLineaDePersona } from "./campana/forma-persona";
 import { alCopiarOrden, htmlDeTurnos } from "./ui/lista-de-turnos";
 import { isTurnOrder } from "./modos/turnos";
 import { getLang, onLangChange, texto as t, textos } from "./idioma";
