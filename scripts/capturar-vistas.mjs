@@ -33,6 +33,7 @@
  *   paginaEntera  true para fotografiar la página completa y no solo la pantalla
  *   pasos         acciones en orden antes de la foto:
  *     {"accion":"clic","selector":"#btn-freeze"}
+ *     {"accion":"clicHasta","selector":"#btn-espera","hasta":".espera-reloj"}   clic y, si en 1 s no aparece lo otro, otro clic (hasta 20 s)
  *     {"accion":"escribir","selector":"#ta","texto":"Ana\nBeto"}        reemplaza lo que haya
  *     {"accion":"nombres","selector":"#ta","cantidad":150}              N nombres inventados, uno por renglón
  *     {"accion":"esperar","selector":"#wait-box","ms":20000}            espera a que se vea
@@ -68,6 +69,7 @@
 import { mkdirSync, readFileSync, appendFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { clicHasta } from "./lib/vistas-pagina.mjs";
 import { TECLAS, TOPES, direccionDeVista, generarNombres, leerEntorno, leerVistas, problemaDeBase, problemaDeRama } from "./lib/vistas.mjs";
 
 const args = process.argv.slice(2);
@@ -128,6 +130,9 @@ async function esperarVisible(page, sel, ms) {
   if (!r.ok) throw new Error(`no se vio ${sel} en ${Math.round(ms / 1000)} s`);
 }
 
+/** Lo mismo sin lanzar: dice si se vio a tiempo. */
+const estaVisible = async (page, sel, ms) => (await page.waitFor(visible(sel), ms)).ok;
+
 /** Un clic de verdad, en el centro del elemento, ya a la vista. */
 async function clic(page, sel) {
   await esperarVisible(page, sel, 10_000);
@@ -164,6 +169,8 @@ async function paso(page, p) {
   switch (p.accion) {
     case "clic":
       return clic(page, p.selector);
+    case "clicHasta":
+      return clicHasta(page, p, { clic, estaVisible, ahora: Date.now });
     case "escribir":
       return escribir(page, p.selector, p.texto);
     case "nombres":

@@ -24,6 +24,8 @@ export const TOPES = {
   largoNombre: 64,
   /** Lo que una vista puede esperar en total entre pausas y esperas declaradas. */
   totalMs: 240_000,
+  /** Lo que declara un clicHasta: el tiempo que insiste antes de rendirse (ver `CLIC_HASTA` en vistas-pagina.mjs). */
+  clicHastaMs: 20_000,
   variables: 20,
   largoValor: 200,
   largoRama: 200,
@@ -31,7 +33,7 @@ export const TOPES = {
 
 export const DEFECTOS = { ancho: 1440, alto: 900, pausaMs: 500, esperarMs: 30_000 };
 
-export const ACCIONES = ["clic", "escribir", "nombres", "esperar", "pausa", "tecla", "desplazar"];
+export const ACCIONES = ["clic", "clicHasta", "escribir", "nombres", "esperar", "pausa", "tecla", "desplazar"];
 
 /** Las teclas que se pueden apretar: nombre, código y código virtual de Chrome, y el texto que escriben. */
 export const TECLAS = {
@@ -53,6 +55,7 @@ export const TECLAS = {
 const CAMPOS_VISTA = ["nombre", "ruta", "ancho", "alto", "tema", "idioma", "esperar", "pausaMs", "paginaEntera", "pasos"];
 const CAMPOS_PASO = {
   clic: ["selector"],
+  clicHasta: ["selector", "hasta"],
   escribir: ["selector", "texto"],
   nombres: ["selector", "cantidad"],
   esperar: ["selector", "ms"],
@@ -111,6 +114,11 @@ function validarPaso(paso, donde, errores) {
     const p = problemaDeSelector(paso.selector);
     if (p) errores.push(`${donde}: "selector" ${p}`);
     else salida.selector = paso.selector;
+  }
+  if (accion === "clicHasta") {
+    const p = problemaDeSelector(paso.hasta);
+    if (p) errores.push(`${donde}: "hasta" ${p}`);
+    else salida.hasta = paso.hasta;
   }
   if (accion === "escribir") {
     if (typeof paso.texto !== "string" || paso.texto.length > TOPES.largoTexto) errores.push(`${donde}: "texto" tiene que ser un texto de hasta ${TOPES.largoTexto} caracteres`);
@@ -188,7 +196,7 @@ export function validarVistas(lista) {
       }
     }
     if (errores.length > n) return;
-    const total = pausaMs + (v.esperar === undefined ? 0 : DEFECTOS.esperarMs) + pasos.reduce((s, p) => s + (p.ms ?? 0), 0);
+    const total = pausaMs + (v.esperar === undefined ? 0 : DEFECTOS.esperarMs) + pasos.reduce((s, p) => s + (p.ms ?? (p.accion === "clicHasta" ? TOPES.clicHastaMs : 0)), 0);
     if (total > TOPES.totalMs) {
       errores.push(`${etiqueta}: entre pausas y esperas declara hasta ${Math.round(total / 1000)} s y el tope es ${TOPES.totalMs / 1000} s`);
       return;
