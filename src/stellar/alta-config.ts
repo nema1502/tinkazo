@@ -42,7 +42,7 @@ export interface BanderasDeAlta {
   qr: boolean;
 }
 
-/** Todo apagado: lo que vale fuera de la red principal y con el build de hoy. */
+/** Todo apagado: lo que vale fuera de la red principal. */
 export const BANDERAS_APAGADAS: Readonly<BanderasDeAlta> = Object.freeze({ alta: false, libre: false, pago: false, sorteoServidor: false, qr: false });
 
 const uno = (x: unknown): boolean => x === "1";

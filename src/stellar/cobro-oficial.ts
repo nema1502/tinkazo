@@ -8,8 +8,8 @@ import { activeWallet } from "./wallet-lite";
  * - `redPrincipalConPollar`: la red principal con la billetera de Pollar, sin mirar ninguna bandera. Ahí «pagar con mi
  *   cuenta» (Pollar firmando sin el portero, una firma que nadie cuenta) no existe: ni en la caja de la red, ni en el
  *   sorteo, ni en `submitElsewhere`. Y el candado de `submitElsewhere` no deja firmar un sello ni un sorteo sin el acceso
- *   confirmado por el portero (`acceso-oficial.ts`). Esa combinación todavía no existe en producción, así que no cambia
- *   nada de hoy.
+ *   confirmado por el portero (`acceso-oficial.ts`). Esa combinación es la de producción desde el 20 de
+ *   de noviembre de 2026, cuando el sitio pasó a abrir en Oficial.
  * - `cobroPorUso`: lo mismo, y además el acceso por cupón o por pago pedido en el build (`VITE_ALTA=1`). Gobierna lo que
  *   se ve del acceso: la caja del cupón, las compuertas de la pantalla antes del sello y del sorteo, y la línea de los
  *   sorteos oficiales que quedan. Sin él, el chequeo de la red frena como antes a una cuenta sin acceso o sin sorteos.

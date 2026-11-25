@@ -179,7 +179,7 @@ Las rutas nuevas:
 
 ## Si el proveedor de cuentas corta el ingreso: el plan B del ingreso
 
-- **Qué es.** `VITE_INGRESO_PLAN_B` es una bandera del build, apagada por defecto. Con `1` y solo en el modo Prueba, cuando entrar con Google o con un correo falla por algo que no es de la persona (Pollar contesta con error, tarda de más o no deja crear la cuenta), el aviso suma el botón Sortear sin cuenta. Lleva al modo libre: la lista se cierra en el navegador, no queda sello en Stellar, el sorteo no aparece en Mis sorteos y el comprobante dice que falta un testigo. En Oficial nunca aparece, y siempre lo elige la persona.
+- **Qué es.** `VITE_INGRESO_PLAN_B` es una bandera del build, apagada por defecto y prendida hoy en el build de producción (ver la tabla de banderas más abajo). Solo se aplica en el modo Prueba, así que en Oficial no se ve. Con `1` y solo en el modo Prueba, cuando entrar con Google o con un correo falla por algo que no es de la persona (Pollar contesta con error, tarda de más o no deja crear la cuenta), el aviso suma el botón Sortear sin cuenta. Lleva al modo libre: la lista se cierra en el navegador, no queda sello en Stellar, el sorteo no aparece en Mis sorteos y el comprobante dice que falta un testigo. En Oficial nunca aparece, y siempre lo elige la persona.
 - **Cuándo se prende.** Solo si durante un evento el ingreso falla para varias personas a la vez (por ejemplo, al llegar al tope de cuentas del plan de Pollar) y reintentar no lo arregla. En Vercel, la variable `VITE_INGRESO_PLAN_B=1` en Production y una publicación nueva: se lee al construir, así que el cambio llega con la publicación y no al instante.
 - **Cómo se apaga.** Vaciar la variable (o poner `0`) y publicar de nuevo. Con la bandera apagada la elección ya hecha deja de valer y el botón de sellar vuelve a pedir la cuenta.
 
@@ -199,7 +199,7 @@ Las rutas nuevas:
 
 ## Los pagos de premios, los retiros y el alta de quien ganó
 
-Además de los sellos y los sorteos, el portero de mainnet puede pagar la comisión de la red de dos pagos de dólares digitales y dar de alta a quien ganó un premio. Son tres cosas aparte, cada una con su variable en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml`. Nacen apagadas y solo valen en la red principal y con `ALTAS = "1"`. Con las tres apagadas el portero hace lo de siempre: las rutas nuevas dan `404 no-existe` y `estado` y `cupo` no traen nada nuevo.
+Además de los sellos y los sorteos, el portero de mainnet puede pagar la comisión de la red de dos pagos de dólares digitales y dar de alta a quien ganó un premio. Son tres cosas aparte, cada una con su variable en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml`. Nacen apagadas en el código y solo valen en la red principal y con `ALTAS = "1"`. Hoy las tres están en `"1"` en `[env.mainnet.vars]`, desde mediados de noviembre de 2026. Con las tres apagadas el portero hace lo de siempre: las rutas nuevas dan `404 no-existe` y `estado` y `cupo` no traen nada nuevo.
 
 - **El pago de un premio** (`POST /v1/patrocinio/pago` con `{"forma":"premio","xdr":...}`). Quien organizó un sorteo le paga a quien ganó, desde su propia cuenta, con la nota `tk:premio:<sorteo>:<puesto>`. No lleva sesión: la firma de la cuenta que paga prueba quién es. El portero lo paga solo si esa cuenta está en su libro, el sorteo es suyo, ya se sorteó, el puesto existe, el sello lo pagó el portero, el `draw` de ese mismo sorteo también lo pagó el portero con ese sello (un sello respalda un solo sorteo: otro igual sellado por fuera no tiene premios por acá) y ese puesto no se pagó antes por esta ruta.
 - **El retiro con su costo** (`forma: "retiro"`). Una persona saca dólares digitales de su cuenta a otra, y en la misma transacción paga el costo de `COSTO_RETIRO` a `CUENTA_COBROS`. Vale desde cualquier cuenta. El portero reconoce ese costo por la transacción que él mismo pagó: no cae a los pagos sueltos ni se confunde con una orden, y la nota de un retiro nunca se lee como la de una orden.
@@ -209,9 +209,9 @@ La comisión de la red la paga la cuenta que paga los sellos, con un presupuesto
 
 | Variable | Hoy | Qué hace |
 |---|---|---|
-| `PAGOS_PREMIO` | `"0"` | Con `"1"`, el pago de un premio. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `pagos-premio` y queda apagada |
-| `RETIROS` | `"0"` | Con `"1"`, el retiro con su costo. Pide `ALTAS = "1"`, `CUENTA_COBROS` propia y `COSTO_RETIRO` bien escrito. Si falta algo, `faltaAltas` dice `retiros` o `costo-retiro` |
-| `ALTAS_PREMIO` | `"0"` | Con `"1"`, el alta de quien ganó. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `alta-premio` |
+| `PAGOS_PREMIO` | `"1"` | Con `"1"`, el pago de un premio. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `pagos-premio` y queda apagada |
+| `RETIROS` | `"1"` | Con `"1"`, el retiro con su costo. Pide `ALTAS = "1"`, `CUENTA_COBROS` propia y `COSTO_RETIRO` bien escrito. Si falta algo, `faltaAltas` dice `retiros` o `costo-retiro` |
+| `ALTAS_PREMIO` | `"1"` | Con `"1"`, el alta de quien ganó. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `alta-premio` |
 | `COSTO_RETIRO` | `"0.50"` | El costo exacto del retiro, en USDC con punto, de 0,01 a 5. Manda sobre el del sitio: si no son iguales, el portero rechaza todo retiro y nunca cobra de más. Vacío, en 0, en 6, con coma o con letras, el retiro no se prende y `faltaAltas` dice `costo-retiro` |
 | `TOPE_PAGOS_STROOPS` | `"20000000"` | El presupuesto de las comisiones de los pagos en 24 horas: 2 XLM, aparte del de los sellos. **Solo dígitos** y hasta `"100000000"` (10 XLM): mal escrita apaga los pagos y `faltaAltas` dice `tope-pagos`, también con las formas apagadas |
 | `PAGOS_RECHAZADOS_DIA` | `"20"` | Cuántos pagos de cada forma que la red rechazó al aplicarse (y que pagaron comisión) se aceptan en 24 horas entre todas las cuentas. Lo que está en el aire tiene su propio tope, en el código. **Solo dígitos** y hasta `"100"`: mal escrita apaga los pagos y `faltaAltas` dice `pagos-rechazos` |
@@ -358,7 +358,7 @@ node scripts/campana-firmar.mjs --nueva-llave-prueba
 
 ### Qué se despliega, en qué orden y por qué
 
-El código del sitio sube antes, con todas las banderas apagadas: así ya está publicado cuando la sala nueva exista, y con las banderas apagadas la campaña no se ve. Después va este orden, y cada paso se comprueba antes de seguir. Con gente adentro no se despliega el portero ni el sitio. La sala solo se despliega para los cortes 3 a 5 de Cómo cortar una campaña: la lista, las fases y la alarma están guardadas en el almacenamiento de la sala y sobreviven, y los celulares siguen preguntando solos y se ponen al día en menos de un minuto.
+Para una campaña nueva, el código del sitio sube antes, con las banderas de esa campaña apagadas: así ya está publicado cuando la sala nueva exista, y con las banderas apagadas la campaña no se ve. Hoy `VITE_CAMPANAS` y las de pagos ya están prendidas, como dice la tabla de banderas. Después va este orden, y cada paso se comprueba antes de seguir. Con gente adentro no se despliega el portero ni el sitio. La sala solo se despliega para los cortes 3 a 5 de Cómo cortar una campaña: la lista, las fases y la alarma están guardadas en el almacenamiento de la sala y sobreviven, y los celulares siguen preguntando solos y se ponen al día en menos de un minuto.
 
 1. **El portero**, con los tres pagos desplegados apagados y pausados, y después prendidos y pausados. Es lo primero porque el sello y el sorteo de la campaña, el alta de quien ganó y los pagos pasan por él, y porque cada despliegue suyo reinicia su memoria. Se hace como dice Cómo se prenden, en la sección de los pagos: dos despliegues y un exporte antes de cada uno.
 2. **El servicio de conteo** (`workers/enlaces`, en `c.tinkazo.app`). Va antes que las banderas del voto porque la lista cerrada de lo que cuenta incluye el error `cofirmaDistinta`, el que sale cuando el voto por contenido frena una firma. Un conteo anterior rechaza ese aviso entero y justo la falla que más importa no se vería.
@@ -511,7 +511,7 @@ El build no sale con una sola o con dos de las tres, con la cuenta repetida, sin
 
 **Qué hace falta antes (no es código):**
 
-1. El portero de la red principal con `RETIROS = "1"` y `PAGOS_PREMIO = "1"`: es un cambio en `workers/patrocinio/wrangler.toml` y un despliegue del portero, que pide la palabra de quien mantiene el proyecto. **Hoy `RETIROS` está en `"0"`: sin eso, el panel muestra el pago desde otra billetera como único camino.**
+1. El portero de la red principal con `RETIROS = "1"` y `PAGOS_PREMIO = "1"`: es un cambio en `workers/patrocinio/wrangler.toml` y un despliegue del portero, que pide la palabra de quien mantiene el proyecto. **Hoy `RETIROS` está en `"1"`, desde mediados de noviembre de 2026. Con `"0"`, el panel muestra el pago desde otra billetera como único camino.**
 2. La cuenta que cobra, creada en la red principal con su línea del USDC de Circle. Sin la línea, el retiro da `no-recibe`.
 3. Créditos de Pollar para la firma del retiro.
 
