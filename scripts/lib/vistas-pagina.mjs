@@ -32,3 +32,43 @@ export async function clicHasta(page, paso, deps) {
     }
   }
 }
+
+/** Lo que se guarda de una vista que falló: cuánto texto y cuánto esperar a la página. */
+export const FALLO = { textoMax: 300, esperaMs: 15_000 };
+
+/** Espera una promesa hasta `ms`: si tarda más, falla (y no deja el temporizador vivo). */
+function conTope(promesa, ms) {
+  let t;
+  const corte = new Promise((_, rechazar) => {
+    t = setTimeout(() => rechazar(new Error(`no contestó en ${Math.round(ms / 1000)} s`)), ms);
+  });
+  return Promise.race([promesa, corte]).finally(() => clearTimeout(t));
+}
+
+/**
+ * Qué había en pantalla cuando una vista falló: la foto (`fotografiar(archivo)`), la dirección en ese
+ * momento y los primeros 300 caracteres del texto visible. Cada cosa tiene su propio intento y su
+ * propio tope de tiempo: si una falla queda en null y las demás se guardan igual. Nunca lanza, para
+ * que un error acá no tape el error de la vista.
+ */
+export async function evidenciaDelFallo(page, fotografiar, archivo, ms = FALLO.esperaMs) {
+  const r = { archivoDelFallo: null, direccionEnElFallo: null, textoVisible: null };
+  try {
+    await conTope(Promise.resolve().then(() => fotografiar(archivo)), ms);
+    r.archivoDelFallo = archivo;
+  } catch {
+    /* la foto no salió: se anota sin ella */
+  }
+  try {
+    r.direccionEnElFallo = String(await conTope(page.eval("location.href"), ms));
+  } catch {
+    /* sin dirección */
+  }
+  try {
+    const texto = await conTope(page.eval("(document.body ? document.body.innerText : '')"), ms);
+    r.textoVisible = String(texto).replace(/\s+/g, " ").trim().slice(0, FALLO.textoMax);
+  } catch {
+    /* sin texto */
+  }
+  return r;
+}
