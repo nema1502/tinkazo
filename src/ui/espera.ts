@@ -174,6 +174,14 @@ function ajustar(capa: HTMLElement): void {
     capa.style.setProperty("--ajuste", entra.toFixed(3));
     return true;
   };
+  // Primero lo que la sala lee desde el fondo: el reloj y las tres cintas, al tamaño completo. La presentación de la lista
+  // sellada se queda solo si con ella todo entra así. Si no, se esconde (`data-sin-teaser`) y se sigue como antes de que
+  // existiera: achicar y, de hacer falta, quitar cintas. Nunca paga ella el reloj ni las cintas.
+  delete capa.dataset.sinTeaser;
+  delete capa.dataset.apretada;
+  capa.style.setProperty("--ajuste", "1");
+  if (!sobra()) return;
+  capa.dataset.sinTeaser = "1";
   // Sin tres cintas no hay nada que quitar: con dos o una, los niveles repiten lo mismo y se pasa al siguiente sin costo.
   for (const nivel of [0, 1, 2]) if (probar(nivel)) return;
 }

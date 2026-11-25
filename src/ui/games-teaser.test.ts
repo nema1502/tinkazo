@@ -269,4 +269,8 @@ describe("el aspecto de la presentación vive en la hoja de estilos", () => {
   it("en una pantalla baja la presentación se esconde para no empujar el reloj", () => {
     expect(css).toMatch(/@media \(max-height: 560px\)\s*\{[^@]*\.espera-teaser-caja\s*\{\s*display:\s*none/);
   });
+
+  it("cuando la capa decide que no hay alto para la presentación, la hoja de estilos la esconde", () => {
+    expect(css).toMatch(/\.espera\[data-sin-teaser\]\s+\.espera-teaser-caja\s*\{\s*display:\s*none/);
+  });
 });
