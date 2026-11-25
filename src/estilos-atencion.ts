@@ -6,8 +6,9 @@
  * (`styles.css`, bloque "Animaciones de atención") apaga las animaciones.
  *
  * Las piezas:
- * - `iniciarTemblorHero`: los dos botones de la portada tiemblan sutilmente
- *   tras ~8 s sin interactuar; cualquier interacción corta el ciclo y lo rearma.
+ * - `iniciarTemblorHero`: el botón principal de la portada (y el par del cierre)
+ *   tiembla sutilmente tras ~8 s sin interactuar; cualquier interacción corta el
+ *   ciclo y lo rearma.
  * - `iniciarDestelloPie`: cada ~4 s un brillo cruza el badge del pie de la
  *   página (el «sello» de la marca), en ~0,8 s, y se apaga solo.
  * - `iniciarHoverVivo`: la captura de la tarjeta bajo el mouse se mueve suave
@@ -85,11 +86,15 @@ function conHover(): boolean {
 export const TEMBLOR_TRAS_MS = 8000;
 /** Cuánto dura una sacudida: ~0,5 s con dos vaivenes dentro; el tiempo exacto lo manda el CSS. */
 export const TEMBLOR_DURACION_MS = 600;
-/** Los dos botones de la portada: el grande de entrar y "Probar con un ejemplo". */
+/**
+ * Los botones de la portada que tiemblan: el grande de entrar (arriba y en el cierre) y el "Probar con un ejemplo" del cierre,
+ * que va en la misma fila. El de arriba ya no está en la fila del botón grande, vive en su puerta, y no tiembla: el temblor del
+ * hero queda en el botón principal.
+ */
 const BOTONES_HERO = ".hero-ctas [data-cta-entrar], .hero-ctas [data-entrar-ensayo]";
 
 /**
- * Los dos botones del hero tiemblan sutilmente cuando nadie interactúa hace
+ * El botón principal de la portada (y el par del cierre) tiembla cuando nadie interactúa hace
  * ~8 s: una sacudida corta, y se vuelve a armar. Cualquier interacción corta el
  * ciclo en el acto. El filtro de lo visible mira el display del propio botón:
  * la portada oculta desde un ancestro no lo frena. Devuelve la limpieza.
