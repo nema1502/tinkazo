@@ -450,15 +450,16 @@ describe("el alta de una persona con Google", () => {
     expect(await r.json()).toEqual({ error: "llena" });
   });
 
-  it("con el interruptor apagado después de crear la campaña, ni el alta ni la consulta propia andan", async () => {
+  it("con el interruptor apagado después de crear la campaña, no entra nadie más y la consulta propia sigue", async () => {
     expect((await altaGoogle(mundo, sala, await tokenDeGoogle(1))).status).toBe(201);
     mundo.env.DIFERIDA = "0";
     const alta = await altaGoogle(mundo, sala, await tokenDeGoogle(2), { llave: llaveDe(2) });
     expect(alta.status).toBe(503);
     expect(await alta.json()).toEqual({ error: "personas-apagadas" });
+    // La consulta propia no frena: quien ya está anotada sigue pudiendo ver cómo va lo suyo.
     const yo = await yoPorLlave(mundo, sala, llaveDe(1));
-    expect(yo.status).toBe(503);
-    expect(await yo.json()).toEqual({ error: "personas-apagadas" });
+    expect(yo.status).toBe(200);
+    expect(await yo.json()).toMatchObject({ anotada: true });
     expect(filas(mundo, sala)).toHaveLength(1);
     // Lo que no es de las personas sigue como siempre: el estado público.
     expect((await mundo.pedir(ruta(sala, "/campana/estado"))).status).toBe(200);
@@ -692,13 +693,13 @@ describe("activar una campaña de personas", () => {
     expect(await r.json()).toMatchObject({ error: "forma", campo: "identidad" });
   });
 
-  it("con los interruptores, la activa y el texto firmado conserva el campo", async () => {
+  it("con los interruptores tampoco: las campañas de personas las firma solo Tinkazo", async () => {
     const m = await montarMundoDeActivar({ DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE });
     vi.setSystemTime(HORA_DE_LA_PRUEBA);
     m.horizon.pagos = [m.pagoCompleto("casa-andina-k7p2")];
     const r = await m.activar({ texto: JSON.stringify(m.campana({ identidad: "persona" })), sesion: m.organizadora.token });
-    expect(r.status).toBe(200);
-    expect(((await r.json()) as { texto: string }).texto).toBe(JSON.stringify(m.campana({ identidad: "persona" })));
+    expect(r.status).toBe(400);
+    expect(await r.json()).toMatchObject({ error: "forma", campo: "identidad" });
   });
 
   it("un valor de identidad que no existe no se activa con los interruptores como estén", async () => {
