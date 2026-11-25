@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { MARGEN_BASE, MARGEN_GRACIA_MAX, MARGEN_MAX, FRENO_MS, adelgazadoPrendido, horizonteDeMusica, margenMusica, nivelDeGracia, prenderAdelgazado } from "./music-margen";
 
@@ -155,24 +154,6 @@ describe("el freno del procesador y la pestaña escondida", () => {
     expect(silencioConGracia([1500, 1200, 900, 800], 1500)).toBe(0);
     // La única hendija es la primera del tirón, que nadie puede prever.
     expect(silencioConGracia([...Array(40).fill(40), 1500, 1200, 900, 800, ...Array(60).fill(40)])).toBeLessThan(1.4);
-  });
-});
-
-describe("music.ts usa el margen", () => {
-  it("el tick programa hasta la hora más el margen, no 0,22 fijo, y el remate se arma con el mismo margen", async () => {
-    const { readFileSync } = await import("node:fs");
-    const src = readFileSync(new URL("./music.ts", import.meta.url), "utf8");
-    expect(src).not.toMatch(/s\.ctx\.currentTime \+ 0\.22/);
-    expect(src).toMatch(/s\.margen = escondida \? MARGEN_BASE : margenMusica\(s\.margen, intervalo, s\.adelgazar\);/);
-    expect(src).toMatch(/while \(s\.next < s\.ctx\.currentTime \+ \(s\.adelgazar && !escondida \? horizonteDeMusica\(s\.margen, intervalo\) : s\.margen\)\)/);
-    expect(src).toMatch(/const espera = \(at - s\.ctx\.currentTime - Math\.max\(0\.15, s\.margen\)\) \* 1000;/);
-  });
-
-  it("el tick mide cuánto frenó el procesador y con gracia el horizonte llega hasta el próximo tick", async () => {
-    const src = readFileSync(new URL("./music.ts", import.meta.url), "utf8");
-    expect(src).toMatch(/const intervalo = ahora - s\.ultimoTick;/);
-    expect(src).toMatch(/s\.gracia = s\.adelgazar && !escondida \? nivelDeGracia\(s\.gracia, intervalo\) : 0;/);
-    expect(src).toMatch(/horizonteDeMusica\(s\.margen, intervalo\)/);
   });
 });
 

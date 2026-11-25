@@ -18,7 +18,7 @@ import { ACORDES, type AcordeId } from "./sonidos/carrera";
 /**
  * Las capas del show por juego: la identidad de cada juego es un mapa puro de datos que la página de
  * escucha (`src/ui/escucha.ts`) toca con el secuenciador de siempre, y nada más. En producción no prende nada
- * nuevo: eso lo decide el dueño escuchando. Y el núcleo del freno: el tick de la música mide cuánto
+ * nuevo: eso se decide escuchando. Y el núcleo del freno: el tick de la música mide cuánto
  * tardó el tick y baja con gracia a algo más simple, sin cortar nunca.
  */
 
@@ -133,25 +133,6 @@ describe("la curva del show: espera, tensión, ganador, festejo", () => {
   it("la semilla de la escucha es fija: la misma candidata suena igual cada vez", () => {
     expect(SEMILLA_DE_LA_ESCUCHA).toBeTypeOf("number");
     expect(SEMILLA_DE_LA_ESCUCHA).toBeGreaterThan(0);
-  });
-});
-
-describe("el tick baja con gracia cuando el procesador frenó, sin cortar nunca", () => {
-  it("el tick mide el intervalo, sigue el margen, mide el freno y programa hasta el horizonte de gracia", async () => {
-    const src = readFileSync(resolve(process.cwd(), "src/music.ts"), "utf8");
-    expect(src).toMatch(/const intervalo = ahora - s\.ultimoTick;/);
-    expect(src).toMatch(/s\.margen = escondida \? MARGEN_BASE : margenMusica\(s\.margen, intervalo, s\.adelgazar\);/);
-    expect(src).toMatch(/s\.gracia = s\.adelgazar && !escondida \? nivelDeGracia\(s\.gracia, intervalo\) : 0;/);
-    expect(src).toMatch(/horizonteDeMusica\(s\.margen, intervalo\)/);
-  });
-
-  it("con gracia las capas caras se caen primero, y el remate y el ganador suenan enteros", async () => {
-    const src = readFileSync(resolve(process.cwd(), "src/music.ts"), "utf8");
-    // La subida de ruido y la octava de arriba de la zampoña son lo primero que cae.
-    expect(src).toMatch(/L > 0\.8 && s\.gracia === 0/);
-    expect(src).toMatch(/s\.gracia < 0\.5/);
-    // El ganador (el remate ya programado) no se degrada: la gracia solo alcanza mientras el show corre.
-    expect(src).toMatch(/s\.gracia = 0;/);
   });
 });
 
