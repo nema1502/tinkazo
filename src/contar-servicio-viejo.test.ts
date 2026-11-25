@@ -117,13 +117,47 @@ describe("con el servicio sin actualizar", () => {
     const aviso = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     pestaña(servicioDeHoy);
     expect(contarPasoOficial("abrio", "mainnet")).toBe(true);
-    expect(contarPasoOficial("lista", "mainnet")).toBe(true);
+    await reposo();
+    expect(contarPasoOficial("lista", "mainnet")).toBe(false);
     await reposo();
     // El servicio las rechaza en silencio: no hay nada que contar de antes ni nada que reenviar.
     expect(aceptados(servicioDeHoy)).toEqual([]);
-    expect(salidas.every((s) => s.via === "beacon")).toBe(true);
     expect(error).not.toHaveBeenCalled();
     expect(aviso).not.toHaveBeenCalled();
+  });
+
+  it("después de un rechazo, las etapas que el servicio no conoce no se vuelven a mandar", async () => {
+    pestaña(servicioDeHoy);
+    expect(contarPasoOficial("abrio", "mainnet")).toBe(true);
+    await reposo();
+    expect(salidas).toHaveLength(1);
+    for (const paso of ["cupon", "activada", "protegida", "lista", "prueba"] as const) {
+      expect(contarPasoOficial(paso, "mainnet"), paso).toBe(false);
+    }
+    await reposo();
+    expect(salidas, "una sola etapa salió en vano, las demás se descartaron en silencio").toHaveLength(1);
+  });
+
+  it("si la cuenta conectada ya mostró que el servicio es el de antes, las etapas ni salen", async () => {
+    pestaña(servicioDeHoy);
+    expect(contarEntradaConRed("google", "mainnet")).toBe(true);
+    await reposo();
+    const antes = salidas.length;
+    expect(contarPasoOficial("abrio", "mainnet")).toBe(false);
+    await reposo();
+    expect(salidas).toHaveLength(antes);
+    // Lo que el servicio de antes sí conoce sigue saliendo.
+    expect(contar("seal_confirmed", { network: "mainnet", from: "aula" })).toBe(true);
+    expect(contar("list_shown", {})).toBe(true);
+  });
+
+  it("un servicio que contesta que espere no hace descartar las etapas", async () => {
+    pestaña(() => 429);
+    expect(contarPasoOficial("abrio", "mainnet")).toBe(true);
+    await reposo();
+    expect(contarPasoOficial("lista", "mainnet")).toBe(true);
+    await reposo();
+    expect(salidas).toHaveLength(2);
   });
 
   it("lo que ya se contaba antes de la novedad sale como siempre, una sola vez", async () => {
@@ -174,6 +208,13 @@ describe("con el servicio ya actualizado", () => {
     expect(contarPasoOficial("protegida", "mainnet")).toBe(true);
     await reposo();
     expect(aceptados(servicioActualizado)).toEqual([{ e: "oficial_step", p: { paso: "protegida" } }]);
+  });
+
+  it("todas las etapas salen, una por una, porque nadie las rechazó", async () => {
+    pestaña(servicioActualizado);
+    for (const paso of ["abrio", "activada", "protegida", "lista"] as const) expect(contarPasoOficial(paso, "mainnet"), paso).toBe(true);
+    await reposo();
+    expect(aceptados(servicioActualizado)).toHaveLength(4);
   });
 });
 

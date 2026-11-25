@@ -55,9 +55,22 @@ const MAX = 512;
 
 let destino = CONTADOR;
 
+/**
+ * Los conteos que el servicio publicado antes de la novedad no conoce y que no tienen una forma anterior: las etapas del
+ * paso de la cuenta. Si el servicio ya rechazó algo de lo nuevo, no se manda más de esto.
+ */
+const SIN_FORMA_ANTERIOR: ReadonlySet<Evento> = new Set<Evento>(["oficial_step", "cupon_llegada"]);
+
+/**
+ * El servicio contestó 400 a lo nuevo: es el de antes de la novedad. Desde ahí, lo que no tiene forma anterior se descarta
+ * en silencio, en lugar de mandarlo en vano una y otra vez. Hasta desplegar el servicio, esas etapas no se cuentan.
+ */
+let servicioDeAntes = false;
+
 /** Solo para las pruebas: otro destino. */
 export function probarCon(url: string): void {
   destino = url;
+  servicioDeAntes = false;
 }
 
 type Nav = Pick<Navigator, "doNotTrack"> & { globalPrivacyControl?: boolean; webdriver?: boolean };
@@ -127,13 +140,35 @@ function enviarConRespaldo(texto: string, respaldo: string): boolean {
     if (typeof fetch !== "function") return enviar(respaldo);
     void fetch(destino, { method: "POST", body: texto, keepalive: true, credentials: "omit", mode: "cors" }).then(
       (r) => {
-        if (r.status === 400) enviar(respaldo);
+        if (r.status === 400) {
+          servicioDeAntes = true;
+          enviar(respaldo);
+        }
       },
       () => undefined,
     );
     return true;
   } catch {
     return enviar(respaldo);
+  }
+}
+
+/**
+ * Manda un conteo que no tiene forma anterior y mira qué contesta el servicio. Si dice que no lo entiende (400), marca que
+ * es el de antes y no manda más de lo nuevo. No hay nada que reenviar: se descarta en silencio, sin aviso ni error.
+ */
+function enviarMirando(texto: string): boolean {
+  try {
+    if (typeof fetch !== "function") return enviar(texto);
+    void fetch(destino, { method: "POST", body: texto, keepalive: true, credentials: "omit", mode: "cors" }).then(
+      (r) => {
+        if (r.status === 400) servicioDeAntes = true;
+      },
+      () => undefined,
+    );
+    return true;
+  } catch {
+    return enviar(texto);
   }
 }
 
@@ -145,11 +180,17 @@ export function contar<E extends Evento>(e: E, p: PropsDe<E>, ref?: Ref): boolea
   try {
     if (!destino || !puedeContar(location, navigator)) return false;
     if (enPractica() && !DE_LA_PRACTICA.has(e)) return false;
+    const sinForma = SIN_FORMA_ANTERIOR.has(e);
+    if (sinForma && servicioDeAntes) return false;
     const texto = cuerpo(e, p, ref);
     if (texto.length > MAX) return false;
     const viejo = paraElServicioViejo(e, p);
     const respaldo = viejo ? cuerpo(e, viejo, ref) : null;
-    const salir = (): boolean => (respaldo === null ? enviar(texto) : enviarConRespaldo(texto, respaldo));
+    const salir = (): boolean => {
+      if (sinForma && servicioDeAntes) return false;
+      if (respaldo !== null) return enviarConRespaldo(texto, respaldo);
+      return sinForma ? enviarMirando(texto) : enviar(texto);
+    };
     // Una página adelantada (prerender) todavía no la vio nadie: sale si se muestra.
     const doc = document as Document & { prerendering?: boolean };
     if (doc.prerendering) {
