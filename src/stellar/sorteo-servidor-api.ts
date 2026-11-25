@@ -1,0 +1,124 @@
+import { formaDePortero } from "./alta-build";
+import { ErrorPortero, errorDeRespuesta } from "./patrocinador";
+
+/**
+ * Cómo pide el sitio al servicio de comisiones que mande el sorteo (`POST /v1/sorteo`), y qué quiere decir cada
+ * respuesta. La forma de la ruta es la del servicio (`workers/patrocinio/src/sorteadora.ts`).
+ *
+ * Es un archivo de lógica pura: el pedido sale por un `fetch` que entra por argumento, y nada se lee de la pantalla.
+ * Lo que decide qué hacer después (esperar, seguir por el camino de siempre, mirar la red) es `sorteo-del-servicio.ts`.
+ *
+ * - **El resultado no sale de acá.** Nada de lo que trae el cuerpo de la respuesta se usa como ganadores ni como número
+ *   al azar: el sorteo se lee de la red (`readDraw`) o del valor que devuelve la transacción ya confirmada.
+ * - **Sin nada del navegador.** Sin sesión ni cabeceras de más, `credentials: "omit"`, sin `Referer`, sin caché.
+ * - **Cerrado ante la duda.** Ninguna función lanza. Un corte, un tope o una respuesta que no se entiende es
+ *   `incierto`: quien llama no vuelve a pedir ni cambia de camino sin antes mirar la red.
+ */
+
+/** Qué hacer con una respuesta del servicio. */
+export type RespuestaDelSorteo =
+  /** El servicio mandó el sorteo y la red lo tomó (`pendiente`) o ya lo tenía en camino (`duplicado`). */
+  | { accion: "mandado"; hash: string; pendiente: boolean }
+  /** El servicio dice que el sorteo ya está hecho. Se comprueba en la red antes de creerlo. */
+  | { accion: "ya" }
+  /** El servicio aseguró que no mandó nada y que conviene volver a pedir. `fijaMs`: la espera, si el servicio la dice. */
+  | { accion: "espera"; fijaMs?: number }
+  /**
+   * El servicio aseguró que no lo va a mandar: sigue el camino de siempre. `marca`: este sorteo ya no es suyo.
+   * `disyuntor`: el problema es del servicio y no del sorteo, así que por un rato no se le pregunta más.
+   * `olvidar`: lo que se sabía del portero ya no vale.
+   */
+  | { accion: "hoy"; marca: boolean; disyuntor: boolean; olvidar: boolean }
+  /** Un no que se muestra tal cual, sin pasar por el camino de siempre. */
+  | { accion: "error"; error: ErrorPortero }
+  /** No se sabe si lo mandó. */
+  | { accion: "incierto" };
+
+/** La espera fija del 409: el servicio dice la hora de su reloj, que acá no se usa. */
+export const ESPERA_RONDA_NO_LISTA_MS = 5_000;
+
+const HASH = /^[0-9a-f]{64}$/i;
+const hoy = (m: { marca?: boolean; disyuntor?: boolean; olvidar?: boolean } = {}): RespuestaDelSorteo => ({ accion: "hoy", marca: !!m.marca, disyuntor: !!m.disyuntor, olvidar: !!m.olvidar });
+/** Un no que habla del servicio y no del sorteo: se sigue por el camino de siempre y por un rato no se le pregunta. */
+const delServicio = (olvidar = false): RespuestaDelSorteo => hoy({ disyuntor: true, olvidar });
+
+const DETALLES_DE_LECTURA = new Set(["lectura-sorteo", "simulacion", "secuencia", "ocupada"]);
+
+const texto = (x: unknown): string => (typeof x === "string" ? x : "");
+
+/** Traduce el estado y el cuerpo de la respuesta del servicio a lo que hay que hacer. Pura. */
+export function leerRespuestaDelSorteo(estado: number, cuerpo: unknown): RespuestaDelSorteo {
+  const c = (cuerpo && typeof cuerpo === "object" ? cuerpo : {}) as Record<string, unknown>;
+  const motivo = texto(c.motivo);
+  const detalle = texto(c.detalle);
+
+  if (estado === 200) {
+    if (c.ya === true) return { accion: "ya" };
+    const hash = texto(c.hash);
+    if (HASH.test(hash) && (c.status === "PENDING" || c.status === "DUPLICATE")) return { accion: "mandado", hash: hash.toLowerCase(), pendiente: c.status === "PENDING" };
+    return { accion: "incierto" };
+  }
+  if (estado === 409) return motivo === "ronda-no-lista" ? { accion: "espera", fijaMs: ESPERA_RONDA_NO_LISTA_MS } : delServicio();
+  if (estado === 502) {
+    if (motivo === "red" && DETALLES_DE_LECTURA.has(detalle)) return { accion: "espera" };
+    // Un corte del servicio con la red puede venir de la etapa de envío: puede haber salido.
+    return { accion: "incierto" };
+  }
+  if (estado === 429) return motivo === "cupo-cuenta" ? { accion: "error", error: errorDeRespuesta(429, cuerpo) } : delServicio();
+  if (estado === 400) {
+    // La comisión alta la decide el camino de siempre con su propia simulación.
+    if (motivo === "fee-alta") return hoy();
+    // La simulación del navegador da el mismo error del contrato antes de cualquier firma.
+    if (motivo === "fallaria") return hoy({ marca: true });
+    return delServicio();
+  }
+  if (estado === 403) return motivo === "no-es-nuestro" ? hoy({ marca: true }) : delServicio();
+  if (estado === 503) {
+    if (motivo === "apagado" || motivo === "fondo") return delServicio(true);
+    return { accion: "incierto" };
+  }
+  if (estado === 404 || estado === 405) return delServicio();
+  if (estado >= 400 && estado < 500) return delServicio();
+  return { accion: "incierto" };
+}
+
+export interface PedidoDelSorteo {
+  /** La dirección del servicio. Sin forma de portero de la red principal, no se pide nada. */
+  url: string | null | undefined;
+  raffleId: bigint;
+  /** La firma de la ronda, sin comprimir: los 96 bytes que pide `draw`. */
+  firma96: Uint8Array;
+  fetch?: typeof fetch;
+  /** Para abandonar el pedido: lo que se abortó puede seguir en el servicio. */
+  signal?: AbortSignal;
+}
+
+const hex = (b: Uint8Array): string => Array.from(b, (n) => n.toString(16).padStart(2, "0")).join("");
+
+/** Pide al servicio que mande el sorteo. No lanza nunca. */
+export async function pedirElSorteo(p: PedidoDelSorteo): Promise<RespuestaDelSorteo> {
+  const base = String(p.url ?? "").trim().replace(/\/+$/, "");
+  if (!formaDePortero(base)) return hoy();
+  const f: typeof fetch = p.fetch ?? ((...a) => fetch(...a));
+  let r: Response;
+  try {
+    r = await f(`${base}/v1/sorteo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sorteo: String(p.raffleId), firma: hex(p.firma96) }),
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      cache: "no-store",
+      ...(p.signal ? { signal: p.signal } : {}),
+    });
+  } catch {
+    return { accion: "incierto" };
+  }
+  let cuerpo: unknown = null;
+  try {
+    cuerpo = await r.json();
+  } catch {
+    /* sin cuerpo que se entienda: la respuesta se juzga por su estado */
+  }
+  return leerRespuestaDelSorteo(r.status, cuerpo);
+}
