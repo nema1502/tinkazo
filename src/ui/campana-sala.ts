@@ -451,7 +451,7 @@ const DOCE_HORAS = 12 * 3_600_000;
 const MARGEN_DE_LAS_DOCE_HORAS = 4 * 60_000;
 /** Quien vuelve a la pestaña no hace mirar el premio más de una vez cada 5 segundos. */
 const ENTRE_MIRADAS_DEL_DEPOSITO_MS = 5_000;
-/** Cuánto se sigue afirmando una lectura del premio: pasado un minuto se vuelve a leer y mientras tanto no se dice nada. */
+/** Cuánto se sigue afirmando una lectura del premio: pasado un minuto ya no se dice y la línea cuenta que no se pudo ver. */
 const VIDA_DE_LA_LECTURA_DEL_DEPOSITO_MS = 60_000;
 /** Con el panel a la vista, la relectura arranca a los 50 segundos de la última lectura: el texto de antes sigue hasta que llega la nueva. */
 const RELECTURA_DEL_DEPOSITO_MS = 50_000;
@@ -459,6 +459,11 @@ const RELECTURA_DEL_DEPOSITO_MS = 50_000;
 const RELOJ_DEL_DEPOSITO_MS = VIDA_DE_LA_LECTURA_DEL_DEPOSITO_MS + 250;
 /** Si la primera lectura falla, se prueba una sola vez más a los 5 segundos. */
 const REINTENTO_DEL_DEPOSITO_MS = 5_000;
+/**
+ * Si una lectura del premio todavía vale, según la hora del sistema. Una edad negativa (el reloj se atrasó) cuenta como vencida:
+ * nunca se afirma una lectura que parece del futuro.
+ */
+const vigenteElDeposito = (edadMs: number): boolean => edadMs >= 0 && edadMs < VIDA_DE_LA_LECTURA_DEL_DEPOSITO_MS;
 const DESHACER_MS = 5_000;
 /** Si una quita no llegó a la sala, se vuelve a mandar sola: quitar dos veces es lo mismo que una. */
 const REINTENTO_QUITA_MS = 3_000;
@@ -662,16 +667,19 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let punteroDentro = false;
   let marca = 0;
   /**
-   * Lo que se leyó del premio en la cuenta que lo paga, de qué lectura es y a qué hora se empezó a leer (`de`). Una lectura de
-   * más de un minuto ya no se afirma. Sin `deps.deposito` no se mira nada.
+   * Lo que se leyó del premio en la cuenta que lo paga. `bueno` es la última lectura que contestó (alcanza o falta) y a qué hora
+   * se empezó a leer: una relectura que falla no la pisa, y a partir del minuto ya no se afirma. `de` es la hora en que empezó la
+   * última lectura terminada, y de ahí sale el reloj. Sin `deps.deposito` no se mira nada.
    */
   let deposito: {
     clave: string;
-    estado: EstadoDelDeposito | null;
+    bueno: { estado: Exclude<EstadoDelDeposito, { tipo: "sin-lectura" }>; de: number } | null;
     de: number;
     enVuelo: boolean;
-    /** Si es la primera lectura de esta clave o su único reintento: solo ellas reservan el lugar de la línea. */
-    reserva: boolean;
+    /** Mientras la primera lectura de esta clave y su único reintento no terminan, la línea espera vacía, con su alto. */
+    inicial: boolean;
+    /** Cuándo empezó la primera lectura: pasado un minuto sin respuesta, la línea ya dice que no se pudo ver. */
+    inicio: number;
     /** Si ya se lanzó la relectura que sigue a esta lectura: el reloj pasa entonces al vencimiento. */
     releyendo: boolean;
   } | null = null;
@@ -681,7 +689,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let claveReintentada = "";
   let pararRelojDelDeposito: (() => void) | null = null;
   let pararReintentoDelDeposito: (() => void) | null = null;
-  /** La línea del premio: sin `deps.deposito` no existe y el panel es el de siempre. Con él, su lugar queda reservado. */
+  /** La línea del premio: sin `deps.deposito` no existe y el panel es el de siempre. Con él, mientras corresponde, está a la vista con su alto. */
   let depositoEl: HTMLElement | null = null;
   let escucha: { parar: () => void; consultar: () => Promise<void> } | null = null;
   let pararPase: (() => void) | null = null;
@@ -3101,8 +3109,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
    * saldo baja, y se vuelve a mirar), y después una vez cada 50 segundos mientras el panel está a la vista: el texto de antes sigue
    * hasta que llega la lectura nueva, y una lectura de más de un minuto no se afirma. Con la pestaña escondida no lee. `volvio` es
    * la vuelta a la pestaña: quien cargó dólares en otra ventana lo ve al volver, sin pedir más de una vez cada 5 segundos. `ahora`
-   * es justo antes de abrir la inscripción: lee siempre, y hasta que vuelve la lectura no se dice nada. `reloj` es la relectura de
-   * los 50 segundos y `reintento` el único segundo intento de una primera lectura fallida. Nunca frena nada ni lanza: es solo la línea.
+   * es justo antes de abrir la inscripción: lee siempre, sin esperarla. `reloj` es la relectura de los 50 segundos y `reintento`
+   * el único segundo intento de una primera lectura fallida. Nunca frena nada ni lanza: es solo la línea.
    *
    * Con el cobro prendido y todavía sin pagar no se mira ni se dice nada: lo que hay que cargar es el premio más lo que se cobra,
    * y eso ya lo dice el control del cobro con su propia lectura del saldo. Una línea que dijera que el premio está en la cuenta
@@ -3122,7 +3130,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       const { cuenta, total, clave } = datos;
       const hora = deps.ahora();
       const antes = deposito?.clave === clave ? deposito : null;
-      const vieja = antes !== null && hora - antes.de >= VIDA_DE_LA_LECTURA_DEL_DEPOSITO_MS;
+      const vieja = antes !== null && !vigenteElDeposito(hora - antes.de);
       if (antes !== null && !vieja) {
         // Ya leída y todavía fresca: solo la vuelta a la pestaña (cada 5 s como mucho), la relectura del reloj o el toque de abrir vuelven a leer.
         if (modo === "normal") return;
@@ -3131,14 +3139,16 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // Con una lectura en el aire, un repintado cualquiera no pide otra.
       if (antes?.enVuelo && modo === "normal") return;
       ultimaMiradaDelDeposito = hora;
-      // Lo de antes se conserva solo si es fresco y no es el toque de abrir: una lectura vieja no se afirma mientras se vuelve a leer.
+      // El texto bueno de antes se queda en la línea mientras la lectura nueva viene en camino: su edad dice hasta cuándo se afirma.
+      // Solo el reloj de la relectura sigue el de la lectura de antes, salvo que esta esté vieja o sea el toque de abrir.
       const conserva = antes !== null && !vieja && modo !== "ahora";
       const esta = {
         clave,
-        estado: antes !== null && conserva ? antes.estado : null,
+        bueno: antes !== null ? antes.bueno : null,
         de: antes !== null && conserva ? antes.de : hora,
         enVuelo: true,
-        reserva: modo === "reintento" || antes === null,
+        inicial: antes !== null ? antes.inicial : true,
+        inicio: antes !== null ? antes.inicio : hora,
         releyendo: conserva,
       };
       deposito = esta;
@@ -3153,17 +3163,24 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         .catch((): EstadoDelDeposito => ({ tipo: "sin-lectura" }))
         .then((estado) => {
           if (deposito !== esta || depositoDetenido) return;
-          esta.estado = estado;
           esta.de = hora;
           esta.enVuelo = false;
           esta.releyendo = false;
-          if (estado.tipo === "sin-lectura" && primera && claveReintentada !== clave) {
-            claveReintentada = clave;
-            pararReintentoDelDeposito?.();
-            pararReintentoDelDeposito = deps.esperar(() => {
-              pararReintentoDelDeposito = null;
-              if (deposito === esta && !depositoDetenido) mirarElDeposito("reintento");
-            }, REINTENTO_DEL_DEPOSITO_MS);
+          if (estado.tipo === "sin-lectura") {
+            // Una lectura que falla no pisa la buena de antes. La primera tiene un único reintento: hasta que termine, la línea espera vacía.
+            if (primera && claveReintentada !== clave) {
+              claveReintentada = clave;
+              pararReintentoDelDeposito?.();
+              pararReintentoDelDeposito = deps.esperar(() => {
+                pararReintentoDelDeposito = null;
+                if (deposito === esta && !depositoDetenido) mirarElDeposito("reintento");
+              }, REINTENTO_DEL_DEPOSITO_MS);
+            } else {
+              esta.inicial = false;
+            }
+          } else {
+            esta.bueno = { estado, de: hora };
+            esta.inicial = false;
           }
           programarElRelojDelDeposito();
           pintar();
@@ -3180,62 +3197,79 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   }
 
   /**
-   * Un solo reloj para la línea. A los 50 segundos de la última lectura pide la relectura (con la pestaña a la vista) y, pasada esa,
-   * despierta al panel un instante después de que la lectura cumple su minuto, para que la línea vieja se esconda. Cada lectura
-   * nueva lo reprograma y descartar la línea lo apaga.
+   * Un solo reloj para la línea. A los 50 segundos de la última lectura pide la relectura (con la pestaña a la vista) y, en el
+   * momento en que lo que dice la línea se vence (la lectura buena cumple su minuto, o la primera lectura que no contestó), despierta
+   * al panel para que el texto cambie. Cada lectura nueva lo reprograma y descartar la línea lo apaga. Nunca espera más de lo que
+   * dura una lectura: si la hora del sistema se atrasó, vuelve a mirar en lugar de quedarse esperando.
    */
   function programarElRelojDelDeposito(): void {
     pararRelojDelDeposito?.();
     pararRelojDelDeposito = null;
     const d = deposito;
     if (d === null || depositoDetenido) return;
-    const releer = !d.releyendo;
-    const cuando = d.de + (releer ? RELECTURA_DEL_DEPOSITO_MS : RELOJ_DEL_DEPOSITO_MS);
+    const ahora = deps.ahora();
+    const edadDeLaUltima = ahora - d.de;
+    const aLeer = d.releyendo ? null : edadDeLaUltima < 0 ? 0 : Math.max(0, RELECTURA_DEL_DEPOSITO_MS - edadDeLaUltima);
+    const origen = d.bueno !== null && vigenteElDeposito(ahora - d.bueno.de) ? d.bueno.de : d.inicial && vigenteElDeposito(ahora - d.inicio) ? d.inicio : null;
+    const aVencer = origen === null ? null : Math.max(0, origen + RELOJ_DEL_DEPOSITO_MS - ahora);
+    const esperas = [aLeer, aVencer].filter((x): x is number => x !== null);
+    if (esperas.length === 0) return;
     pararRelojDelDeposito = deps.esperar(
       () => {
         pararRelojDelDeposito = null;
         if (depositoDetenido || deposito !== d) return;
-        if (releer) {
+        const edad = deps.ahora() - d.de;
+        if (!d.releyendo && (edad < 0 || edad >= RELECTURA_DEL_DEPOSITO_MS)) {
           d.releyendo = true;
           mirarElDeposito("reloj");
-          // Si no salió una lectura (la pestaña escondida, por ejemplo), queda el vencimiento.
-          if (deposito === d && pararRelojDelDeposito === null) programarElRelojDelDeposito();
         } else {
           pintar();
         }
+        // Si no salió una lectura (la pestaña escondida, por ejemplo), queda lo que falta: el vencimiento.
+        if (deposito === d && pararRelojDelDeposito === null) programarElRelojDelDeposito();
       },
-      Math.max(0, cuando - deps.ahora()),
+      Math.min(Math.min(...esperas), RELOJ_DEL_DEPOSITO_MS),
     );
   }
 
   /**
-   * La línea del premio en la vista previa: está, o cuánto falta. Con la lectura fallida, vieja, de otra cuenta o de otro total, o
-   * todavía en el aire, no dice nada. Su lugar queda reservado solo mientras la primera lectura (o su único reintento) sigue en
-   * camino y no tiene un minuto: así, al aparecer el texto, el botón de abrir no se corre, y si no hay nada que decir no queda un
-   * blanco. El texto solo se reescribe cuando cambia lo que dice.
+   * La línea del premio en la vista previa: mientras corresponde está siempre a la vista, con su alto, tenga texto o no. Dice si el
+   * premio está o cuánto falta con una lectura buena de menos de un minuto (una relectura que falla no la pisa antes de tiempo). Con
+   * la primera lectura (o su único reintento) en camino queda vacía. Con la lectura fallida o vencida dice que no se pudo ver. Solo se
+   * esconde cuando deja de corresponder: sin cuenta, con otra cuenta, otra red, el cobro sin pagar o fuera de la vista previa. El
+   * texto solo se reescribe cuando cambia lo que dice.
    */
   function pintarDeposito(): void {
     try {
       if (!deps.deposito) return;
       const datos = datosDelDeposito();
       if (datos === null && deposito !== null) descartarElDeposito();
-      const d = datos !== null && deposito !== null && deposito.clave === datos.clave ? deposito : null;
-      const fresca = d !== null && deps.ahora() - d.de < VIDA_DE_LA_LECTURA_DEL_DEPOSITO_MS;
-      const estado = d !== null && fresca ? d.estado : null;
+      const corresponde = datos !== null;
       let texto = "";
-      if (estado?.tipo === "alcanza") texto = fmt("cpoDepAlcanza", { premios: dolaresEnTexto(estado.total, deps.idioma()) });
-      else if (estado?.tipo === "falta") texto = fmt("cpoDepFalta", { falta: dolaresEnTexto(estado.falta, deps.idioma()) });
-      const reservada = texto === "" && d !== null && fresca && d.reserva && (d.enVuelo || pararReintentoDelDeposito !== null);
-      if (texto === "" && !reservada && depositoEl === null) return;
+      if (datos !== null) {
+        const d = deposito !== null && deposito.clave === datos.clave ? deposito : null;
+        const ahora = deps.ahora();
+        const bueno = d?.bueno ?? null;
+        if (bueno !== null && vigenteElDeposito(ahora - bueno.de)) {
+          texto =
+            bueno.estado.tipo === "falta"
+              ? fmt("cpoDepFalta", { falta: dolaresEnTexto(bueno.estado.falta, deps.idioma()) })
+              : tx("cpoDepAlcanza");
+        } else if (d !== null && d.inicial && vigenteElDeposito(ahora - d.inicio)) {
+          texto = "";
+        } else if (d !== null || document.visibilityState === "visible") {
+          texto = tx("cpoDepSinLectura");
+        }
+      }
       if (depositoEl === null) {
+        if (!corresponde) return;
         depositoEl = document.createElement("p");
         depositoEl.id = "cpo-deposito";
         depositoEl.className = "cpo-linea cpo-deposito";
         depositoEl.setAttribute("role", "status");
         premioEl.after(depositoEl);
       }
-      const escondida = texto === "" && !reservada;
-      if (depositoEl.hidden !== escondida) depositoEl.hidden = escondida;
+      if (depositoEl.hidden === corresponde) depositoEl.hidden = !corresponde;
       if (depositoEl.textContent !== texto) depositoEl.textContent = texto;
     } catch {
       try {

@@ -53,17 +53,23 @@ import {
 } from "./campana-sala-mundo";
 
 const CUENTA = cuentaDePrueba(5);
+/** Los premios del archivo de ejemplo suman 40 dólares. */
+const PREMIO = "40,00";
 /** El texto de la clave en ese idioma con sus huecos llenos. */
 const dice = (idioma: "es" | "en", clave: string, huecos: Record<string, string>): string =>
   Object.entries(huecos).reduce((t, [hueco, valor]) => t.replace(`{${hueco}}`, valor), TEXTOS_SALA_CAMPANA[idioma][clave] ?? "");
-/** Los premios del archivo de ejemplo suman 40 dólares. */
-const PREMIO = "40,00";
 
 const ponerRed = (m: Mundo, red: "testnet" | "mainnet"): void => {
   h.red = red;
   m.red = red;
 };
 const linea = (p: Panel): string => p.raiz.querySelector("#cpo-deposito")?.textContent ?? "";
+/** Lo que dice la línea cuando no se pudo ver el saldo, sin esconderse. */
+const SIN_LECTURA = dice("es", "cpoDepSinLectura", {});
+/** La línea está a la vista, con o sin texto: nunca escondida. */
+const visible = (p: Panel): boolean => $(p, "#cpo-deposito").hidden === false;
+/** El selector de la regla del alto mínimo: sin :empty, así vale con y sin texto. */
+const REGLA_DEL_ALTO = ".cpo-deposito.cpo-linea:not([hidden]) {";
 
 /** El mundo en la red principal con la cuenta entrada y una lectura del saldo que contesta lo que se diga. */
 function armar(lectura: SaldoDeDolares | "falla", o: { red?: "mainnet" | "testnet"; cuenta?: string | null } = {}) {
@@ -102,7 +108,7 @@ describe("la línea del premio en la vista previa", () => {
   it("con el saldo que cubre el premio dice que está en la cuenta", async () => {
     const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
     const p = await previa(m);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
     expect(leer).toHaveBeenCalledTimes(1);
     expect(leer).toHaveBeenCalledWith(CUENTA);
   });
@@ -198,7 +204,7 @@ describe("la línea del premio en la vista previa", () => {
     document.dispatchEvent(new Event("visibilitychange"));
     await suelta(6);
     expect(leer).toHaveBeenCalledTimes(2);
-    expect($(p, "#cpo-deposito").textContent).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect($(p, "#cpo-deposito").textContent).toBe(dice("es", "cpoDepAlcanza", {}));
   });
 });
 
@@ -242,12 +248,12 @@ describe("la línea del premio con el cobro de Tinkazo prendido", () => {
     const p = await previa(m);
     await suelta(8);
     expect(leer).toHaveBeenCalled();
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
   });
 });
 
 describe("las lecturas que se cruzan o fallan", () => {
-  it("una lectura que falla después de una buena borra la línea vieja en vez de dejarla pintada", async () => {
+  it("una lectura que falla después de una buena no pisa el texto bueno hasta que cumple el minuto", async () => {
     let saldo: SaldoDeDolares | "falla" = { tipo: "saldo", saldo: "125.0000000" };
     const { m, leer } = armar(saldo);
     leer.mockImplementation(async () => {
@@ -255,13 +261,16 @@ describe("las lecturas que se cruzan o fallan", () => {
       return saldo;
     });
     const p = await previa(m);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
     saldo = "falla";
     await m.correr(6_000);
     document.dispatchEvent(new Event("visibilitychange"));
     await suelta(6);
     expect(leer).toHaveBeenCalledTimes(2);
-    expect(linea(p)).toBe("");
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
+    await m.correr(55_000);
+    expect(linea(p)).toBe(SIN_LECTURA);
+    expect(visible(p)).toBe(true);
   });
 
   it("la lectura de antes que llega después de la de ahora no la pisa", async () => {
@@ -277,11 +286,11 @@ describe("las lecturas que se cruzan o fallan", () => {
     expect(pendientes).toHaveLength(2);
     pendientes[1]?.({ tipo: "saldo", saldo: "125.0000000" });
     await suelta(6);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
     // La primera, que decía que faltaba todo, llega tarde: no cambia lo que se ve.
     pendientes[0]?.({ tipo: "sin-linea" });
     await suelta(6);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
   });
 
   it("una lectura que llega cuando el panel ya dejó la campaña no pinta nada", async () => {
@@ -305,11 +314,41 @@ describe("las lecturas que se cruzan o fallan", () => {
 });
 
 describe("los textos de la línea del premio", () => {
-  it("están en los dos idiomas con los mismos huecos", () => {
+  const CLAVES = ["cpoDepAlcanza", "cpoDepFalta", "cpoDepSinLectura"] as const;
+
+  it("están en los dos idiomas, con los mismos huecos", () => {
+    for (const clave of CLAVES) {
+      expect(TEXTOS_SALA_CAMPANA.es[clave], `es.${clave}`).toBeTruthy();
+      expect(TEXTOS_SALA_CAMPANA.en[clave], `en.${clave}`).toBeTruthy();
+    }
     for (const idioma of ["es", "en"] as const) {
-      expect(TEXTOS_SALA_CAMPANA[idioma].cpoDepAlcanza).toContain("{premios}");
+      expect(TEXTOS_SALA_CAMPANA[idioma].cpoDepAlcanza).not.toContain("{");
+      expect(TEXTOS_SALA_CAMPANA[idioma].cpoDepSinLectura).not.toContain("{");
       expect(TEXTOS_SALA_CAMPANA[idioma].cpoDepFalta).toContain("{falta}");
     }
+  });
+
+  it("dicen lo que decidió el diseño", () => {
+    expect(TEXTOS_SALA_CAMPANA.es.cpoDepAlcanza).toBe("Los dólares del premio ya están en tu cuenta.");
+    expect(TEXTOS_SALA_CAMPANA.en.cpoDepAlcanza).toBe("The prize dollars are already in your account.");
+    expect(TEXTOS_SALA_CAMPANA.es.cpoDepFalta).toBe("Faltan {falta} dólares digitales en tu cuenta.");
+    expect(TEXTOS_SALA_CAMPANA.en.cpoDepFalta).toBe("Your account is {falta} digital dollars short.");
+    expect(TEXTOS_SALA_CAMPANA.es.cpoDepSinLectura).toBe("No pudimos ver si el premio está en tu cuenta.");
+    expect(TEXTOS_SALA_CAMPANA.en.cpoDepSinLectura).toBe("We could not check if the prize is in your account.");
+  });
+
+  it("los dos de alcanza y falta miden como mucho 50 caracteres en español, aun con un monto de cuatro cifras", () => {
+    for (const clave of CLAVES) expect(dice("es", clave, { falta: "1.250,00" }).length, clave).toBeLessThanOrEqual(50);
+  });
+
+  it("con un monto de cuatro cifras la línea de falta sale entera", async () => {
+    const { m } = armar({ tipo: "sin-linea" });
+    const p = nuevoPanel(m);
+    await suelta(4);
+    await elegirArchivo(m, p, archivoDe({ red: m.red, premios: ["12500000000"] }));
+    await suelta(6);
+    expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: "1250,00" }));
+    expect(linea(p).length).toBeLessThanOrEqual(50);
   });
 });
 
@@ -335,13 +374,13 @@ describe("ninguna excepción de la línea tumba el panel", () => {
     h.rompeElTotal = false;
     p.pintar();
     await suelta(6);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
   });
 
   it("si al volver a la pestaña el cálculo lanza, el evento no lanza y la línea se apaga", async () => {
     const { m } = armar({ tipo: "saldo", saldo: "125.0000000" });
     const p = await previa(m);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
     h.rompeElTotal = true;
     await m.correr(6_000);
     expect(() => document.dispatchEvent(new Event("visibilitychange"))).not.toThrow();
@@ -357,30 +396,30 @@ describe("la línea no queda vieja", () => {
     leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
     leer.mockImplementation(() => new Promise<SaldoDeDolares>((resolver) => void pendientes.push(resolver)));
     const p = await previa(m);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
     await m.correr(49_000);
     expect(leer).toHaveBeenCalledTimes(1);
     await m.correr(2_000);
     expect(leer).toHaveBeenCalledTimes(2);
     // La lectura vieja tiene 51 segundos: todavía se afirma.
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
     await m.correr(8_000);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
     pendientes[0]?.({ tipo: "saldo", saldo: "25.0000000" });
     await suelta(6);
     expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: "15,00" }));
   });
 
-  it("si a los 60 segundos la lectura nueva no llegó, la línea queda escondida y no vuelve a afirmar lo viejo", async () => {
+  it("si a los 60 segundos la lectura nueva no llegó, la línea dice que no se pudo ver y no vuelve a afirmar lo viejo", async () => {
     const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
     leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
     leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
     const p = await previa(m);
     await m.correr(59_000);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
     await m.correr(2_000);
-    expect(linea(p)).toBe("");
-    expect($(p, "#cpo-deposito").hidden).toBe(true);
+    expect(linea(p)).toBe(SIN_LECTURA);
+    expect(visible(p)).toBe(true);
   });
 
   it("una relectura con el mismo resultado no vuelve a escribir la línea", async () => {
@@ -395,7 +434,7 @@ describe("la línea no queda vieja", () => {
     ojo.disconnect();
     expect(leer.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(mudanzas.length).toBe(0);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
   });
 
   it("una relectura con otro resultado cambia el texto", async () => {
@@ -408,16 +447,20 @@ describe("la línea no queda vieja", () => {
     expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: "15,00" }));
   });
 
-  it("si la relectura falla, la línea de antes no sigue afirmando", async () => {
+  it("si la relectura falla, el texto de antes sigue hasta los 60 segundos y ahí pasa a no se pudo ver", async () => {
     const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
     leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
     leer.mockImplementation(async () => {
       throw new Error("sin conexión");
     });
     const p = await previa(m);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
-    await m.correr(61_000);
-    expect(linea(p)).toBe("");
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
+    await m.correr(55_000);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
+    await m.correr(6_000);
+    expect(linea(p)).toBe(SIN_LECTURA);
+    expect(visible(p)).toBe(true);
   });
 
   it("con el panel a la vista lee como mucho una vez por minuto", async () => {
@@ -428,7 +471,7 @@ describe("la línea no queda vieja", () => {
     expect(leer.mock.calls.length).toBeLessThanOrEqual(4);
   });
 
-  it("con la pestaña escondida no lee, y la línea vieja se apaga", async () => {
+  it("con la pestaña escondida no lee, y la línea vieja pasa a no se pudo ver", async () => {
     const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
     const p = await previa(m);
     Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
@@ -436,13 +479,13 @@ describe("la línea no queda vieja", () => {
     p.pintar();
     await suelta(4);
     expect(leer).toHaveBeenCalledTimes(1);
-    expect(linea(p)).toBe("");
+    expect(linea(p)).toBe(SIN_LECTURA);
     // Al volver se lee de nuevo y la línea reaparece.
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     document.dispatchEvent(new Event("visibilitychange"));
     await suelta(6);
     expect(leer).toHaveBeenCalledTimes(2);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
   });
 
   it("al tocar Abrir la inscripción vuelve a leer, y si queda en la vista previa la línea es la de la lectura nueva", async () => {
@@ -458,10 +501,10 @@ describe("la línea no queda vieja", () => {
     await suelta(8);
     expect(leer).toHaveBeenCalledTimes(2);
     expect(vistaDe(p)).toBe("previa");
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
   });
 
-  it("mientras la lectura de antes de abrir no vuelve, no afirma nada y abrir no espera", async () => {
+  it("mientras la lectura de antes de abrir no vuelve, el texto fresco se queda y abrir no espera", async () => {
     const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
     leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
     leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
@@ -471,7 +514,7 @@ describe("la línea no queda vieja", () => {
     await suelta(8);
     expect(m.creadas).toHaveLength(1);
     expect(vistaDe(p)).toBe("previa");
-    expect(linea(p)).toBe("");
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
   });
 });
 
@@ -487,16 +530,16 @@ describe("la primera lectura que falla se reintenta una vez", () => {
     expect(leer).toHaveBeenCalledTimes(1);
     await m.correr(2_000);
     expect(leer).toHaveBeenCalledTimes(2);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
   });
 
-  it("si el reintento también falla, no vuelve a probar hasta los 50 segundos y la línea queda escondida", async () => {
+  it("si el reintento también falla, no vuelve a probar hasta los 50 segundos y la línea dice que no se pudo ver", async () => {
     const { m, leer } = armar("falla");
     const p = await previa(m);
     await m.correr(30_000);
     expect(leer).toHaveBeenCalledTimes(2);
-    expect(linea(p)).toBe("");
-    expect($(p, "#cpo-deposito").hidden).toBe(true);
+    expect(linea(p)).toBe(SIN_LECTURA);
+    expect(visible(p)).toBe(true);
   });
 
   it("una primera lectura que anda no se reintenta", async () => {
@@ -530,9 +573,9 @@ describe("el lugar de la línea está reservado", () => {
     expect(el && botonPrincipal && el.compareDocumentPosition(botonPrincipal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("la hoja le da un alto mínimo aunque esté vacía", () => {
+  it("la hoja le da un alto mínimo con o sin texto", () => {
     const css = readFileSync("src/campana/campana-sala.css", "utf8");
-    const inicio = css.indexOf(".cpo-deposito:empty:not([hidden]) {");
+    const inicio = css.indexOf(REGLA_DEL_ALTO);
     expect(inicio).toBeGreaterThan(-1);
     const regla = css.slice(inicio, css.indexOf("}", inicio));
     expect(regla).toContain("display: block");
@@ -566,7 +609,7 @@ describe("la línea habla solo de la cuenta que entró", () => {
     await elegirArchivo(m, p, conPide(CUENTA));
     await suelta(6);
     expect(leer).toHaveBeenCalledWith(CUENTA);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
   });
 });
 
@@ -577,7 +620,7 @@ describe("lo que se pinta es de la clave de ahora", () => {
     leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
     leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
     const p = await previa(m);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
     return { m, leer, p };
   }
 
@@ -633,29 +676,43 @@ describe("lo que se pinta es de la clave de ahora", () => {
 });
 
 describe("sin hueco en blanco", () => {
-  it("con la primera lectura y su reintento fallidos la línea queda escondida y no reservada", async () => {
+  it("con la primera lectura y su reintento fallidos la línea dice que no se pudo ver, a la vista", async () => {
     const { m, leer } = armar("falla");
     const p = await previa(m);
-    // Primera lectura fallida y reintento pendiente: el lugar sigue reservado.
-    expect($(p, "#cpo-deposito").hidden).toBe(false);
+    // Primera lectura fallida y reintento pendiente: el lugar sigue a la vista, vacío.
+    expect(visible(p)).toBe(true);
     expect(linea(p)).toBe("");
     await m.correr(6_000);
     expect(leer).toHaveBeenCalledTimes(2);
-    expect($(p, "#cpo-deposito").hidden).toBe(true);
+    expect(visible(p)).toBe(true);
+    expect(linea(p)).toBe(SIN_LECTURA);
     await m.correr(60_000);
-    expect($(p, "#cpo-deposito").hidden).toBe(true);
+    expect(visible(p)).toBe(true);
+    expect(linea(p)).toBe(SIN_LECTURA);
   });
 
-  it("una primera lectura que no vuelve en un minuto deja de reservar el lugar", async () => {
+  it("una primera lectura que no vuelve en un minuto pasa a no se pudo ver", async () => {
     const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
     leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
     const p = await previa(m);
-    expect($(p, "#cpo-deposito").hidden).toBe(false);
-    await m.correr(61_000);
-    expect($(p, "#cpo-deposito").hidden).toBe(true);
+    expect(visible(p)).toBe(true);
+    expect(linea(p)).toBe("");
+    await m.correr(59_000);
+    expect(linea(p)).toBe("");
+    await m.correr(2_000);
+    expect(visible(p)).toBe(true);
+    expect(linea(p)).toBe(SIN_LECTURA);
   });
 
-  it("una relectura fallida de una lectura buena no reserva lugar: queda escondida", async () => {
+  it("con la lectura en camino la línea está a la vista y vacía", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
+    const p = await previa(m);
+    expect(visible(p)).toBe(true);
+    expect(linea(p)).toBe("");
+  });
+
+  it("una relectura fallida de una lectura buena no pisa el texto bueno ni deja el lugar vacío", async () => {
     const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
     leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
     leer.mockImplementation(async () => {
@@ -663,8 +720,41 @@ describe("sin hueco en blanco", () => {
     });
     const p = await previa(m);
     await m.correr(52_000);
-    expect(linea(p)).toBe("");
-    expect($(p, "#cpo-deposito").hidden).toBe(true);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
+    await m.correr(7_000);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
+    await m.correr(2_000);
+    expect(linea(p)).toBe(SIN_LECTURA);
+    expect(visible(p)).toBe(true);
+  });
+
+  it("mientras una relectura está en camino, lo que estaba a la vista se queda y, vencido, dice que no se pudo ver", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "25.0000000" });
+    leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "25.0000000" }));
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
+    const p = await previa(m);
+    await m.correr(55_000);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: "15,00" }));
+    await m.correr(10_000);
+    expect(linea(p)).toBe(SIN_LECTURA);
+    await m.correr(30_000);
+    expect(linea(p)).toBe(SIN_LECTURA);
+    expect(visible(p)).toBe(true);
+  });
+
+  it("una edad negativa, con el reloj del sistema atrasado, cuenta como lectura vencida", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
+    const p = await previa(m);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
+    // El reloj se atrasa dos minutos: la lectura parece del futuro y no se afirma.
+    m.ahora -= 120_000;
+    p.pintar();
+    expect(linea(p)).toBe(SIN_LECTURA);
+    expect(visible(p)).toBe(true);
   });
 
   it("la línea sigue siendo un aviso de estado para quien usa lector de pantalla", async () => {
@@ -688,15 +778,21 @@ describe("el alto reservado según el ancho", () => {
     return "";
   };
 
-  it("son dos renglones por defecto, tres por debajo de 400 px y uno desde 900 px", () => {
-    const base = css.indexOf(".cpo-deposito:empty:not([hidden]) {");
+  it("el alto mínimo vale con y sin texto: dos renglones por defecto y uno desde 900 px", () => {
+    const base = css.indexOf(REGLA_DEL_ALTO);
+    expect(base).toBeGreaterThan(-1);
     expect(css.slice(base, css.indexOf("}", base))).toContain("min-height: 2.7em");
-    expect(bloque("@media (max-width: 399px)")).toMatch(/\.cpo-deposito:empty:not\(\[hidden\]\)\s*\{[^}]*min-height:\s*4\.05em/u);
-    expect(bloque("@media (min-width: 900px) {")).toMatch(/\.cpo-deposito:empty:not\(\[hidden\]\)\s*\{[^}]*min-height:\s*1\.35em/u);
+    expect(bloque("@media (min-width: 900px) {")).toMatch(/\.cpo-deposito\.cpo-linea:not\(\[hidden\]\)\s*\{[^}]*min-height:\s*1\.35em/u);
   });
 
-  it("la regla de tres renglones va después de la base para ganarle", () => {
-    expect(css.indexOf("@media (max-width: 399px)")).toBeGreaterThan(css.indexOf(".cpo-deposito:empty:not([hidden]) {"));
+  it("ninguna regla del alto depende de :empty y no queda la de tres renglones", () => {
+    expect(css).not.toMatch(/\.cpo-deposito[^{]*:empty/u);
+    expect(css).not.toContain("4.05em");
+    expect(css).not.toContain("max-width: 399px");
+  });
+
+  it("la regla del alto va después de la que esconde las líneas vacías, para ganarle", () => {
+    expect(css.indexOf(REGLA_DEL_ALTO)).toBeGreaterThan(css.indexOf(".cpo-aviso:empty, .cpo-linea:empty { display: none; }"));
   });
 });
 
