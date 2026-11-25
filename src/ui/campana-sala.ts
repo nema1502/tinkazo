@@ -2741,7 +2741,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       else if (retomada && !leyendoLaLista) botones.push(principal(tx("cpoPasar"), () => void (sala && leerListaCompleta(sala))));
       botones.push(boton(tx("cpoGrande"), "ghost", (b) => grande.abrir(b)));
       if (!listaTrabada()) botones.push(boton(tx("cpoReabrir"), "enlace", () => void reabrir(), trabajando));
-      botones.push(otroArchivo());
+      // Armar otra campaña en el mismo lugar: olvida esta y abre el selector de archivo de la siguiente.
+      botones.push(boton(tx("cpoOtra"), "enlace", () => { olvidar(); elegir(); }));
     } else if (vista === "sellada" || vista === "sorteada") {
       const delBoton = principalDelPaso();
       if (delBoton) botones.push(delBoton);
@@ -2859,7 +2860,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     let titulo = tx(TITULOS[vista] ?? "cpoTitulo");
     let linea = "";
     if (vista === "elegir") linea = tx("cpoElegirLinea");
-    if (vista === "confirmar") linea = tx("cpoCerrarLinea");
+    if (vista === "confirmar" || vista === "cerrada") linea = tx("cpoCerrarLinea");
     if (vista === "cerrada" && sinLeer) linea = tx("cpoNoLeyo");
     if (vista === "tomada") linea = tx("cpoTomadaL");
     if (vista === "tus") linea = tx("cpoTusL");
@@ -3005,7 +3006,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pieEl.hidden = vista !== "cerrada" || !sala || !campana;
     if (sala && campana && vista === "cerrada") {
       const fecha = fechaTexto(sala.vence, campana.zona, deps.idioma());
-      pieEl.textContent = fmt("cpoSeBorra", { fecha, hora: horaTexto(sala.vence, campana.zona, deps.idioma()) });
+      // La consecuencia dicha en simple: la lista queda a la vista, sin palabras que asusten.
+      pieEl.textContent = fmt("cpoSeBorra", { fecha });
     }
     pintarPlegado();
   }

@@ -785,6 +785,24 @@ describe("cerrar la lista", () => {
     expect(principales(p)).toHaveLength(0);
   });
 
+  it("desde cerrada, Armar otra campaña olvida la campaña y deja elegir el archivo de la siguiente", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await abrirInscripcion(m, p);
+    await alta(m, 1, "Ana");
+    await alta(m, 2, "Nora");
+    await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
+    boton(p, "Cerrar la lista").click();
+    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+    expect(botones(p).map((b) => b.textContent)).toContain("Armar otra campaña");
+    expect(botones(p).map((b) => b.textContent)).not.toContain("Elegir otro archivo");
+    boton(p, "Armar otra campaña").click();
+    expect(vistaDe(p)).toBe("elegir");
+    expect(m.almacen.getItem(CLAVE_ORG)).toBeNull();
+    expect(boton(p, "Elegir el archivo")).toBeTruthy();
+  });
+
   it("un doble toque no confirma el cierre sin querer", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
@@ -799,7 +817,7 @@ describe("cerrar la lista", () => {
     expect(vistaDe(p)).toBe("confirmar");
   });
 
-  it("al cerrar muestra cuándo se borra y deja volver a abrir", async () => {
+  it("al cerrar dice hasta cuándo queda guardada la lista y deja volver a abrir", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
     await abrirInscripcion(m, p);
@@ -809,7 +827,10 @@ describe("cerrar la lista", () => {
     boton(p, "Cerrar la lista").click();
     await confirmarCierre(m, p, "Cerrar con 2 personas");
     await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
-    expect(texto(p, "#cpo-pie")).toBe("La lista se borra el 22 de noviembre a las 14:00.");
+    // La consecuencia dicha en simple, sin susto: la lista queda guardada.
+    expect(texto(p, "#cpo-linea")).toBe("Nadie más va a poder anotarse.");
+    expect(texto(p, "#cpo-pie")).toBe("La lista queda guardada hasta el 22 de noviembre.");
+    expect(texto(p, "#cpo-pie")).not.toContain("borra");
     boton(p, "Volver a abrir la lista").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
     expect(m.fases[m.fases.length - 1]?.[0]).toBe("abierta");
