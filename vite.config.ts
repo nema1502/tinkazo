@@ -9,6 +9,7 @@ import { comisionDelBuild, costoDelRetiroDelToml, cuentasDelPorteroEnElToml, ret
 import { cuentaDeCobrosDelPortero } from "./src/stellar/retiro-config";
 import { problemasDeLasPaginasConCobro, problemasDeLasPaginasEnOficial, problemasDelRegaloSinDar } from "./src/alta-textos-con-cobro";
 import { problemasDeLaPortadaConRetiro } from "./src/costo-del-retiro-portada";
+import { esModuloDeLaPrueba, incluirPruebaDeLlave, problemasDePruebaDeLlave, rutaNormal } from "./src/prueba-llave/en-el-build";
 
 type Dict = Record<string, unknown>;
 
@@ -274,6 +275,83 @@ function validarComision(): Plugin {
   };
 }
 
+/** El módulo que reemplaza al par opcional del kit (`@creit-tech/stellar-wallets-kit`), que la prueba nunca usa. */
+const SIN_WALLETS_KIT = "\0tinkazo-sin-wallets-kit";
+
+/**
+ * La página de prueba de la llave (`prueba/llave/index.html`, issue 301) y todo lo que trae (el kit de cuentas de contrato,
+ * su SDK y su librería de passkeys) entran al armado solo con `VITE_PRUEBA_LLAVE=1` en una vista previa de Vercel o en la
+ * revisión automática de GitHub (`src/prueba-llave/en-el-build.ts`). Con la variable en una publicación de producción, la
+ * construcción falla. Sin la variable, y en cualquier armado que no la pida, `generateBundle` falla si algún trozo trae un
+ * módulo de la prueba. Con la prueba incluida, ninguna otra entrada puede alcanzar un módulo de la prueba, ni por imports
+ * estáticos ni por `import()`.
+ *
+ * El kit trae un `import()` de un par opcional que la prueba no instala: acá se resuelve a un módulo que falla al usarse,
+ * solo para los imports que hace el kit. No se toca nada global.
+ */
+function pruebaDeLlave(): Plugin {
+  let incluida = false;
+  const esDeLaPagina = (id: string | null | undefined): boolean => !!id && rutaNormal(id).endsWith("/prueba/llave/index.html");
+  return {
+    name: "tinkazo:prueba-de-llave",
+    apply: "build",
+    enforce: "pre",
+    config(_config, { mode }) {
+      const env = loadEnv(mode, __dirname, ["VITE_", "VERCEL_ENV", "GITHUB_ACTIONS"]);
+      const problemas = problemasDePruebaDeLlave(env);
+      if (problemas.length) throw new Error(`La prueba de la llave está mal puesta:\n- ${problemas.join("\n- ")}`);
+      incluida = incluirPruebaDeLlave(env);
+      if (!incluida) return;
+      return { build: { rollupOptions: { input: { "prueba-llave": resolve(__dirname, "prueba/llave/index.html") } } } };
+    },
+    resolveId: {
+      order: "pre",
+      handler(source, importer) {
+        if (!incluida || !source.startsWith("@creit-tech/stellar-wallets-kit")) return null;
+        if (!importer || !/\/smart-account-kit@|\/node_modules\/smart-account-kit\//.test(rutaNormal(importer))) return null;
+        return SIN_WALLETS_KIT;
+      },
+    },
+    load(id) {
+      if (id !== SIN_WALLETS_KIT) return null;
+      return [
+        'const falla = () => { throw new Error("stellar-wallets-kit no se usa en la prueba de la llave"); };',
+        "export const StellarWalletsKit = { init: falla };",
+        "export const sep43Modules = falla;",
+      ].join("\n");
+    },
+    generateBundle(_salida, bundle) {
+      const trozos = Object.values(bundle).filter((t) => t.type === "chunk");
+      const conMarcas = (t: (typeof trozos)[number]): string[] => (t.type === "chunk" ? Object.keys(t.modules).filter(esModuloDeLaPrueba) : []);
+      if (!incluida) {
+        const sueltos = trozos.flatMap(conMarcas);
+        const archivos = Object.keys(bundle).filter((f) => f.startsWith("prueba/"));
+        if (sueltos.length || archivos.length) {
+          this.error("La prueba de la llave se coló en un armado que no la pidió: " + [...sueltos.slice(0, 3), ...archivos.slice(0, 3)].join(", "));
+        }
+        return;
+      }
+      // Con la prueba incluida: lo que alcanza cualquier entrada que no sea la suya no puede traer nada de la prueba.
+      const porNombre = new Map(trozos.map((t) => [t.fileName, t]));
+      for (const entrada of trozos) {
+        if (entrada.type !== "chunk" || !entrada.isEntry || esDeLaPagina(entrada.facadeModuleId)) continue;
+        const vistos = new Set<string>();
+        const pendientes = [entrada.fileName];
+        while (pendientes.length) {
+          const nombre = pendientes.pop() as string;
+          if (vistos.has(nombre)) continue;
+          vistos.add(nombre);
+          const t = porNombre.get(nombre);
+          if (!t || t.type !== "chunk") continue;
+          const marcados = conMarcas(t);
+          if (marcados.length) this.error(`La entrada ${entrada.fileName} alcanza un módulo de la prueba de la llave: ${marcados[0] ?? ""}`);
+          pendientes.push(...t.imports, ...t.dynamicImports);
+        }
+      }
+    },
+  };
+}
+
 /**
  * Las páginas de lectura se adelantan: cuando el mouse se posa 200 ms sobre un
  * enlace a otra (o al tocarlo, en el celular), Chrome la prerenderiza y al
@@ -387,6 +465,7 @@ function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
 // sortear.
 export default defineConfig({
   plugins: [
+    pruebaDeLlave(),
     validarBanderasDeAlta(),
     validarModoPremios(),
     validarCostoDelRetiro(),
