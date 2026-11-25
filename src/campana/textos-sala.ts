@@ -350,7 +350,7 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoCmPagada: "Service paid",
     cpoDepAlcanza: "The prize dollars are already in your account.",
     cpoDepFalta: "Your account is {falta} digital dollars short.",
-    cpoDepSinLectura: "We could not check if the prize is in your account.",
+    cpoDepSinLectura: "We could not check the prize in your account.",
     cpoFvHace: "Checked {n} s ago",
     cpoFvMirando: "Checking your balance",
     cpoFvArmando: "Preparing the payment",
