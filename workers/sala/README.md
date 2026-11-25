@@ -238,11 +238,12 @@ La configuración no secreta vive en `wrangler.toml`:
   (`google`, `GOOGLE` y `Google` valen), pero lo que escribe el verify con una cuenta de Google todavía no se midió con una
   respuesta real. Si no coincide, en modo estricto no entra nadie.
   Cada rechazo por la vía deja una línea en el registro, `{"evento":"via-rechazada","datos":{"valor","modo"}}`, con lo que mandó el
-  proveedor (minúsculas, solo letras, números y `.` `-` `_` `:`, hasta 32 caracteres, o `sin-campo`, `no-es-texto` o `vacio`) y nada
-  de la persona: ni cuenta, ni correo, ni sesión, ni dirección de red. Se mira con
-  `npx wrangler@4.160.0 tail --config wrangler.toml --search via-rechazada`. Esta regla vive en el módulo del portero que la sala
-  empaqueta: para que valga hay que desplegar la sala y el portero. Si el valor que aparece no es `google`, no se cambia nada en
-  vivo sin la palabra de quien mantiene el proyecto, y el arreglo es la constante `VIA_DE_LA_SESION`.
+  proveedor (sin espacios al principio ni al final, minúsculas, solo letras, números y `.` `-` `_` `:`, hasta 32 caracteres, con `~`
+  al final si al limpiarlo se perdió algo, o `sin-campo`, `no-es-texto` o `vacio`) y nada de la persona: ni cuenta, ni correo, ni
+  sesión, ni dirección de red. Se mira con `npx wrangler@4.160.0 tail --config wrangler.toml --search via-rechazada`. Esta regla
+  vive en el módulo del proveedor de cuentas, que la sala empaqueta: para que valga hay que desplegar solo la sala. El portero no
+  la lee y recibe el cambio en su próximo despliegue normal. Si el valor que aparece no es `google`, no se cambia nada en vivo
+  sin la palabra de quien mantiene el proyecto, y el arreglo es la constante `VIA_DE_LA_SESION`.
 
 `POLLAR_SECRETO` es la misma llave secreta del portero de la red principal y no se escribe en el repositorio. Se carga desde
 esta carpeta con:
