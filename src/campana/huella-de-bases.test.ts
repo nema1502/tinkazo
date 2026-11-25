@@ -5,6 +5,8 @@
  * el canon: si alguien cambia el orden de las claves o mete espacios, estas pruebas
  * se rompen antes de que dos implementaciones dejen de dar la misma cifra.
  */
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
 import { huellaDeBases } from "./huella-de-bases";
 
@@ -49,5 +51,38 @@ describe("huellaDeBases", () => {
     expect(() => huellaDeBases({ a: Infinity })).toThrow();
     expect(() => huellaDeBases([-Infinity])).toThrow();
     expect(huellaDeBases({ a: 0 })).not.toBe(huellaDeBases({ a: null }));
+  });
+
+  it("lo que se escribiría vacío sin avisar lanza: fechas, mapas, conjuntos, direcciones e instancias de clase", () => {
+    class Bases {
+      a = 1;
+    }
+    for (const raro of [new Date(0), new Map([["a", 1]]), new Set([1]), new URL("https://example.org"), new Bases(), /x/u, new Uint8Array(2)]) {
+      expect(() => huellaDeBases({ a: raro }), String(raro)).toThrow();
+      expect(() => huellaDeBases([raro]), String(raro)).toThrow();
+    }
+    expect(() => huellaDeBases(new Date(0))).toThrow();
+    // Un registro sin prototipo sí es un registro simple, y da lo mismo que uno de siempre.
+    const sinPrototipo = Object.assign(Object.create(null) as Record<string, unknown>, { a: 1 });
+    expect(huellaDeBases(sinPrototipo)).toBe(huellaDeBases({ a: 1 }));
+  });
+
+  it("un valor que se contiene a sí mismo lanza un error claro y no desborda la pila", () => {
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.yo = circular;
+    expect(() => huellaDeBases(circular)).toThrow(/se contiene a sí mismo/u);
+    const lista: unknown[] = [1];
+    lista.push(lista);
+    expect(() => huellaDeBases(lista)).toThrow(/se contiene a sí mismo/u);
+    // El mismo objeto dos veces, sin ser su propio ancestro, no es un ciclo.
+    const compartido = { x: 1 };
+    expect(huellaDeBases({ a: compartido, b: compartido })).toBe(huellaDeBases({ a: { x: 1 }, b: { x: 1 } }));
+  });
+
+  it("las claves se ordenan por unidades UTF-16 (RFC 8785): un emoji va antes que una letra de ancho completo", () => {
+    // U+FF5E es una sola unidad (0xFF5E) y el emoji son dos (0xD83D 0xDE00): por unidades va primero el emoji,
+    // y por bytes UTF-8 o puntos de código iría al revés. Se fija el orden elegido con el texto canónico escrito a mano.
+    const texto = '{"\u{1F600}":1,"\u{FF5E}":2}';
+    expect(huellaDeBases({ "\u{FF5E}": 2, "\u{1F600}": 1 })).toBe(bytesToHex(sha256(new TextEncoder().encode(texto))));
   });
 });
