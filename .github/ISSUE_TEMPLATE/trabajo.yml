@@ -1,15 +1,15 @@
 name: Trabajo del equipo (solo equipo)
-description: Solo para quienes tienen permiso de escritura. Un trabajo interno con su zona, su lugar en el código y cómo se comprueba
+description: Para el equipo. Si sos de afuera, usá los otros dos formularios.
 body:
   - type: markdown
     attributes:
       value: |
-        Este formulario es para quienes tienen permiso de escritura y repite la forma de los issues que ya tenemos. La etiqueta de la zona se pone después, a mano. Antes de tomar un trabajo de otra persona, preguntá en su issue.
+        Este formulario es para quienes tienen permiso de escritura y repite la forma de los issues que ya tenemos. La dirección pone la etiqueta de la zona al clasificar el issue. Antes de tomar un trabajo de otra persona, preguntá en su issue.
   - type: dropdown
     id: zona
     attributes:
       label: Zona
-      description: El reparto está en el issue 277.
+      description: El reparto está en https://github.com/nema1502/tinkazo/issues/277
       options:
         - Frente
         - Servicios
