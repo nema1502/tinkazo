@@ -3029,7 +3029,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (sala && campana && vista === "cerrada") {
       const fecha = fechaTexto(sala.vence, campana.zona, deps.idioma());
       // La consecuencia dicha en simple: la lista queda a la vista, sin palabras que asusten.
-      pieEl.textContent = fmt("cpoSeBorra", { fecha });
+      pieEl.textContent = fmt("cpoSeBorra", { fecha, hora: horaTexto(sala.vence, campana.zona, deps.idioma()) });
     }
     pintarPlegado();
   }

@@ -15,7 +15,6 @@ const AVISOS_DEL_CELULAR = [
   "cpoRevisaCampo",
   "cpoQrSinConexion",
   "cpoParaRevisarNota",
-  "cpoSeBorra",
   "cpoElegirLinea",
   "cpoYaExiste",
 ];
@@ -78,5 +77,13 @@ describe("los textos del panel de quien organiza", () => {
         expect(TEXTOS_SALA_CAMPANA[idioma][clave]?.length ?? 99, `${idioma}.${clave}`).toBeLessThanOrEqual(46);
       }
     }
+  });
+
+  it("el pie de la lista cerrada dice hasta cuándo queda guardada, con la fecha y la hora, y la línea de elegir dice qué hacer", () => {
+    // El pie es un párrafo que puede partirse en dos renglones: no entra en la cuenta de una línea de celular.
+    expect(TEXTOS_SALA_CAMPANA.es.cpoSeBorra).toBe("La lista queda guardada hasta el {fecha} a las {hora}.");
+    expect(TEXTOS_SALA_CAMPANA.en.cpoSeBorra).toBe("The list stays saved until {fecha} at {hora}.");
+    expect(TEXTOS_SALA_CAMPANA.es.cpoElegirLinea).toBe("Elegí el archivo de tu campaña.");
+    expect(TEXTOS_SALA_CAMPANA.en.cpoElegirLinea).toBe("Choose your campaign file.");
   });
 });
