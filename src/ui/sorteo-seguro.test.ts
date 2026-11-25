@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { errorKey } from "../stellar/errores";
-import { ESPERAS_DEL_SORTEO_MS, SORTEO_REINTENTABLE, avisoDelReintento, sorteoReintentable, sortearConReintentos } from "./sorteo-seguro";
+import { ESPERAS_DEL_SORTEO_MS, PRESUPUESTO_MINIMO_DEL_SORTEO_MS, SORTEO_REINTENTABLE, avisoDelReintento, sorteoReintentable, sortearConReintentos } from "./sorteo-seguro";
 
 /** Un reloj de mentira: `dormir` lo adelanta en el acto. */
 function reloj() {
@@ -32,20 +32,22 @@ describe("sortearConReintentos: el sorteo reintenta", () => {
   it("con lo ya gastado en otro camino, deja de esperar antes: se descuenta del presupuesto", async () => {
     const r = reloj();
     const intentar = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    const fin = await sortearConReintentos({ intentar, yaEsta: async () => null, reintentable, yaGastadoMs: 90_000 - 7000, ...r });
+    const fin = await sortearConReintentos({ intentar, yaEsta: async () => null, reintentable, yaGastadoMs: 90_000 - 25_000, ...r });
     expect(fin.ok).toBe(false);
-    // 2 s y 4 s caben en 7 s, los 8 s siguientes ya no.
-    expect(intentar).toHaveBeenCalledTimes(3);
-    expect(r.dormir.mock.calls.map((c) => c[0])).toEqual([2000, 4000]);
+    // 2, 4 y 8 segundos caben en 25, los 16 siguientes ya no.
+    expect(intentar).toHaveBeenCalledTimes(4);
+    expect(r.dormir.mock.calls.map((c) => c[0])).toEqual([2000, 4000, 8000]);
   });
 
-  it("sin presupuesto igual hace un intento", async () => {
+  it("con todo el presupuesto gastado en otro camino, le queda un mínimo para reintentar", async () => {
     const r = reloj();
     const intentar = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-    const fin = await sortearConReintentos({ intentar, yaEsta: async () => null, reintentable, yaGastadoMs: 120_000, ...r });
+    const fin = await sortearConReintentos({ intentar, yaEsta: async () => null, reintentable, yaGastadoMs: 200_000, ...r });
     expect(fin.ok).toBe(false);
-    expect(intentar).toHaveBeenCalledTimes(1);
-    expect(r.dormir).not.toHaveBeenCalled();
+    // Con 20 segundos de mínimo caben las esperas de 2, 4 y 8: un fallo de la red no deja un solo intento.
+    expect(intentar).toHaveBeenCalledTimes(4);
+    expect(r.dormir.mock.calls.map((c) => c[0])).toEqual([2000, 4000, 8000]);
+    expect(PRESUPUESTO_MINIMO_DEL_SORTEO_MS).toBe(20_000);
   });
 
   it("la red ocupada, la ronda que la cadena todavía no ve y lo que no se sabe también se reintentan", async () => {
