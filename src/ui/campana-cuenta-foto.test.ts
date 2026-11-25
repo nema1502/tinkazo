@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -74,7 +75,7 @@ import {
  * Los textos que se comparan son los que lee la persona. Ningún paso que viene puede cambiar una línea: si una campaña de
  * cuentas se ve distinta, esta prueba falla y dice cuál. Sin el archivo grabado, deja lo anotado en el registro (`FOTO64`).
  */
-const FOTO = fileURLToPath(new URL("./campana-cuenta-foto.base.json", import.meta.url));
+const FOTO = join(dirname(fileURLToPath(import.meta.url)), "campana-cuenta-foto.base.json");
 
 /** Las escenas que van anotando las pruebas de abajo: la última las compara con lo grabado. */
 const escenas: Foto = {};

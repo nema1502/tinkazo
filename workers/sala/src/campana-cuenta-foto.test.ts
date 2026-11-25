@@ -303,12 +303,6 @@ describe("el lector de campañas que se activan solas", () => {
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.compacto).toContain('"campo_de_prueba":"x"');
   });
-
-  it("agujero de hoy: un campo de identidad todavía se firma igual, y lo cierra el paso que empieza a leerlo en la sala", () => {
-    const r = leerParaActivar(campanaParaActivar({ identidad: "persona" }), HORA);
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.compacto).toContain('"identidad":"persona"');
-  });
 });
 
 describe("la foto de hoy de la sala de cuentas", () => {
