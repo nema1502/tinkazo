@@ -71,6 +71,8 @@ function entregaDelPremio(premio: PremioDeLaPromocion, c: LaEntrega): EntregaDel
   // igual que lo ve la persona en `src/campana/premios-de-la-cuenta.ts`.
   if (premio.state === "Returned") return { puesto: premio.position, cuenta: premio.winner, monto: monto, accion: "no", motivo: "volvio" };
   const espera = premio.state === "Owed" || premio.state === "Held";
+  // Un plazo que no es un número finito no dice hasta cuándo se puede cobrar: no se adivina ni se llama.
+  if (espera && !Number.isFinite(c.cobrarHastaMs)) return { puesto: premio.position, cuenta: premio.winner, monto: monto, accion: "no", motivo: "no-se-sabe" };
   if (espera && c.ahoraMs >= c.cobrarHastaMs) return { puesto: premio.position, cuenta: premio.winner, monto: monto, accion: "no", motivo: "vencido" };
   if (espera) {
     // La línea no se puede saber también corta: un claim a una cuenta que no puede recibir el activo
