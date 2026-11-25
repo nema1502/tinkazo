@@ -172,8 +172,7 @@ describe("la hoja de operación", () => {
 
   it("las filas del aviso de cuentas nuevas dicen qué paso frena la creación de cuentas y que pausar las altas no lo hace", () => {
     for (const asunto of ["Muchas cuentas nuevas en una hora", "Muchas activaciones en una hora", "Muchas cuentas nuevas y activaciones en una hora"]) {
-      const fila = seccion.split("
-").find((l) => l.startsWith(`| **${asunto}** |`));
+      const fila = seccion.split(String.fromCharCode(10)).find((l) => l.startsWith(`| **${asunto}** |`));
       expect(fila, asunto).toBeDefined();
       expect(fila, asunto).toContain("Pausar las altas del portero no frena esto");
       expect(fila, asunto).toContain("panel de Pollar");
@@ -188,8 +187,7 @@ describe("la hoja de operación", () => {
   });
 
   it("la fila de las cuentas que no se cuentan habla de la consulta de uso y no de la lista de movimientos", () => {
-    const fila = seccion.split("
-").find((l) => l.startsWith("| **No se están contando las cuentas nuevas** |"));
+    const fila = seccion.split(String.fromCharCode(10)).find((l) => l.startsWith("| **No se están contando las cuentas nuevas** |"));
     expect(fila).toBeDefined();
     expect(fila).not.toMatch(/movimientos/);
     expect(fila).toMatch(/consulta de uso/);
