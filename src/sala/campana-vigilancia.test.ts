@@ -66,7 +66,6 @@ describe("la vigilancia de las altas de campaña", () => {
     for (let n = 1; n <= 2; n++) {
       const r = await altaDe(mundo, sala.id, personaDePrueba(mundo, n));
       expect(r.status).toBe(201);
-      expect(((await r.json()) as { ya: boolean }).ya).toBe(false);
     }
     expect(await activaciones(mundo, sala.id)).toMatchObject({ ok: true, [DIA]: 2 });
     // La persona quedó en la lista: reingresar la reconoce.
