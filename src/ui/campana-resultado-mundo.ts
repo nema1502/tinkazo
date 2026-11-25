@@ -4,6 +4,7 @@
  * Sin red ni reloj de verdad.
  */
 import type { EstadoDeAltaPremio, SorteoDeCampana } from "../campana/en-curso";
+import { esLineaDePersona } from "../campana/forma-persona";
 import { type PasoDelPuente, alCambiarElPuente, pasoDelPuente, reiniciarElPuente } from "../campana/puente";
 import { roundTime } from "../protocol/quicknet";
 import type {
@@ -66,7 +67,9 @@ export interface Mundo {
   estadoPorDefecto: EstadoDeSala | FallaDeSala;
   resultados: { sorteo: string; comprobante: string; en: number }[];
   respuestasAlResultado: RespuestaDeResultado[];
-  leidoDeLaSala: ResultadoDeSala | "sin-resultado" | "no-existe" | "red";
+  leidoDeLaSala: ResultadoDeSala | "sin-resultado" | "no-existe" | "red" | "mezclada";
+  /** Los nombres que la pestaña conoce de quienes ganaron, por cuenta o por línea. Sin nombre, una línea de persona es Ganadora y su puesto. */
+  nombres: Record<string, string>;
   avisos: string[];
   respuestaAlAviso: RespuestaDeAviso;
   altas: { sorteo: string; ganadoras: string[] }[];
@@ -115,6 +118,7 @@ export function mundo(): Mundo {
     resultados: [],
     respuestasAlResultado: [],
     leidoDeLaSala: { sorteo: "777", ganadoras: ["GB", "GA"], comprobante: "/verificar.html" },
+    nombres: {},
     avisos: [],
     respuestaAlAviso: "ok",
     altas: [],
@@ -182,7 +186,8 @@ export function mundo(): Mundo {
     },
     sePuedeSoltar: () => m.puedeSoltar,
     soltarElSello: async () => void m.soltadas++,
-    nombreDe: (cuenta) => (cuenta === "GA" ? "Ana" : cuenta === "GB" ? "Beto" : cuenta),
+    nombreDe: (cuenta, puesto) =>
+      m.nombres[cuenta] ?? (cuenta === "GA" ? "Ana" : cuenta === "GB" ? "Beto" : esLineaDePersona(cuenta) ? `Ganadora ${puesto + 1}` : cuenta),
     otraBilletera: () => m.otraBilletera,
     iniciarAltas: (sorteo, ganadoras) => void m.altas.push({ sorteo, ganadoras }),
     altasDe: () => m.altasDe,

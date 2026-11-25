@@ -6,8 +6,11 @@
  */
 import { type EstadoDeAltaPremio, cuentaConectada, entradaDelEvento, guardarSorteoDeCampana } from "../campana/en-curso";
 import { registrarAcciones, ponerPaso } from "../campana/puente";
+import { esLineaDePersona } from "../campana/forma-persona";
+import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
 import { nombreDelEquipo } from "../equipos/etiquetas";
 import { sinGrabar } from "../ensayo-modo";
+import { getLang } from "../idioma";
 import { listHash } from "../protocol/canonical";
 import { bytesToHex } from "../protocol/quicknet";
 import { horaDeLaRonda, relojComprobado } from "../reloj-de-la-ronda";
@@ -81,6 +84,8 @@ function salaGuardada(): SalaDeCampana | null {
 }
 
 const cuentaCorta = (cuenta: string): string => `${cuenta.slice(0, 4)}…${cuenta.slice(-4)}`;
+
+const ganadoraN = (puesto: number): string => (TEXTOS_SALA_CAMPANA[getLang()].cpoGanadoraN ?? "").replace("{n}", String(puesto + 1));
 
 /** Si quien organiza entró con la cuenta de Google: la billetera activa es la que da el token de la sesión. */
 function sesionDeGoogle(): { tokenDeSesion: () => Promise<string | null> } | null {
@@ -161,12 +166,14 @@ export function depsDelResultadoReales(): DepsDelResultado {
     ponerSellada: (s, sorteo, plazo) => ponerSellada(s, sorteo, {}, plazo),
     estado: (s) => estadoConToken(s),
     guardarResultado: (s, sorteo, comprobante) => guardarResultadoEnSala(s, sorteo, comprobante),
-    resultado: (s) => resultadoDeSala(s),
+    // Pide distinguir la mezcla: reintentar no la cambia y tiene su propio aviso.
+    resultado: (s) => resultadoDeSala(s, {}, { distinguirMezclada: true }),
     avisar: (s, cuenta) => avisarEnSala(s, cuenta),
     // Un juego en marcha o la pantalla grande abierta no se cortan: solo se muestra la línea.
     sePuedeSoltar: () => app.frozen !== null && app.drawn === null && !sorteoEnMarcha(app.frozen) && !document.fullscreenElement,
     soltarElSello: soltarParaSellarDeNuevo,
-    nombreDe: (cuenta) => nombreDelEquipo(cuenta) ?? cuentaCorta(cuenta),
+    // Una línea de persona nunca se muestra: sin nombre se llama Ganadora y su puesto. Una cuenta, como siempre.
+    nombreDe: (cuenta, puesto) => nombreDelEquipo(cuenta) ?? (esLineaDePersona(cuenta) ? ganadoraN(puesto) : cuentaCorta(cuenta)),
     sinPoderMoverLaSala: () => {
       const conectada = cuentaConectada();
       const memoria = leerOrg(almacen(), Date.now(), network.name, conectada);

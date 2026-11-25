@@ -14,6 +14,7 @@
  * un error, ni al detalle de un evento, ni al paso que dibuja el panel.
  */
 import { type SorteoDeCampana, conSorteoSinResolver } from "../campana/en-curso";
+import { formaDeLista } from "../campana/forma-de-lista";
 import { type FilaDeGanadora, type PasoDelPuente, accionesDelPuente, ponerPaso, ponerRechazo, registrarAcciones } from "../campana/puente";
 import { roundTime } from "../protocol/quicknet";
 import type {
@@ -64,13 +65,15 @@ export interface DepsDelResultado {
   ponerSellada: (s: SalaDeCampana, sorteo: string, plazoMs: number) => Promise<{ r: RespuestaDeSellada; horaSala: number | null }>;
   estado: (s: SalaDeCampana) => Promise<EstadoDeSala | FallaDeSala>;
   guardarResultado: (s: SalaDeCampana, sorteo: string, comprobante: string) => Promise<RespuestaDeResultado>;
-  resultado: (s: SalaDeCampana) => Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red">;
+  /** `mezclada`: la sala devolvió ganadoras de cuenta junto a líneas de persona. No se sortea y reintentar no lo cambia. */
+  resultado: (s: SalaDeCampana) => Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red" | "mezclada">;
   avisar: (s: SalaDeCampana, cuenta: string) => Promise<RespuestaDeAviso>;
   /** Se puede soltar el sello de la pantalla: no hay juego en marcha ni pantalla grande abierta ni sorteo hecho. */
   sePuedeSoltar: () => boolean;
   /** Suelta el sello de la pantalla (deja el cuadro vacío): sigue el paso entero de pasar la lista. */
   soltarElSello: () => Promise<void> | void;
-  nombreDe: (cuenta: string) => string;
+  /** Cómo se llama a una ganadora en la fila: su nombre, o algo que no dice nada de quién es. `puesto` empieza en 0. */
+  nombreDe: (cuenta: string, puesto: number) => string;
   /** Si quien organiza entró con otra billetera que la de Google: el acceso de quien gana no se puede avisar solo. */
   otraBilletera: () => boolean;
   /**
@@ -443,11 +446,12 @@ export function escucharSellos(d: DepsDelResultado): () => void {
 
 /* ------------------------------------------------------------ el resultado */
 
-function filasDelResultado(d: DepsDelResultado, ganadoras: readonly string[]): FilaDeGanadora[] {
-  const altas = d.altasDe();
+function filasDelResultado(d: DepsDelResultado, ganadoras: readonly string[], enMano: boolean): FilaDeGanadora[] {
+  // En mano no hay servicio del acceso: ninguna fila lleva su estado de alta, aunque la entrada local guarde alguno.
+  const altas: Record<string, import("../campana/en-curso").EstadoDeAltaPremio> = enMano ? {} : d.altasDe();
   return ganadoras.map((cuenta, puesto) => ({
     cuenta,
-    nombre: d.nombreDe(cuenta),
+    nombre: d.nombreDe(cuenta, puesto),
     avisada: avisadasPorCelular.has(cuenta),
     alta: altas[String(puesto)] ?? "esperando",
   }));
@@ -523,11 +527,23 @@ async function mostrarGanadoras(d: DepsDelResultado, sala: SalaDeCampana, sorteo
     await d.esperar(ESPERA_TRAS_GUARDAR_MS);
     leido = await d.resultado(sala);
   }
+  // Una mezcla de cuentas y líneas de persona no se sortea y volver a leer no la cambia: se dice y no hay botón.
+  if (leido === "mezclada") return ponerPaso({ paso: "lista-rara" });
   if (typeof leido === "string") return ponerPaso({ paso: "boton-resultado" });
+  const resultado = leido;
+  // El premio en mano se sabe por las ganadoras mismas, no por un dato aparte que se pueda perder: si todas son líneas de
+  // persona no hay cuenta ni billetera, así que no se espera la sesión, no se avisa al servicio del acceso y no se paga.
+  if (formaDeLista(resultado.ganadoras) === "persona") {
+    const repintarEnMano = (): void =>
+      ponerPaso({ paso: "resultado", filas: filasDelResultado(d, resultado.ganadoras, true), otraBilletera: false, enMano: true });
+    repintarGanadoras = repintarEnMano;
+    repintarEnMano();
+    return;
+  }
   // Tras una recarga la sesión de Google se retoma aparte: hasta que llegue (o pase el tope) no se dice que es otra billetera.
   let esperandoLaSesion = d.otraBilletera() && (d.billeteraPendiente?.() ?? false);
   const repintar = (): void =>
-    ponerPaso({ paso: "resultado", filas: filasDelResultado(d, leido.ganadoras), otraBilletera: d.otraBilletera() && !esperandoLaSesion });
+    ponerPaso({ paso: "resultado", filas: filasDelResultado(d, resultado.ganadoras, false), otraBilletera: d.otraBilletera() && !esperandoLaSesion });
   repintarGanadoras = repintar;
   repintar();
   if (esperandoLaSesion) {
@@ -537,9 +553,9 @@ async function mostrarGanadoras(d: DepsDelResultado, sala: SalaDeCampana, sorteo
   }
   // El servicio del acceso solo se avisa con lo que la sala confirmó, y solo si es lo mismo que se calculó acá.
   const locales = d.sorteado()?.ganadoras ?? null;
-  const coinciden = locales !== null && locales.length === leido.ganadoras.length && locales.every((c, i) => c === leido.ganadoras[i]);
+  const coinciden = locales !== null && locales.length === resultado.ganadoras.length && locales.every((c, i) => c === resultado.ganadoras[i]);
   if (coinciden || d.sorteado() === null) {
-    if (!d.otraBilletera()) d.iniciarAltas(sorteo, leido.ganadoras, repintar);
+    if (!d.otraBilletera()) d.iniciarAltas(sorteo, resultado.ganadoras, repintar);
   }
 }
 

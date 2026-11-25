@@ -6,9 +6,8 @@ import { depsDelPasoReales } from "./campana-pasar-real";
 import { depsDelResultadoReales } from "./campana-resultado-real";
 
 /**
- * Lo que los pasos de pasar la lista y de mostrar el resultado hacen con una lista que la sala devuelve mezclada. Al pasar la
- * lista se pide distinguir la mezcla, porque reintentar no la cambia y tiene su propio aviso. El resultado todavía no lo pide:
- * una mezcla es la falla que más se le parece y no se ve ningún aviso nuevo.
+ * Lo que los pasos de pasar la lista y de mostrar el resultado hacen con una lista que la sala devuelve mezclada. Los dos piden
+ * distinguir la mezcla, porque reintentar no la cambia y tiene su propio aviso.
  */
 
 const SALA: SalaDeCampana = {
@@ -82,8 +81,22 @@ describe("mostrar el resultado con ganadoras mezcladas", () => {
     });
   });
 
-  it("ganadoras mezcladas se tratan como un resultado que no se pudo leer: red", async () => {
+  it("ganadoras mezcladas se leen como mezcladas y no como un resultado que no se pudo leer", async () => {
     conSala([cuerpo([cuentaDePrueba(1), lineaDePrueba(1)])]);
+    expect(await depsDelResultadoReales().resultado(SALA)).toBe("mezclada");
+  });
+
+  it("ganadoras que son todas líneas de persona se leen como un resultado", async () => {
+    conSala([cuerpo([lineaDePrueba(2), lineaDePrueba(1)])]);
+    expect(await depsDelResultadoReales().resultado(SALA)).toEqual({
+      sorteo: "9",
+      ganadoras: [lineaDePrueba(2), lineaDePrueba(1)],
+      comprobante: "/verificar.html?x=1",
+    });
+  });
+
+  it("una ganadora que no es cuenta ni línea sigue siendo un resultado que no se pudo leer", async () => {
+    conSala([cuerpo([cuentaDePrueba(1), "GBBB"])]);
     expect(await depsDelResultadoReales().resultado(SALA)).toBe("red");
   });
 
