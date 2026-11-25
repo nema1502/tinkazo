@@ -27,7 +27,7 @@
  *   ruta          camino y consulta, con / adelante: "/?demo=wheel&instant=1&lead=3"
  *   ancho, alto   la pantalla, de 280 a 2560 px (1440 por 900 si no se dice)
  *   tema          "light" o "dark" (suma ?theme=)
- *   idioma        "es" o "en" (suma ?lang=)
+ *   idioma        "es" o "en" (suma ?lang=). Sin él, el navegador dice que habla español de Bolivia
  *   esperar       selector CSS que tiene que estar visible antes de capturar (hasta 30 s)
  *   pausaMs       cuánto esperar antes de la foto, de 0 a 60000 (500 si no se dice)
  *   paginaEntera  true para fotografiar la página completa y no solo la pantalla
@@ -52,7 +52,7 @@
  *
  *   La espera de un sorteo de demostración, con la cuenta en marcha (hay 30 s de espera, la foto sale a los 4):
  *     {"nombre":"espera-demo","ruta":"/?demo=wheel&lead=30","ancho":1280,"alto":900,"tema":"dark",
- *      "esperar":"#wait-box","pausaMs":4000}
+ *      "esperar":"#wait-box","pausaMs":4000,"pasos":[{"accion":"desplazar","selector":"#wait-box"}]}
  *
  *   El resultado de una demostración (sin animaciones, la ronda llega a los 3 s):
  *     {"nombre":"resultado-demo","ruta":"/?demo=wheel&instant=1&lead=3","ancho":1280,"alto":900,"tema":"light",
@@ -216,12 +216,17 @@ async function fotografiar(page, archivo, entera) {
 
 async function capturar(browser, v) {
   const url = direccionDeVista(v, base);
-  const fila = { nombre: v.nombre, ok: false, archivo: null, error: null, direccion: url, direccionFinal: null, pantalla: `${v.ancho}x${v.alto}`, tema: v.tema, idioma: v.idioma, paginaEntera: v.paginaEntera, truncada: false, scrollHorizontal: null, anchoDelContenido: null, anchoDeLaPantalla: null, erroresDeConsola: [] };
+  const fila = { nombre: v.nombre, ok: false, archivo: null, error: null, direccion: url, direccionFinal: null, idiomaDeLaPagina: null, pantalla: `${v.ancho}x${v.alto}`, tema: v.tema, idioma: v.idioma, paginaEntera: v.paginaEntera, truncada: false, scrollHorizontal: null, anchoDelContenido: null, anchoDeLaPantalla: null, erroresDeConsola: [] };
   const page = await browser.open("about:blank");
   let errores = () => [];
   const trabajo = (async () => {
     await page.send("Emulation.setDeviceMetricsOverride", { width: v.ancho, height: v.alto, deviceScaleFactor: 1, mobile: v.ancho < 600, screenWidth: v.ancho, screenHeight: v.alto });
     await page.send("Log.enable").catch(() => undefined);
+    // El idioma de una persona de acá. Sin esto, en una máquina de Linux sin idioma configurado el sitio abre en inglés
+    // cuando la vista no pide ?lang=. Se cambia solo lo que dice el navegador, no su nombre.
+    const agente = await page.eval("navigator.userAgent");
+    await page.send("Emulation.setUserAgentOverride", { userAgent: agente, acceptLanguage: "es-BO,es" });
+    await page.send("Emulation.setLocaleOverride", { locale: "es-BO" }).catch(() => undefined);
     errores = vigilarErrores(page);
     const nav = await page.send("Page.navigate", { url });
     if (nav.errorText) throw new Error(`no cargó ${url}: ${nav.errorText}`);
@@ -238,8 +243,9 @@ async function capturar(browser, v) {
     }
     if (v.esperar) await esperarVisible(page, v.esperar, 30_000);
     if (v.pausaMs) await sleep(v.pausaMs);
-    const d = JSON.parse(await page.eval("JSON.stringify({ href: location.href, sw: document.documentElement.scrollWidth, iw: window.innerWidth })"));
+    const d = JSON.parse(await page.eval("JSON.stringify({ href: location.href, lang: document.documentElement.lang, sw: document.documentElement.scrollWidth, iw: window.innerWidth })"));
     fila.direccionFinal = d.href;
+    fila.idiomaDeLaPagina = d.lang;
     fila.anchoDelContenido = d.sw;
     fila.anchoDeLaPantalla = d.iw;
     fila.scrollHorizontal = d.sw > d.iw + 1;
