@@ -60,7 +60,7 @@ describe("CONTRIBUTING.md", () => {
   });
 
   it("cada comando de pnpm que nombra existe en package.json", () => {
-    const nombrados = [...contribuir.matchAll(/pnpm ([a-z][\w:-]*)/g)].map((m) => m[1]!);
+    const nombrados = [...contribuir().matchAll(/pnpm ([a-z][\w:-]*)/g)].map((m) => m[1]!);
     const propios = new Set(["install"]);
     const faltan = nombrados.filter((n) => !propios.has(n) && !(n in paquete().scripts));
     expect(nombrados.length).toBeGreaterThan(0);
@@ -68,7 +68,7 @@ describe("CONTRIBUTING.md", () => {
   });
 
   it("cada guion de scripts/ que nombra existe", () => {
-    const nombrados = [...contribuir.matchAll(/node (scripts\/[\w.-]+)/g)].map((m) => m[1]!);
+    const nombrados = [...contribuir().matchAll(/node (scripts\/[\w.-]+)/g)].map((m) => m[1]!);
     expect(nombrados.filter((r) => !existe(r))).toEqual([]);
   });
 
@@ -104,9 +104,9 @@ describe("CONTRIBUTING.md", () => {
   });
 
   it("la plantilla de pedido nombra comandos y guiones que existen", () => {
-    const comandos = [...plantilla.matchAll(/pnpm ([a-z][\w:-]*)/g)].map((m) => m[1]!);
+    const comandos = [...plantilla().matchAll(/pnpm ([a-z][\w:-]*)/g)].map((m) => m[1]!);
     expect(comandos.filter((n) => n !== "install" && !(n in paquete().scripts))).toEqual([]);
-    const guiones = [...plantilla.matchAll(/node (scripts\/[\w.-]+)/g)].map((m) => m[1]!);
+    const guiones = [...plantilla().matchAll(/node (scripts\/[\w.-]+)/g)].map((m) => m[1]!);
     expect(guiones.filter((r) => !existe(r))).toEqual([]);
   });
 
