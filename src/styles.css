@@ -1092,6 +1092,8 @@
     font-size: clamp(14px, 1.4vw, 18px);
   }
   .espera-teaser-tarjeta .sel-img { display: block; width: 76px; height: 43px; object-fit: cover; border-radius: 6px; background: var(--field); flex-shrink: 0; }
+  /* La captura que no llegó se esconde pero conserva su lugar: la tarjeta no cambia de tamaño ni empuja el reloj. */
+  .espera-teaser-tarjeta .sel-img[data-fallo] { visibility: hidden; }
   .espera-teaser-tarjeta b { overflow-wrap: anywhere; }
   .espera-nadie { font-size: clamp(14px, 1.7vw, 22px); font-weight: 800; color: var(--ink); max-width: 46ch; text-wrap: balance; }
   .espera-ensayo {
