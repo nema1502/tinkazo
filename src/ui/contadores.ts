@@ -7,7 +7,7 @@ import { contarUnaVez, origenActual } from "../contar";
  * este archivo siga chico y sin el modo de Vite.
  *
  * Se manda lo mismo que siempre: el nombre del evento y, a lo sumo, dos propiedades de una lista cerrada
- * (`workers/enlaces/src/conteo.ts`). Sin token, sin id, sin cuenta, sin nombre, sin horas — nada que una a una persona
+ * (`workers/enlaces/src/conteo.ts`). Sin token, sin id, sin cuenta, sin nombre, sin horas, nada que una a una persona
  * con el siguiente paso. Lo que sale de la demo y del ensayo también lo corta `contar` de siempre.
  */
 

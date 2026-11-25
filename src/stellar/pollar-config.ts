@@ -62,7 +62,7 @@ export const TOPE_TOKEN_MS = 8_000;
  * de los 8 segundos de la primera mirada, y entregar `null` ahí tiraba a quien ya entró a «Entrar de nuevo».
  *
  * En cada vencido se vuelve a mirar la sesión (`getAuthState`): si el kit dice que ya no existe, el token sale con
- * `null` al toque —ahí sí conviene entrar de nuevo—; si sigue abierta sin verificar, se espera de nuevo con espera
+ * `null` al toque (ahí sí conviene entrar de nuevo); si sigue abierta sin verificar, se espera de nuevo con espera
  * creciente. Es de la espera de siempre (el paso de la cuenta): quien pide su propio tope (la sala de campaña con
  * `ESPERA_TOKEN_MS`, la lectura del celular) tiene exactamente el suyo. Un vencimiento nunca toca la marca de la sesión.
  */
