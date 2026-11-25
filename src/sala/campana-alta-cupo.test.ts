@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
+  CAMPANA_MAX,
   VENTANA_CAMPANA_MS,
   anotarPersona,
   crearTablasDeCampana,
@@ -20,8 +21,8 @@ import {
 vi.mock("cloudflare:workers", async () => await import("./cloudflare-falso"));
 
 /**
- * El cupo y el tope de la ruta de alta de campaña (issue #168): la sala llena no anota a nadie más, y el tope de altas
- * nuevas por conexión es el cupo del evento más un margen, no un número fijo.
+ * El cupo de la ruta de alta de campaña (issue #168): la sala llena no anota a nadie más. En un evento todas las personas
+ * salen por la misma conexión del lugar, así que no hay un tope de altas nuevas por conexión: el cupo de la sala es el límite.
  */
 const AHORA = Date.UTC(2026, 10, 21, 15, 0, 0);
 
@@ -63,7 +64,7 @@ describe("el cupo de la sala, por el alta de campaña", () => {
   });
 });
 
-/* ------------------------------------------------ el tope dinámico por conexión */
+/* ------------------------------------------------ sin tope de altas por conexión */
 
 /** Las altas de campaña contra un SQLite de verdad, con huellas inventadas y sin llamadas al proveedor. */
 function nuevaSala(): { sql: Ejecutar } {
@@ -94,61 +95,32 @@ function alta(o: Partial<AltaDePersona> = {}): AltaDePersona {
   };
 }
 
-describe("el tope de altas por conexión es el cupo del evento más un margen", () => {
-  /** El módulo de la sala, cargado tarde: el tope dinámico todavía no existe cuando la prueba lo busca (rojo). */
-  async function campana(): Promise<
-    typeof import("../../workers/sala/src/campana") & {
-      altasDeCampanaPorConexion?: (cupo: number) => number;
-      MARGEN_DE_ALTAS_CAMPANA?: number;
-    }
-  > {
-    return (await import("../../workers/sala/src/campana")) as typeof import("../../workers/sala/src/campana");
-  }
-
-  it("el tope sale del cupo del evento más un margen fijo", async () => {
-    const m = await campana();
-    expect(m.MARGEN_DE_ALTAS_CAMPANA).toBeGreaterThan(0);
-    expect(m.altasDeCampanaPorConexion?.(0)).toBe(m.MARGEN_DE_ALTAS_CAMPANA);
-    expect(m.altasDeCampanaPorConexion?.(m.CAMPANA_MAX)).toBe(m.CAMPANA_MAX + m.MARGEN_DE_ALTAS_CAMPANA);
-  });
-
-  it("una conexión entra hasta el tope y la alta siguiente de la misma conexión espera", async () => {
-    const m = await campana();
-    const tope = m.altasDeCampanaPorConexion?.(m.CAMPANA_MAX) ?? 0;
+describe("ninguna conexión frena por altas nuevas: en un evento todas salen por la misma", () => {
+  it("una conexión que ya anotó muchas más personas que el cupo sigue entrando mientras haya lugar", () => {
     const { sql } = nuevaSala();
-    // La conexión ya trae el tope menos una alta de esta ventana.
     sql(
       "INSERT INTO ritmo (grupo, ventana, altas, envios) VALUES (?, ?, ?, ?)",
       "conexion-1",
       Math.floor(T0 / VENTANA_CAMPANA_MS),
-      tope - 1,
-      tope - 1,
+      5_000,
+      0,
     );
-    expect(anotarPersona(sql, alta(), siempre).ok).toBe(true);
+    const r = anotarPersona(sql, alta(), siempre);
+    expect(r.ok).toBe(true);
     expect(sql<{ n: number }>("SELECT COUNT(*) AS n FROM equipos WHERE cuenta = ?", cuentaN(1))[0]?.n).toBe(1);
-    // La alta siguiente de esa conexión ya no entra: el tope de la ventana está lleno, y la sala no cambia.
-    const segunda = anotarPersona(sql, alta({ persona: huella("persona-2"), cuenta: cuentaN(2), llave: huella("llave-2") }), siempre);
-    expect(segunda).toMatchObject({ ok: false, motivo: "cupo-conexion" });
-    if (!("esperaS" in segunda)) throw new Error("la respuesta de tope trae cuánto esperar");
-    expect(segunda.esperaS).toBeGreaterThan(0);
-    expect(sql<{ n: number }>("SELECT COUNT(*) AS n FROM equipos")[0]?.n).toBe(1);
   });
 
-  it("pasada la ventana de diez minutos la conexión vuelve a tener su tope entero", async () => {
-    const m = await campana();
-    const tope = m.altasDeCampanaPorConexion?.(m.CAMPANA_MAX) ?? 0;
+  it("lo único que corta a una conexión por cantidad es el cupo de la sala, que contesta llena", () => {
     const { sql } = nuevaSala();
-    sql(
-      "INSERT INTO ritmo (grupo, ventana, altas, envios) VALUES (?, ?, ?, ?)",
-      "conexion-1",
-      Math.floor(T0 / VENTANA_CAMPANA_MS),
-      tope,
-      tope,
+    for (let i = 1; i <= CAMPANA_MAX; i++) {
+      const r = anotarPersona(sql, alta({ persona: huella(`p${i}`), cuenta: cuentaN(i), llave: huella(`l${i}`) }), siempre);
+      expect(r.ok).toBe(true);
+    }
+    const deMas = anotarPersona(
+      sql,
+      alta({ persona: huella("p-extra"), cuenta: cuentaN(CAMPANA_MAX + 1), llave: huella("l-extra") }),
+      siempre,
     );
-    expect(anotarPersona(sql, alta(), siempre)).toMatchObject({ ok: false, motivo: "cupo-conexion" });
-    const despues = T0 + VENTANA_CAMPANA_MS;
-    expect(
-      anotarPersona(sql, alta({ ahora: despues }), siempre).ok,
-    ).toBe(true);
+    expect(deMas).toEqual({ ok: false, motivo: "llena" });
   });
 });
