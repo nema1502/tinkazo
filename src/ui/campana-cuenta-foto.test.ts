@@ -263,7 +263,7 @@ async function recorridoDelPanel(cobro: "sin" | "con"): Promise<{ lineas: string
   ver("con la lista cerrada");
 
   lineas.push(
-    `lo que la sala recibió | fases ${enTexto(m.fases)} | quitadas ${enTexto(m.quitadas)} | creadas ${enTexto(m.creadas.map((c) => ({ evento: c.de.evento, red: c.de.red, anterior: c.de.anterior })))} | qr ${enTexto(m.qrs.map((q) => q.texto))} | borradas ${m.borradas}`,
+    `lo que la sala recibió | fases ${enTexto(m.fases)} | quitadas ${enTexto(m.quitadas)} | creadas ${enTexto(m.creadas.map((c) => ({ evento: c.de.evento, red: c.de.red, anterior: c.de.anterior })))} | qr ${enTexto(m.qrs.map((q) => q.texto.split(CLAVE).join("<CLAVE>")))} | borradas ${m.borradas}`,
     `lo que el panel le pasó al paso | ${enTexto(cierres)}`,
   );
   cerrarTodos();
