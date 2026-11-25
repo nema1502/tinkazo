@@ -1,5 +1,7 @@
 import { campanasActivo } from "../campana/bandera";
+import { enPractica } from "../ensayo-modo";
 import { montoDelPremio } from "../stellar/pagos";
+import { fijoPorCampana } from "./ganadores";
 
 /**
  * El aviso del premio en plata (25 de noviembre de 2026).
@@ -8,10 +10,13 @@ import { montoDelPremio } from "../stellar/pagos";
  * campaña de una empresa, que se lo paga a quien gana. Debajo del campo aparece un aviso corto con el enlace. Es solo una
  * pista: se puede cerrar, no vuelve en la sesión, nunca frena Sellar la lista ni suma un botón principal. Un falso positivo
  * ("Entrada $10") cuesta un toque en la cruz. Solo existe con las campañas abiertas y solo en el modo de sortear premios:
- * en el orden de turnos y en el amigo secreto el campo es el nombre del orden.
+ * en el orden de turnos y en el amigo secreto el campo es el nombre del orden. Tampoco aparece en un sorteo que ya viene de una
+ * campaña (quien la armó no necesita que se la ofrezcan) ni en el ensayo y el modo stand, donde nada se graba ni se paga. Si
+ * estaba a la vista cuando eso pasa, se esconde.
  *
  * Aparece al salir del campo, cuando la persona terminó de escribir, y no mientras escribe: así no empuja Sellar la lista
- * debajo de su dedo. Si el foco se va a un botón o a un enlace no aparece, porque la persona ya está tocando otra cosa.
+ * debajo de su dedo. Si la ventana pierde el foco (cambio de pestaña o de aplicación) el navegador también avisa que el campo
+ * se dejó, sin destino: eso no cuenta, y al volver se mira de nuevo. Si el foco se va a un botón o a un enlace no aparece, porque la persona ya está tocando otra cosa.
  * Al cerrarlo el foco no vuelve a un campo de texto, que en un celular abriría el teclado. El enlace abre en otra pestaña
  * para no sacar a quien organiza de la lista que está armando.
  *
@@ -56,7 +61,7 @@ export const avisoDePlataVisible = (): boolean => aviso()?.hidden === false;
 export function actualizarAvisoDePlata(): void {
   const el = aviso();
   if (!el) return;
-  const ver = montado && activo && enModoDeSorteo() && !seCerroAntes() && textosDelPremio().some(parecePremioEnPlata);
+  const ver = montado && activo && enModoDeSorteo() && !fijoPorCampana() && !enPractica() && !seCerroAntes() && textosDelPremio().some(parecePremioEnPlata);
   if (el.hidden === !ver) return;
   el.hidden = !ver;
 }
@@ -80,9 +85,12 @@ function alTocar(e: Event): void {
 
 const tocabaUnBoton = (): boolean => performance.now() - ultimoToqueABoton < VENTANA_DEL_TOQUE_MS;
 
+/** ¿La ventana está a la vista y con el foco? Si no, el foco que se va del campo es el de la ventana y no el de la persona. */
+const ventanaActiva = (): boolean => document.visibilityState !== "hidden" && document.hasFocus();
+
 /** La persona salió de un campo del premio: recién ahora se mira lo escrito. */
 function alSalirDelCampo(e: FocusEvent): void {
-  if (vaAUnBoton(e.relatedTarget) || tocabaUnBoton()) return;
+  if (!ventanaActiva() || vaAUnBoton(e.relatedTarget) || tocabaUnBoton()) return;
   actualizarAvisoDePlata();
 }
 
@@ -96,6 +104,11 @@ const escribiendoElPremio = (): boolean => {
 export function refrescarAvisoDePlata(): void {
   if (escribiendoElPremio()) return;
   actualizarAvisoDePlata();
+}
+
+/** La ventana recuperó el foco: se vuelve a mirar el campo, salvo que la persona siga escribiendo en él. */
+function alRecuperarElFoco(): void {
+  refrescarAvisoDePlata();
 }
 
 /** Cierra el aviso para el resto de la sesión. */
@@ -121,6 +134,7 @@ export function montarAvisoDePlata(campanas: boolean = campanasActivo()): void {
   if (!activo) return;
   // Al salir del campo y no al escribir: `focusout` sube desde cada campo de los demás lugares.
   document.addEventListener("pointerdown", alTocar, true);
+  window.addEventListener("focus", alRecuperarElFoco);
   document.getElementById("prize")?.addEventListener("focusout", alSalirDelCampo);
   document.getElementById("prize-lugares")?.addEventListener("focusout", alSalirDelCampo);
   // Cambiar de modo cambia lo que quiere decir el campo.
@@ -136,4 +150,5 @@ export function reiniciarAvisoDePlata(): void {
   cerrado = false;
   ultimoToqueABoton = -Infinity;
   document.removeEventListener("pointerdown", alTocar, true);
+  window.removeEventListener("focus", alRecuperarElFoco);
 }

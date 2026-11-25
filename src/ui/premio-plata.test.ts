@@ -2,7 +2,9 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { T } from "../i18n";
-import { montarPremios, ponerPremio, reiniciarPremios } from "./premios";
+import { marcarEnsayo, marcarStand } from "../ensayo-modo";
+import { fijarPorCampana } from "./ganadores";
+import { actualizarLugares, montarPremios, ponerPremio, reiniciarPremios } from "./premios";
 import { avisoDePlataVisible, montarAvisoDePlata, parecePremioEnPlata, reiniciarAvisoDePlata } from "./premio-plata";
 
 /**
@@ -27,12 +29,27 @@ const escribirYSalir = (campo: HTMLInputElement, valor: string): void => {
   salir(campo);
 };
 
+/** Lo que dice el navegador sobre la ventana: en estas pruebas, por defecto, con el foco y a la vista. */
+let ventanaConFoco = true;
+let paginaVisible = true;
+
 beforeEach(() => {
   document.body.innerHTML = html.slice(html.indexOf("<body>") + 6, html.indexOf("</body>"));
   sessionStorage.clear();
   reiniciarAvisoDePlata();
+  ventanaConFoco = true;
+  paginaVisible = true;
+  vi.spyOn(document, "hasFocus").mockImplementation(() => ventanaConFoco);
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => (paginaVisible ? "visible" : "hidden") });
 });
-afterEach(() => reiniciarAvisoDePlata());
+afterEach(() => {
+  reiniciarAvisoDePlata();
+  vi.restoreAllMocks();
+  delete (document as unknown as Record<string, unknown>).visibilityState;
+  fijarPorCampana(false);
+  marcarEnsayo(false);
+  marcarStand(false);
+});
 
 describe("qué es un premio en plata", () => {
   it("reconoce un monto con su unidad, en las formas que ya reconoce Pagar premio", () => {
@@ -217,6 +234,82 @@ describe("con los premios armados, escribir no mueve Sellar la lista", () => {
     expect(aviso().hidden).toBe(false);
     ponerPremio("Termo");
     expect(aviso().hidden).toBe(true);
+  });
+});
+
+describe("donde el aviso no corresponde", () => {
+  beforeEach(() => {
+    reiniciarPremios();
+    montarPremios();
+    montarAvisoDePlata(true);
+  });
+  afterEach(() => reiniciarPremios());
+
+  it("en un sorteo que ya viene de una campaña no se ofrece armar una campaña, y se esconde si estaba a la vista", () => {
+    (document.getElementById("btn-freeze") as HTMLButtonElement).focus();
+    ponerPremio("50 USD");
+    expect(aviso().hidden).toBe(false);
+    // La campaña pasa a sorteo real: fija la cantidad y los campos la siguen.
+    fijarPorCampana(true);
+    actualizarLugares();
+    expect(aviso().hidden).toBe(true);
+    escribirYSalir(premio(), "100 USD");
+    expect(aviso().hidden).toBe(true);
+    // Al soltar el sello vuelve a valer lo escrito.
+    fijarPorCampana(false);
+    escribirYSalir(premio(), "100 USD");
+    expect(aviso().hidden).toBe(false);
+  });
+
+  it("en el ensayo no aparece y, si estaba a la vista, se esconde: ahí no se graba ni se paga nada", () => {
+    (document.getElementById("btn-freeze") as HTMLButtonElement).focus();
+    ponerPremio("50 USD");
+    expect(aviso().hidden).toBe(false);
+    marcarEnsayo(true);
+    ponerPremio("60 USD");
+    expect(aviso().hidden).toBe(true);
+    escribirYSalir(premio(), "70 USD");
+    expect(aviso().hidden).toBe(true);
+    marcarEnsayo(false);
+    escribirYSalir(premio(), "70 USD");
+    expect(aviso().hidden).toBe(false);
+  });
+
+  it("en el modo stand tampoco", () => {
+    marcarStand(true);
+    escribirYSalir(premio(), "50 USD");
+    expect(aviso().hidden).toBe(true);
+    marcarStand(false);
+    escribirYSalir(premio(), "50 USD");
+    expect(aviso().hidden).toBe(false);
+  });
+
+  it("si la ventana pierde el foco (cambio de pestaña o de aplicación) el campo no se da por abandonado", () => {
+    escribir(premio(), "50 USD");
+    ventanaConFoco = false;
+    salir(premio());
+    expect(aviso().hidden).toBe(true);
+    // El navegador avisa además que la página quedó oculta.
+    ventanaConFoco = true;
+    paginaVisible = false;
+    salir(premio());
+    expect(aviso().hidden).toBe(true);
+  });
+
+  it("cuando la ventana recupera el foco se vuelve a mirar el campo, y solo si la persona no sigue escribiendo", () => {
+    escribir(premio(), "50 USD");
+    ventanaConFoco = false;
+    salir(premio());
+    expect(aviso().hidden).toBe(true);
+    ventanaConFoco = true;
+    // El foco volvió al campo: sigue escribiendo y el aviso espera.
+    premio().focus();
+    window.dispatchEvent(new Event("focus"));
+    expect(aviso().hidden).toBe(true);
+    // Si el foco quedó en otro lado, ahora sí se mira lo escrito.
+    premio().blur();
+    window.dispatchEvent(new Event("focus"));
+    expect(aviso().hidden).toBe(false);
   });
 });
 
