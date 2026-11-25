@@ -96,7 +96,7 @@ const ventanaActiva = (): boolean => document.visibilityState !== "hidden" && do
  * y nadie lo tocó, es el teclado (Tab): ahí el aviso aparece, porque el foco no se mueve de donde está y no hay un dedo que
  * apoyar. Si lo tocó el mouse o el dedo, el toque ya quedó anotado y el aviso espera.
  */
-function alSalirDelCampo(_e: FocusEvent): void {
+function alSalirDelCampo(): void {
   if (!ventanaActiva() || tocabaUnBoton()) return;
   actualizarAvisoDePlata();
 }
