@@ -119,6 +119,24 @@ describe("las reglas de escritura", () => {
     const m = mensajeDeAlerta({ claves: ["creditos-bajos"], problemas: [], recordatorio: false, arreglados: [], siguen: [] }, ctx(estadoBien({ creditos: 2400, margen: 400 })));
     expect(m.texto).toMatch(/Cargá/);
   });
+
+  it("el aviso de la clave que falta va en frases cortas, con los dos comandos y sin el verbo en tercera persona", () => {
+    for (const lista of [false, true]) {
+      const claves = lista ? ["vigilante-sin-clave", "altas-pausadas"] : ["vigilante-sin-clave"];
+      const m = mensajeDeAlerta({ claves, problemas: [], recordatorio: false, arreglados: [], siguen: [] }, ctx());
+      const lineas = m.texto.split("\n");
+      for (const linea of lineas) expect(linea.length, linea).toBeLessThanOrEqual(220);
+      const desde = lineas.findIndex((l) => l.includes("Qué hacer: Si cargaste la clave de solo lectura"));
+      expect(desde, "el Qué hacer de la clave que falta").toBeGreaterThanOrEqual(0);
+      const hacer = lineas.slice(desde, desde + 2).join(" ");
+      expect(hacer).toContain("wrangler secret delete PORTERO_TOKEN_LECTURA");
+      expect(hacer).toContain("wrangler secret put PORTERO_ADMIN_TOKEN");
+      expect(hacer).toMatch(/borrala/);
+      expect(hacer).not.toMatch(/\bvuelve a usar\b/);
+      // La segunda línea sigue la sangría del aviso (con lista, tres espacios).
+      expect(lineas[desde + 1]!.startsWith(lista ? "   Si no, cargá" : "Si no, cargá")).toBe(true);
+    }
+  });
 });
 
 describe("las cifras", () => {
