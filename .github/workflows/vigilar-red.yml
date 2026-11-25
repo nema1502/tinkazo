@@ -68,9 +68,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # scripts/lib/umbrales-red.mjs lee los umbrales de src/stellar/red-umbrales.json
+          # y scripts/check-banderas.mjs lee la tabla de banderas de docs/operacion.md
           sparse-checkout: |
             scripts
             src/stellar/red-umbrales.json
+            docs/operacion.md
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -119,6 +121,13 @@ jobs:
       #   run: |
       #     curl -fsS -m 20 --retry 2 -H "Authorization: Bearer $PORTERO_ADMIN_TOKEN" "$PORTERO_URL/v1/patrocinio/estado" -o estado-portero.json
       #     node -e "const j=JSON.parse(require('fs').readFileSync('estado-portero.json','utf8')); console.log('saldo (stroops):', j.balanceStroops, '| alerta:', j.alerta, j.motivoAlerta ?? ''); process.exit(j.alerta ? 1 : 0)"
+      # Las banderas del sitio (scripts/check-banderas.mjs): baja el sitio publicado y falla si la tabla de
+      # docs/operacion.md ya no dice lo que tiene prendido. Una vez al día, con el recordatorio de las 12:07 UTC,
+      # y con always() por la misma razón que el paso del fondo. Depende de producción, así que NO va en la
+      # revisión de cada pedido (ci.yml): frenaría justo el pedido que cambia una bandera.
+      - name: Banderas del sitio publicado
+        if: ${{ always() && (github.event.schedule == '7 12 * * *' || inputs.diario) }}
+        run: node scripts/check-banderas.mjs
       # El latido: avisa a un servicio de alarma (healthchecks.io) que el detector corrió, y
       # lo hace también si la corrida falló por una alarma de la red: lo que el servicio
       # vigila es que el detector no calle (el cron se saltea, o GitHub desactiva el workflow
