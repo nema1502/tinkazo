@@ -297,6 +297,21 @@ describe("donde el aviso no corresponde", () => {
     expect(aviso().hidden).toBe(false);
   });
 
+  it("en la demostración (?demo=) tampoco: no graba nada, como el ensayo y el modo stand", () => {
+    const antes = location.pathname + location.search;
+    history.replaceState(null, "", "/?demo=wheel");
+    try {
+      montarAvisoDePlata(true);
+      escribirYSalir(premio(), "50 USD");
+      expect(aviso().hidden).toBe(true);
+      expect(avisoDePlataVisible()).toBe(false);
+    } finally {
+      history.replaceState(null, "", antes);
+    }
+    escribirYSalir(premio(), "50 USD");
+    expect(aviso().hidden).toBe(false);
+  });
+
   it("si la ventana pierde el foco (cambio de pestaña o de aplicación) el campo no se da por abandonado", () => {
     premio().focus();
     escribir(premio(), "50 USD");
