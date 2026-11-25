@@ -169,14 +169,14 @@ describe("el sorteo que manda el servicio, en la pantalla", () => {
     soltar({ estado: "listo", valor: { winners: ESPERADOS, randomness: V.quicknet.randomness, txHash: TX }, yaEstaba: false });
     await vi.waitFor(() => expect(document.getElementById("grab-estado")?.dataset.grabacion).toBe("guardado"));
     const caja = document.getElementById("grab-estado");
-    expect(caja?.textContent).toContain(T.es.grabGuardado);
+    expect(caja?.textContent).toContain(String(T.es.grabGuardado));
     expect(caja?.querySelector("a")?.getAttribute("href")).toContain(TX);
-    expect(document.getElementById("btn-draw")?.textContent).toBe(T.es.drawnDone);
+    expect(document.getElementById("btn-draw")?.textContent).toBe(String(T.es.drawnDone));
     expect(h.contar).toHaveBeenCalledWith("draw_confirmed", expect.anything());
     expect(h.drawOnChain).not.toHaveBeenCalled();
     // Nunca se ve nada de aprobar ni de firmar.
-    expect(vistos.some((v) => v.includes(T.es.txSigning))).toBe(false);
-    expect(document.body.textContent).not.toContain(T.es.txSigning);
+    expect(vistos.some((v) => v.includes(String(T.es.txSigning)))).toBe(false);
+    expect(document.body.textContent).not.toContain(String(T.es.txSigning));
   });
 
   it("una cuenta que ya puede guardar premios ve Sorteo guardado y no el comprobante de la puerta del premio", async () => {
@@ -187,7 +187,7 @@ describe("el sorteo que manda el servicio, en la pantalla", () => {
     await vi.waitFor(() => expect(h.juego).toHaveBeenCalledTimes(1));
     h.fin?.();
     await vi.waitFor(() => expect(document.getElementById("grab-estado")?.dataset.grabacion).toBe("guardado"));
-    expect(document.getElementById("grab-estado")?.textContent).toContain(T.es.grabGuardado);
+    expect(document.getElementById("grab-estado")?.textContent).toContain(String(T.es.grabGuardado));
     expect(h.drawOnChain).not.toHaveBeenCalled();
   });
 });
