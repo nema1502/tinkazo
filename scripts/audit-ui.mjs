@@ -54,9 +54,11 @@ import {
   FORZAR_LETRA_ANCHA,
   SONDA_FILA_CABECERA,
   SONDA_FILA_CELULAR,
+  SONDA_LISTA_MAS,
   cuentaAbiertaJs,
   evaluarFilaCabecera,
   evaluarFilaCelular,
+  evaluarListaMas,
 } from "./lib/cabecera-fila.mjs";
 
 // La línea bajo Entrar para sellar tranquiliza a quien organiza. Se compara la frase COMPLETA, en español y en inglés, leída del
@@ -1180,6 +1182,9 @@ async function run() {
               const r = evaluarFilaCelular(JSON.parse(await c.eval(SONDA_FILA_CELULAR)));
               check(`cabecera celular ${ancho} px ${idioma} con ${nombre}: la flecha de Más queda a la vista y Empresas en la fila`, r.ok, r.detalle);
               await c.screenshot(join(outDir, `ui-cabecera-celular-${ancho}-${idioma}-${nombre.startsWith("letra ancha") ? "ancha" : "x120"}.png`));
+              // Y la lista que abre Más: la regla que aprieta el relleno de la fila no puede quitarle a sus renglones los 16 px de aire.
+              const lista = evaluarListaMas(JSON.parse(await c.eval(SONDA_LISTA_MAS)));
+              check(`cabecera celular ${ancho} px ${idioma} con ${nombre}: la lista de Más conserva el relleno de sus renglones`, lista.ok, lista.detalle);
             } finally {
               await c.send("Page.close").catch(() => undefined);
             }

@@ -14,9 +14,12 @@ import {
   MARGEN_FILA_PX,
   SONDA_FILA_CABECERA,
   SONDA_FILA_CELULAR,
+  SONDA_LISTA_MAS,
+  RELLENO_LISTA_MAS_PX,
   cuentaAbiertaJs,
   evaluarFilaCabecera,
   evaluarFilaCelular,
+  evaluarListaMas,
 } from "./cabecera-fila.mjs";
 
 const caja = (arriba, abajo, izquierda, derecha) => ({ arriba, abajo, izquierda, derecha });
@@ -249,5 +252,71 @@ describe("la fila de la cabecera del celular", () => {
     expect(medido.empresas.izquierda).toBe(240);
     expect(medido.empresasCortada).toBe(true);
     expect(medido.entradas).toBe(4);
+  });
+});
+
+/** La lista que abre Más, abierta, con tres renglones y 16 px de relleno a cada lado. */
+const listaDeMas = (extra = {}) => ({
+  ancho: 414,
+  abierta: true,
+  items: [
+    { texto: "Cómo se usa", izquierda: 16, derecha: 16 },
+    { texto: "Juegos", izquierda: 16, derecha: 16 },
+    { texto: "Cómo funciona", izquierda: 16, derecha: 16 },
+  ],
+  ...extra,
+});
+
+describe("la lista que abre Más en el celular", () => {
+  it("pasa cuando todos los renglones conservan sus 16 px de relleno a cada lado", () => {
+    expect(RELLENO_LISTA_MAS_PX).toBe(16);
+    const r = evaluarListaMas(listaDeMas());
+    expect(r.ok).toBe(true);
+    expect(r.detalle).toContain("3 renglones");
+    expect(r.detalle).toContain("414 px");
+  });
+
+  it("falla si un renglón queda con 5 px de relleno, el defecto de la fila apretada que alcanzaba a la lista", () => {
+    const r = evaluarListaMas(listaDeMas({ items: [{ texto: "Juegos", izquierda: 5, derecha: 5 }, { texto: "Cómo funciona", izquierda: 16, derecha: 16 }] }));
+    expect(r.ok).toBe(false);
+    expect(r.detalle).toContain("Juegos");
+    expect(r.detalle).toContain("5 px");
+    expect(r.detalle).toContain("414 px de ancho");
+  });
+
+  it("falla si solo el relleno de la derecha se perdió, y si el relleno es de 15 px", () => {
+    expect(evaluarListaMas(listaDeMas({ items: [{ texto: "Juegos", izquierda: 16, derecha: 5 }] })).ok).toBe(false);
+    expect(evaluarListaMas(listaDeMas({ items: [{ texto: "Juegos", izquierda: 15, derecha: 16 }] })).ok).toBe(false);
+  });
+
+  it("falla, y lo dice, si la lista no se abrió o no tiene renglones a la vista: no pasa a ciegas", () => {
+    expect(evaluarListaMas(listaDeMas({ abierta: false })).detalle).toMatch(/no se abrió/);
+    expect(evaluarListaMas(listaDeMas({ items: [] })).ok).toBe(false);
+    expect(evaluarListaMas(null).ok).toBe(false);
+  });
+
+  it("la sonda fuerza las campañas abiertas, abre Más con un toque y mide el relleno de cada renglón", () => {
+    const atributos = {};
+    let toques = 0;
+    const mas = { classList: { contains: () => toques > 0 } };
+    const boton = { getAttribute: () => (toques > 0 ? "true" : "false"), click: () => toques++ };
+    const renglon = (texto, izq, der, visible = true) => ({ textContent: ` ${texto} `, getClientRects: () => (visible ? [1] : []), _p: [izq, der] });
+    const lista = [renglon("Cómo se usa", "16px", "16px"), renglon("Para empresas", "5px", "5px", false), renglon("Juegos", "5px", "5px")];
+    const documento = {
+      documentElement: { setAttribute: (k, v) => (atributos[k] = v), clientWidth: 414 },
+      querySelector: (s) => (s === "header .topnav .mas" ? mas : s === "header .topnav .mas-btn" ? boton : null),
+      querySelectorAll: (s) => (s === "header .topnav .mas-lista a" ? lista : []),
+    };
+    const getComputedStyle = (e) => ({ paddingLeft: e._p[0], paddingRight: e._p[1] });
+    const medido = JSON.parse(vm.runInNewContext(SONDA_LISTA_MAS, { document: documento, getComputedStyle }));
+    expect(atributos["data-campanas"]).toBe("1");
+    expect(toques).toBe(1);
+    expect(medido.abierta).toBe(true);
+    expect(medido.ancho).toBe(414);
+    expect(medido.items).toEqual([
+      { texto: "Cómo se usa", izquierda: 16, derecha: 16 },
+      { texto: "Juegos", izquierda: 5, derecha: 5 },
+    ]);
+    expect(evaluarListaMas(medido).ok).toBe(false);
   });
 });
