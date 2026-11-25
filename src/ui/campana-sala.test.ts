@@ -840,6 +840,70 @@ describe("cerrar la lista", () => {
     expect(m.fases[m.fases.length - 1]?.[0]).toBe("abierta");
   });
 
+  describe("volver a abrir una lista cerrada manda siempre una hora nueva", () => {
+    async function cerrada(m: Mundo): Promise<ReturnType<typeof nuevoPanel>> {
+      const p = nuevoPanel(m);
+      await abrirInscripcion(m, p);
+      await alta(m, 1, "Ana");
+      await alta(m, 2, "Nora");
+      await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
+      boton(p, "Cerrar la lista").click();
+      await confirmarCierre(m, p, "Cerrar con 2 personas");
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+      return p;
+    }
+
+    it("con el cierre todavía por venir, la hora es el cierre que tenía más quince minutos", async () => {
+      const m = mundo();
+      const p = await cerrada(m);
+      boton(p, "Volver a abrir la lista").click();
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+      expect(m.fases[m.fases.length - 1]).toEqual(["abierta", AHORA + 3 * 3_600_000 + 900_000]);
+    });
+
+    it("con la hora de la sala atrasada también manda una hora, no un vacío que el servidor rechace", async () => {
+      const m = mundo();
+      m.hastaDelPase = AHORA - 600_000;
+      const p = await cerrada(m);
+      boton(p, "Volver a abrir la lista").click();
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+      const ultima = m.fases[m.fases.length - 1];
+      expect(ultima?.[0]).toBe("abierta");
+      expect(ultima?.[1]).toBe(AHORA + 3 * 3_600_000 + 900_000);
+    });
+
+    it("con el cierre ya vencido, la hora cuenta desde ahora", async () => {
+      const m = mundo();
+      const p = await cerrada(m);
+      await m.correr(3 * 3_600_000 + 20 * 60_000);
+      boton(p, "Volver a abrir la lista").click();
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+      expect(m.fases[m.fases.length - 1]).toEqual(["abierta", m.ahora + 900_000]);
+    });
+
+    it("con el cierre a casi doce horas no pide más de lo que la sala acepta", async () => {
+      const m = mundo();
+      const p = nuevoPanel(m);
+      await abrirInscripcion(m, p);
+      for (let i = 0; i < 36; i++) {
+        boton(p, "15 minutos más").click();
+        await vi.waitFor(() => expect(m.fases).toHaveLength(i + 2));
+      }
+      await alta(m, 1, "Ana");
+      await alta(m, 2, "Nora");
+      await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
+      boton(p, "Cerrar la lista").click();
+      await confirmarCierre(m, p, "Cerrar con 2 personas");
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+      boton(p, "Volver a abrir la lista").click();
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+      const hora = m.fases[m.fases.length - 1]?.[1];
+      expect(typeof hora).toBe("number");
+      expect(hora as number).toBeLessThanOrEqual(m.ahora + 12 * 3_600_000);
+      expect(hora as number).toBeGreaterThanOrEqual(m.ahora + 60_000);
+    });
+  });
+
   it("si la respuesta del cierre se perdió pero la sala cerró, pasa a cerrada sin pedirlo otra vez", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
