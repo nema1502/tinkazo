@@ -224,8 +224,8 @@ async function capturar(browser, v) {
     await page.send("Log.enable").catch(() => undefined);
     // El idioma de una persona de acá. Sin esto, en una máquina de Linux sin idioma configurado el sitio abre en inglés
     // cuando la vista no pide ?lang=. Se cambia solo lo que dice el navegador, no su nombre.
-    const agente = await page.eval("navigator.userAgent");
-    await page.send("Emulation.setUserAgentOverride", { userAgent: agente, acceptLanguage: "es-BO,es" });
+    const ua = await page.eval("navigator.userAgent");
+    await page.send("Emulation.setUserAgentOverride", { userAgent: ua, acceptLanguage: "es-BO,es" });
     await page.send("Emulation.setLocaleOverride", { locale: "es-BO" }).catch(() => undefined);
     errores = vigilarErrores(page);
     const nav = await page.send("Page.navigate", { url });
