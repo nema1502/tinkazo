@@ -16,7 +16,7 @@ describe("validar la lista de vistas", () => {
   it("una vista mínima vale y se completa con los valores de siempre", () => {
     const { vistas, errores: e } = validarVistas([vista()]);
     expect(e).toEqual([]);
-    expect(vistas).toEqual([{ nombre: "portada", ruta: "/", ancho: DEFECTOS.ancho, alto: DEFECTOS.alto, tema: null, idioma: null, esperar: null, pausaMs: DEFECTOS.pausaMs, paginaEntera: false, pasos: [] }]);
+    expect(vistas).toEqual([{ nombre: "portada", ruta: "/", ancho: DEFECTOS.ancho, alto: DEFECTOS.alto, tema: null, idioma: null, esperar: null, pausaMs: DEFECTOS.pausaMs, paginaEntera: false, terminaEn: null, pasos: [] }]);
   });
 
   it("una vista completa con todos los pasos vale", () => {

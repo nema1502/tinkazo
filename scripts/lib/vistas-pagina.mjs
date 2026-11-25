@@ -321,7 +321,7 @@ export async function puntoDelClicEn(page, selector) {
 
 /**
  * Corre DENTRO de la página: lo que ella dice de sí misma al terminar los pasos. La dirección, el idioma de la
- * etiqueta html (solo la base: "es-BO" es "es"), el tema (el forzado por la página o, sin él, el del sistema),
+ * etiqueta html (solo la base: "es-BO" es "es"), el camino sin consulta ni fragmento, el tema (el forzado por la página o, sin él, el del sistema),
  * el ancho del contenido y de la pantalla, y si hay contexto webgl2 y con qué placa dibuja.
  */
 export function estadoDeLaPagina() {
@@ -345,7 +345,18 @@ export function estadoDeLaPagina() {
     webgl2 = false;
     renderizador = null;
   }
-  return { href: location.href, idioma: String(raiz.lang || "").toLowerCase().split("-")[0], tema, sw: raiz.scrollWidth, iw: window.innerWidth, webgl2, renderizador };
+  return { href: location.href, camino: location.pathname, idioma: String(raiz.lang || "").toLowerCase().split("-")[0], tema, sw: raiz.scrollWidth, iw: window.innerWidth, webgl2, renderizador };
+}
+
+/**
+ * La comprobación de después de los pasos y antes de la foto: lo que cargó la pestaña (estados HTTP), dónde
+ * terminó (el camino de la ruta pedida o, si la vista navega a propósito, el de `terminaEn`) y si salió con
+ * el tema y el idioma pedidos. Un clic puede llevar a otra página: sin `terminaEn`, eso es un error y no una
+ * captura con el nombre de la ruta pedida. Devuelve el motivo, o "" si está bien.
+ */
+export function problemaAlTerminar({ respuestas, caminoPedido, terminaEn, estado, pedido }) {
+  if (typeof estado?.camino !== "string") return "no pude leer el camino en que terminó la página";
+  return problemaDelDocumento({ respuestas, caminoPedido: terminaEn || caminoPedido, caminoCargado: estado.camino }) || problemaDeTemaEIdioma(pedido, estado);
 }
 
 /** Si la página salió con el tema y el idioma que se pidieron. Devuelve el motivo si no. */
@@ -382,29 +393,54 @@ const ORIGEN_FALSO = "http://sitio.invalid";
  * servidor de vista previa contesta la portada con 200 a cualquier camino que no es un archivo (una ruta mal
  * escrita como /seguridad en vez de /seguridad.html), y una captura de la portada con el nombre de otra página es
  * peor que un error. Pide el camino (sin la consulta ni el fragmento) y lo compara con la portada, que pide
- * una sola vez: si el texto es el mismo, es el respaldo. Devuelve el motivo, o "" si está bien o si no se pudo
- * saber (la navegación lo dirá).
+ * una sola vez: si el texto es el mismo, es el respaldo. Devuelve el motivo, o "" si la página existe.
+ *
+ * Si no se puede comprobar (el servidor no contesta, se corta, la portada da error) NO da la ruta por buena: es el
+ * caso en que el servidor devolvería la portada y nada más lo detectaría. Reintenta unas veces antes de rendirse y,
+ * si la portada no se pudo leer, la próxima ruta vuelve a intentarlo (no guarda el fallo).
  */
-export function crearComprobadorDeRutas(base, buscar = fetch) {
+export function crearComprobadorDeRutas(base, buscar = fetch, { intentos = 3, pausaMs = 500 } = {}) {
   const raiz = String(base).replace(/\/+$/, "");
-  const leer = async (camino) => {
+  const leerUnaVez = async (camino) => {
     const r = await buscar(`${raiz}${camino}`, { signal: AbortSignal.timeout(10_000) });
     const bien = r.status >= 200 && r.status < 300;
     return { estado: r.status, texto: bien ? await r.text() : "" };
   };
+  const leer = async (camino) => {
+    let ultimo;
+    for (let i = 0; i < intentos; i++) {
+      try {
+        return await leerUnaVez(camino);
+      } catch (e) {
+        ultimo = e;
+        if (i < intentos - 1 && pausaMs > 0) await new Promise((r) => setTimeout(r, pausaMs));
+      }
+    }
+    throw ultimo;
+  };
+  const sinComprobar = (que, e) => `no pude comprobar ${que}: ${String(e?.message ?? e).slice(0, 200)}`;
   let portada = null;
   return async (ruta) => {
     const camino = new URL(ruta, ORIGEN_FALSO).pathname;
     if (normalizarCamino(camino) === "/") return "";
+    let pagina;
     try {
-      const pagina = await leer(camino);
-      if (!(pagina.estado >= 200 && pagina.estado < 300)) return `el servidor contestó ${pagina.estado} a ${camino}`;
-      portada ??= leer("/");
-      if (pagina.texto === (await portada).texto) return `${camino} no existe en el sitio servido: el servidor devolvió la portada`;
-      return "";
-    } catch {
-      return "";
+      pagina = await leer(camino);
+    } catch (e) {
+      return sinComprobar(`que ${camino} exista en el sitio servido`, e);
     }
+    if (!(pagina.estado >= 200 && pagina.estado < 300)) return `el servidor contestó ${pagina.estado} a ${camino}`;
+    if (!portada) {
+      try {
+        const p = await leer("/");
+        if (!(p.estado >= 200 && p.estado < 300)) throw new Error(`el servidor contestó ${p.estado} a la portada`);
+        portada = p;
+      } catch (e) {
+        return sinComprobar(`que ${camino} no sea la portada (no se pudo leer la portada)`, e);
+      }
+    }
+    if (pagina.texto === portada.texto) return `${camino} no existe en el sitio servido: el servidor devolvió la portada`;
+    return "";
   };
 }
 

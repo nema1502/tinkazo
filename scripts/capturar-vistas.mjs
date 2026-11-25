@@ -33,7 +33,9 @@
  *
  * Una vista falla, con su foto, si el servidor no contesta 2xx, si la ruta no es una página del sitio (el servidor
  * de vista previa contesta la portada a un camino que no existe, como /seguridad sin .html), si la página no
- * terminó en el camino pedido, si un clic es a un elemento apagado o tapado por otro (el error nombra al que lo tapa),
+ * terminó en el camino pedido (se comprueba al cargar y otra vez después de los pasos, antes de la foto: un
+ * clic que lleva a otra página no deja una captura con el nombre de la ruta pedida), si no se pudo comprobar
+ * que la ruta exista (el servidor no contesta o no se pudo leer la portada para compararla), si un clic es a un elemento apagado o tapado por otro (el error nombra al que lo tapa),
  * o si se pidió un tema o un idioma y la página salió con otro. Una vista que se pasó de su plazo no puede
  * terminar después y quedar como bien. Si el navegador deja de contestar, la que falla queda con su error y las que
  * faltan quedan como no hechas, con ese motivo.
@@ -50,6 +52,7 @@
  *   esperar       selector CSS que tiene que estar visible antes de capturar (hasta 30 s)
  *   pausaMs       cuánto esperar antes de la foto, de 0 a 60000 (500 si no se dice)
  *   paginaEntera  true para fotografiar la página completa y no solo la pantalla
+ *   terminaEn     solo si un paso navega a propósito: el camino en que tiene que terminar la página ("/juegos.html")
  *   pasos         acciones en orden antes de la foto:
  *     {"accion":"clic","selector":"#btn-freeze"}
  *     {"accion":"clicHasta","selector":"#btn-espera","hasta":".espera-reloj"}   clic y, si en 1 s no aparece lo otro, otro clic (hasta 20 s)
@@ -107,7 +110,7 @@
 import { mkdirSync, readFileSync, appendFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
-import { clicHasta, conTope, correrConPlazo, cortarFueraDelOrigen, crearComprobadorDeRutas, desplazar, describirGraficos, estadoDeLaPagina, evidenciaDelFallo, prepararFoto, problemaDeTemaEIdioma, problemaDelDocumento, puntoDelClicEn, recorrerVistas, vigilarDocumentos } from "./lib/vistas-pagina.mjs";
+import { clicHasta, conTope, correrConPlazo, cortarFueraDelOrigen, crearComprobadorDeRutas, desplazar, describirGraficos, estadoDeLaPagina, evidenciaDelFallo, prepararFoto, problemaAlTerminar, problemaDelDocumento, puntoDelClicEn, recorrerVistas, vigilarDocumentos } from "./lib/vistas-pagina.mjs";
 import { TECLAS, TOPES, direccionDeVista, generarNombres, leerEntorno, leerVistas, plazoDeLaVista, problemaDeBase, problemaDeOrigen, problemaDeRama } from "./lib/vistas.mjs";
 
 const args = process.argv.slice(2);
@@ -335,7 +338,7 @@ async function capturar(browser, v, { plazoMs, porElTotal }, comprobarRuta) {
       d.anchoDeLaPantalla = e.iw;
       d.scrollHorizontal = e.sw > e.iw + 1;
       if (new URL(e.href).origin !== new URL(base).origin) throw new Error(`la página terminó en otro sitio: ${e.href}`);
-      const malaDespues = problemaDelDocumento({ respuestas: documentos.respuestas, caminoPedido }) || problemaDeTemaEIdioma(v, e);
+      const malaDespues = problemaAlTerminar({ respuestas: documentos.respuestas, caminoPedido, terminaEn: v.terminaEn, estado: e, pedido: v });
       if (malaDespues) throw new Error(malaDespues);
       const archivo = `${v.nombre}.png`;
       d.truncada = await fotografiar(page, join(out, archivo), v.paginaEntera, vigente);

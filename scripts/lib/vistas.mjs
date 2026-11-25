@@ -59,7 +59,7 @@ export const TECLAS = {
 /** Los nombres que Windows no deja usar como archivo, tengan o no extensión: quien baje el artefacto allá no podría abrirlo. */
 const NOMBRE_RESERVADO = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
-const CAMPOS_VISTA = ["nombre", "ruta", "ancho", "alto", "tema", "idioma", "esperar", "pausaMs", "paginaEntera", "pasos"];
+const CAMPOS_VISTA = ["nombre", "ruta", "ancho", "alto", "tema", "idioma", "esperar", "pausaMs", "paginaEntera", "terminaEn", "pasos"];
 const CAMPOS_PASO = {
   clic: ["selector"],
   clicHasta: ["selector", "hasta"],
@@ -207,6 +207,11 @@ export function validarVistas(lista) {
     }
     const pausaMs = v.pausaMs === undefined ? DEFECTOS.pausaMs : v.pausaMs;
     if (!esEntero(pausaMs) || pausaMs < 0 || pausaMs > TOPES.pausaMaxMs) errores.push(`${etiqueta}: "pausaMs" tiene que ser un entero entre 0 y ${TOPES.pausaMaxMs}`);
+    if (v.terminaEn !== undefined) {
+      const p = problemaDeRuta(v.terminaEn);
+      if (p) errores.push(`${etiqueta}: "terminaEn" ${p}`);
+      else if (/[?#]/.test(v.terminaEn)) errores.push(`${etiqueta}: "terminaEn" es solo el camino de la página, sin consulta ni fragmento`);
+    }
     if (v.paginaEntera !== undefined && typeof v.paginaEntera !== "boolean") errores.push(`${etiqueta}: "paginaEntera" tiene que ser true o false`);
     const pasos = [];
     if (v.pasos !== undefined) {
@@ -235,6 +240,7 @@ export function validarVistas(lista) {
       esperar: v.esperar ?? null,
       pausaMs,
       paginaEntera: v.paginaEntera === true,
+      terminaEn: v.terminaEn ?? null,
       pasos,
     });
   });

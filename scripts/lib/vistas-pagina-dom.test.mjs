@@ -183,6 +183,14 @@ describe("estadoDeLaPagina: lo que la página dice de sí misma", () => {
     expect(e.href).toContain("http");
   });
 
+  it("anota el camino de la página, sin la consulta ni el fragmento", () => {
+    sinMedios();
+    conCanvas(null);
+    expect(estadoDeLaPagina().camino).toBe(window.location.pathname);
+    window.history.pushState({}, "", "/seguridad.html?lang=en#arriba");
+    expect(estadoDeLaPagina().camino).toBe("/seguridad.html");
+  });
+
   it("sin tema forzado sigue al sistema, y sin sistema es claro", () => {
     conCanvas(null);
     window.matchMedia = (q) => ({ matches: q.includes("dark") });
