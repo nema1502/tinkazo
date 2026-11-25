@@ -803,6 +803,26 @@ describe("cerrar la lista", () => {
     expect(boton(p, "Elegir el archivo")).toBeTruthy();
   });
 
+  it("con 150 personas anotándose, un toque en Cerrar la lista no cierra: pide confirmar", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await abrirInscripcion(m, p);
+    for (let n = 1; n <= 150; n++) await alta(m, n, `Persona ${n}`);
+    await vi.waitFor(() => expect(texto(p, "#cpo-n")).toBe("150"));
+    boton(p, "Cerrar la lista").click();
+    await suelta();
+    // Nada se cerró: la inscripción sigue abierta para quien escanee en este rato.
+    expect(m.fases.filter(([f]) => f === "cerrada")).toHaveLength(0);
+    expect(m.cerradas).toHaveLength(0);
+    expect(vistaDe(p)).toBe("confirmar");
+    expect(texto(p, "#cpo-h")).toBe("¿Cerrar la lista?");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Cerrar con 150 personas"]);
+    // Y se puede seguir abierta sin haber cerrado nada.
+    boton(p, "Seguir abierta").click();
+    expect(vistaDe(p)).toBe("abierta");
+    expect(m.fases.filter(([f]) => f === "cerrada")).toHaveLength(0);
+  });
+
   it("un doble toque no confirma el cierre sin querer", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
