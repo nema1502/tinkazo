@@ -17,14 +17,14 @@ import {
  * verdad). Acá va lo que decide, premio por premio, si esa vuelta entrega o no:
  *
  * - llama cuando el premio espera (`Owed` o `Held`, los dos estados que la persona ve como Por
- *   recibir en `src/campana/premios-de-la-cuenta.ts`), todavía no venció la fecha de entrega de la
- *   campaña (`recibir_hasta_ms`) y la cuenta de quien ganó ya tiene la línea de esa moneda;
+ *   recibir en `src/campana/premios-de-la-cuenta.ts`), todavía no venció el plazo para cobrar que le
+ *   llega como dato (`cobrarHastaMs`) y la cuenta de quien ganó ya tiene la línea de esa moneda;
  * - no lo llama, con su motivo, en los demás casos: ya recibido, devuelto, vencido, sin línea,
  *   línea incierta, o una promoción que nunca podría pagar el premio (sin sello, cancelada,
  *   reembolsada).
  *
  * La decisión es pura y nunca mira la red ni el reloj de la máquina: la lectura la trae quien
- * llama, la hora y la fecha de la campaña entran aparte, y la presencia de la línea la cuenta una
+ * llama, la hora y el plazo para cobrar entran aparte, y la presencia de la línea la cuenta una
  * función que le pasan (qué cuenta la consulta y con qué RPC es el trabajo del servicio, que es
  * quien satisface si el premio se puede pagar). Nunca lanza: lo que la red no contestó se dice tal
  * cual, sin inventar una decisión sobre un premio que no se leyó.
@@ -46,8 +46,12 @@ export type EntregaDelPremio =
 
 /** Lo que se mira antes de decidir cada premio. */
 export interface LaEntrega {
-  /** Hasta cuándo se puede entregar el premio (ms), como lo dijo la campaña (`recibir_hasta_ms`). */
-  recibirHastaMs: number;
+  /**
+   * Hasta cuándo se puede cobrar el premio (ms). Es un dato de entrada y la decisión no trae ningún plazo propio: lo
+   * pone quien llama y tiene que ser el que deja el contrato de premios, no un plazo más corto de la campaña, o se
+   * dejaría sin pagar a quien todavía puede cobrar.
+   */
+  cobrarHastaMs: number;
   /** El momento de la vuelta (ms). Un premio con la fecha límite exacta ya está vencido. */
   ahoraMs: number;
   /** Si la cuenta de quien ganó ya tiene la línea de la moneda del premio. Lo que no se sabe es `null`. */
@@ -67,7 +71,7 @@ function entregaDelPremio(premio: PremioDeLaPromocion, c: LaEntrega): EntregaDel
   // igual que lo ve la persona en `src/campana/premios-de-la-cuenta.ts`.
   if (premio.state === "Returned") return { puesto: premio.position, cuenta: premio.winner, monto: monto, accion: "no", motivo: "volvio" };
   const espera = premio.state === "Owed" || premio.state === "Held";
-  if (espera && c.ahoraMs >= c.recibirHastaMs) return { puesto: premio.position, cuenta: premio.winner, monto: monto, accion: "no", motivo: "vencido" };
+  if (espera && c.ahoraMs >= c.cobrarHastaMs) return { puesto: premio.position, cuenta: premio.winner, monto: monto, accion: "no", motivo: "vencido" };
   if (espera) {
     // La línea no se puede saber también corta: un claim a una cuenta que no puede recibir el activo
     // gastaría una llamada y una comisión para un pago que la red rechaza. Se reintenta en la próxima vuelta.
