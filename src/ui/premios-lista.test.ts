@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type VistaDeLosPremios } from "../campana/premios-de-la-cuenta";
-import { filasDeLosPremios } from "./premios-lista";
+import { filasDeLosPremios, montoLegible } from "./premios-lista";
 
 /**
  * La lista «Tus premios» de quien ganó, sin DOM ni red (`premios-lista.ts`): cada premio de la cuenta
@@ -50,6 +50,15 @@ describe("la lista de Tus premios", () => {
   it("sin premios o sin promoción: la lista va vacía y no dice más", () => {
     expect(lista({ ok: true, premios: [] })).toEqual({ filas: [] });
     expect(lista({ ok: false, error: "red-caida" })).toEqual({ filas: [] });
+  });
+
+  it("el monto no pierde cifras: sale del texto, sin pasar por un número de coma flotante", () => {
+    expect(montoLegible("123456789012345678901234567", "en")).toBe("12,345,678,901,234,567,890.1234567");
+    expect(montoLegible("123456789012345678901234567", "es")).toBe("12.345.678.901.234.567.890,1234567");
+    expect(montoLegible("50000000", "en")).toBe("5");
+    expect(montoLegible("1", "es")).toBe("0,0000001");
+    expect(montoLegible("0", "es")).toBe("0");
+    expect(montoLegible("12x", "es")).toBeNull();
   });
 
   it("el idioma: los montos con coma decimal y los mismos estados", () => {

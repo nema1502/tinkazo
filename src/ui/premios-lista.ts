@@ -37,7 +37,15 @@ const textoDelEstado = (estado: EstadoVistoDelPremio, fecha: (hastaMs: number) =
 export const montoLegible = (unidades: string, idioma: "es" | "en"): string | null => {
   if (!/^\d+$/u.test(unidades)) return null;
   try {
-    return new Intl.NumberFormat(idioma === "en" ? "en" : "es", { maximumFractionDigits: 7 }).format(Number(unidades) / 1e7);
+    // Del texto, sin pasar por un número de coma flotante: la parte entera como BigInt y las siete cifras de la fracción tal cual.
+    const lleno = unidades.padStart(8, "0");
+    const entera = BigInt(lleno.slice(0, -7));
+    const fraccion = lleno.slice(-7).replace(/0+$/u, "");
+    const formato = new Intl.NumberFormat(idioma === "en" ? "en" : "es");
+    const texto = formato.format(entera);
+    if (fraccion === "") return texto;
+    const coma = formato.formatToParts(1.1).find((p) => p.type === "decimal")?.value ?? ".";
+    return `${texto}${coma}${fraccion}`;
   } catch {
     return null;
   }
