@@ -224,7 +224,7 @@ describe("una campaña de personas: la previa", () => {
     const yo = vi.fn(async () => propio());
     const { mundo, g } = await montarPersona({ yo, sala: SALA }, memoria);
     expect(g.montajes).toHaveLength(0);
-    expect(texto(mundo, "#cmp-adentro h1")).toBe("Ya estás adentro");
+    expect(texto(mundo, "#cmp-adentro h1")).toBe("Ya estabas en la lista");
     expect(yo).toHaveBeenCalled();
   });
 });

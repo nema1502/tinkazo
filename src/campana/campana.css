@@ -1306,7 +1306,13 @@ a.cmp-suave {
   /* El botón puede achicarse hasta 180 px y el texto de apoyo o de error hasta 160: juntos entran en una sola fila desde
      unos 410 px de ancho. El texto se queda con tres partes del espacio que sobra y el botón con una, así el texto no se
      parte en muchos renglones y la barra se mantiene en los 84 px que el contenido le reserva. */
-  .cmp-accion .primary,
+  .cmp-accion .primary {
+    flex: 1 1 180px;
+    width: auto;
+    max-width: 360px;
+  }
+
+  /* El botón de Google de una campaña de personas ocupa el lugar del botón principal, en la misma fila. */
   .cmp-accion .cmp-google {
     flex: 1 1 180px;
     width: auto;

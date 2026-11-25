@@ -250,7 +250,7 @@ describe("participar.html: una campaña de personas", () => {
     await abrir();
     expect(guiones).toHaveLength(0);
     expect(gis.initialize).not.toHaveBeenCalled();
-    expect(texto("#cmp-adentro h1")).toBe("Ya estás adentro");
+    expect(texto("#cmp-adentro h1")).toBe("Ya estabas en la lista");
     const yo = cuerpoDe("yo");
     expect(yo).toEqual({ llave: llaveDelAlta });
     expect(h.billeteraCargada).toBe(0);
