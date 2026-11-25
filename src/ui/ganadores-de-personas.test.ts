@@ -45,7 +45,18 @@ describe("los ganadores de una lista de personas", () => {
     expect(htmlDeLosGanadores(["Ana", "Beto"], [0], "Polera", avatar)).not.toContain("Lugar");
   });
 
-  it("una sola línea de persona no es una lista de personas: la tarjeta es la de siempre", () => {
-    expect(htmlDeLosGanadores([lineas[0] as string], [0], "Polera", avatar)).toContain(`<p class="winner-name">${lineas[0]}</p>`);
+  it("una sola línea de persona, o una mezclada con nombres, también dice su lugar y nada más", () => {
+    expect(htmlDeLosGanadores([lineas[0] as string], [0], "Polera", avatar)).toContain('<p class="winner-name">Lugar 1 de la lista</p>');
+    const mezcla = ["Ana", lineas[0] as string, cuentaDePrueba(1)];
+    const html = htmlDeLosGanadores(mezcla, [0, 1, 2], "Polera", avatar);
+    expect(html).toContain('<p class="winner-name">Ana</p>');
+    expect(html).toContain('<p class="winner-name">Lugar 2 de la lista</p>');
+    expect(html).toContain(`<p class="winner-name">${cuentaDePrueba(1)}</p>`);
+    expect(html).not.toContain("p1:");
+  });
+
+  it("una línea repetida que sale dos veces no se nombra en el aviso", () => {
+    const html = htmlDeLosGanadores([lineas[0] as string, lineas[0] as string, lineas[1] as string], [0, 1], "", avatar);
+    expect(html).not.toContain("p1:");
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cuentaDePrueba, lineaDePrueba } from "./cuentas-de-prueba";
-import { esListaDePersonas, formaDeLista } from "./forma-de-lista";
+import { esListaDePersonas, formaDeLista, hayLineasDePersona } from "./forma-de-lista";
 
 /**
  * La forma de una lista se reconoce en sus datos: de cuentas si todas las filas son cuentas, de personas si todas son
@@ -78,5 +78,20 @@ describe("esListaDePersonas", () => {
     expect(esListaDePersonas([cuentaDePrueba(1), cuentaDePrueba(2)])).toBe(false);
     expect(esListaDePersonas([lineaDePrueba(1), cuentaDePrueba(1)])).toBe(false);
     expect(esListaDePersonas([lineaDePrueba(1), lineaDePrueba(2), "hola"])).toBe(false);
+  });
+});
+
+describe("hayLineasDePersona", () => {
+  it("es cierto con una línea de persona, sola o entre otras filas", () => {
+    expect(hayLineasDePersona([lineaDePrueba(1)])).toBe(true);
+    expect(hayLineasDePersona([lineaDePrueba(1), lineaDePrueba(2)])).toBe(true);
+    expect(hayLineasDePersona(["Ana", lineaDePrueba(1), cuentaDePrueba(1)])).toBe(true);
+  });
+
+  it("es falso con cuentas, nombres, filas casi bien o una lista vacía", () => {
+    expect(hayLineasDePersona([cuentaDePrueba(1), cuentaDePrueba(2)])).toBe(false);
+    expect(hayLineasDePersona(["Ana", "Beto"])).toBe(false);
+    expect(hayLineasDePersona([lineaDePrueba(1).toUpperCase(), 7, null])).toBe(false);
+    expect(hayLineasDePersona([])).toBe(false);
   });
 });

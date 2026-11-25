@@ -59,10 +59,10 @@ describe("con el mapa de etiquetas vacío, ninguna cadena visible es una línea 
     SIN_LINEA(etiquetaDe(L[0]!));
   });
 
-  it("etiquetaDe dice Persona anotada si la línea no está en el cuadro o no hay cuadro", () => {
-    expect(etiquetaDe(L[0]!)).toBe("Persona anotada");
+  it("etiquetaDe dice Sin nombre si la línea no está en el cuadro o no hay cuadro", () => {
+    expect(etiquetaDe(L[0]!)).toBe("Sin nombre");
     ponerCuadro([L[1]!, L[2]!]);
-    expect(etiquetaDe(L[0]!)).toBe("Persona anotada");
+    expect(etiquetaDe(L[0]!)).toBe("Sin nombre");
   });
 
   it("etiquetaConCuenta nunca agrega un trozo de la línea", () => {
@@ -71,7 +71,7 @@ describe("con el mapa de etiquetas vacío, ninguna cadena visible es una línea 
     expect(etiquetaConCuenta(L[1]!)).not.toContain("(");
     SIN_LINEA(etiquetaConCuenta(L[3]!));
     ponerCuadro([]);
-    expect(etiquetaConCuenta(L[3]!)).toBe("Persona anotada");
+    expect(etiquetaConCuenta(L[3]!)).toBe("Sin nombre");
   });
 
   it("nombreOLugar dice el lugar que le dan, desde 1", () => {
@@ -120,12 +120,12 @@ describe("con cuentas todo queda como hoy", () => {
 describe("los textos", () => {
   it("están en español y en inglés, y en inglés se usan", () => {
     expect(T.es.vLugar).toBe("Lugar {n}");
-    expect(T.es.vPersonaAnotada).toBe("Persona anotada");
+    expect(T.es.vPersonaAnotada).toBe("Sin nombre");
     expect(T.en.vLugar).toBe("Spot {n}");
-    expect(T.en.vPersonaAnotada).toBe("Signed-up person");
+    expect(T.en.vPersonaAnotada).toBe("No name");
     setLang("en");
     expect(paraMostrar(L)[1]).toBe("Spot 2");
-    expect(etiquetaDe(L[0]!)).toBe("Signed-up person");
+    expect(etiquetaDe(L[0]!)).toBe("No name");
     expect(nombreOLugar(L[0]!, 0)).toBe("Spot 1 on the list");
   });
 });

@@ -29,3 +29,11 @@ export function formaDeLista(filas: readonly unknown[]): FormaDeLista | "mezclad
 export function esListaDePersonas(lineas: readonly unknown[]): boolean {
   return lineas.length >= 2 && formaDeLista(lineas) === "persona";
 }
+
+/**
+ * Si alguna fila es una línea de persona, sea toda la lista de personas o una mezcla. Es lo que pide una página que muestra
+ * la lista pública: una línea de persona nunca se ve tal cual, se decida lo que se decida sobre el resto de la lista.
+ */
+export function hayLineasDePersona(filas: readonly unknown[]): boolean {
+  return filas.some((f) => esLineaDePersona(f));
+}

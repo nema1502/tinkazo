@@ -13,7 +13,7 @@ import { cuentaCorta } from "./modelo";
  * Una línea sin etiqueta se muestra tal cual, como siempre: con la bandera apagada esto no cambia nada.
  *
  * La excepción es la línea de una persona (campañas de personas, `p1:` y 26 caracteres): no dice quién es y no se muestra
- * nunca. Si este navegador conoce su nombre va el nombre, y si no, su lugar en la lista («Lugar 3»), o «Persona anotada»
+ * nunca. Si este navegador conoce su nombre va el nombre, y si no, su lugar en la lista («Lugar 3»), o «Sin nombre»
  * si no está en la lista del cuadro.
  */
 
@@ -116,7 +116,7 @@ const conN = (clave: string, n: number): string => t(clave).replace("{n}", Strin
 /** Cómo se nombra a una persona sin nombre: su lugar en la lista, que empieza en 1 («Lugar 3»). */
 const lugarCorto = (n: number): string => conN("vLugar", n);
 
-/** Lo que se ve de una línea de persona sin nombre: su lugar en el cuadro, o «Persona anotada» si el cuadro no la tiene. */
+/** Lo que se ve de una línea de persona sin nombre: su lugar en el cuadro, o «Sin nombre» si el cuadro no la tiene. */
 function sinNombre(linea: string): string {
   const i = lugarEnElCuadro(linea);
   return i >= 0 ? lugarCorto(i + 1) : t("vPersonaAnotada");

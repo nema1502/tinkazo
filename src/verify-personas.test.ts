@@ -5,10 +5,11 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cuentaDePrueba, lineaDePrueba } from "./campana/cuentas-de-prueba";
 
 /**
- * El comprobante de una lista de personas (`renderList`, `renderResult` y las comprobaciones de `verify.ts`): cuando toda la
- * lista sellada son líneas de persona, la página dice qué es cada línea y las ganadoras son Lugar n de la lista, nunca una
- * línea suelta. Con una lista de cuentas o una lista libre de nombres, la página queda exactamente como siempre. Se prueba
- * con el markup de verdad de `verificar.html`.
+ * El comprobante con líneas de persona (`renderList`, `renderResult` y las comprobaciones de `verify.ts`): cada línea de
+ * persona se muestra como su lugar en la lista, en la lista sellada, en el buscador, en las tarjetas, en la comprobación y en
+ * el mensaje de compartir, y nunca como la línea. Se decide línea por línea, así que también vale con una lista mezclada. Con
+ * una lista de cuentas o una lista libre de nombres, la página queda exactamente como siempre. Se prueba con el markup de
+ * verdad de `verificar.html`.
  */
 
 const pagina = readFileSync(join(process.cwd(), "verificar.html"), "utf8");
@@ -36,12 +37,13 @@ async function montar(): Promise<typeof import("./verify")> {
 const aviso = (): HTMLElement => document.getElementById("v-personas") as HTMLElement;
 const cuenta = (): string => document.getElementById("v-count")?.textContent ?? "";
 const tarjetas = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>("#v-winners .winner-card")];
+const filas = (): string[] => [...document.querySelectorAll<HTMLElement>("#v-names i")].map((f) => f.textContent ?? "");
 const nombres = (): string[] => [...document.querySelectorAll<HTMLElement>("#v-winners .winner-name")].map((n) => n.textContent ?? "");
 const premios = (): string[] => tarjetas().map((c) => c.querySelector(".winner-prize")?.textContent ?? "");
 
 const lineas = [1, 2, 3, 4, 5].map((n) => lineaDePrueba(n));
-const ES = "Cada línea es una persona anotada, escrita de forma que no dice quién es.";
-const EN = "Each line is a person who signed up, written so it doesn't say who they are.";
+const ES = "Hay líneas que no dicen a quién pertenecen. Se muestran como su lugar en la lista.";
+const EN = "Some lines don't say who they belong to. They show as their spot on the list.";
 
 const revision = (names: string[], ganadores: number[]): never =>
   ({ ronda: 7, firma: "ab", semilla: "cd", ganadores, nombres: names, ancla: { tipo: "libre" } }) as never;
@@ -67,6 +69,62 @@ describe("el comprobante: el renglón de la lista de personas", () => {
     expect(document.querySelectorAll("#v-names i")).toHaveLength(5);
   });
 
+  it("la lista sellada muestra el lugar de cada línea y ninguna línea, ni en el texto ni en la cara", async () => {
+    const { renderList } = await montar();
+    renderList({ names: lineas } as never);
+    expect(filas()).toEqual(["Lugar 1", "Lugar 2", "Lugar 3", "Lugar 4", "Lugar 5"]);
+    const html = document.getElementById("v-names")?.innerHTML ?? "";
+    expect(html).not.toContain("p1:");
+    const legible = ((): string => {
+      try {
+        return decodeURIComponent(html);
+      } catch {
+        return html;
+      }
+    })();
+    for (const l of lineas) {
+      expect(html).not.toContain(l.slice(3));
+      expect(legible).not.toContain(l.slice(3));
+    }
+  });
+
+  it("en inglés la lista dice Spot n", async () => {
+    history.replaceState(null, "", "/verificar.html?lang=en");
+    const { renderList } = await montar();
+    renderList({ names: lineas } as never);
+    expect(filas()).toEqual(["Spot 1", "Spot 2", "Spot 3", "Spot 4", "Spot 5"]);
+  });
+
+  it("una lista mezclada muestra el lugar de las líneas y deja el resto como estaba", async () => {
+    const { renderList } = await montar();
+    renderList({ names: [lineas[0] as string, "Ana", cuentaDePrueba(1), lineas[1] as string] } as never);
+    expect(filas()).toEqual(["Lugar 1", "Ana", cuentaDePrueba(1), "Lugar 4"]);
+    expect(document.getElementById("v-names")?.innerHTML).not.toContain("p1:");
+    expect(aviso().style.display).toBe("");
+  });
+
+  it("una línea suelta también se muestra como su lugar", async () => {
+    const { renderList } = await montar();
+    renderList({ names: [lineas[0] as string] } as never);
+    expect(filas()).toEqual(["Lugar 1"]);
+    expect(aviso().style.display).toBe("");
+  });
+
+  it("el buscador encuentra por lugar y nunca repite una línea", async () => {
+    const { renderList } = await montar();
+    renderList({ names: lineas } as never);
+    const buscar = document.getElementById("v-buscar") as HTMLInputElement;
+    buscar.value = "lugar 3";
+    buscar.dispatchEvent(new Event("input"));
+    expect([...document.querySelectorAll("#v-names i.match")].map((f) => f.textContent)).toEqual(["Lugar 3"]);
+    expect(document.getElementById("v-buscar-out")?.textContent).not.toContain("p1:");
+    // Quien pega una línea entera no encuentra nada: la página no la muestra.
+    buscar.value = lineas[2] as string;
+    buscar.dispatchEvent(new Event("input"));
+    expect(document.querySelectorAll("#v-names i.match")).toHaveLength(0);
+    expect(document.getElementById("v-buscar-out")?.textContent).not.toContain("p1:");
+  });
+
   it("en inglés dice lo mismo en inglés", async () => {
     history.replaceState(null, "", "/verificar.html?lang=en");
     const { renderList } = await montar();
@@ -75,14 +133,12 @@ describe("el comprobante: el renglón de la lista de personas", () => {
     expect(aviso().textContent).toBe(EN);
   });
 
-  it("una lista de cuentas, una de nombres libres, una mezclada y una de una sola persona no lo muestran", async () => {
+  it("una lista de cuentas, una de nombres libres, una con líneas casi bien y una vacía no lo muestran", async () => {
     const { renderList } = await montar();
     const casos: string[][] = [
       [cuentaDePrueba(1), cuentaDePrueba(2), cuentaDePrueba(3)],
       ["Ana", "Beto", "Carla"],
-      [lineas[0] as string, lineas[1] as string, cuentaDePrueba(1)],
-      [lineas[0] as string, lineas[1] as string, "Ana"],
-      [lineas[0] as string],
+      [(lineas[0] as string).toUpperCase(), `${(lineas[1] as string).slice(0, -1)}z`],
       [],
     ];
     for (const names of casos) {
@@ -196,11 +252,40 @@ describe("el comprobante de una lista que no es de personas, igual que siempre",
     expect((abrirSorteo.mock.calls[0]?.[0] as { ganadores: string[] }).ganadores).toEqual(["Carla"]);
   });
 
-  it("una lista mezclada de líneas y nombres muestra las líneas como hasta ahora", async () => {
+  it("una lista mezclada de líneas y nombres: la línea es su lugar y el nombre sigue siendo el nombre", async () => {
     const { renderResult } = await montar();
     const mezcla = [lineas[0] as string, "Ana", lineas[1] as string];
-    renderResult({ names: mezcla, prize: "Un libro" } as never, revision(mezcla, [0]), "Un libro", { fromChain: false });
-    expect(nombres()).toEqual([lineas[0]]);
+    renderResult({ names: mezcla, prize: "Un libro" } as never, revision(mezcla, [0, 1, 2]), "Un libro", { fromChain: false });
+    expect(nombres()).toEqual(["Lugar 1 de la lista", "Ana", "Lugar 3 de la lista"]);
+    expect(document.getElementById("v-winners")?.innerHTML).not.toContain("p1:");
+    (document.getElementById("btn-compartir") as HTMLButtonElement).click();
+    expect((abrirSorteo.mock.calls[0]?.[0] as { ganadores: string[] }).ganadores).toEqual(["Lugar 1 de la lista", "Ana", "Lugar 3 de la lista"]);
+  });
+
+  it("la comprobación del ganador de una lista mezclada tampoco muestra la línea", async () => {
+    const { pintarComprobaciones } = await montar();
+    const mezcla = [lineas[0] as string, "Ana", lineas[1] as string];
+    pintarComprobaciones({ names: mezcla, prize: "Un libro" } as never, {
+      ancla: { tipo: "libre" },
+      firma: "ab",
+      firmaOk: true,
+      semilla: "cd",
+      ganadores: [2, 1],
+      nombres: mezcla,
+      motivos: [],
+      veredicto: "libre",
+      huella: "00".repeat(32),
+    } as never);
+    const texto = document.getElementById("checks")?.textContent ?? "";
+    expect(texto).toContain("Lugar 3 de la lista, Ana");
+    expect(texto).not.toContain("p1:");
+  });
+
+  it("una línea de persona que sale dos veces no deja su línea en el aviso", async () => {
+    const { renderResult } = await montar();
+    const repetida = [lineas[0] as string, lineas[0] as string, lineas[1] as string];
+    renderResult({ names: repetida, prize: "Un libro" } as never, revision(repetida, [0, 1]), "Un libro", { fromChain: false });
+    expect(document.getElementById("v-winners")?.innerHTML).not.toContain("p1:");
   });
 
   it("un orden de turnos de nombres sigue siendo una lista de turnos", async () => {
@@ -223,6 +308,7 @@ describe("los textos del comprobante de personas", () => {
       }
       expect(String(T[l].vLugarDeLaLista)).toContain("{n}");
     }
+    expect(String(T.es.vListaDePersonas)).not.toMatch(/persona anotada/i);
     expect(T.es.vListaDePersonas).toBe(ES);
     expect(T.en.vListaDePersonas).toBe(EN);
     expect(T.es.vLugarDeLaLista).toBe("Lugar {n} de la lista");
