@@ -35,7 +35,7 @@
 
 ## Qué despliega o configura al unirse
 
-<!-- Escribí Nada si no hay nada. Si hay un servicio, un secreto, una variable o un orden de despliegue, decilo acá. Unir a main no despliega ningún servicio. -->
+<!-- Unir a main publica el sitio en tinkazo.app. Escribí Nada solo si cambia únicamente el sitio y no hay servicio, secreto, variable ni orden de despliegue. Si los hay, decilo acá. -->
 
 ## Antes de pedir la revisión
 

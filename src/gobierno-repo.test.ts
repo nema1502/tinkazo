@@ -37,6 +37,20 @@ describe("CONTRIBUTING.md", () => {
   });
 });
 
+describe("lo que despliega unir a main", () => {
+  it("la guía no dice que unir a main no despliega nada: el sitio sale a producción", () => {
+    expect(contribuir).not.toMatch(/no despliega ningún servicio/);
+    expect(contribuir).toMatch(/Unir un pedido a `main` publica el sitio en tinkazo\.app/);
+    expect(contribuir).toMatch(/servicios de `workers\/`/);
+  });
+
+  it("la plantilla no sugiere que Nada es lo normal ni que unir es inocuo", () => {
+    expect(plantilla).not.toMatch(/no despliega ningún servicio/);
+    expect(plantilla).toMatch(/publica el sitio en tinkazo\.app/);
+    expect(plantilla).toMatch(/Escribí Nada solo si/);
+  });
+});
+
 describe("falla.yml", () => {
   it("no pide pegar el enlace del comprobante en un issue público", () => {
     expect(falla).not.toMatch(/el enlace de su comprobante\./);

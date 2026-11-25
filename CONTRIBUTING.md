@@ -43,7 +43,7 @@ La lista completa de carpetas y archivos de cada zona está en el issue 277.
 - Cada pedido trae sus pruebas.
 - Si el pedido no cumple todo el issue, escribí `Refs #N`. Escribí `Closes #N` solo cuando el issue queda hecho entero.
 - Si cambia algo que se ve, traé capturas en escritorio y en celular, en los dos temas.
-- Unir un pedido a `main` no despliega ningún servicio. Lo que despliega un servicio, cambia un secreto o toca producción se coordina antes con la dirección, en el issue.
+- Unir un pedido a `main` publica el sitio en tinkazo.app de inmediato, así que se revisa como si ya estuviera en vivo. Los servicios de `workers/` y el contrato no se despliegan solos. Lo que despliega un servicio, cambia un secreto o toca producción se coordina antes con la dirección, en el issue.
 
 ## Qué se corre antes de pedir la revisión
 
