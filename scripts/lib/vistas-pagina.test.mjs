@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLIC_HASTA, FALLO, clicHasta, evidenciaDelFallo } from "./vistas-pagina.mjs";
+import { CLIC_HASTA, FALLO, clicHasta, cortarFueraDelOrigen, evidenciaDelFallo } from "./vistas-pagina.mjs";
 
 /** Un reloj de mentira: cada espera lo adelanta, así la prueba no espera de verdad. */
 function mundo({ apareceEnElClic = Infinity, clicsQueFallan = [] } = {}) {
@@ -108,5 +108,89 @@ describe("evidenciaDelFallo: qué había en pantalla cuando una vista falló", (
     expect(r.archivoDelFallo).toBeNull();
     expect(r.direccionEnElFallo).toContain("seguridad.html");
     expect(Date.now() - t0).toBeLessThan(2000);
+  });
+});
+
+describe("cortarFueraDelOrigen: la pestaña no sale del sitio servido", () => {
+  const ORIGEN = "http://localhost:4173";
+
+  /** Una página de mentira: guarda lo que se le manda y deja disparar eventos del protocolo. */
+  function paginaFalsa() {
+    const ws = new EventTarget();
+    const p = {
+      ws,
+      enviados: [],
+      async send(metodo, params = {}) {
+        p.enviados.push([metodo, params]);
+        if (metodo === "Page.getFrameTree") return { frameTree: { frame: { id: "PRINCIPAL" } } };
+        return {};
+      },
+      pausa(parametros) {
+        ws.dispatchEvent(Object.assign(new Event("message"), { data: JSON.stringify({ method: "Fetch.requestPaused", params: parametros }) }));
+      },
+    };
+    return p;
+  }
+  const pedido = (url, extra = {}) => ({ requestId: `r-${url}`, request: { url }, frameId: "PRINCIPAL", resourceType: "Document", ...extra });
+  const sobre = (page, metodo) => page.enviados.filter(([m]) => m === metodo);
+
+  it("pide ver solo las navegaciones de documentos, no las imágenes ni los datos", async () => {
+    const page = paginaFalsa();
+    await cortarFueraDelOrigen(page, ORIGEN);
+    expect(sobre(page, "Fetch.enable")).toEqual([["Fetch.enable", { patterns: [{ resourceType: "Document", requestStage: "Request" }] }]]);
+  });
+
+  it("deja pasar los documentos del propio sitio", async () => {
+    const page = paginaFalsa();
+    const corte = await cortarFueraDelOrigen(page, ORIGEN);
+    page.pausa(pedido(`${ORIGEN}/juegos.html`));
+    expect(sobre(page, "Fetch.continueRequest")).toEqual([["Fetch.continueRequest", { requestId: `r-${ORIGEN}/juegos.html` }]]);
+    expect(sobre(page, "Fetch.failRequest")).toEqual([]);
+    expect(corte.fuera).toEqual([]);
+  });
+
+  it("corta la navegación de la pestaña a otro sitio y la anota sin la consulta", async () => {
+    const page = paginaFalsa();
+    const corte = await cortarFueraDelOrigen(page, ORIGEN);
+    page.pausa(pedido("https://example.org/ruta?clave=secreto#x"));
+    expect(sobre(page, "Fetch.failRequest")).toEqual([["Fetch.failRequest", { requestId: "r-https://example.org/ruta?clave=secreto#x", errorReason: "Aborted" }]]);
+    expect(sobre(page, "Fetch.continueRequest")).toEqual([]);
+    expect(corte.fuera).toEqual(["https://example.org/ruta"]);
+    expect(() => corte.revisar()).toThrow(/otro sitio.*example\.org\/ruta/);
+    expect(() => corte.revisar()).not.toThrow(/secreto/);
+  });
+
+  it("también corta un puerto distinto del mismo servidor", async () => {
+    const page = paginaFalsa();
+    const corte = await cortarFueraDelOrigen(page, ORIGEN);
+    page.pausa(pedido("http://localhost:9999/"));
+    expect(corte.fuera).toEqual(["http://localhost:9999/"]);
+  });
+
+  it("los marcos de adentro (otro frameId) y los demás pedidos del sitio a terceros siguen andando", async () => {
+    const page = paginaFalsa();
+    const corte = await cortarFueraDelOrigen(page, ORIGEN);
+    page.pausa(pedido("https://example.org/incrustado", { frameId: "HIJO" }));
+    page.pausa(pedido("https://api.example.org/ronda", { resourceType: "Fetch" }));
+    expect(sobre(page, "Fetch.continueRequest")).toHaveLength(2);
+    expect(sobre(page, "Fetch.failRequest")).toEqual([]);
+    expect(corte.fuera).toEqual([]);
+    expect(() => corte.revisar()).not.toThrow();
+  });
+
+  it("una dirección que no se entiende en la pestaña principal también se corta", async () => {
+    const page = paginaFalsa();
+    const corte = await cortarFueraDelOrigen(page, ORIGEN);
+    page.pausa(pedido("no es una dirección"));
+    expect(sobre(page, "Fetch.failRequest")).toHaveLength(1);
+    expect(corte.fuera).toHaveLength(1);
+  });
+
+  it("ignora los mensajes del protocolo que no son suyos", async () => {
+    const page = paginaFalsa();
+    await cortarFueraDelOrigen(page, ORIGEN);
+    page.ws.dispatchEvent(Object.assign(new Event("message"), { data: "no es json" }));
+    page.ws.dispatchEvent(Object.assign(new Event("message"), { data: JSON.stringify({ method: "Page.loadEventFired", params: {} }) }));
+    expect(sobre(page, "Fetch.continueRequest")).toEqual([]);
   });
 });
