@@ -772,7 +772,7 @@ export const modoSoloGoogle = (valor: string | undefined): ModoSoloGoogle => (va
 
 /**
  * Si se anota a una persona según por dónde dice el proveedor que entró. Es una lista de lo permitido: entra quien el
- * proveedor dice, exactamente, que es de Google. El modo suave es un interruptor de emergencia: además deja pasar a quien
+ * proveedor dice que es de Google, comparado sin importar mayúsculas ni espacios alrededor (eso lo resuelve quien lee la sesión). El modo suave es un interruptor de emergencia: además deja pasar a quien
  * el proveedor no dice por dónde entró (`sin-dato`, que se cuenta aparte). Una vía conocida que no es Google no entra nunca.
  */
 export function viaPermitida(
