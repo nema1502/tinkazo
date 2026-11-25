@@ -1,6 +1,6 @@
 /**
  * Lo que dice la página de escucha (`src/ui/escucha.html`), en su propio diccionario y no en el de
- * `src/i18n.ts`: esa página es la mesa de trabajo del dueño para elegir la música juego por juego (S5),
+ * `src/i18n.ts`: esa página es la mesa de trabajo del dueño para elegir la música juego por juego,
  * no parte del sitio, y el diccionario global es lo más pesado que baja la herramienta (`vite.config.ts`).
  * Paridad es/en, probada en `escucha-textos.test.ts`.
  */

@@ -15,7 +15,7 @@ import { TEXTOS_ESCUCHA } from "./escucha-textos";
 import { CAPAS_SHOW, IDENTIDADES, MOVIMIENTO_DEL_SHOW, SEGUNDO_DEL_GOLPE, HORA_DEL_SOLO_BOMBO } from "../music";
 
 /**
- * La página de escucha (T1, S5) sin audio: la bandera ``?escucha=1``, las tarjetas por juego con sus capas,
+ * La página de escucha sin audio: la bandera ``?escucha=1``, las tarjetas por juego con sus capas,
  * el tempo y las etiquetas de intención, y la ruleta de votos manual. El renderizado de audio de verdad
  * (OfflineAudioContext) es del navegador: en pruebas no existe y `renderizarFase` devuelve null.
  */

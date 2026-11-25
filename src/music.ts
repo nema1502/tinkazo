@@ -466,7 +466,7 @@ export function musicTempo(mul: number): void {
 
 /**
  * Lo que dice el relator, con su tensión. Un salto grande es una sorpresa: la
- * música se calla un tiempo. Tensión 1 es el remate: remate.
+ * música se calla un tiempo. Con tensión 1 entra el remate del ganador.
  */
 export function musicCue(heat: number): void {
   const s = cur;
@@ -495,7 +495,7 @@ export function musicCue(heat: number): void {
     }
     if (s.style === "chovena") finaleChovena(s, at);
     else finale(s, at);
-    // El remate suena entero pase lo que pase: la gracia solo alcanza mientras el show corre (S1).
+    // El remate suena entero pase lo que pase: la gracia solo alcanza mientras el show corre.
     s.gracia = 0;
     return;
   }
@@ -874,7 +874,7 @@ export type Banda = Session;
 /* --------------------------------------------------- el show por capas, por juego */
 
 /**
- * Las cuatro capas del show (S2): la espera antes de la ronda, la tensión que crece, el momento del ganador y el
+ * Las cuatro capas del show: la espera antes de la ronda, la tensión que crece, el momento del ganador y el
  * festejo. El show prende las capas con la tensión que le dice el relator (`musicCue`); acá solo están los nombres.
  */
 export type CapaShow = "espera" | "tension" | "remate" | "festejo";
@@ -882,8 +882,8 @@ export type CapaShow = "espera" | "tension" | "remate" | "festejo";
 export const CAPAS_SHOW: readonly CapaShow[] = ["espera", "tension", "remate", "festejo"];
 
 /**
- * Cuánto dura cada capa en la pieza que se escucha para elegir (T1). La espera y la tensión son la forma entera
- * que pide S3: un comienzo, un desarrollo y un final, sin delatar nunca el resultado — la capa del ganador entra
+ * Cuánto dura cada capa en la pieza que se escucha para elegir. La espera y la tensión son la forma entera
+ * que se pide: un comienzo, un desarrollo y un final, sin delatar nunca el resultado — la capa del ganador entra
  * solo cuando el show lo dice (`musicCue` con tensión 1), nunca antes, pase lo que pase en la animación.
  */
 export const MOVIMIENTO_DEL_SHOW: Readonly<Record<CapaShow, number>> = { espera: 8, tension: 14, remate: 6, festejo: 4 } as const;
@@ -897,7 +897,7 @@ export const HORA_DEL_SOLO_BOMBO = SEGUNDO_DEL_GOLPE - 3;
 /**
  * La tensión (de 0 a 1) que pide el relator en el instante `t` de la pieza del show: la espera quedita, la tensión
  * que crece, el pico del ganador, y después del golpe silencio — el remate y el festejo son otra pieza.
- * Es la misma curva que en vivo componen la espera y `musicCue`; por eso la toca la página de escucha (T1).
+ * Es la misma curva que en vivo componen la espera y `musicCue`; por eso la toca la página de escucha.
  */
 export function nivelDelShow(t: number): number {
   const { espera, tension } = MOVIMIENTO_DEL_SHOW;
@@ -911,12 +911,12 @@ export function nivelDelShow(t: number): number {
 export const SEMILLA_DE_LA_ESCUCHA = 0x0a110a;
 
 /**
- * La identidad musical de un juego (S2, S3), en datos: lo que la página de escucha (`src/ui/escucha.ts`) toca con
+ * La identidad musical de un juego, en datos: lo que la página de escucha (`src/ui/escucha.ts`) toca con
  * el secuenciador de siempre para poder elegir juego por juego, y nada más — en el show de producción no prende
- * nada nuevo: eso lo decide el dueño escuchando (S5). El formato es el mismo perfil de la música de la carrera
+ * nada nuevo: eso lo decide el dueño escuchando. El formato es el mismo perfil de la música de la carrera
  * (`PerfilMusica`), que es el que el secuenciador ya sabe tocar capa por capa; los ritmos y los instrumentos de
  * cuerpo (charango, zampoña, quena, bombo, guitarra; huayño, caporal, taquirari, cueca…) van como etiquetas de
- * intención, solo texto: no hay samples ni voces nuevas (S4), las hacen los sintetizadores que ya hay.
+ * intención, solo texto: no hay samples ni voces nuevas, las hacen los sintetizadores que ya hay.
  */
 export interface IdentidadDelJuego {
   /** El juego tal como lo conoce el show (`Game`, en `src/state.ts`). */
@@ -940,9 +940,9 @@ export interface IdentidadDelJuego {
   zamponaDesde: number;
   /** Las vueltas de acordes entre las que elige la semilla. */
   vueltas: readonly (readonly AcordeId[])[];
-  /** Los ritmos que se reconocen, como etiqueta de intención (S3): solo texto. */
+  /** Los ritmos que se reconocen, como etiqueta de intención: solo texto. */
   ritmos: readonly string[];
-  /** Los instrumentos con cuerpo a los que apunta la identidad, también solo texto: no hay samples (S4). */
+  /** Los instrumentos con cuerpo a los que apunta la identidad, también solo texto: no hay samples. */
   instrumentos: readonly string[];
 }
 
@@ -951,7 +951,7 @@ const vueltas = (de: number, a: number): readonly (readonly AcordeId[])[] => VUE
 /**
  * La identidad de cada juego: el mismo huayño de banda con distinta cara. La carrera lleva el huayño del altiplano
  * al frente; la ruleta, la chovena cruceña que ya tiene su estilo; la tómbola y los demás, virando la caja, las
- * palmas y la zampoña. Mientras el dueño no elija escuchando, en el show suena lo de siempre (S5): esto es
+ * palmas y la zampoña. Mientras el dueño no elija escuchando, en el show suena lo de siempre: esto es
  * la candidata, no la puesta en producción.
  */
 export const IDENTIDADES: Readonly<Record<string, IdentidadDelJuego>> = {
@@ -977,7 +977,7 @@ export const IDENTIDADES: Readonly<Record<string, IdentidadDelJuego>> = {
 /**
  * El perfil que las confía al secuenciador: la misma forma que toca `playStepCarrera`, sin el arreglo "legado"
  * (así se oye la identidad, no el arreglo de hoy) y con el volumen medido de la base, pendiente de recalibrar por
- * candidata cuando las escoja el dueño (S6).
+ * candidata cuando las escoja el dueño.
  */
 export function perfilDeIdentidad(i: IdentidadDelJuego): PerfilMusica {
   return {
@@ -1292,7 +1292,7 @@ function siku(s: Session, t: number, semis: number, len: number, pan: number, v:
 }
 
 /**
- * El remate del remate: bombo, platillo, el charango en trémolo sobre la
+ * El remate del ganador: bombo, platillo, el charango en trémolo sobre la
  * menor y la zampoña sosteniendo la tónica arriba. Después, silencio: el cartel
  * y la fanfarria son del ganador.
  */

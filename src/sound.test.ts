@@ -6,7 +6,7 @@ import { ContextoFalso } from "./sonidos/audio-falso";
 import { reanudarSiHaceFalta } from "./sound";
 
 /**
- * El núcleo que no se corta (S1, S7): el iPhone nombra `interrupted` a su estado de contexto cortado (una llamada,
+ * El núcleo que no se corta: el iPhone nombra `interrupted` a su estado de contexto cortado (una llamada,
  * el ahorro de batería), y `src/sound.ts` solo reanudaba `suspended`: después de una interrupción el sorteo
  * entero corría mudo y nada lo volvía a prender. Acá se prueba la reanudación desde los dos estados y el camino
  * de la pestaña que vuelve a la vista; el enganche con `chain()` y el listener de `visibilitychange` se mira en el

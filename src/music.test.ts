@@ -15,9 +15,9 @@ import {
 import { ACORDES, type AcordeId } from "./sonidos/carrera";
 
 /**
- * Las capas del show por juego (T3, S2 a S4): la identidad de cada juego es un mapa puro de datos que la página de
+ * Las capas del show por juego: la identidad de cada juego es un mapa puro de datos que la página de
  * escucha (`src/ui/escucha.ts`) toca con el secuenciador de siempre, y nada más — en producción no prende nada
- * nuevo: eso lo decide el dueño escuchando (S5). Y el núcleo del freno (T2, S1): el tick de la música mide cuánto
+ * nuevo: eso lo decide el dueño escuchando. Y el núcleo del freno: el tick de la música mide cuánto
  * tardó el tick y baja con gracia a algo más simple, sin cortar nunca.
  */
 
@@ -30,9 +30,9 @@ function juegosDelState(): string[] {
   return union;
 }
 
-/** Lo que se reconoce como ritmo de Bolivia (S3): etiquetas de intención, solo texto, no síntesis. */
+/** Lo que se reconoce como ritmo de Bolivia: etiquetas de intención, solo texto, no síntesis. */
 const RITMOS = new Set(["huayño", "huayno", "caporal", "taquirari", "cueca", "chovena", "saya", "morenada", "kullawada"]);
-/** Los instrumentos con cuerpo que pide S3: también solo etiquetas. */
+/** Los instrumentos con cuerpo: también solo etiquetas. */
 const INSTRUMENTOS = new Set(["charango", "zampoña", "quena", "bombo", "guitarra"]);
 
 const IDENTIDADES_EN_ORDEN = Object.values(IDENTIDADES);
@@ -67,7 +67,7 @@ describe("la identidad musical de cada juego, en datos", () => {
       }
     });
 
-    it(`${i.juego}: los ritmos y los instrumentos son etiquetas de la familia boliviana, solo texto (S3, S4)`, () => {
+    it(`${i.juego}: los ritmos y los instrumentos son etiquetas de la familia boliviana, solo texto`, () => {
       expect(i.ritmos.length).toBeGreaterThan(0);
       for (const r of i.ritmos) expect(RITMOS.has(r), r).toBe(true);
       expect(i.instrumentos.length).toBeGreaterThan(0);
@@ -115,7 +115,7 @@ describe("la curva del show: espera, tensión, ganador, festejo", () => {
   });
 });
 
-describe("el tick baja con gracia cuando el procesador frenó, sin cortar nunca (S1)", () => {
+describe("el tick baja con gracia cuando el procesador frenó, sin cortar nunca", () => {
   it("el tick mide el intervalo, sigue el margen, mide el freno y programa hasta el horizonte de gracia", async () => {
     const src = readFileSync(resolve(process.cwd(), "src/music.ts"), "utf8");
     expect(src).toMatch(/const intervalo = ahora - s\.ultimoTick;/);
@@ -131,5 +131,21 @@ describe("el tick baja con gracia cuando el procesador frenó, sin cortar nunca 
     expect(src).toMatch(/s\.gracia < 0\.5/);
     // El ganador (el remate ya programado) no se degrada: la gracia solo alcanza mientras el show corre.
     expect(src).toMatch(/s\.gracia = 0;/);
+  });
+});
+
+describe("los comentarios de la música dicen cosas con sentido", () => {
+  it("el cambio de nombre de ganador a remate no dejó frases que se repiten", () => {
+    const src = readFileSync(resolve(process.cwd(), "src/music.ts"), "utf8");
+    expect(src).not.toMatch(/remate: remate/i);
+    expect(src).not.toMatch(/remate del remate/i);
+    expect(src).not.toMatch(/es el remate: /);
+  });
+
+  it("ningún comentario cita una especificación que no está en el repositorio", () => {
+    for (const archivo of ["src/music.ts", "src/sound.ts", "src/music-margen.ts", "src/ui/escucha.ts", "src/ui/escucha-textos.ts"]) {
+      const src = readFileSync(resolve(process.cwd(), archivo), "utf8");
+      expect(src, archivo).not.toMatch(/\((?:[ST]\d)(?:, [ST]\d| a [ST]\d)*\)/);
+    }
   });
 });
