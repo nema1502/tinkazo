@@ -1093,10 +1093,6 @@
   .espera-teaser-tarjeta .sel-img { display: block; width: 76px; height: 43px; object-fit: cover; border-radius: 6px; background: var(--field); flex-shrink: 0; }
   .espera-teaser-tarjeta b { overflow-wrap: anywhere; }
   .espera-teaser-mas { font-weight: 700; font-size: clamp(14px, 1.4vw, 18px); color: var(--muted); }
-  /* Una pantalla baja (un celular acostado, un zoom de 200 %): el reloj y los nombres primero, sin la presentación. */
-  @media (max-height: 560px) {
-    .espera-teaser-caja { display: none; }
-  }
   .espera-nadie { font-size: clamp(14px, 1.7vw, 22px); font-weight: 800; color: var(--ink); max-width: 46ch; text-wrap: balance; }
   .espera-ensayo {
     font-size: clamp(14px, 1.6vw, 22px); font-weight: 900; letter-spacing: 0.08em; max-width: 100%;
@@ -3280,6 +3276,8 @@
     .espera-t { font-size: clamp(16px, 4vh, 28px); }
     .espera-cinta span { font-size: clamp(16px, 4.4vh, 28px); padding: 2px 12px; }
     .espera-nombres { gap: 6px; margin: 2px 0; }
+    /* La presentación de la lista sellada se esconde: el reloj y los nombres primero. */
+    .espera-teaser-caja { display: none; }
     .espera-pie { font-size: clamp(14px, 3.4vh, 22px); }
     .espera-nadie { font-size: clamp(16px, 3.6vh, 24px); }
     .espera-id { font-size: clamp(14px, 3.2vh, 20px); }
