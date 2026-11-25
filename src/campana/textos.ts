@@ -112,7 +112,7 @@ export const TEXTOS_CAMPANA: { es: Record<string, string>; en: Record<string, st
     cpRevisamosMas: "Lo que no cumpla sale de la lista antes del sorteo, y se dice por qué.",
     cpEjemplo: "Demo",
     cpEjemploAnotar: "Es una demostración: nadie queda anotado.",
-    cpErrEspera: "Probá de nuevo en unos minutos o con tus datos móviles.",
+    cpErrEspera: "Probá de nuevo en unos minutos.",
     cpAvisoCorreo: "Si ganás, te avisamos por correo.",
     tmCampanaT: "Sorteos de empresas",
     tmCampanaA:
@@ -231,7 +231,7 @@ export const TEXTOS_CAMPANA: { es: Record<string, string>; en: Record<string, st
     cpRevisamosMas: "Anything that doesn't comply comes off the list before the draw, and the reason is given.",
     cpEjemplo: "Demo",
     cpEjemploAnotar: "This is a demo: nobody gets signed up.",
-    cpErrEspera: "Try again in a few minutes or on mobile data.",
+    cpErrEspera: "Try again in a few minutes.",
     cpAvisoCorreo: "If you win, we email you.",
     tmCampanaT: "Company draws",
     tmCampanaA:
