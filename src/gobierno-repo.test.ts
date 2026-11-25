@@ -147,8 +147,14 @@ describe("formularios de issue", () => {
   const archivos = ["falla.yml", "mejora.yml", "trabajo.yml"];
   const formularios = archivos.map(leerFormulario);
   const TIPOS = new Set(["markdown", "input", "textarea", "dropdown", "checkboxes"]);
-  // Las etiquetas que GitHub trae en todo repositorio. El repositorio no versiona una lista propia.
-  const ETIQUETAS_DE_GITHUB = new Set(["bug", "enhancement", "documentation", "question"]);
+  // Si el repositorio versiona su lista de etiquetas, esa manda. Si no, valen las que GitHub trae
+  // en todo repositorio.
+  const ARCHIVO_DE_ETIQUETAS = ".github/labels.yml";
+  const ETIQUETAS_DE_GITHUB = new Set(
+    existe(ARCHIVO_DE_ETIQUETAS)
+      ? [...leer(ARCHIVO_DE_ETIQUETAS).matchAll(/^- name:\s*"?([^"\n]+?)"?\s*$/gm)].map((m) => m[1]!)
+      : ["bug", "enhancement", "documentation", "question"],
+  );
 
   it("la prueba cubre todos los formularios del directorio", () => {
     const hay = readdirSync(raiz(".github/ISSUE_TEMPLATE")).filter((n) => n.endsWith(".yml") && n !== "config.yml");
@@ -179,6 +185,62 @@ describe("formularios de issue", () => {
 
   it("el formulario del equipo enlaza el reparto con su dirección completa", () => {
     expect(leer(".github/ISSUE_TEMPLATE/trabajo.yml")).toContain(URL_REPARTO);
+  });
+});
+
+describe("sintaxis de los YAML de .github/ISSUE_TEMPLATE", () => {
+  /**
+   * Busca valores que un lector de YAML rechaza o entiende distinto. No reemplaza a un lector
+   * completo: revisa lo que en estos archivos ya falló una vez. En un valor plano, dos puntos
+   * seguidos de un espacio abren otro mapeo y un espacio antes de la almohadilla empieza un
+   * comentario. Un valor entre comillas tiene que cerrarlas. El contenido de un bloque con barra
+   * vertical o mayor que se saltea.
+   */
+  const problemasDeSintaxis = (archivo: string): string[] => {
+    const problemas: string[] = [];
+    let sangriaDeBloque: number | null = null;
+    leer(`.github/ISSUE_TEMPLATE/${archivo}`)
+      .split("\n")
+      .forEach((linea, i) => {
+        const sangria = linea.length - linea.trimStart().length;
+        if (sangriaDeBloque !== null) {
+          if (linea.trim() === "" || sangria > sangriaDeBloque) return;
+          sangriaDeBloque = null;
+        }
+        if (/\t/.test(linea.slice(0, sangria))) problemas.push(`${archivo}:${i + 1} sangría con tabulador`);
+        const m = /^(\s*)(- )?([A-Za-z_][\w-]*):(?: +(.*))?$/.exec(linea);
+        if (!m) return;
+        const valor = (m[4] ?? "").trim();
+        const donde = `${archivo}:${i + 1}`;
+        if (/^[|>]/.test(valor)) {
+          sangriaDeBloque = m[1]!.length + (m[2] ? 2 : 0);
+        } else if (valor.startsWith('"')) {
+          if (valor.length < 2 || !valor.endsWith('"')) problemas.push(`${donde} comillas sin cerrar`);
+        } else if (valor.startsWith("'")) {
+          if (valor.length < 2 || !valor.endsWith("'")) problemas.push(`${donde} comillas sin cerrar`);
+        } else if (valor.startsWith("[") || valor.startsWith("{")) {
+          try {
+            JSON.parse(valor);
+          } catch {
+            problemas.push(`${donde} lista o mapa de una línea que no se lee`);
+          }
+        } else {
+          if (/: /.test(valor) || /:$/.test(valor)) problemas.push(`${donde} dos puntos dentro de un valor plano`);
+          if (/ #/.test(valor)) problemas.push(`${donde} almohadilla dentro de un valor plano`);
+          if (/^[@`%*&!?]/.test(valor)) problemas.push(`${donde} un valor plano no puede empezar con ${valor[0]}`);
+        }
+      });
+    return problemas;
+  };
+
+  const todos = readdirSync(raiz(".github/ISSUE_TEMPLATE")).filter((n) => n.endsWith(".yml"));
+
+  it("hay archivos que revisar", () => {
+    expect(todos.length).toBeGreaterThan(1);
+  });
+
+  it.each(todos.map((archivo) => ({ archivo })))("$archivo no tiene valores planos que rompan el YAML", ({ archivo }) => {
+    expect(problemasDeSintaxis(archivo)).toEqual([]);
   });
 });
 
