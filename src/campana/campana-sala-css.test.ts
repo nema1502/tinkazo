@@ -304,4 +304,11 @@ describe("el panel de quien organiza", () => {
       expect(armado, id).toContain(`id="${id}" class="${id}"`);
     }
   });
+
+  it("la pregunta de dejar la campaña sin línea deja aire entre el título y el botón", () => {
+    const armado = readFileSync("src/ui/campana-sala.ts", "utf8");
+    // La regla se apoya en que la línea es el hermano que sigue al título.
+    expect(armado).toMatch(/<h2 id="cpo-h"><\/h2>' \+\s*'<p id="cpo-linea" class="cpo-linea"><\/p>/u);
+    expect(css).toMatch(/\.cpo-panel\[data-vista="olvidar"\] h2:has\(\+ \.cpo-linea:empty\) \{ margin-bottom: 12px; \}/u);
+  });
 });
