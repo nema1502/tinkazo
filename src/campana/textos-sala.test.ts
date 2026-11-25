@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { T } from "../i18n";
 import { TEXTOS_CAMPANA } from "./textos";
@@ -85,5 +86,16 @@ describe("los textos del panel de quien organiza", () => {
     expect(TEXTOS_SALA_CAMPANA.en.cpoSeBorra).toBe("The list stays saved until {fecha} at {hora}.");
     expect(TEXTOS_SALA_CAMPANA.es.cpoElegirLinea).toBe("Elegí el archivo de tu campaña.");
     expect(TEXTOS_SALA_CAMPANA.en.cpoElegirLinea).toBe("Choose your campaign file.");
+  });
+});
+
+describe("los documentos que copian la pregunta de dejar la campaña", () => {
+  it("la hoja de operación y la guía de UX traen el texto exacto de la línea condicional, tal como está en los textos", () => {
+    const linea = TEXTOS_SALA_CAMPANA.es.cpoOlvidarAviso;
+    expect(linea).toBeTruthy();
+    for (const doc of ["docs/operacion.md", "docs/ux.md"]) {
+      const texto = readFileSync(`${process.cwd()}/${doc}`, "utf8");
+      expect(texto.includes(linea ?? ""), doc).toBe(true);
+    }
   });
 });

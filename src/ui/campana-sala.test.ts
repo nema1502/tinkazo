@@ -1805,6 +1805,23 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
       expect(texto(p, "#cpo-linea")).not.toBe(LINEA);
     });
 
+    it("desde la vista previa la pregunta no lleva la línea, aunque quede un aviso que en otra vista la haría salir", async () => {
+      const m = mundo();
+      guardarOrg(m.almacen, { sala: SALA, fase: "lista" });
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("previa"));
+      for (const paso of [{ paso: "boton-avisar" }, { paso: "no-avisamos" }, { paso: "boton-resultado" }] as const) {
+        ponerPaso(paso);
+        boton(p, "Elegir otro archivo").click();
+        // Con la sala creada, la vista previa pregunta antes de dejarla, pero sin la línea de los avisos.
+        expect(vistaDe(p), paso.paso).toBe("olvidar");
+        expect(texto(p, "#cpo-h"), paso.paso).toBe("¿Dejar esta campaña?");
+        expect(texto(p, "#cpo-linea"), paso.paso).toBe("");
+        boton(p, "Cancelar").click();
+        expect(vistaDe(p), paso.paso).toBe("previa");
+      }
+    });
+
     it("desde una campaña abierta la pregunta no lleva la línea, aunque quede un aviso viejo en el puente", async () => {
       const m = mundo();
       const p = nuevoPanel(m);
