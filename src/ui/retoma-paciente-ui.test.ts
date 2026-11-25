@@ -12,8 +12,8 @@ import { FUSIBLE_DE_RETOMA_MS } from "../stellar/pollar-config";
  * - La retoma paciente sigue y, si llega, abre la cuenta sola.
  * - Si la persona ya entró de nuevo (o la ventana de Google está abierta) cuando la retoma llega, gana lo que ya está y la
  *   retoma tardía no abre nada dos veces.
- * - Entrar y el pedido de entrar esperan la retoma un segundo como mucho, para que el toque siga vivo y el navegador
- *   no bloquee la ventana de Google.
+ * - Entrar y el pedido de entrar esperan la primera mirada de la retoma (8 segundos, como en la rama principal): una sesión
+ *   guardada que todavía vuelve no recibe una ventana de Google nueva ni pierde la cuenta que tenía.
  */
 
 const DIR = "GDVZABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRS5ZLE";
@@ -211,29 +211,34 @@ describe("la retoma tardía contra una entrada nueva", () => {
   });
 });
 
-describe("Entrar no espera la retoma entera", () => {
-  it("con la retoma en camino, Entrar sigue a Google al segundo con el toque vivo", async () => {
+describe("Entrar espera la primera mirada de la retoma, como siempre", () => {
+  it("con la retoma en camino, Entrar no abre un Google nuevo y espera la primera mirada de 8 segundos", async () => {
     const { ui } = await abrir();
     await asentar(2_000);
     expect(ui.estadoDeLaCuenta().estado).toBe("retomando");
     void ui.entrar();
-    await asentar(900);
-    expect(h.conexiones, "antes del segundo todavía espera").toBe(0);
-    await asentar(300);
-    expect(h.conexiones, "al segundo abre Google, no a los 8 ni a los 30").toBe(1);
+    await asentar(1_200);
+    expect(h.conexiones, "pasado el segundo todavía no abre Google: la sesión guardada puede estar por volver").toBe(0);
+    await asentar(4_000);
+    expect(h.conexiones, "a los 7 segundos de la retoma tampoco").toBe(0);
+    await asentar(1_500);
+    expect(h.conexiones, "vencida la primera mirada, la cabecera ofrece Entrar y Google se abre").toBe(1);
   });
 
-  it("si la retoma termina dentro de ese segundo, Entrar no abre Google", async () => {
-    h.tarda = 2_500;
+  it("si la sesión guardada vuelve dentro de esa espera, Entrar la abre sola y no pasa por Google", async () => {
+    h.tarda = 5_000;
     const { ui } = await abrir();
     await asentar(2_000);
     void ui.entrar();
-    await asentar(2_000);
+    await asentar(4_000);
+    expect(ui.currentSession()?.address, "la sesión guardada abrió la cuenta").toBe(DIR);
+    expect(h.conexiones, "sin una ventana de Google nueva").toBe(0);
+    await asentar(15_000);
     expect(ui.currentSession()?.address).toBe(DIR);
-    expect(h.conexiones).toBe(0);
+    expect(h.activaciones).toBe(1);
   });
 
-  it("el pedido de entrar sigue al segundo, y cuando la retoma se suelta la puerta ofrece Entrar con el foco", async () => {
+  it("el pedido de entrar espera lo mismo, y cuando la retoma se suelta la puerta ofrece Entrar con el foco", async () => {
     const { ui, t } = await abrir();
     await asentar(2_000);
     ui.pedirEntrar();
@@ -244,11 +249,22 @@ describe("Entrar no espera la retoma entera", () => {
     expect(document.activeElement?.closest("#gate"), "el foco queda en el botón de la puerta").not.toBeNull();
   });
 
-  it("Entrar y el pedido de entrar esperan con un solo tope corto, no con la promesa entera de la retoma", () => {
-    const ui = readFileSync("src/ui/wallet-ui.ts", "utf8").replace(/\r\n/g, "\n");
-    expect(ui).toMatch(/ESPERA_DE_ENTRAR_MS\s*=\s*1_000/);
-    // La única espera a la promesa de la retoma es la que lleva su tope.
-    const esperas = ui.match(/await retomaTerminada/g) ?? [];
-    expect(esperas).toHaveLength(0);
+  it("si el pedido de entrar espera y la sesión guardada vuelve, no ofrece Entrar", async () => {
+    h.tarda = 5_000;
+    const { ui } = await abrir();
+    await asentar(2_000);
+    ui.pedirEntrar();
+    await asentar(4_000);
+    expect(ui.currentSession()?.address).toBe(DIR);
+    expect(puertaVisible()).toBe(false);
+  });
+
+  it("Entrar y el pedido de entrar esperan la promesa de la retoma, que se suelta a la primera mirada, sin un tope propio", () => {
+    const ui = readFileSync("src/ui/wallet-ui.ts", "utf8").replace(/
+/g, "
+");
+    expect(ui).not.toMatch(/ESPERA_DE_ENTRAR_MS/);
+    expect(ui.match(/await retomaTerminada/g) ?? []).toHaveLength(1);
+    expect(ui.match(/await esperarLaRetoma\(\)/g) ?? []).toHaveLength(2);
   });
 });
