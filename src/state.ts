@@ -477,6 +477,28 @@ export const SAMPLE = [
   "Camila Suárez", "Andrés Villca", "Paola Mendoza", "Franco Ibáñez", "Daniela Cruz", "Óscar Limachi",
 ];
 
+/**
+ * Una lista de ejemplo de `cantidad` personas: los nombres de ejemplo, y con la segunda vuelta en adelante
+ * numerados (María Quispe 2). La usan la escena fija (`?pose=&n=`) y la demostración (`?demo=&n=`), para
+ * mirar un juego o la espera con dos personas y con doscientas sin cuenta ni red.
+ */
+export function nombresDeEjemplo(cantidad: number): string[] {
+  return Array.from({ length: cantidad }, (_, i) => {
+    const vuelta = Math.floor(i / SAMPLE.length);
+    return `${SAMPLE[i % SAMPLE.length]}${vuelta ? ` ${vuelta + 1}` : ""}`;
+  });
+}
+
+/**
+ * La cantidad que pide `?n=` en la demostración: un entero de 2 a 2000, escrito solo con cifras. Cualquier otra
+ * cosa (vacío, una letra, un decimal, uno solo, de más) se ignora, y la demostración queda con su lista de siempre.
+ */
+export function cantidadDeLaDemo(valor: string | null): number | null {
+  if (valor === null || !/^\d{1,4}$/.test(valor)) return null;
+  const n = Number(valor);
+  return n >= 2 && n <= 2000 ? n : null;
+}
+
 // El avatar se dibuja en el navegador. Antes se le pedía a un servicio
 // externo con el nombre de la persona en la dirección, lo que sacaba la lista
 // entera del navegador de a un nombre por vez. Ver src/avatar.ts.

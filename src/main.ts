@@ -2,9 +2,9 @@ import "./styles.css";
 import { cargaOpcional } from "./version-nueva";
 import { $ } from "./dom";
 import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
-import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
+import { SAMPLE, app, cantidadDeLaDemo, currentPace, nombresDeEjemplo, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
-import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
+import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador, setList } from "./ui/participants";
 import { GAME_BUTTONS, cambiarJuego, copyRules, copyRulesPre, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { avisarCambioConQr } from "./ui/espectadores-de-la-sala";
 import { initSiguiente } from "./ui/siguiente";
@@ -499,7 +499,11 @@ function avisarQueYaEntro(): void {
 const GAMES: readonly Game[] = [...new Set<Game>(["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "luz", "ledger", "rockets", "totora", "trueque", ...JUEGOS.map((j): Game => j.id)])];
 
 async function autoDemo(mode: string): Promise<void> {
-  loadSample();
+  // `?n=N` (de 2 a 2000) arma la lista de ejemplo con esa cantidad de personas, para mirar la espera y los juegos con
+  // listas chicas y grandes sin cuenta. Sin `?n=`, o con uno que no sirve, la lista es la de siempre.
+  const cantidad = cantidadDeLaDemo(params.get("n"));
+  if (cantidad === null) loadSample();
+  else setList(nombresDeEjemplo(cantidad).join("\n"));
   // `?nw=N` elige cuántos premios, para poder auditar el caso de varios
   // ganadores: hubo un sorteo de dos en el que el juego anunciaba uno solo.
   const nw = Number(params.get("nw"));
@@ -535,12 +539,7 @@ async function poseScene(): Promise<void> {
   // numerados, para medir cada juego con dos personas y con doscientas sin
   // tocar la red. Es solo para la escena fija: no sella ni sortea nada.
   const cantidad = Math.max(0, Math.min(2000, Math.floor(Number(params.get("n")) || 0)));
-  const base = cantidad
-    ? Array.from({ length: cantidad }, (_, i) => {
-      const vuelta = Math.floor(i / SAMPLE.length);
-      return `${SAMPLE[i % SAMPLE.length]}${vuelta ? ` ${vuelta + 1}` : ""}`;
-    })
-    : SAMPLE;
+  const base = cantidad ? nombresDeEjemplo(cantidad) : SAMPLE;
   // `?extremos=1`: los nombres difíciles (de 1 y de 40 caracteres, con acentos,
   // con emojis, sin espacios) en lugar de otros tantos de la lista, para ver
   // que se leen enteros sin cortarse. El ganador (el puesto 3) no se toca.

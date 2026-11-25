@@ -115,3 +115,28 @@ describe("auditaCon", () => {
     expect(s.auditaCon("nino")).toBe(false);
   });
 });
+
+describe("la lista de ejemplo con cantidad (?n=)", () => {
+  it("sin cantidad o con una cantidad que no sirve, la demostración no cambia nada", async () => {
+    const s = await load();
+    for (const malo of [null, "", "abc", "1.5", "0", "1", "-4", "2001", "99999", "1e2", " 5", "5 ", "NaN", "Infinity"]) {
+      expect(s.cantidadDeLaDemo(malo), String(malo)).toBeNull();
+    }
+  });
+
+  it("acepta los enteros de 2 a 2000", async () => {
+    const s = await load();
+    for (const bueno of ["2", "6", "7", "18", "150", "300", "2000"]) expect(s.cantidadDeLaDemo(bueno)).toBe(Number(bueno));
+  });
+
+  it("arma una lista de ese largo con los nombres de ejemplo numerados, igual que la escena fija", async () => {
+    const s = await load();
+    expect(s.nombresDeEjemplo(2)).toEqual(s.SAMPLE.slice(0, 2));
+    expect(s.nombresDeEjemplo(18)).toEqual(s.SAMPLE);
+    const ciento50 = s.nombresDeEjemplo(150);
+    expect(ciento50).toHaveLength(150);
+    expect(ciento50[18]).toBe(`${s.SAMPLE[0]} 2`);
+    expect(new Set(ciento50).size).toBe(150);
+    expect(s.nombresDeEjemplo(300)).toHaveLength(300);
+  });
+});
