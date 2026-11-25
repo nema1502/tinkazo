@@ -21,8 +21,8 @@ import { configDelPortero } from "./patrocinio-config";
  * - **Sin nada del navegador.** `credentials: "omit"`, sin `Referer`, sin caché.
  *
  * Lo que hay: `estado`, `canjear`, `reclamar` (el regalo de quien entra con su cuenta), `precios`, `abrir`, `orden` y
- * `pago`, y las de la compra con QR (`/v1/compra/*`): `empezarCompra`, `cargarCompra` y `anularCompra`. Falta a propósito
- * `sortearEnElServidor`: entra con el sorteo por el servidor.
+ * `pago`, y las de la compra con QR (`/v1/compra/*`): `empezarCompra`, `cargarCompra` y `anularCompra`. El pedido del
+ * sorteo al servicio (`/v1/sorteo`) vive aparte, en `sorteo-servidor-api.ts`.
  */
 
 /** Cuánto se espera cada pedido. */

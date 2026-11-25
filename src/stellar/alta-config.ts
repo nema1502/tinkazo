@@ -12,7 +12,9 @@ import { banderasDeVenta, entornoDelBuild } from "./venta-piloto";
  *   más: sellar y sortear siguen pidiendo el acceso. Existe para un solo caso (el plan B1 del diseño), sola: junto con
  *   `VITE_ALTA` no vale.
  * - `VITE_ALTA_PAGO=1`: la compra de sorteos. Solo cuenta con `VITE_ALTA`.
- * - `VITE_SORTEO_SERVIDOR=1`: el sorteo lo manda el servidor. Solo cuenta con `VITE_ALTA`.
+ * - `VITE_SORTEO_SERVIDOR=1`: el sorteo de una cuenta de Google o de correo, en la red principal, lo manda el servicio de
+ *   comisiones y no quien organiza (`grabar-sorteo.ts` y `sorteo-del-servicio.ts`). No aplica a las billeteras propias, a la
+ *   demo ni a pagar con la propia cuenta. Solo cuenta con `VITE_ALTA`.
  * - `VITE_PAGO_CON_SALDO=1`: pagar un paquete con los dólares digitales de la propia cuenta (`pago-con-saldo.ts`). Solo
  *   cuenta con la compra (`VITE_ALTA_PAGO`), que a su vez pide `VITE_ALTA`. Va aparte de `BanderasDeAlta`
  *   (`pagoConSaldoActivo`).
