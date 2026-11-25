@@ -336,8 +336,9 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
     for (;;) {
       const l = await leer(hasta);
       if (l.ok && l.v) return listo(l.v, true);
-      // El servicio aseguró que no manda nada: el camino de siempre lo encuentra con su propia simulación.
-      if (ahora() + LEER_CADA_MS > hasta) return caminoDeHoy();
+      // El servicio aseguró que no manda nada: el camino de siempre lo encuentra con su propia simulación. Con la marca,
+      // un nuevo clic en Guardar no vuelve a pasar por acá.
+      if (ahora() + LEER_CADA_MS > hasta) return caminoDeHoy({ marca: true });
       await esperar(LEER_CADA_MS);
     }
   };
@@ -464,7 +465,8 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
         const espera = r.fijaMs ?? (ESPERAS_DEL_SERVICIO_MS[Math.min(vez, ESPERAS_DEL_SERVICIO_MS.length - 1)] as number);
         vez++;
         // Otro pedido tiene que caber entero: si no, el servicio aseguró que no mandó y se sigue por el camino de siempre.
-        if (ahora() + espera + TOPE_DEL_PEDIDO_MS > hastaServicio) siguiente = caminoDeHoy();
+        // Un servicio que no puede en 20 segundos se deja de lado un rato, para que el siguiente sorteo no pague la etapa.
+        if (ahora() + espera + TOPE_DEL_PEDIDO_MS > hastaServicio) siguiente = caminoDeHoy({ marca: true, disyuntor: true });
         else await esperar(espera);
       } else if (r.accion === "ya") {
         siguiente = await yaDicho();
