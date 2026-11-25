@@ -13,7 +13,7 @@ Si lo que encontraste es una falla de seguridad, no abras un issue. Seguí [SECU
 
 ## Las zonas
 
-Quienes tienen escritura se reparten el trabajo por zonas. Cada issue lleva la etiqueta de la suya (`zona:frente`, `zona:servicios` o `zona:dirección`).
+Quienes tienen escritura se reparten el trabajo por zonas. La dirección pone en cada issue la etiqueta de su zona (`zona:frente`, `zona:servicios` o `zona:dirección`) al clasificarlo, así que un issue nuevo puede esperarla un tiempo.
 
 | Zona | Qué incluye | Se pregunta antes de tocar |
 |---|---|---|
@@ -33,7 +33,7 @@ La lista completa de carpetas y archivos de cada zona está en el issue 277.
 
 - En español, con tildes, y con una primera línea de 72 caracteres o menos que dice qué cambia desde quien usa lo que se arregla o se agrega. Por ejemplo: `La sala deja de gastar el tope de conexión con quienes esperan`.
 - Un commit por idea. Si un arreglo toca algo que el issue no pide, va en su propio commit.
-- Cada commit lleva tu autoría. Si la dirección necesita arreglar algo de tu pedido antes de unirlo, lo hace en commits aparte y no reescribe los tuyos.
+- Cada commit lleva tu autoría. Si la dirección necesita arreglar algo de tu pedido antes de unirlo, lo hace en commits aparte y no reescribe los tuyos. Si un pedido se une con squash, el commit que queda lleva la autoría de quien abrió el pedido.
 - Los mensajes no llevan líneas de coautoría ni de atribución.
 
 ## El pedido
@@ -79,7 +79,7 @@ Los pedidos desde una copia propia del repositorio esperan que la dirección apr
 
 ## Cómo se une
 
-Quien dirige el proyecto une los pedidos. El método (merge o squash) lo decide según el pedido. A veces junta varios en un paquete para integrarlos juntos. En ese caso el issue lleva la etiqueta `en integración` y nadie más lo toma.
+Quien dirige el proyecto une los pedidos con rebase o con squash, nunca con un commit de unión, para que la historia de `main` quede lineal. A veces junta varios en un paquete para integrarlos juntos. En ese caso el issue lleva la etiqueta `en integración` y nadie más lo toma.
 
 ## Qué no se sube nunca
 
