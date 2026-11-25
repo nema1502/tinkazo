@@ -215,7 +215,9 @@ describe("leer el pedido", () => {
   });
 
   it("rechaza lo que no es una cuenta G válida", () => {
-    const sinSuma = `${cuentaNueva().slice(0, -1)}A`;
+    // La última letra distinta de la que ya tiene: con una cuenta al azar que termina en A, cambiarla por A la dejaba válida.
+    const valida = cuentaNueva();
+    const sinSuma = `${valida.slice(0, -1)}${valida.endsWith("A") ? "B" : "A"}`;
     const malas = [undefined, 7, "", "G", sinSuma, "M".padEnd(69, "A"), cuentaNueva().toLowerCase()];
     for (const cuenta of malas) {
       expect(leerPedidoDeOrganizadora({ cuenta, evento: EVENTO }), String(cuenta)).toBeNull();
