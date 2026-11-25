@@ -1,5 +1,5 @@
 /**
- * La bandera de los premios pagados y del panel de ganadores, apagada en producción: solo `VITE_PAGOS=1`.
+ * La bandera de los premios pagados y del panel de ganadores: solo `VITE_PAGOS=1`. Está prendida en producción desde mediados de noviembre de 2026.
  * La del registro de equipos con cupón (`VITE_EQUIPOS`) no la prende: en un stand los premios se suelen entregar en
  * mano, y el comprobante no tiene que decir «Pendiente» ni «Vencido» de un premio que nunca se iba a pagar en la red.
  *
