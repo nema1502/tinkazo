@@ -53,9 +53,15 @@
 #     -f vistas='[{"nombre":"portada","ruta":"/","ancho":1440,"alto":900,"tema":"light"}]'
 #   gh run download ID -n capturas-vistas -D capturas
 # Los datos de entrada nunca se escriben dentro de un comando: llegan por variables de entorno y se
-# validan antes de construir nada. No usa ningún secreto, los permisos son de solo lectura y el trabajo de
-# capturas no usa la caché de pnpm: construye código de otra rama, y lo que guardara quedaría en el ámbito
-# de la rama desde donde se lanzó la corrida, donde lo leería después la revisión de esa rama.
+# validan antes de construir nada. No usa ningún secreto y los permisos son de solo lectura.
+#
+# La caché de Actions. El trabajo de capturas no usa la caché de pnpm, pero eso no alcanza: construir una
+# rama corre su código (la instalación, la construcción) con el token de la corrida, y con él ese código
+# podría guardar lo que quiera en la caché, en el ámbito de la rama desde donde se lanzó la corrida. Si
+# esa es la rama principal, lo guardado lo lee después la revisión de la principal. Por eso desde la rama
+# principal no se construye otra rama: la validación lo corta. Se lanza desde otra rama (--ref MI-RAMA) o
+# sin `rama`, que construye la principal misma. Tampoco se acepta una referencia de pedido (pull/N/head,
+# refs/...): sería código de una bifurcación.
 #
 # Para ver andar este archivo antes de que esté en la rama principal, se dispara también en
 # un pedido que lo cambie (el botón «Run workflow» solo aparece cuando el archivo ya está en
@@ -275,6 +281,7 @@ jobs:
         env:
           VISTAS_JSON: ${{ inputs.vistas }}
           RAMA: ${{ inputs.rama }}
+          RAMA_PRINCIPAL: ${{ github.event.repository.default_branch }}
           ENTORNO: ${{ inputs.entorno }}
         run: node herramienta/scripts/capturar-vistas.mjs --validar --entorno-en "$GITHUB_ENV"
       # El sitio a fotografiar: la rama pedida o, sin ella, la misma de la herramienta.
