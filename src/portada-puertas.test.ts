@@ -145,7 +145,37 @@ describe("los textos de las puertas, en los dos idiomas", () => {
   });
 });
 
+describe("cada puerta dice lo que hace su botón, en los dos idiomas", () => {
+  it("el título dice para quién es y el botón cumple lo que el título promete", () => {
+    expect(T.es.ptListaT).toBe("Mirá cómo es");
+    expect(T.es.ptStandT).toBe("Para tu stand o tu feria");
+    expect(T.es.ptEmpresaT).toBe("Para tu empresa");
+    expect(T.en.ptListaT).toBe("See how it works");
+    expect(T.en.ptStandT).toBe("For your booth or fair");
+    expect(T.en.ptEmpresaT).toBe("For your company");
+    // El ejemplo no usa tu lista: la línea no promete pegar nombres.
+    expect(T.es.ptListaB).not.toMatch(/pegá|tu lista/i);
+    expect(T.en.ptListaB).not.toMatch(/paste|your list/i);
+    // En el stand la gente se anota y mira la ronda: no juega.
+    expect(T.es.ptStandB).toMatch(/mira la ronda/);
+    expect(T.en.ptStandB).toMatch(/watch the round/);
+  });
+
+  it("la tarjeta de ejemplo no cuenta personas: dice que participar es gratis", () => {
+    expect(T.es.peGente).toBe("Participar es gratis");
+    expect(T.en.peGente).toBe("Joining is free");
+    expect(T.en.pePremioM).not.toMatch(/digital dollars/i);
+  });
+});
+
 describe("los pasos 01 a 03 de la portada", () => {
+  it("el paso 2 y el paso 3 dicen por qué es justo, sin hablar de un número que no se explica", () => {
+    expect(T.es.s2b).toBe("Queda cerrada antes del sorteo: nadie la puede cambiar.");
+    expect(T.es.s3b).toBe("Gana quien sale de un número que nadie elige.");
+    expect(T.en.s2b).toMatch(/before the draw/);
+    expect(T.en.s3b).toMatch(/nobody picks/);
+  });
+
   it("cada uno trae un dibujo o una captura, un título y una línea", () => {
     const pasos = [...document.querySelectorAll<HTMLElement>(".steps > article")];
     expect(pasos).toHaveLength(3);
