@@ -1831,11 +1831,11 @@
      de 2026 Para empresas tampoco se esconde en la laptop: era la entrada de quien arma una campaña y casi siempre lo hace desde
      una compu. */
   html[data-campanas]:not([data-campanas="1"]):not([data-campanas="true"]) [data-campana-enlace] { display: none; }
-  /* El nombre corto de Para empresas va en la fila del celular, de 400 a 760 px, antes de Más. Ahí sale de Más para no repetirse.
-     Por debajo de 400 px la fila no tiene lugar y sigue dentro de Más: la fila no hace salto de línea ni desborda, y con una letra
-     más ancha que la de un teléfono (la de las máquinas de GitHub) Más quedaba cortado contra el borde a 375 px y su flecha a 390. */
+  /* El nombre corto de Para empresas va en la fila del celular, de 412 a 760 px, antes de Más. Ahí sale de Más para no repetirse.
+     Por debajo de 412 px la fila no tiene lugar y sigue dentro de Más: la fila no hace salto de línea ni desborda, y con una letra
+     más ancha que la de un teléfono (la de las máquinas de GitHub) Más quedaba cortado contra el borde a 375 px y su flecha a 390, y a 400 px la flecha quedaba a 7 px del borde. */
   .topnav a.nav-empresas-cel { display: none; }
-  @media (min-width: 400px) and (max-width: 760px) {
+  @media (min-width: 412px) and (max-width: 760px) {
     .topnav a.nav-empresas-cel { display: inline-flex; }
     .topnav .mas-lista a[data-campana-enlace] { display: none; }
   }
