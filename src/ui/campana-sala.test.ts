@@ -1691,11 +1691,8 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
 
     it("con el sello sin avisar, dice que los celulares no van a ver la lista sellada", async () => {
       const m = mundo();
-      guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
-      m.sala.fase = "sellada";
       const p = nuevoPanel(m);
-      await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
-      await suelta();
+      await cerradaConDos(m, p);
       ponerPaso({ paso: "no-avisamos" });
       boton(p, "Elegir otro archivo").click();
       expect(vistaDe(p)).toBe("olvidar");
@@ -1743,11 +1740,8 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
 
     it("si el aviso cambia con la pregunta abierta, la línea sigue al aviso", async () => {
       const m = mundo();
-      guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
-      m.sala.fase = "sellada";
       const p = nuevoPanel(m);
-      await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
-      await suelta();
+      await cerradaConDos(m, p);
       ponerPaso({ paso: "boton-avisar" });
       boton(p, "Elegir otro archivo").click();
       expect(texto(p, "#cpo-linea")).toBe(SELLO);
@@ -1755,16 +1749,58 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
       expect(texto(p, "#cpo-linea")).toBe(RESULTADO);
     });
 
-    it("sin avisos pendientes, o desde una campaña abierta, la pregunta queda sin línea", async () => {
+    it("con la sala ya borrada y la lista sellada se pregunta igual, pero la pregunta no inventa un aviso", async () => {
+      const m = mundo();
+      guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
+      m.sala.fase = "sellada";
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
+      await suelta();
+      ponerPaso({ paso: "sala-borrada" });
+      boton(p, "Elegir otro archivo").click();
+      expect(vistaDe(p)).toBe("olvidar");
+      // Ya no hay sala a la que avisarle nada: la línea queda vacía en lugar de decir que falta el sello.
+      expect(texto(p, "#cpo-linea")).toBe("");
+    });
+
+    it("con el sello ya llegado, el resultado es lo que falta aunque el paso sea de otro tipo", async () => {
+      const m = mundo();
+      guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
+      m.sala.fase = "sellada";
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
+      await suelta();
+      for (const paso of [{ paso: "nada" }, { paso: "otro-sorteo" }, { paso: "sin-conexion" }] as const) {
+        ponerPaso(paso);
+        boton(p, "Elegir otro archivo").click();
+        expect(vistaDe(p), paso.paso).toBe("olvidar");
+        expect(texto(p, "#cpo-linea"), paso.paso).toBe(RESULTADO);
+        boton(p, "Cancelar").click();
+      }
+    });
+
+    it("con el sorteo hecho y el resultado avisado a todas, no se pregunta y no queda línea", async () => {
+      const m = mundo();
+      guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+      m.sala.fase = "sorteada";
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+      await suelta();
+      ponerPaso({ paso: "resultado", filas: [{ cuenta: "GUNO", nombre: "Ana", avisada: true, alta: "esperando" }], otraBilletera: false });
+      boton(p, "Elegir otro archivo").click();
+      expect(vistaDe(p)).toBe("elegir");
+      expect(texto(p, "#cpo-linea")).not.toContain("no lo van a ver");
+    });
+
+    it("desde una campaña abierta, la pregunta queda sin línea aunque quede un aviso viejo en el puente", async () => {
       const m = mundo();
       const p = nuevoPanel(m);
       await abrirInscripcion(m, p);
+      ponerPaso({ paso: "no-avisamos" });
       boton(p, "Elegir otro archivo").click();
       expect(vistaDe(p)).toBe("olvidar");
+      // Con la pregunta abierta, sin tocar Cancelar: es ahí donde la línea tendría que aparecer si el cambio la mostrara de más.
       expect(texto(p, "#cpo-linea")).toBe("");
-      // Con el sorteo hecho y el resultado avisado a todas no se pregunta (ver arriba), y con la sala borrada tampoco.
-      boton(p, "Cancelar").click();
-      expect(texto(p, "#cpo-linea")).not.toContain("no lo van a ver");
     });
   });
 });
