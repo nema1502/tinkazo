@@ -2134,9 +2134,10 @@
        la puerta de Mirá cómo es: por defecto va al final, después de las puertas, para que el botón principal quede arriba. */
     .hero-portada .hero-shot { order: 2; margin-top: 6px; }
   }
-  /* En una pantalla angosta y alta sobra lugar: la imagen del show va arriba, antes del título, y el botón principal sigue entero
-     en la primera pantalla. */
-  @media (max-width: 700px) and (min-height: 741px) {
+  /* En un celular angosto y alto sobra lugar: la imagen del show va arriba, antes del título, y el botón principal sigue entero
+     en la primera pantalla. La imagen mide el ancho por 0,562, así que más ancho la hace más alta: el botón termina en unos 675 px
+     a 520 de ancho y en unos 790 a 700. Por eso el corte mira también el ancho. */
+  @media (max-width: 520px) and (min-height: 741px) {
     .hero-portada .hero-shot { order: -1; margin-top: 0; margin-bottom: 4px; }
   }
   /* En una laptop el botón de sortear tiene que verse sin bajar. Con 1366×768
