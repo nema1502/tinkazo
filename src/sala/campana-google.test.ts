@@ -14,8 +14,8 @@ import {
 vi.mock("cloudflare:workers", async () => await import("./cloudflare-falso"));
 
 /**
- * Solo entra quien el proveedor dice, exactamente, que es de Google. Una lista de lo permitido: lo que no se reconoce no
- * entra. El modo suave es solo un interruptor de emergencia y se cuenta aparte.
+ * Solo entra quien el proveedor dice que es de Google, sin importar mayúsculas ni espacios alrededor. Una lista de lo
+ * permitido: lo que no se reconoce no entra. El modo suave es solo un interruptor de emergencia y se cuenta aparte.
  */
 const AHORA = Date.UTC(2026, 10, 21, 15, 0, 0);
 
@@ -141,6 +141,58 @@ describe("el alta con la vía de la sesión", () => {
       expect(r.estado, JSON.stringify(via)).toBe(403);
     }
     expect((await estado()).total).toBe(0);
+  });
+
+  /** Las líneas de la vía rechazada que salieron al registro mientras corre `hacer`. */
+  async function lineasDeVia(hacer: () => Promise<unknown>): Promise<string[]> {
+    const espia = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      await hacer();
+      return espia.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("via-rechazada"));
+    } finally {
+      espia.mockRestore();
+    }
+  }
+
+  it("cuando rechaza por la vía deja una sola línea con el valor saneado y el modo, y la respuesta no cambia", async () => {
+    await montar();
+    const persona = personaDePrueba(mundo, 1, { authProvider: "Google.COM" });
+    let respuesta: { estado: number; cuerpo: unknown } | null = null;
+    const lineas = await lineasDeVia(async () => {
+      const r = await altaDe(mundo, sala.id, persona);
+      respuesta = { estado: r.status, cuerpo: await r.json() };
+    });
+    expect(respuesta).toEqual({ estado: 403, cuerpo: { error: "solo-google" } });
+    expect(lineas).toEqual([JSON.stringify({ evento: "via-rechazada", datos: { valor: "google.com", modo: "estricto" } })]);
+    for (const secreto of [persona.token, persona.cuenta, persona.usuario]) expect(lineas[0]).not.toContain(secreto);
+  });
+
+  it("una línea por rechazo, con las marcas fijas cuando el campo falta o no es texto", async () => {
+    await montar();
+    const lineas = await lineasDeVia(async () => {
+      await altaConVia(1, { authProvider: undefined });
+      await altaConVia(2, { authProvider: 12 });
+      await altaConVia(3, { authProvider: "ana@example.org" });
+    });
+    expect(lineas.map((l) => JSON.parse(l).datos.valor)).toEqual(["sin-campo", "no-es-texto", "anaexample.org"]);
+    expect(lineas.join("")).not.toContain("@");
+  });
+
+  it("en modo suave la línea dice suave, y quien no dice por dónde entró no deja línea", async () => {
+    await montar({ SOLO_GOOGLE: "suave" });
+    const lineas = await lineasDeVia(async () => {
+      await altaConVia(1, { authProvider: "email" });
+      await altaConVia(2, { authProvider: undefined });
+    });
+    expect(lineas).toEqual([JSON.stringify({ evento: "via-rechazada", datos: { valor: "email", modo: "suave" } })]);
+  });
+
+  it("una sesión de Google, escrita como se escriba, no deja línea", async () => {
+    await montar();
+    const lineas = await lineasDeVia(async () => {
+      for (const [i, via] of ["google", "GOOGLE", " Google "].entries()) await altaConVia(i + 1, { authProvider: via });
+    });
+    expect(lineas).toEqual([]);
   });
 
   it("un valor raro de la variable del Worker es estricto", async () => {

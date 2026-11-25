@@ -239,7 +239,7 @@ export interface Env extends VariablesDeActivar, VariablesDeLlaveAuto {
   /** En "0" se apaga la exigencia del pase, solo como salida de emergencia el día del evento. */
   PASE?: string;
   /**
-   * Solo entra quien el proveedor dice, exactamente, que es de Google. El valor "suave" es un interruptor de emergencia:
+   * Solo entra quien el proveedor dice que es de Google, sin importar mayúsculas ni espacios alrededor. El valor "suave" es un interruptor de emergencia:
    * también deja entrar (y cuenta aparte) a quien el proveedor no dice por dónde entró. Cualquier otro valor es estricto.
    */
   SOLO_GOOGLE?: string;
@@ -1514,6 +1514,7 @@ function depsDeTus(env: Env, ip: string, ahora: number): DepsDeTus {
       ip,
       ahora,
       proveedor: pollarDeLaSala(env),
+      registrar,
       topes: {
         antes: (conexion, ficha, conocida) => cupos.cuentaAntes(conexion, ficha, conocida),
         rechazo: (conexion, ficha) => cupos.cuentaRechazo(conexion, ficha),
@@ -2016,6 +2017,8 @@ export default {
         // Solo entra quien el proveedor dice que es de Google. El modo suave es solo un interruptor de emergencia.
         const via = viaPermitida(sesion.via, modoSoloGoogle(env.SOLO_GOOGLE));
         if (!via.ok) {
+          // Una línea con lo que mandó el proveedor (ya saneado, sin nada de la persona): si todos quedaran afuera, se ve por qué.
+          registrar("via-rechazada", { valor: sesion.viaCruda ?? "sin-campo", modo: modoSoloGoogle(env.SOLO_GOOGLE) });
           await sala.rechazo(ip, token);
           return falla({ motivo: "solo-google" }, h);
         }
