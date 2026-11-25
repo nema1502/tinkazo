@@ -148,11 +148,6 @@ export interface EstadoDeEntrada {
   falla: FallaDeEntrada | null;
   /** Si falló por el límite del servicio de cuentas: hasta cuándo no acepta (reloj de la página). El botón vuelve solo. */
   libreHasta?: number | null;
-  /**
-   * Solo en una campaña de personas, donde la previa también anota: si se está anotando y el motivo (ya escrito) por el que
-   * el alta falló. Sin esto (las demás campañas) no se mira.
-   */
-  alta?: { anotando: boolean; error: string | null };
 }
 
 /** Cuánto tarda en aparecer el aviso de volver a la pestaña después de tocar Entrar. */
@@ -257,17 +252,10 @@ export function pintarLaCampana(
     return limpiarTemporizadores;
   }
   if (deps.persona) {
-    // Una campaña de personas: el botón de Google del sitio en lugar de Entrar. Al entrar, la página anota sola.
+    // Una campaña de personas: el botón de Google del sitio en lugar de Entrar. Al entrar sigue Hola, como en las demás.
     parrafo(accion, deps.tx("cpEntrarNotaPersona"), "cmp-apoyo");
-    const falla = parrafo(accion, entrada.alta?.error ?? "", "cmp-error");
-    falla.hidden = !entrada.alta?.error;
-    if (entrada.alta?.anotando) {
-      // Anotando con la ruedita: el botón apagado no se confunde con uno que no responde.
-      const ocupado = boton(accion, deps.tx("cpAnotando"), "primary", () => undefined);
-      ocupado.disabled = true;
-      ocupado.setAttribute("aria-busy", "true");
-      return limpiarTemporizadores;
-    }
+    const falla = parrafo(accion, "", "cmp-error");
+    falla.hidden = true;
     const sitio = caja("cmp-google");
     accion.append(sitio);
     const persona = deps.persona;

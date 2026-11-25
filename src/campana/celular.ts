@@ -17,7 +17,6 @@ import {
   pintarOtra,
   pintarSalio,
   pintarTermino,
-  textoDeErrorDeAlta,
 } from "./adentro";
 import type { TarjetaMontada } from "./confirmar";
 import type { Regresiva, Sorteo } from "./empieza";
@@ -142,9 +141,9 @@ export interface DepsDelCelular {
   /** Entrar con Google desde el toque. Rechaza con un Error cuyo message es una FallaDeEntrada. */
   entrar: () => Promise<SesionDelCelular>;
   /**
-   * Solo en una campaña de personas (anotarse sin billetera): la entrada es el botón de Google del sitio, que anota a la
-   * persona apenas entra, sin la pantalla Hola, y no hay cuenta que leer ni confirmar. Sin esto (todas las demás campañas) la
-   * página es la de siempre.
+   * Solo en una campaña de personas (anotarse sin billetera): la entrada es el botón de Google del sitio. Al entrar sigue la
+   * pantalla Hola de siempre, con el nombre, los pedidos de quien organiza y No soy yo, y la persona se anota con un toque en
+   * Acepto. No hay cuenta que leer ni confirmar. Sin esto (todas las demás campañas) la página es la de siempre.
    */
   persona?: { google: BotonDeGoogle };
   /** El nombre de quien entró cuando el perfil llegó después de la sesión, o null. Sin esto el saludo queda como estaba. */
@@ -859,9 +858,6 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     pintarAviso(seccion, texto, accion, false, rotulos);
   };
 
-  /** La pantalla donde se ve cómo va el alta: Hola, o la previa misma en una campaña de personas, que no tiene Hola. */
-  const pantallaDelAlta: Pantalla = deps.persona ? "previa" : "hola";
-
   const intervaloDe = (pantalla: Pantalla): number | null => {
     if (pantalla === "previa" || pantalla === "hola" || pantalla === "adentro") return 15_000;
     if (pantalla === "gano" || pantalla === "otra") return 60_000;
@@ -884,18 +880,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     limpiarPintura = null;
     ocultar();
     if (estado.pantalla === "previa" && estado.publico) {
-      // En una campaña de personas la previa dice si se está anotando y por qué falló (en el idioma de ahora).
-      if (deps.persona) {
-        entrada.alta = { anotando: estado.anotando, error: estado.errorAlta === null ? null : textoDeErrorDeAlta(deps, estado.errorAlta) };
-      }
       limpiarPintura = pintarLaCampana(raiz, depsDeLaPrevia, estado.publico, (sesion) => {
         estado.sesion = sesion;
         estado.errorAlta = null;
-        // Con Google entrega la identidad y listo: la página anota a la persona, sin otra pantalla ni otro toque.
-        if (deps.persona) {
-          void anotarse();
-          return;
-        }
         arrancarLaLectura(sesion.cuenta);
         ir("hola");
       }, entrada);
@@ -1318,7 +1305,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     estado.errorAlta = null;
     pintar();
     temporizadorAlta = window.setTimeout(() => {
-      if (estado.anotando && estado.pantalla === pantallaDelAlta) {
+      if (estado.anotando && estado.pantalla === "hola") {
         estado.tardando = true;
         pintar();
       }
@@ -1326,7 +1313,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     let resultado: ResultadoDelAlta;
     try {
       resultado = await deps.anotar(estado.sesion.nombre, (motivo) => {
-        if (estado.anotando && estado.pantalla === pantallaDelAlta) {
+        if (estado.anotando && estado.pantalla === "hola") {
           estado.errorAlta = motivo;
           pintar();
         }

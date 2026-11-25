@@ -154,6 +154,14 @@ const cuerpoDe = (ruta: string, n = 0): Record<string, unknown> =>
 
 const PERSONA = envuelta(campanaCruda({ identidad: "persona" }));
 
+/** Google entrega la identidad y la persona toca Acepto y me anoto en Hola. */
+async function entrarYAceptar(token = tokenDeAna()): Promise<void> {
+  respuestaDeGoogle?.({ credential: token });
+  await asentar();
+  document.querySelector<HTMLButtonElement>("#cmp-hola .cmp-accion .primary")?.click();
+  await asentar();
+}
+
 beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
@@ -210,8 +218,7 @@ describe("participar.html: una campaña de personas", () => {
   it("al entrar con Google manda el token a la sala y queda adentro, sin cuenta en ningún lado", async () => {
     await abrir();
     const token = tokenDeAna();
-    respuestaDeGoogle?.({ credential: token });
-    await asentar();
+    await entrarYAceptar(token);
     const alta = cuerpoDe("alta");
     expect(alta.google).toBe(token);
     expect(alta).not.toHaveProperty("token");
@@ -227,10 +234,36 @@ describe("participar.html: una campaña de personas", () => {
     expect(guardado).not.toContain("ana@example.org");
   });
 
-  it("el nombre cifrado del alta es el del perfil y no sale en claro", async () => {
+  it("al entrar con Google no anota todavía: Hola muestra el nombre y los pedidos de la empresa", async () => {
+    ponerSala({
+      campana: [envuelta(campanaCruda({
+        identidad: "persona",
+        pasos: [
+          { tipo: "instagram", url: "https://www.instagram.com/alcancia", texto: { es: "", en: "" } },
+          { tipo: "texto", url: null, texto: { es: "Dejá tu nombre en el stand", en: "Leave your name at the booth" } },
+        ],
+      }))],
+      estado: [estadoDeSala()],
+      yo: [yoDeSala(false)],
+      alta: [{ estado: 201, cuerpo: { anotada: true } }],
+      resultado: [noEsta],
+    });
     await abrir();
     respuestaDeGoogle?.({ credential: tokenDeAna() });
     await asentar();
+    expect(llamadas.some((l) => l.ruta === "alta")).toBe(false);
+    expect(texto("#cmp-hola h1")).toBe("Hola, Ana P.");
+    expect(texto("#cmp-hola .cmp-der h2")).toBe("Lo que pide Alcancía Andina");
+    expect(document.querySelectorAll("#cmp-hola .cmp-paso")).toHaveLength(2);
+    expect(texto("#cmp-hola .cmp-otra-cuenta")).toBe("No soy Ana P.");
+    document.querySelector<HTMLButtonElement>("#cmp-hola .cmp-accion .primary")?.click();
+    await asentar();
+    expect(llamadas.filter((l) => l.ruta === "alta")).toHaveLength(1);
+  });
+
+  it("el nombre cifrado del alta es el del perfil y no sale en claro", async () => {
+    await abrir();
+    await entrarYAceptar();
     const cuerpo = String(llamadas.find((l) => l.ruta === "alta")?.init.body ?? "");
     expect(cuerpo).not.toContain("Ana");
     expect(cuerpo).not.toContain(CLAVE);
@@ -238,8 +271,7 @@ describe("participar.html: una campaña de personas", () => {
 
   it("al recargar ya anotada se reconoce por la llave del celular: ni guion de Google ni billetera", async () => {
     await abrir();
-    respuestaDeGoogle?.({ credential: tokenDeAna() });
-    await asentar();
+    await entrarYAceptar();
     const llaveDelAlta = cuerpoDe("alta").llave;
     // La página se vuelve a abrir: el navegador conserva su memoria, la sala dice que está anotada.
     vi.resetModules();
@@ -258,8 +290,7 @@ describe("participar.html: una campaña de personas", () => {
 
   it("la consulta propia va con la llave sola, sin cuenta", async () => {
     await abrir();
-    respuestaDeGoogle?.({ credential: tokenDeAna() });
-    await asentar();
+    await entrarYAceptar();
     await asentar(20_000);
     for (const n of llamadas.filter((l) => l.ruta === "yo").keys()) {
       expect(Object.keys(cuerpoDe("yo", n))).toEqual(["llave"]);
