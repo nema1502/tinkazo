@@ -276,9 +276,19 @@ firmado. Sin el campo, o con `"cuenta"`, la campaña es la de siempre y ninguna 
 se acepta (`400 forma`).
 
 Nacen apagadas. Hacen falta dos variables en `wrangler.toml`: `DIFERIDA` en `"1"` y un `GOOGLE_CLIENT_ID` (el identificador de
-cliente de Google de Tinkazo, que es público). Si falta una, crear una campaña de personas da `503 personas-apagadas`, activarla
-al pagar da `400 forma` con el campo `identidad`, y el alta y la consulta propia de una ya creada dan `503 personas-apagadas`.
-La sala guarda el modo en la clave `identidad` de la sala, solo en esas campañas.
+cliente de Google de Tinkazo, que es público). Si falta una, crear una campaña de personas da `503 personas-apagadas` y el alta
+en una ya creada da lo mismo. Todo lo demás de una campaña en curso sigue andando para poder terminarla: la consulta propia,
+quitar, cerrar, sellar, guardar el resultado y avisar. La sala guarda el modo en la clave `identidad` de la sala, solo en esas
+campañas.
+
+La activación al pagar nunca las firma, con los interruptores como estén: `POST /v1/activar` con `identidad` da `400 forma` con
+el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
+
+- **El premio en mano.** El texto firmado puede traer `"premio_en_mano": {"es","en"}`, cada uno de 1 a 60 caracteres, de una sola
+  línea, con algo escrito y sin caracteres invisibles. Solo vale con `"identidad": "persona"` y con todos los `premios` en `"0"`:
+  sin la identidad de persona da `400 forma` con el campo `premio_en_mano`, y con algún monto distinto de `"0"` da `400 forma` con
+  el campo `premios`. La sala no guarda ni usa el texto: solo lo deja pasar. Una campaña de personas con montos y sin
+  `premio_en_mano` se sigue aceptando al leerla. La activación al pagar tampoco acepta `premio_en_mano`.
 
 - **El alta** es `POST /v1/sala/<id>/campana/alta` con `{"google","d","llave","p"?}`. `google` es el token de identidad que
   entrega el botón de Google, y la sala lo verifica sola con `identidad-google.ts`: firma contra las llaves públicas de Google,
@@ -309,8 +319,9 @@ La sala guarda el modo en la clave `identidad` de la sala, solo en esas campaña
   aunque sea cifrado y hasta el fin del reclamo, y eso choca con la regla de no guardar nada que la identifique. Reclamar el premio
   exige además que la sala siga viva mientras dure el reclamo. Esta etapa no hace ninguna de las dos cosas a propósito. Mientras no
   se decida cómo se entera quien gana, `DIFERIDA` queda en `"0"` en los eventos con premios.
-- **El interruptor apagado en medio de un evento** no toca lo que ya está anotado: la sala sigue mostrando el estado, el panel de
-  quien organiza sigue cerrando, sellando y guardando el resultado. Solo dejan de andar el alta y la consulta propia.
+- **El interruptor apagado en medio de un evento** no toca lo que ya está anotado: la sala sigue mostrando el estado, la consulta
+  propia de cada celular y el panel de quien organiza sigue quitando, cerrando, sellando, guardando el resultado y avisando.
+  Solo dejan de andar crear campañas de personas y el alta de gente nueva.
 
 La prueba `src/sala/campana-paridad-cuenta.test.ts` compara cada ruta de una campaña de cuentas, con sus cabeceras y su cuerpo,
 contra un archivo grabado con la sala de antes de este modo. `src/sala/campana-persona.test.ts` prueba el modo nuevo.
