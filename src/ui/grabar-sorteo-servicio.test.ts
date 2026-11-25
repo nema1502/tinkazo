@@ -192,7 +192,7 @@ describe("si el servicio no se puede ni preparar, sigue el camino de siempre", (
 describe("el tope de sorteos del mes cuando el servicio pudo dejar una reserva", () => {
   const cupo = (): Error => Object.assign(new Error("portero-cupo-cuenta"), { name: "ErrorPortero", motivo: "cupo-cuenta", estado: 429, que: "sorteos" });
   // Como en la aplicación: el tope de sorteos del portero no se arregla esperando.
-  beforeEach(() => h.clave.mockImplementation((e: unknown) => ((e as { name?: string }).name === "ErrorPortero" ? "porteroCupoSorteos" : "rpcDown")));
+  beforeEach(() => h.clave.mockImplementation((e: unknown) => ((e as { name?: string } | undefined)?.name === "ErrorPortero" ? "porteroCupoSorteos" : "rpcDown")));
 
   /** El reloj de la prueba corre solo con lo que se duerme. */
   function reloj(): { ahora: () => number; dormir: (ms: number) => Promise<void> } {
@@ -206,11 +206,12 @@ describe("el tope de sorteos del mes cuando el servicio pudo dejar una reserva",
     h.drawOnChain.mockRejectedValue(cupo());
     h.readDraw.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValue(GANADORES);
     const { grabarElSorteo } = await import("./grabar-sorteo");
-    const fin = await grabarElSorteo({ ...base, ...reloj() });
+    const r = reloj();
+    const fin = await grabarElSorteo({ ...base, ...r });
     expect(fin).toEqual({ estado: "guardado", yaEstaba: true });
     expect(h.drawOnChain).toHaveBeenCalledTimes(1);
     expect(h.readDraw.mock.calls.length).toBeGreaterThanOrEqual(3);
-    expect(h.reserva).toHaveBeenCalledWith(7n, base.ahora);
+    expect(h.reserva).toHaveBeenCalledWith(7n, r.ahora);
   });
 
   it("si el sorteo no aparece en lo que dura el presupuesto, el error del tope se muestra, con una sola firma", async () => {
@@ -244,6 +245,17 @@ describe("el tope de sorteos del mes cuando el servicio pudo dejar una reserva",
     const { grabarElSorteo } = await import("./grabar-sorteo");
     expect(await grabarElSorteo({ ...base, ...reloj() })).toEqual({ estado: "guardado", txHash: HASH, yaEstaba: false });
     expect(h.drawOnChain).toHaveBeenCalledTimes(2);
+  });
+
+  it("con una reserva posible, solo el tope de sorteos se espera: el de sellos es definitivo", async () => {
+    h.sortearPorElServicio.mockResolvedValue({ estado: "camino-de-hoy" });
+    h.reserva.mockReturnValue(true);
+    const e = Object.assign(cupo(), { que: "sellos" });
+    h.drawOnChain.mockRejectedValue(e);
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    expect(await grabarElSorteo({ ...base, ...reloj() })).toEqual({ estado: "fallo", error: e });
+    expect(h.drawOnChain).toHaveBeenCalledTimes(1);
+    expect(h.readDraw).toHaveBeenCalledTimes(1);
   });
 
   it("sin servicio, el tope de sorteos no se toca: un solo intento", async () => {

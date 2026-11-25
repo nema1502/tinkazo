@@ -40,6 +40,16 @@ export function mismosGanadores(a: readonly number[], b: readonly number[]): boo
   return a.length === b.length && a.every((x, i) => x === b[i]);
 }
 
+/**
+ * Si el error es el tope de sorteos del mes que el servicio de comisiones le puso a la cuenta (`cupo-cuenta` de los
+ * sorteos). Por el nombre y la forma, como `esErrorDelPortero`: el módulo del portero se baja aparte.
+ */
+function esTopeDeSorteos(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const x = e as { name?: unknown; motivo?: unknown; que?: unknown };
+  return x.name === "ErrorPortero" && x.motivo === "cupo-cuenta" && x.que === "sorteos";
+}
+
 const dormirDeVerdad = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const ahoraDeLaRondaMs = (): number => horaDeLaRonda() * 1000;
 
@@ -89,7 +99,7 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
   // la ronda (`reloj-de-la-ronda.ts`), el mismo de la puerta de la grabación: sin medir, es el de la compu.
   const falta = msHasta(arranqueDelShow(p.round).grabable, (p.ahora ?? ahoraDeLaRondaMs)());
   if (falta > 0) await dormir(falta);
-  const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable, esTopeDeSorteos }] = await Promise.all([import("../protocol/drand"), import("./sorteo-seguro")]);
+  const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable }] = await Promise.all([import("../protocol/drand"), import("./sorteo-seguro")]);
   // Apagado en el build, la condición es una constante falsa y todo este bloque desaparece: el camino de siempre, sin
   // cargar nada de más. Prendido, el servicio de comisiones manda el sorteo de una cuenta de Google en la red principal
   // (`sorteo-del-servicio.ts`) y, si asegura que no lo manda, sigue el camino de abajo. Lo que se esperó al servicio se
