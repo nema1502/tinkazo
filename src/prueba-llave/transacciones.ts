@@ -125,3 +125,25 @@ export function armarSorteo(o: ArmadoBase & { id: bigint; firma96: Uint8Array })
   });
   return armar(o, operacion);
 }
+
+/** La lectura de un sorteo que ya salió (`get_draw`): solo se simula, nunca se manda. */
+export function armarLectura(o: ArmadoBase & { id: bigint }): string {
+  const operacion = Operation.invokeContractFunction({
+    contract: RED_DE_PRUEBA.contrato,
+    function: "get_draw",
+    args: [nativeToScVal(o.id, { type: "u64" })],
+  });
+  return armar(o, operacion);
+}
+
+/** El hash de una transacción armada, en hexadecimal: se conoce antes de mandarla. */
+export function hashDeTransaccion(txXdr: string): string {
+  const tx = TransactionBuilder.fromXDR(txXdr, RED_DE_PRUEBA.passphrase);
+  return Array.from(tx.hash(), (n) => n.toString(16).padStart(2, "0")).join("");
+}
+
+/** Hasta qué segundo de la red vale la transacción (su `maxTime`). */
+export function maxTimeDe(txXdr: string): number {
+  const tx = TransactionBuilder.fromXDR(txXdr, RED_DE_PRUEBA.passphrase) as Transaction;
+  return Number(tx.timeBounds?.maxTime ?? 0);
+}

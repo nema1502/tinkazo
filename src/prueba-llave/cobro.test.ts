@@ -1,6 +1,6 @@
 import { nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
-import { bytesDeBase64, cobroDeLaDecodificada, declaradoDeSobre, escritoDeMeta, eventosDeComisionDeMeta, leerCobro, medidoDeDiagnostico, recursosDeMeta } from "./cobro";
+import { bytesDeBase64, cobroDeLaDecodificada, declaradoDeSobre, escritoDeMeta, eventosDeComisionDeMeta, leerCobro, medidoDeDiagnostico, recursosDeMeta, retornoDe, retornoDeMeta } from "./cobro";
 
 /** Una unión del XDR del SDK 17 hecha a mano: el campo type, la rama con nombre y el genérico value. */
 const union = (type: string, nombre: string, valor: unknown): Record<string, unknown> => ({ type, [nombre]: valor, value: valor });
@@ -149,5 +149,18 @@ describe("el cobro armado", () => {
     expect(typeof xdr.TransactionMeta.fromXDR).toBe("function");
     expect(typeof xdr.TransactionEnvelope.fromXDR).toBe("function");
     expect(typeof xdr.DiagnosticEvent.fromXDR).toBe("function");
+  });
+});
+
+describe("lo que devolvió la llamada", () => {
+  it("el valor sale de la meta de Soroban", () => {
+    expect(retornoDeMeta({ sorobanMeta: { returnValue: nativeToScVal(7n, { type: "u64" }) } })).toBe(7n);
+  });
+
+  it("sin meta o sin valor, undefined y sin lanzar", () => {
+    expect(retornoDeMeta(null)).toBeUndefined();
+    expect(retornoDeMeta({ sorobanMeta: {} })).toBeUndefined();
+    expect(retornoDe({ status: "SUCCESS", resultMetaXdr: "no es xdr" })).toBeUndefined();
+    expect(retornoDe({ status: "SUCCESS" })).toBeUndefined();
   });
 });

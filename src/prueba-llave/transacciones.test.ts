@@ -1,27 +1,15 @@
-import { Keypair, Networks, StrKey, TransactionBuilder, scValToNative } from "@stellar/stellar-sdk";
+import { Keypair, Networks, TransactionBuilder, scValToNative } from "@stellar/stellar-sdk";
 import type { Transaction } from "@stellar/stellar-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { entradaDe, hex } from "./ayuda-de-pruebas";
 import { RED_DE_PRUEBA } from "./red";
-import { aOperacion, armarConOperacion, armarCreacion, armarSorteo, conEntradasFirmadas, entradasPorFirmar, mismaAutorizacion, operacionDeSello, VIDA_DEL_SOBRE_S } from "./transacciones";
+import { aOperacion, armarConOperacion, armarCreacion, armarLectura, armarSorteo, conEntradasFirmadas, entradasPorFirmar, hashDeTransaccion, maxTimeDe, mismaAutorizacion, operacionDeSello, VIDA_DEL_SOBRE_S } from "./transacciones";
 
 const origen = Keypair.random().publicKey();
 const organizador = RED_DE_PRUEBA.contrato;
 
-const hex = (b: Uint8Array): string => Array.from(b, (n) => n.toString(16).padStart(2, "0")).join("");
-const aBase64 = (h: string): string => btoa(String.fromCharCode(...(h.match(/../g) ?? []).map((x) => parseInt(x, 16))));
-
-/**
- * Una entrada de autorización con credenciales de dirección, escrita a mano en XDR: 1 (dirección), la dirección del
- * contrato (1 y sus 32 bytes), el nonce, el vencimiento, la firma vacía, y la raíz que invoca `seal` sin argumentos ni subllamadas.
- */
-function entradaDe(contrato: string, vence = 100): string {
-  const c = hex(StrKey.decodeContract(contrato));
-  const dueño = `00000001${c}`;
-  const raiz = `00000000${`00000001${hex(StrKey.decodeContract(RED_DE_PRUEBA.contrato))}`}00000004${hex(new TextEncoder().encode("seal"))}0000000000000000`;
-  return aBase64(`00000001${dueño}0000000000000000${vence.toString(16).padStart(8, "0")}00000001${raiz}`);
-}
-
 const huella = new Uint8Array(32).fill(7);
+const hexDe = hex;
 const operacion = operacionDeSello({ organizador, huella, cantidad: 3, ganadores: 1, ronda: 4_000_000 });
 
 afterEach(() => {
@@ -35,7 +23,7 @@ describe("la llamada a seal", () => {
     expect(operacion.args).toHaveLength(6);
     const nativos = operacion.args.map((a) => scValToNative(a));
     expect(nativos[0]).toBe(organizador);
-    expect(hex(nativos[1] as Uint8Array)).toBe(hex(huella));
+    expect(hexDe(nativos[1] as Uint8Array)).toBe(hexDe(huella));
     expect(nativos[2]).toBe(3);
     expect(nativos[3]).toBe(1);
     expect(nativos[4]).toBe(4_000_000n);
@@ -124,5 +112,20 @@ describe("la llamada a draw", () => {
 describe("la creación de la cuenta", () => {
   it("con algo que no es XDR no se arma", () => {
     expect(() => armarCreacion({ origen, secuencia: "1", funcB64: "no es xdr", authB64: [] })).toThrow();
+  });
+});
+
+describe("lo que se sabe de una transacción antes de mandarla", () => {
+  it("el hash son 64 hexadecimales y no cambia", () => {
+    const tx = armarLectura({ origen, secuencia: "5", id: 3n });
+    expect(hashDeTransaccion(tx)).toMatch(/^[0-9a-f]{64}$/);
+    expect(hashDeTransaccion(tx)).toBe(hashDeTransaccion(tx));
+  });
+
+  it("el maxTime es el de su vida de 30 s", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
+    const tx = armarLectura({ origen, secuencia: "5", id: 3n });
+    expect(maxTimeDe(tx)).toBe(Math.floor(new Date("2026-11-25T12:00:00Z").getTime() / 1000) + VIDA_DEL_SOBRE_S);
   });
 });

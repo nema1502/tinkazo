@@ -285,3 +285,19 @@ export function leerCobro(c: RespuestaCruda): Cobro {
     diagnosticos,
   });
 }
+
+/** El valor que devolvió la llamada, de la parte Soroban de la meta, o `undefined` si no hay. */
+export function retornoDeMeta(meta: unknown): unknown {
+  try {
+    const valor = obj(obj(meta)?.["sorobanMeta"])?.["returnValue"];
+    return valor ? scValToNative(valor as xdr.ScVal) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** El valor que devolvió la llamada de una transacción que entró: el número del sorteo de `seal`, el registro de `draw`. */
+export function retornoDe(c: RespuestaCruda): unknown {
+  const meta = c.resultMetaXdr ? tryDecodificar(() => xdr.TransactionMeta.fromXDR(c.resultMetaXdr as string, "base64")) : null;
+  return retornoDeMeta(ramaDeMeta(meta));
+}

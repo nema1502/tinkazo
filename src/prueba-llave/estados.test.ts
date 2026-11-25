@@ -3,6 +3,8 @@ import type { Lang } from "../idioma";
 import { ESTADOS, estadoInicial, pantallaDe, type Aparato, type EntornoInicial, type Estado } from "./estados";
 import { TEXTOS, type ClaveDePrueba } from "./textos";
 
+// Comillas angulares, punto y coma, rayas largas, punto medio y flechas, por su código para no escribirlos.
+const PROHIBIDOS = new RegExp(`[;${String.fromCharCode(171, 187, 8212, 8211, 183, 8594, 8592)}]`);
 const LENGUAS: Lang[] = ["es", "en"];
 const APARATOS: Aparato[] = ["cel", "compu"];
 
@@ -17,7 +19,7 @@ describe("los textos de la prueba", () => {
   it("no hay comillas angulares, punto y coma, rayas largas, punto medio ni flechas", () => {
     for (const l of LENGUAS) {
       for (const [k, v] of Object.entries(TEXTOS[l])) {
-        expect(v, `${l}.${k}`).not.toMatch(/[;«»—–·→←]/);
+        expect(v, `${l}.${k}`).not.toMatch(PROHIBIDOS);
       }
     }
   });
