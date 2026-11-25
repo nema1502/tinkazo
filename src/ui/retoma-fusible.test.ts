@@ -10,9 +10,7 @@ import { FUSIBLE_DE_RETOMA_MS, VENTANA_RETOMA_MS } from "../stellar/pollar-confi
  * mirada la retoma misma suelta la cabecera (`cuandoTarda`), y si la sesión llega después, se abre sola.
  */
 
-const fuente = (ruta: string): string => readFileSync(new URL(ruta, import.meta.url), "utf8").replace(/
-/g, "
-");
+const fuente = (ruta: string): string => readFileSync(new URL(ruta, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 
 describe("el fusible de la cabecera y la retoma de la sesión", () => {
   it("el fusible es el de siempre y la ventana paciente corre por detrás, más larga que él", () => {
