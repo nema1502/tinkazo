@@ -24,6 +24,10 @@ export const TOPES = {
   largoNombre: 64,
   /** Lo que una vista puede esperar en total entre pausas y esperas declaradas. */
   totalMs: 240_000,
+  /** Cuánto puede durar el guion entero: el trabajo de GitHub corta a los 40 minutos y tiene que quedar el informe. */
+  scriptMs: 35 * 60_000,
+  /** Con menos que esto de tiempo total, una vista nueva ya no se empieza. */
+  vistaMinimaMs: 10_000,
   /** Lo que declara un clicHasta: el tiempo que insiste antes de rendirse (ver `CLIC_HASTA` en vistas-pagina.mjs). */
   clicHastaMs: 20_000,
   variables: 20,
@@ -67,6 +71,17 @@ const CAMPOS_PASO = {
 const esObjeto = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
 const esEntero = (x) => typeof x === "number" && Number.isInteger(x);
 const hayControl = (s) => /[\u0000-\u001f\u007f]/.test(s);
+
+/**
+ * Qué hacer con la vista que viene, dado lo que ya gastó el guion: si se hace, cuánto puede durar
+ * (el plazo de una vista o lo que queda del tiempo total, lo que sea menor) y si el límite lo pone el total.
+ */
+export function plazoDeLaVista(gastadoMs, plazoVistaMs) {
+  const restanteMs = TOPES.scriptMs - gastadoMs;
+  if (restanteMs < TOPES.vistaMinimaMs) return { hacer: false, plazoMs: 0, porElTotal: true };
+  const porElTotal = restanteMs < plazoVistaMs;
+  return { hacer: true, plazoMs: porElTotal ? restanteMs : plazoVistaMs, porElTotal };
+}
 
 /** Una sola base para resolver rutas: si el resultado cambia de origen, la ruta se salía del sitio. */
 const ORIGEN_FALSO = "http://sitio.invalid";
