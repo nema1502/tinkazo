@@ -55,6 +55,8 @@
           <a href="/crear-campana.html" data-campana-enlace hidden data-i="navEmpresas">Para empresas</a>
         </div>
       </div>
+      <!-- La misma entrada, con el nombre corto, en la fila del celular: ahí Más la esconde y quien arma una campaña no la encontraba. Solo se muestra de 360 a 760 px (styles.css). -->
+      <a href="/crear-campana.html" class="nav-empresas-cel" data-campana-enlace hidden data-i="navEmpresasC">Empresas</a>
     </nav>
     <div class="header-lado">
       <nav class="langs" aria-label="idioma">
@@ -90,13 +92,16 @@
         <source srcset="/juegos/race-light.webp" media="(prefers-color-scheme: light)" />
         <img src="/juegos/race.webp" width="900" height="506" alt="" />
       </picture>
+      <!-- Si el tema elegido no es el del sistema, la imagen del tema elegido reemplaza a la de arriba (styles.css, .hero-alt). Diferidas: casi nunca se piden. -->
+      <img class="hero-alt hero-alt-osc" src="/juegos/race.webp" width="900" height="506" alt="" loading="lazy" decoding="async" />
+      <img class="hero-alt hero-alt-cla" src="/juegos/race-light.webp" width="900" height="506" alt="" loading="lazy" decoding="async" />
       <span class="mascot" aria-hidden="true"><svg viewBox="-1 -3 24 28"><use href="#llama" fill="currentColor"/></svg></span>
     </a>
     <!-- Las tres puertas: una tarjeta por lo que viene a hacer cada quien. La acción principal de la portada sigue siendo el
          botón de arriba. La de las empresas se ve solo con las campañas abiertas (src/main.ts) y, sin ella, quedan dos. -->
     <div class="puertas" id="puertas">
       <article class="puerta puerta-lista">
-        <div class="puerta-media"><img class="pj-img pj-osc" src="/juegos/portada/wheel.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/wheel-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /></div>
+        <div class="puerta-media"><img class="pj-img pj-osc" src="/juegos/portada/pinata.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/pinata-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /></div>
         <h2 class="puerta-t" data-i="ptListaT">Mirá cómo es</h2>
         <p class="puerta-b" data-i="ptListaB">Un sorteo de ejemplo en pantalla grande.</p>
         <button class="ghost puerta-a" type="button" data-entrar-ensayo data-i="ctaEnsayo">Probar con un ejemplo</button>
@@ -110,6 +115,8 @@
       </article>
       <article class="puerta puerta-empresa" data-campana-enlace hidden>
         <div class="puerta-media">
+          <!-- En el celular la puerta es un renglón y la tarjeta de ejemplo se cambia por este regalo (styles.css, Las tres puertas). -->
+          <span class="puerta-ico" aria-hidden="true"><svg viewBox="0 0 48 48" width="40" height="40" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"><rect x="7" y="19" width="34" height="23"/><rect x="4" y="12" width="40" height="7"/><path d="M24 12v30"/><path d="M24 12c-3-8-12-8-12-3 0 4 7 3 12 3zM24 12c3-8 12-8 12-3 0 4-7 3-12 3z"/></svg></span>
           <!-- Una tarjeta de campaña de ejemplo, hecha con HTML y CSS: la marca es inventada y dice que es un ejemplo. -->
           <div class="cp-ejemplo">
             <span class="cp-franja" aria-hidden="true"></span>
@@ -120,8 +127,10 @@
                 <span class="cp-rotulo" data-i="peRotulo">Ejemplo</span>
               </div>
               <p class="cp-premio"><span data-i="pePremioN">3 premios de</span><strong data-i="pePremioM">40 dólares digitales</strong></p>
-              <p class="cp-estado"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-4 3-6 6.5-6s6.5 2 6.5 6"/><path d="M19 6v6M16 9h6"/></svg><span data-i="peEstado">Anotando</span></p>
-              <p class="cp-gente"><span class="cp-caras" aria-hidden="true"><i></i><i></i><i></i></span><span data-i="peGente">Participar es gratis</span></p>
+<div class="cp-pie">
+                <p class="cp-estado"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-4 3-6 6.5-6s6.5 2 6.5 6"/><path d="M19 6v6M16 9h6"/></svg><span data-i="peEstado">Anotando</span></p>
+                <p class="cp-gente" data-i="peGente">Participar es gratis</p>
+              </div>
             </div>
           </div>
         </div>
@@ -135,17 +144,23 @@
   <h2 class="sr-only portada-only" data-i="howTitle">¿Cómo funciona?</h2>
   <div class="steps portada-only">
     <article>
-      <div class="paso-media paso-lista" aria-hidden="true"><svg viewBox="0 0 160 90" focusable="false"><rect x="14" y="12" width="132" height="66" fill="var(--card)" stroke="var(--ink)" stroke-width="3"/><circle cx="32" cy="28" r="7" fill="var(--magenta)" stroke="var(--ink)" stroke-width="2"/><rect x="46" y="24" width="64" height="8" fill="var(--ink)"/><circle cx="32" cy="46" r="7" fill="var(--yellow)" stroke="var(--ink)" stroke-width="2"/><rect x="46" y="42" width="84" height="8" fill="var(--ink)"/><circle cx="32" cy="64" r="7" fill="var(--teal)" stroke="var(--ink)" stroke-width="2"/><rect x="46" y="60" width="48" height="8" fill="var(--ink)"/></svg></div>
-      <span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1c">Pegá los nombres o subí el CSV de Luma.</p>
-      <details class="paso-mas"><summary data-i="pasoMas">Más detalle</summary><p data-i="s1b">Pegás los nombres, o subís el CSV de Luma o de una hoja de cálculo. Tu gente no instala nada ni crea cuenta, y para comprobar el resultado tampoco hace falta nada. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.</p></details>
+      <div class="paso-media paso-lista" aria-hidden="true"><svg viewBox="0 0 64 64" focusable="false"><rect x="7" y="8" width="50" height="48" fill="var(--card)" stroke="var(--ink)" stroke-width="3"/><circle cx="19" cy="21" r="4.5" fill="var(--magenta)" stroke="var(--ink)" stroke-width="2"/><rect x="28" y="18" width="22" height="6" fill="var(--ink)"/><circle cx="19" cy="33" r="4.5" fill="var(--yellow)" stroke="var(--ink)" stroke-width="2"/><rect x="28" y="30" width="16" height="6" fill="var(--ink)"/><circle cx="19" cy="45" r="4.5" fill="var(--teal)" stroke="var(--ink)" stroke-width="2"/><rect x="28" y="42" width="20" height="6" fill="var(--ink)"/></svg></div>
+      <div class="paso-txt">
+        <span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1c">Pegá los nombres o subí el CSV de Luma.</p>
+        <details class="paso-mas"><summary data-i="pasoMas">Más detalle</summary><p data-i="s1b">Pegás los nombres, o subís el CSV de Luma o de una hoja de cálculo. Tu gente no instala nada ni crea cuenta, y para comprobar el resultado tampoco hace falta nada. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.</p></details>
+      </div>
     </article>
     <article>
-      <div class="paso-media paso-sello" aria-hidden="true"><svg viewBox="0 0 160 90" focusable="false"><circle cx="80" cy="45" r="36" fill="var(--yellow)" stroke="var(--ink)" stroke-width="3"/><circle cx="80" cy="45" r="28" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/><g transform="translate(66 29) scale(1.1)" fill="var(--ink)"><use href="#llama"/></g><rect x="104" y="58" width="26" height="20" fill="var(--card)" stroke="var(--ink)" stroke-width="3"/><path d="M110 58v-6a7 7 0 0 1 14 0v6" fill="none" stroke="var(--ink)" stroke-width="3"/></svg></div>
-      <span class="num">02</span><h3 data-i="s2t">Sellá la lista</h3><p data-i="s2b">Queda cerrada antes del sorteo: nadie la puede cambiar.</p>
+      <div class="paso-media paso-sello" aria-hidden="true"><svg viewBox="0 0 64 64" focusable="false"><circle cx="32" cy="32" r="25" fill="var(--yellow)" stroke="var(--ink)" stroke-width="3"/><circle cx="32" cy="32" r="19" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/><g transform="translate(19 19) scale(1)" fill="var(--ink)"><use href="#llama"/></g><rect x="38" y="38" width="18" height="15" fill="var(--card)" stroke="var(--ink)" stroke-width="3"/><path d="M42 38v-4a5 5 0 0 1 10 0v4" fill="none" stroke="var(--ink)" stroke-width="3"/></svg></div>
+      <div class="paso-txt">
+        <span class="num">02</span><h3 data-i="s2t">Sellá la lista</h3><p data-i="s2b">Queda cerrada antes del sorteo: nadie la puede cambiar.</p>
+      </div>
     </article>
     <article>
-      <div class="paso-media paso-juego" aria-hidden="true"><img class="pj-img pj-osc" src="/juegos/selector/trompo.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/selector/trompo-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /></div>
-      <span class="num">03</span><h3 data-i="s3t">Elegí el juego</h3><p data-i="s3b">Gana quien sale de un número que nadie elige.</p>
+      <div class="paso-media paso-juego" aria-hidden="true"><svg viewBox="0 0 64 64" focusable="false"><rect x="25" y="6" width="14" height="9" fill="var(--yellow)" stroke="var(--ink)" stroke-width="3"/><ellipse cx="32" cy="22" rx="23" ry="7" fill="var(--orange)" stroke="var(--ink)" stroke-width="3"/><path d="M9 22L32 58 55 22" fill="var(--magenta)" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/><path d="M17 33h30" stroke="var(--ink)" stroke-width="3"/><circle cx="32" cy="58" r="2" fill="var(--ink)"/></svg></div>
+      <div class="paso-txt">
+        <span class="num">03</span><h3 data-i="s3t">Elegí el juego</h3><p data-i="s3b">Gana quien sale de un número que nadie elige.</p>
+      </div>
     </article>
   </div>
 

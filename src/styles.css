@@ -140,30 +140,24 @@
   .lead { font-size: 18px; color: var(--ink2); max-width: 560px; font-weight: 500; }
   .mascot { color: var(--magenta); transform: rotate(3deg); }
   .mascot svg { width: 150px; height: 130px; filter: drop-shadow(6px 6px 0 var(--ink)); }
-  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; margin: 14px 0 52px; }
-  .steps article { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 20px; }
+  /* Los tres pasos van sin caja ni sombra: un dibujo chico al lado del título y la línea. Así explican sin competir con las
+     puertas de arriba, que son las que llevan a una acción. */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 28px; margin: 6px 0 44px; }
+  .steps article { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 16px; align-items: start; padding: 8px 0; }
   .steps article:nth-child(1) .num { background: var(--magenta); }
   .steps article:nth-child(2) .num { background: var(--orange); }
   .steps article:nth-child(3) .num { background: var(--purple); color: var(--on-purple); }
   .num { display: inline-block; color: var(--on-accent); border: 2px solid var(--ink); font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 16px; padding: 2px 10px; transform: rotate(-2deg); }
-  .steps h3 { font-size: 17px; margin-top: 10px; font-weight: 800; }
-  .steps p { font-size: var(--letra-sec); color: var(--ink2); margin-top: 6px; }
-  /* Cada paso trae su dibujo arriba: la lista, el sello con la llama y una captura del juego. */
-  .steps .paso-media { aspect-ratio: 16 / 9; border: 2px solid var(--ink); background: var(--field); margin-bottom: 4px; position: relative; overflow: hidden; display: grid; place-items: center; }
+  .steps h3 { font-size: 18px; margin-top: 8px; font-weight: 800; }
+  .steps p { font-size: var(--letra-sec); color: var(--ink2); margin-top: 4px; }
+  /* Cada paso trae su dibujo: la lista, el sello con la llama y un trompo. Del mismo estilo, de 64 px. */
+  .steps .paso-media { width: 64px; height: 64px; border: 2px solid var(--ink); background: var(--field); overflow: hidden; }
   .steps .paso-media svg { width: 100%; height: 100%; display: block; }
-  .steps .paso-media .pj-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-  .steps .paso-media .pj-osc { display: none; }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) .steps .paso-media .pj-osc { display: block; }
-    :root:not([data-theme="light"]) .steps .paso-media .pj-cla { display: none; }
-  }
-  :root[data-theme="dark"] .steps .paso-media .pj-osc { display: block; }
-  :root[data-theme="dark"] .steps .paso-media .pj-cla { display: none; }
+  .steps .paso-txt { min-width: 0; }
   /* El detalle de un paso va plegado: la portada dice una línea y quien quiere más la abre. */
   .steps .paso-mas summary { cursor: pointer; display: flex; align-items: center; min-height: 44px; font-size: var(--letra-sec); font-weight: 700; color: var(--ink2); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; list-style: none; }
   .steps .paso-mas summary::-webkit-details-marker { display: none; }
   .steps .paso-mas p { margin-top: 0; padding-bottom: 6px; }
-  @media (max-width: 560px) { .steps .paso-media { aspect-ratio: 2.4 / 1; } }
   section.block { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); margin-bottom: 34px; }
   .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 22px; border-bottom: var(--bw) solid var(--ink); flex-wrap: wrap; }
   .head h2 { font-size: var(--letra-prin); font-weight: 800; }
@@ -1833,6 +1827,13 @@
      hidden lo saca main.ts). Desde el 25 de noviembre de 2026 ya no se esconde en la laptop: era la entrada de quien arma una
      campaña y casi siempre lo hace desde una compu. */
   .topnav .mas-lista a[data-campana-enlace][hidden] { display: none; }
+  /* El nombre corto de Para empresas va en la fila del celular, de 360 a 760 px. Ahí sale de Más para no repetirse; por debajo de
+     360 px la fila no tiene lugar y sigue dentro de Más. */
+  .topnav a.nav-empresas-cel { display: none; }
+  @media (min-width: 360px) and (max-width: 760px) {
+    .topnav a.nav-empresas-cel:not([hidden]) { display: inline-flex; order: 2; }
+    .topnav .mas-lista a[data-campana-enlace] { display: none; }
+  }
   .pies a[hidden] { display: none; }
   /* En la fila quedan cuatro: Sortear, Mis sorteos, Juegos y Cómo funciona (8 de noviembre
      de 2026; Seguridad y Precios bajaron al pie). Con las siete de antes, entre 1101 y
@@ -2104,16 +2105,28 @@
   .note a, .txstatus a, .entity a, main > section > a.sec-link { color: inherit; text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
   /* El hero muestra el producto: una partida de verdad, con la llama encima. */
-  .hero-portada { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 40px; }
+  .hero-portada { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 24px 40px; }
   /* A 64 px el título de doce palabras caía en tres renglones y dejaba "grande." solo en el de abajo (1920x1080): a 56 entra en dos. */
+  .hero-portada { padding-top: 40px; }
   .hero-portada h1 { font-size: clamp(38px, 6.4vw, 56px); }
   .hero-shot { position: relative; display: block; }
   .hero-shot img { width: 100%; height: auto; display: block; border: var(--bw) solid var(--ink); box-shadow: var(--sh); transform: rotate(1.2deg); transition: transform 0.15s ease; }
   .hero-shot:hover img { transform: rotate(0deg) scale(1.01); }
+  /* La imagen del hero sigue el tema elegido (?theme o el botón de tema), no solo el del sistema: si difieren, la de arriba se
+     esconde y entra la del par, igual que en las puertas. */
+  .hero-shot img.hero-alt { display: none; }
+  @media (prefers-color-scheme: light) {
+    :root[data-theme="dark"] .hero-shot picture { display: none; }
+    :root[data-theme="dark"] .hero-shot img.hero-alt-osc { display: block; }
+  }
+  @media (prefers-color-scheme: dark) {
+    :root[data-theme="light"] .hero-shot picture { display: none; }
+    :root[data-theme="light"] .hero-shot img.hero-alt-cla { display: block; }
+  }
   .hero-shot .mascot { position: absolute; left: -30px; bottom: -34px; }
   .hero-shot .mascot svg { width: 104px; height: 90px; }
   @media (max-width: 700px) {
-    .hero-portada { grid-template-columns: 1fr; gap: 26px; }
+    .hero-portada { grid-template-columns: 1fr; gap: 18px; padding-top: 20px; }
     /* La imagen del show va arriba, antes del título: lo que mejor explica qué es Tinkazo entra en la primera pantalla. */
     .hero-portada .hero-shot { display: block; order: -1; }
   }
@@ -2130,7 +2143,7 @@
      "Probar con un ejemplo" debajo (auditor del primer sorteo, 22 de octubre de 2026). */
   @media (max-width: 700px) and (max-height: 740px) {
     .hero-portada { padding-top: 14px; }
-    .hero-portada .hero-copy { gap: 12px; }
+    .hero-portada { gap: 12px; }
     .hero-portada h1 { font-size: clamp(30px, 8.4vw, 38px); }
     .hero-portada .lead { font-size: var(--letra-sec); line-height: 1.45; }
   }
@@ -2139,14 +2152,15 @@
   /* Las tres puertas de la portada (25 de noviembre de 2026): una tarjeta por lo que viene a hacer cada quien, con su imagen,
      un título, una línea y su acción. Van dentro del hero y ocupan el ancho entero. La de las empresas nace escondida y la
      muestra main.ts con las campañas abiertas: sin ella quedan dos tarjetas que se reparten el ancho, sin hueco. */
-  .puertas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: stretch; margin-top: 8px; }
+  .puertas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: stretch; margin-top: 0; }
   .puertas:has(> .puerta[hidden]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .puerta {
     display: flex; flex-direction: column; gap: 8px; padding: 14px; background: var(--card); color: var(--ink);
-    border: var(--bw) solid var(--ink); box-shadow: var(--sh); min-width: 0;
+    border: var(--bw) solid var(--ink); box-shadow: var(--sh); min-width: 0; position: relative;
   }
   .puerta[hidden] { display: none; }
-  .puerta-media { position: relative; flex: 1 0 auto; aspect-ratio: 16 / 9; border: 2px solid var(--ink); background: var(--field); overflow: hidden; margin-bottom: 4px; }
+  /* Lado a lado, la imagen es más baja que la del hero: los botones de las puertas entran en la primera pantalla de una laptop. */
+  .puerta-media { position: relative; flex: 1 0 auto; aspect-ratio: 21 / 9; border: 2px solid var(--ink); background: var(--field); overflow: hidden; margin-bottom: 4px; }
   .puerta-media .pj-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
   .puerta-media .pj-osc { display: none; }
   @media (prefers-color-scheme: dark) {
@@ -2161,13 +2175,17 @@
   @media (min-width: 860px) { .puerta-b { min-height: 3em; } }
   /* La imagen se estira y absorbe el alto que sobra: con tres tarjetas de alto parejo, los botones quedan en la misma línea. */
   .puerta .puerta-a { min-height: 48px; margin-top: 6px; display: inline-flex; align-items: center; justify-content: center; text-align: center; width: 100%; }
+  /* La tarjeta entera es el enlace: el área de toque del botón se estira a toda la tarjeta, así tocar la imagen también funciona. */
+  .puerta .puerta-a::after { content: ""; position: absolute; inset: 0; }
+  .puerta:has(.puerta-a:focus-visible) { outline: 3px solid var(--purple-ink); outline-offset: 3px; }
+  .puerta-ico { display: none; }
 
   /* La tarjeta de campaña de ejemplo: la marca es inventada y dice que es un ejemplo. El estado va con ícono y texto, y la
      cuenta de personas, sin nombres. Es lo que verá quien se anote, a pequeña escala. */
   .puerta-empresa .puerta-media { aspect-ratio: auto; overflow: visible; border: 0; background: none; margin-bottom: 4px; }
   .cp-ejemplo { display: flex; flex-direction: column; height: 100%; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
   .cp-franja { display: block; height: 12px; background: var(--orange); border-bottom: 2px solid var(--ink); flex: none; }
-  .cp-cuerpo { display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 12px 14px; flex: 1 1 auto; }
+  .cp-cuerpo { display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 10px 12px; flex: 1 1 auto; }
   .cp-marca { display: flex; align-items: center; gap: 10px; }
   .cp-logo {
     flex: none; display: grid; place-items: center; width: 42px; height: 42px; color: var(--muted);
@@ -2175,30 +2193,52 @@
   }
   .cp-nombres { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; flex: 1 1 auto; }
   .cp-nombres strong { font-size: 17px; font-weight: 900; }
-  .cp-nombres span { font-size: 14px; color: var(--ink2); }
-  .cp-rotulo { flex: none; align-self: flex-start; background: var(--purple); color: var(--on-purple); font-size: 14px; font-weight: 800; padding: 2px 8px; border: 2px solid var(--ink); }
-  .cp-premio { display: flex; flex-direction: column; line-height: 1.15; }
-  .cp-premio span { font-size: 14px; color: var(--ink2); font-weight: 700; }
-  .cp-premio strong { font-size: clamp(20px, 2.1vw, 24px); font-weight: 900; }
+  .cp-nombres span { font-size: 16px; color: var(--ink2); }
+  .cp-rotulo { flex: none; align-self: flex-start; background: var(--purple); color: var(--on-purple); font-size: 16px; font-weight: 800; padding: 2px 8px; border: 2px solid var(--ink); }
+  .cp-premio { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; line-height: 1.2; }
+  .cp-pie { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .cp-premio span { font-size: 16px; color: var(--ink2); font-weight: 700; }
+  .cp-premio strong { font-size: 20px; font-weight: 900; }
   .cp-estado {
     display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 16px; font-weight: 800;
     background: var(--yellow); color: #191919; border: 2px solid var(--ink); padding: 4px 12px 4px 8px;
   }
-  .cp-gente { display: flex; align-items: center; gap: 10px; font-size: 16px; color: var(--ink2); line-height: 1.25; }
-  .cp-caras { display: inline-flex; flex: none; }
-  .cp-caras i { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--ink); margin-left: -7px; background: var(--teal); }
-  .cp-caras i:first-child { margin-left: 0; background: var(--magenta); }
-  .cp-caras i:nth-child(2) { background: var(--yellow); }
+  .cp-gente { font-size: 16px; color: var(--ink2); line-height: 1.25; }
+  @media (max-width: 359px) { .cp-nombres span { display: none; } }
   @media (hover: hover) {
     .puerta { transition: transform 0.12s ease, box-shadow 0.12s ease; }
     .puerta:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 var(--ink); }
   }
   @media (prefers-reduced-motion: reduce) { .puerta, .puerta:hover { transition: none; transform: none; } }
-  /* En un celular o una tableta las tarjetas van una debajo de otra, sin pasar de un ancho cómodo. */
+  /* En un celular o una tableta cada puerta es un renglón: una miniatura de 64 px, el título y la acción, sin la línea. El renglón
+     entero es el enlace. La tarjeta de ejemplo de las empresas se cambia por un regalo. Las tarjetas grandes quedan en escritorio. */
   @media (max-width: 859px) {
-    .puertas, .puertas:has(> .puerta[hidden]) { grid-template-columns: minmax(0, 1fr); max-width: 520px; width: 100%; margin-inline: auto; }
-    /* Apiladas, las capturas bajan a 2 a 1 para que las tres puertas no alarguen la primera mirada. */
-    .puerta-media { aspect-ratio: 2 / 1; }
+    .puertas, .puertas:has(> .puerta[hidden]) { grid-template-columns: minmax(0, 1fr); max-width: 520px; width: 100%; margin-inline: auto; gap: 8px; }
+  }
+  @media (max-width: 859px), (min-width: 860px) and (max-height: 820px) {
+    .puerta { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 14px; row-gap: 0; align-items: center; align-content: center; padding: 6px 12px 6px 6px; border-width: 2px; box-shadow: var(--sh-sm); }
+    .puerta-media, .puerta-empresa .puerta-media { grid-row: 1 / span 2; width: 64px; height: 64px; aspect-ratio: auto; flex: none; margin: 0; border: 2px solid var(--ink); background: var(--field); overflow: hidden; }
+    .puerta-t { grid-column: 2; font-size: 18px; }
+    .puerta-b { display: none; }
+    .puerta .puerta-a, .puerta .puerta-a:hover:not(:disabled) {
+      grid-column: 2; width: auto; justify-self: start; min-height: 44px; margin: 0; padding: 2px 0 0; align-items: flex-start; border: 0; background: none; box-shadow: none; transform: none;
+      font-size: 16px; font-weight: 700; color: var(--purple-ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; text-align: start;
+    }
+    .puerta-empresa .cp-ejemplo { display: none; }
+    .puerta-empresa .puerta-media { background: var(--yellow); }
+    .puerta-ico { display: grid; place-items: center; width: 100%; height: 100%; color: #191919; }
+    .puerta-ico svg { width: 38px; height: 38px; }
+  }
+  /* En el celular las puertas suben justo debajo del botón de entrar, antes de "Otras formas de entrar", y lo que seguía
+     (los dos enlaces y la firma de la red) baja para hacerles lugar. El texto del hero deja de ser una caja para que sus
+     partes se ordenen junto con las puertas. */
+  @media (max-width: 700px) {
+    .hero-portada .hero-copy { display: contents; }
+    .hero-portada .hero-shot { margin-bottom: 4px; }
+    .hero-portada .puertas { order: 1; margin-top: -12px; }
+    .hero-portada .hero-otras { order: 2; }
+    .hero-portada .hero-note { order: 3; }
+    .hero-portada .built-on { order: 4; }
   }
 
   /* La demo se presenta: una franja arriba y una invitación al final. */
@@ -3054,7 +3094,7 @@
   /* El enlace discreto de siempre se va mientras el aviso dice lo mismo. */
   .aviso-plata:not([hidden]) ~ .premio-campana { display: none; }
   .premio-campana { margin-top: 6px; }
-  .premio-campana a { display: inline-flex; align-items: center; min-height: 44px; }
+  .premio-campana a { display: inline-flex; align-items: center; min-height: 44px; color: var(--purple-ink); }
   #prize[aria-invalid="true"], .premio-lugares input[aria-invalid="true"] { box-shadow: 0 0 0 3px var(--orange); }
 
   /* Cuántos ganan (src/ui/ganadores.ts), a la vista junto a Sellar la lista. Todo son botones: menos, más y los atajos
