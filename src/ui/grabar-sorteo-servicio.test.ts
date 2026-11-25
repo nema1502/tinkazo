@@ -129,12 +129,12 @@ describe("el servicio asegura que no lo manda", () => {
   });
 });
 
-describe("la sala no espera más que antes", () => {
+describe("lo que se espera al servicio se descuenta, con un mínimo", () => {
   it("lo que se esperó al servicio se descuenta del presupuesto del camino de siempre", async () => {
     let t = (roundTime(R) + 60) * 1000;
     const ahora = (): number => t;
     const dormir = async (ms: number): Promise<void> => void (t += ms);
-    // El servicio tardó 80 segundos y aseguró que no manda: al camino de siempre le quedan 10.
+    // El servicio tardó 80 segundos y aseguró que no manda: al camino de siempre le queda su mínimo, 20.
     h.sortearPorElServicio.mockImplementation(async () => {
       t += 80_000;
       return { estado: "camino-de-hoy" };
@@ -143,8 +143,23 @@ describe("la sala no espera más que antes", () => {
     const { grabarElSorteo } = await import("./grabar-sorteo");
     const fin = await grabarElSorteo({ ...base, ahora, dormir });
     expect(fin.estado).toBe("fallo");
-    // Esperas de 2 y 4 segundos caben en 10, la de 8 ya no: tres intentos en vez de cinco.
-    expect(h.drawOnChain).toHaveBeenCalledTimes(3);
+    // Las esperas de 2, 4 y 8 segundos caben en 20, la de 16 ya no: cuatro intentos en vez de cinco.
+    expect(h.drawOnChain).toHaveBeenCalledTimes(4);
+  });
+
+  it("si el servicio se llevó todo el presupuesto, el camino de siempre conserva su mínimo de reintentos", async () => {
+    let t = (roundTime(R) + 60) * 1000;
+    const ahora = (): number => t;
+    const dormir = async (ms: number): Promise<void> => void (t += ms);
+    h.sortearPorElServicio.mockImplementation(async () => {
+      t += 150_000;
+      return { estado: "camino-de-hoy" };
+    });
+    h.drawOnChain.mockRejectedValueOnce(new Error("la red no contestó")).mockResolvedValue({ ...GANADORES, txHash: HASH });
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    const fin = await grabarElSorteo({ ...base, ahora, dormir });
+    expect(fin).toEqual({ estado: "guardado", txHash: HASH, yaEstaba: false });
+    expect(h.drawOnChain).toHaveBeenCalledTimes(2);
   });
 
   it("si el servicio no se usó, el presupuesto es el de siempre", async () => {
@@ -153,5 +168,18 @@ describe("la sala no espera más que antes", () => {
     const { grabarElSorteo } = await import("./grabar-sorteo");
     await grabarElSorteo(base);
     expect(h.drawOnChain).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe("si el servicio no se puede ni preparar, sigue el camino de siempre", () => {
+  it("una excepción al decidir si lo toma el servicio no corta la grabación", async () => {
+    h.loToma.mockImplementation(() => {
+      throw new Error("no se pudo leer la configuración");
+    });
+    h.drawOnChain.mockResolvedValue({ ...GANADORES, txHash: HASH });
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    expect(await grabarElSorteo(base)).toEqual({ estado: "guardado", txHash: HASH, yaEstaba: false });
+    expect(h.sortearPorElServicio).not.toHaveBeenCalled();
+    expect(h.drawOnChain).toHaveBeenCalledTimes(1);
   });
 });

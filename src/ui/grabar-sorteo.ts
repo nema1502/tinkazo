@@ -92,12 +92,21 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
   const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable }] = await Promise.all([import("../protocol/drand"), import("./sorteo-seguro")]);
   // Apagado en el build, la condición es una constante falsa y todo este bloque desaparece: el camino de siempre, sin
   // cargar nada de más. Prendido, el servicio de comisiones manda el sorteo de una cuenta de Google en la red principal
-  // (`sorteo-del-servicio.ts`) y, si asegura que no lo manda, sigue el camino de abajo con lo que le queda del
-  // presupuesto de siempre: lo que se esperó al servicio se descuenta, así la sala no espera más que antes.
+  // (`sorteo-del-servicio.ts`) y, si asegura que no lo manda, sigue el camino de abajo. Lo que se esperó al servicio se
+  // descuenta de los reintentos de ese camino, con un mínimo (`sorteo-seguro.ts`): la etapa del servicio tiene sus propios
+  // topes y la sala puede esperar ese tiempo de más antes de que arranque el camino de siempre, pero nunca se queda sin
+  // reintentos. Si ni siquiera se puede preparar el servicio (un módulo que no baja, una configuración que no se lee),
+  // todavía no se pidió nada y se sigue por el camino de siempre.
   let yaGastadoMs: number | undefined;
   if (import.meta.env.VITE_SORTEO_SERVIDOR === "1") {
-    const [{ sorteoPorServidor }, servicio] = await Promise.all([import("../stellar/alta-config"), import("./sorteo-del-servicio")]);
-    if (sorteoPorServidor() && servicio.loTomaElServicio(p.raffleId, !!p.pagarConMiCuenta, p.ahora)) {
+    let servicio: typeof import("./sorteo-del-servicio") | null = null;
+    try {
+      const [{ sorteoPorServidor }, modulo] = await Promise.all([import("../stellar/alta-config"), import("./sorteo-del-servicio")]);
+      if (sorteoPorServidor() && modulo.loTomaElServicio(p.raffleId, !!p.pagarConMiCuenta, p.ahora)) servicio = modulo;
+    } catch {
+      servicio = null;
+    }
+    if (servicio) {
       const ahora = p.ahora ?? Date.now;
       const desde = ahora();
       const r = await servicio.sortearPorElServicio({

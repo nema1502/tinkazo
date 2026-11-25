@@ -26,6 +26,11 @@ import { errorKey, textoDelError } from "../stellar/errores";
 export const ESPERAS_DEL_SORTEO_MS = [2000, 4000, 8000, 16000] as const;
 /** Pasado este tiempo desde el primer intento no se espera más: la sala está mirando. */
 export const PRESUPUESTO_DEL_SORTEO_MS = 90_000;
+/**
+ * Lo que queda para reintentar aunque otro camino haya gastado todo el presupuesto: alcanza para tres reintentos (2, 4 y
+ * 8 segundos). Sin esto, el peor momento del servicio dejaba al camino de siempre con un solo intento.
+ */
+export const PRESUPUESTO_MINIMO_DEL_SORTEO_MS = 20_000;
 
 export interface PasosDelSorteo<T> {
   /** Un intento de grabarlo (`drawOnChain`). */
@@ -35,7 +40,7 @@ export interface PasosDelSorteo<T> {
   /** Si con este error vale la pena volver a probar. */
   reintentable: (e: unknown) => boolean | Promise<boolean>;
   ahora?: () => number;
-  /** Lo que ya se esperó por otro camino antes de llegar acá: se descuenta del presupuesto, así la sala no espera más. */
+  /** Lo que ya se esperó por otro camino antes de llegar acá: se descuenta del presupuesto de reintentos, con un mínimo. */
   yaGastadoMs?: number;
   dormir?: (ms: number) => Promise<void>;
   /** Antes de cada espera: el número del próximo intento, cuántos hay, y el error de recién. */
@@ -47,7 +52,7 @@ export type FinDelSorteo<T> = { ok: true; valor: T; yaEstaba: boolean } | { ok: 
 export async function sortearConReintentos<T>(p: PasosDelSorteo<T>): Promise<FinDelSorteo<T>> {
   const ahora = p.ahora ?? Date.now;
   const dormir = p.dormir ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const presupuesto = PRESUPUESTO_DEL_SORTEO_MS - Math.max(0, p.yaGastadoMs ?? 0);
+  const presupuesto = Math.max(PRESUPUESTO_MINIMO_DEL_SORTEO_MS, PRESUPUESTO_DEL_SORTEO_MS - Math.max(0, p.yaGastadoMs ?? 0));
   const inicio = ahora();
   const total = ESPERAS_DEL_SORTEO_MS.length + 1;
   for (let i = 0; ; i++) {
