@@ -872,6 +872,27 @@ describe("cerrar la lista", () => {
       expect(ultima?.[1]).toBe(AHORA + 3 * 3_600_000 + 900_000);
     });
 
+    it("al retomar una lista cerrada con la compu atrasada, la hora nueva sale de la hora de la sala y no de la de la compu", async () => {
+      const m = mundo();
+      // La compu va veinte minutos atrasada: el cierre guardado ya pasó para la sala aunque para la compu sea de hace diez.
+      m.adelanto = -20 * 60_000;
+      m.sala.fase = "cerrada";
+      m.sala.cierraMs = m.ahora - 10 * 60_000;
+      guardarOrg(m.almacen, { sala: SALA, cuenta: null, fase: "cerrada" });
+      m.paginas.push([await equipoDe(m, 1, "Ana"), await equipoDe(m, 2, "Nora")]);
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+      await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
+      boton(p, "Volver a abrir la lista").click();
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+      const hora = m.fases[m.fases.length - 1]?.[1];
+      const horaDeLaSala = m.ahora - m.adelanto;
+      expect(typeof hora).toBe("number");
+      // La sala pide un cierre de al menos un minuto desde su propia hora.
+      expect(hora as number).toBeGreaterThanOrEqual(horaDeLaSala + 60_000);
+      expect(hora as number).toBeLessThanOrEqual(horaDeLaSala + 12 * 3_600_000);
+    });
+
     it("con el cierre ya vencido, la hora cuenta desde ahora", async () => {
       const m = mundo();
       const p = await cerrada(m);

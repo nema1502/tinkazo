@@ -2373,6 +2373,17 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     trabajando = true;
     mensaje = "";
     pintar();
+    const m = marca;
+    // Con la lista cerrada no se pide ningún pase, y al retomar o recargar el reloj de la sala todavía no se conoce: se lo
+    // estima ahora, con el pase que la sala da a quien tiene el token, antes de calcular la hora.
+    const p = await deps.pase(s);
+    if (m !== marca) return void (trabajando = false);
+    if (typeof p === "object") estimarDesfase(p.hasta);
+    else if (p === "no-existe" || p === "token") {
+      trabajando = false;
+      pintar();
+      return p === "token" ? tomada() : void sospechaDeBorrada(s);
+    }
     // Siempre con una hora nueva: el máximo entre el cierre que tenía y ahora, más quince minutos, con el reloj estimado de
     // la sala. Sin hora la sala conserva la anterior y, con los relojes desfasados, puede rechazarla por vencida. Nunca
     // más de lo que la sala acepta (doce horas desde ahora).
