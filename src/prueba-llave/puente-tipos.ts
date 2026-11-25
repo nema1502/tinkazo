@@ -1,3 +1,5 @@
+import type { Fuente } from "./buscar-cuenta";
+
 /**
  * Lo que el flujo necesita del kit, sin importar el kit: solo cadenas y números cruzan. Lo implementa `puente-kit.ts`, el
  * único archivo que importa el kit, y las pruebas ponen uno de mentira.
@@ -24,6 +26,21 @@ export interface Conexion {
   contractId: string;
 }
 
+/** Cómo salió la entrada con una llave de otro aparato, para la medida. */
+export interface DatosDeEntrada {
+  /** De dónde salió la pista de nacimiento. `local` si la llave ya estaba guardada en este aparato. */
+  fuente: Fuente | "local";
+  ledgerDeNacimiento: number | null;
+  segundosBuscando: number;
+  /** Cuántas veces pidió la llave el desbloqueo mientras se entraba. Tiene que ser una. */
+  desbloqueos: number;
+}
+
+export interface AvisosDeEntrada {
+  /** La persona ya se desbloqueó y empieza la búsqueda de su cuenta. */
+  alTerminarElDesbloqueo?: () => void;
+}
+
 export interface PuenteKit {
   /** Pide el desbloqueo, crea la llave y deja armada la creación de la cuenta. No manda nada a la red. */
   crearLlave(): Promise<CreacionDeLlave>;
@@ -35,8 +52,8 @@ export interface PuenteKit {
   conectar(credentialId: string, contractId: string): Promise<Conexion>;
   /** Retoma la sesión de los últimos 7 días, si la hay. */
   volver(): Promise<Conexion | null>;
-  /** Entra con una llave que no está en este aparato: pide el desbloqueo y busca la cuenta en el índice. */
-  entrarConLlave(): Promise<Conexion>;
+  /** Entra con una llave que no está en este aparato: pide un desbloqueo y busca la cuenta en la red. */
+  entrarConLlave(avisos?: AvisosDeEntrada): Promise<Conexion & { entrada?: DatosDeEntrada }>;
   llavesGuardadas(): Promise<LlaveGuardada[]>;
   /** La llave firma una entrada de autorización. Pide el desbloqueo. */
   firmarEntrada(entradaB64: string, vence: number): Promise<string>;
