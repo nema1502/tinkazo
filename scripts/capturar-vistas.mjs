@@ -71,7 +71,7 @@
 import { mkdirSync, readFileSync, appendFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
-import { clicHasta, evidenciaDelFallo } from "./lib/vistas-pagina.mjs";
+import { clicHasta, cortarFueraDelOrigen, evidenciaDelFallo } from "./lib/vistas-pagina.mjs";
 import { TECLAS, TOPES, direccionDeVista, generarNombres, leerEntorno, leerVistas, problemaDeBase, problemaDeRama } from "./lib/vistas.mjs";
 
 const args = process.argv.slice(2);
@@ -167,12 +167,12 @@ async function tecla(page, nombre) {
   await page.send("Input.dispatchKeyEvent", { type: "keyUp", ...evento });
 }
 
-async function paso(page, p) {
+async function paso(page, p, revisar) {
   switch (p.accion) {
     case "clic":
       return clic(page, p.selector);
     case "clicHasta":
-      return clicHasta(page, p, { clic, estaVisible, ahora: Date.now });
+      return clicHasta(page, p, { clic, estaVisible, ahora: Date.now, revisar });
     case "escribir":
       return escribir(page, p.selector, p.texto);
     case "nombres":
@@ -228,6 +228,16 @@ async function capturar(browser, v) {
   const fila = { nombre: v.nombre, ok: false, archivo: null, error: null, direccion: url, direccionFinal: null, idiomaDeLaPagina: null, pantalla: `${v.ancho}x${v.alto}`, tema: v.tema, idioma: v.idioma, paginaEntera: v.paginaEntera, truncada: false, scrollHorizontal: null, anchoDelContenido: null, anchoDeLaPantalla: null, erroresDeConsola: [], archivoDelFallo: null, direccionEnElFallo: null, textoVisible: null };
   const page = await browser.open("about:blank");
   let errores = () => [];
+  let revisar = () => undefined;
+  // Si lo que se intentó falla y la página quiso ir a otro sitio, ese es el motivo que cuenta, no el síntoma.
+  const motivoReal = async (f) => {
+    try {
+      return await f();
+    } catch (e) {
+      revisar();
+      throw e;
+    }
+  };
   const trabajo = (async () => {
     await page.send("Emulation.setDeviceMetricsOverride", { width: v.ancho, height: v.alto, deviceScaleFactor: 1, mobile: v.ancho < 600, screenWidth: v.ancho, screenHeight: v.alto });
     await page.send("Log.enable").catch(() => undefined);
@@ -237,6 +247,9 @@ async function capturar(browser, v) {
     await page.send("Emulation.setUserAgentOverride", { userAgent: ua, acceptLanguage: "es-BO,es" });
     await page.send("Emulation.setLocaleOverride", { locale: "es-BO" }).catch(() => undefined);
     errores = vigilarErrores(page);
+    // La pestaña no sale del sitio servido: un enlace externo se corta antes de visitarlo.
+    const corte = await cortarFueraDelOrigen(page, base);
+    revisar = corte.revisar;
     const nav = await page.send("Page.navigate", { url });
     if (nav.errorText) throw new Error(`no cargó ${url}: ${nav.errorText}`);
     const cargo = await page.waitFor("document.readyState === 'complete'", 30_000);
@@ -245,13 +258,15 @@ async function capturar(browser, v) {
     await page.eval("Promise.race([document.fonts.ready.then(() => true), new Promise((r) => setTimeout(() => r(false), 5000))])").catch(() => undefined);
     for (const [i, p] of v.pasos.entries()) {
       try {
-        await paso(page, p);
+        await motivoReal(() => paso(page, p, revisar));
+        revisar();
       } catch (e) {
         throw new Error(`paso ${i + 1} (${p.accion}): ${e.message}`);
       }
     }
-    if (v.esperar) await esperarVisible(page, v.esperar, 30_000);
+    if (v.esperar) await motivoReal(() => esperarVisible(page, v.esperar, 30_000));
     if (v.pausaMs) await sleep(v.pausaMs);
+    revisar();
     const d = JSON.parse(await page.eval("JSON.stringify({ href: location.href, lang: document.documentElement.lang, sw: document.documentElement.scrollWidth, iw: window.innerWidth })"));
     fila.direccionFinal = d.href;
     fila.idiomaDeLaPagina = d.lang;

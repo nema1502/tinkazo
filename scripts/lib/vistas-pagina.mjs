@@ -72,3 +72,54 @@ export async function evidenciaDelFallo(page, fotografiar, archivo, ms = FALLO.e
   }
   return r;
 }
+
+/**
+ * Que la pestaña no salga del sitio servido. Un clic en un enlace externo hacía que la máquina visitara
+ * ese sitio antes de que el guion lo notara. Con el dominio Fetch del protocolo se pausan solo las
+ * navegaciones de documentos (no las imágenes, las fuentes ni los pedidos de datos del sitio a terceros,
+ * como la ronda pública de drand): la del marco principal que va a otro origen se cancela, y las demás
+ * siguen. Cancelada con "Aborted", la pestaña se queda en la página donde estaba, y la foto del fallo
+ * la muestra. Devuelve `fuera`, las direcciones cortadas (sin consulta ni fragmento, que pueden traer
+ * claves), y `revisar()`, que lanza con un mensaje claro si hubo alguna.
+ */
+export async function cortarFueraDelOrigen(page, base) {
+  const origen = new URL(base).origin;
+  const fuera = [];
+  const { frameTree } = await page.send("Page.getFrameTree");
+  const principal = frameTree.frame.id;
+  page.ws.addEventListener("message", (ev) => {
+    let m;
+    try {
+      m = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    if (m.method !== "Fetch.requestPaused") return;
+    const { requestId, request, frameId, resourceType } = m.params;
+    let corta = false;
+    let anotada = "";
+    if (resourceType === "Document" && frameId === principal) {
+      try {
+        const u = new URL(request.url);
+        corta = u.origin !== origen;
+        anotada = `${u.origin}${u.pathname}`;
+      } catch {
+        corta = true;
+        anotada = "una dirección que no se entiende";
+      }
+    }
+    if (corta) {
+      fuera.push(anotada);
+      page.send("Fetch.failRequest", { requestId, errorReason: "Aborted" }).catch(() => undefined);
+    } else {
+      page.send("Fetch.continueRequest", { requestId }).catch(() => undefined);
+    }
+  });
+  await page.send("Fetch.enable", { patterns: [{ resourceType: "Document", requestStage: "Request" }] });
+  return {
+    fuera,
+    revisar() {
+      if (fuera.length) throw new Error(`la página quiso ir a otro sitio y se cortó: ${fuera.slice(0, 3).join(", ")}`);
+    },
+  };
+}
