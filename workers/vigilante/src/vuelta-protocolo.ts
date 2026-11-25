@@ -11,8 +11,9 @@
  *     contesta, termina sin pedir nada a la red: no se puede mirar nada contra nada.
  *  4. Lee cada red con dos pedidos chicos (`getLatestLedger` y los ajustes). Si una no contesta, lo dice y
  *     termina sin avisar cambio: la red caída no es un cambio, y lo que ya se avisó se conserva.
- *  5. Compara y decide (la lógica en `protocolo.ts`): un aviso por cambio, una sola vez. El aviso sale por los
- *     canales, y solo queda marcado como avisado si salió por todos: mejor un aviso repetido que uno perdido.
+ *  5. Compara y decide (la lógica en `protocolo.ts`): un aviso por cambio, una sola vez. El aviso sale por todos
+ *     los canales y queda marcado como avisado si salió por al menos uno: un canal que no anda no puede repetir
+ *     el mismo correo cada diez minutos. Si no salió por ninguno, no se marca y se reintenta en la vuelta siguiente.
  *  6. Guarda lo avisado (una escritura, y solo si cambió algo).
  *
  * La comparación usa el `fetch` y el reloj que le pasan (`Dependencias`), igual que la vuelta: las pruebas la
@@ -203,9 +204,10 @@ export async function pasoProtocolo(env: Entorno, dep: Dependencias, opciones: O
           registrar("error-envio", { canal, codigo: codigoDe(e), motivo: motivoDe(e), tipo: "protocolo", red: aviso.red });
         }
       }
-      // Solo lo que salió por todos los canales cuenta como avisado: con un canal faltante, la vuelta siguiente
-      // repite el aviso (y el canal que salió bien lo recibe dos veces: mejor repetido que perdido).
-      if (salieron === canales.length) {
+      // Lo que salió por al menos un canal cuenta como avisado. Si se exigieran todos, un canal que no anda (un
+      // Telegram mal configurado) haría repetir el correo cada diez minutos. El canal que falló queda en el registro
+      // (`error-envio`). Si no salió por ninguno, no se marca: la vuelta siguiente lo reintenta.
+      if (salieron > 0) {
         estado.el[aviso.red] = aviso.avisado;
         cambio = true;
       }

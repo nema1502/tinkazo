@@ -153,7 +153,7 @@ El criterio, igual que en el detector:
 - un cambio de protocolo o de costo: un aviso por red, que nombra el parámetro con el antes y el luego, hasta que se actualice la base (con `node scripts/vigilar-red.mjs --actualizar-base --red <red>` y el despliegue del portero con la base nueva);
 - la red caída no es un cambio: dice por qué no pudo leer, no avisa, y lo que ya se avisó se conserva.
 
-Un aviso solo cuenta como avisado si salió por todos los canales: con un canal caído, la vuelta siguiente repite el aviso (mejor un aviso repetido que uno perdido).
+Un aviso cuenta como avisado si salió por al menos un canal: un canal que no anda (por ejemplo un Telegram mal configurado) no repite el correo cada diez minutos, y el canal que falló queda en el registro como `error-envio`. Si no salió por ninguno, no se marca y la vuelta siguiente lo reintenta.
 
 **El paso no corre solo**: hace falta el enchufe en el Cron Trigger, que quien integra o despliega agrega en `src/index.ts`, dentro de `scheduled` y al lado de la vuelta del portero:
 

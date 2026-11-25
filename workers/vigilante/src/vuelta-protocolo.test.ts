@@ -272,14 +272,40 @@ describe("los cambios de la red", () => {
     expect(m.correo.enviados[0]!.subject).toMatch(/cambió de protocolo/);
   });
 
-  it("con telegram caído y el correo bien, el aviso se repite en la vuelta siguiente (mejor repetido que perdido)", async () => {
+  it("con telegram caído y el correo bien, el aviso queda avisado y no se repite cada diez minutos", async () => {
     const m = mundo({ conTelegram: true, fallaTelegram: true, porRed: { testnet: { protocolo: 30 } } });
     await m.paso();
     expect(m.correo.enviados).toHaveLength(1);
-    expect(m.libro.datos.has(CLAVE_PROTOCOLO)).toBe(false);
+    expect(m.registros.join("\n")).toContain("error-envio");
+    expect(m.libro.datos.has(CLAVE_PROTOCOLO)).toBe(true);
+    // Un canal que no anda nunca vuelve a llenar el correo: la vuelta siguiente no repite el aviso.
     await m.avanzar(600_000);
     await m.paso();
-    expect(m.correo.enviados).toHaveLength(2);
+    await m.avanzar(600_000);
+    await m.paso();
+    expect(m.correo.enviados).toHaveLength(1);
+  });
+
+  it("con el correo caído y telegram bien, el aviso queda avisado: llegó por un canal", async () => {
+    const m = mundo({ conTelegram: true, fallaCorreo: "SIN_CORREO", porRed: { testnet: { protocolo: 30 } } });
+    await m.paso();
+    expect(m.telegram).toHaveLength(1);
+    expect(m.libro.datos.has(CLAVE_PROTOCOLO)).toBe(true);
+    await m.avanzar(600_000);
+    await m.paso();
+    expect(m.telegram).toHaveLength(1);
+  });
+
+  it("con los dos canales caídos el aviso no se da por avisado y se reintenta en la vuelta siguiente", async () => {
+    const m = mundo({ conTelegram: true, fallaTelegram: true, fallaCorreo: "SIN_CORREO", porRed: { testnet: { protocolo: 30 } } });
+    await m.paso();
+    expect(m.correo.enviados).toEqual([]);
+    expect(m.libro.datos.has(CLAVE_PROTOCOLO)).toBe(false);
+    m.correo.falla = null;
+    await m.avanzar(600_000);
+    await m.paso();
+    expect(m.correo.enviados).toHaveLength(1);
+    expect(m.libro.datos.has(CLAVE_PROTOCOLO)).toBe(true);
   });
 
   it("la red vuelve a lo que ya se avisó y no se repite nada: una vez por cambio", async () => {
