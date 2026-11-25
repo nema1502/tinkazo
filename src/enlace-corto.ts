@@ -394,7 +394,9 @@ export async function abrir(id: string, secreto: string, op: Opciones = {}): Pro
     try {
       // Con el logo registrado, el corto queda recordado con su llave: compartir desde la página de comprobar da este mismo.
       ponerLogoDeRuta(j.u, logo);
-      recordar(j.u, corto);
+      // Uno que puede cambiar no se recuerda como el corto de esos datos: quien los abra después por otro camino no lo
+      // compartiría como si fuera fijo (`cortoDelEnlace`).
+      if (!cambia) recordar(j.u, corto);
     } catch {
       /* recordar es para volver a compartirlo; abrirlo no depende de eso */
     }

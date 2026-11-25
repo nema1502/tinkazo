@@ -1202,11 +1202,14 @@ describe("compartir el sorteo desde la vista en vivo", () => {
       expect(dialogo().querySelector(".cmp-priv")?.textContent).not.toContain(T.es.cmpPrivCorto);
     });
 
-    it("con la referencia en la dirección, lo comparte si es el mismo que este celular recordó al abrir", async () => {
+    it("con la referencia en la dirección el corto puede cambiar: comparte el enlace largo del sorteo que se ve, no ese corto", async () => {
       history.replaceState(null, "", `/#espectador=abc.AbCdEfGh.${"a".repeat(22)}.2`);
       h.cortoGuardado.mockReturnValue({ corto: CORTO, id: "AbCdEfGh", borrar: "" });
       await hastaElFin();
-      expect(await compartirYLeer()).toContain(CORTO);
+      const txt = await compartirYLeer();
+      expect(txt).toMatch(/https?:\/\/\S+\/verificar\.html#\S+/);
+      expect(txt).not.toContain("/c/");
+      expect(txt).not.toContain(CORTO);
     });
 
     it("sin la referencia en la dirección, lo toma de lo que este celular recordó al abrir el corto", async () => {

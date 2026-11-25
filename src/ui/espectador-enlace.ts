@@ -115,22 +115,22 @@ export function refDelEnlace(hash: string = location.hash): { id: string; clave:
 }
 
 /**
- * El enlace corto con el que entró este celular, o null si no lo conoce. Sale de lo que este equipo recordó al abrir el
- * corto (`abrir`, en `c.ts`), buscado con los datos del fragmento tal como llegaron: así el corto es el de este sorteo y
- * no el de otro. Si el fragmento trae la referencia que `c.ts` agrega a un enlace que puede cambiar, tiene que ser la de
- * ese mismo corto: un fragmento armado a mano, con la referencia de otro enlace, no da corto y se comparte el enlace
- * completo del comprobante. Sin lo recordado (almacenamiento bloqueado o vaciado) tampoco: no se puede comprobar de quién
- * es. Solo lee: no escribe ni va a la red, y nunca devuelve un corto de otro origen.
+ * El enlace corto con el que entró este celular, o null si no se debe compartir. Solo se comparte un corto que no puede
+ * cambiar. El del QR de la sala sí puede: quien organiza lo reescribe cuando la sala pasa al premio siguiente, y quien
+ * recibiera ese enlace vería otro sorteo distinto del que dice el mensaje. `c.ts` marca ese caso con la referencia en el
+ * fragmento, y con ella no hay corto: se comparte el enlace completo del comprobante, que no cambia nunca. Sin la
+ * referencia, sale de lo que este equipo recordó al abrir el corto (`abrir`, en `c.ts`, que no recuerda los que pueden
+ * cambiar), buscado con los datos del fragmento tal como llegaron: así el corto es el de este sorteo y no el de otro.
+ * Sin lo recordado (almacenamiento bloqueado o vaciado) tampoco hay corto. Solo lee: no escribe ni va a la red, y nunca
+ * devuelve un corto de otro origen.
  */
 export function cortoDelEnlace(hash: string = location.hash, origen: string = location.origin): string | null {
   const m = FRAGMENTO.exec(hash);
-  if (!m?.[1]) return null;
+  if (!m?.[1] || m[2]) return null;
   try {
     // Con los datos tal como están en el fragmento: ya releídos serían otros y darían otra llave.
     const g = cortoGuardado(`${origen}/#espectador=${m[1]}`);
-    if (!g || !esCortoDe(g.corto, origen)) return null;
-    if (m[2] && m[3] && (g.id !== m[2] || !g.corto.endsWith(`#${m[3]}`))) return null;
-    return g.corto;
+    return g && esCortoDe(g.corto, origen) ? g.corto : null;
   } catch {
     return null;
   }

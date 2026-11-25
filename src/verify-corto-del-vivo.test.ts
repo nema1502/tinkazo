@@ -29,10 +29,11 @@ beforeEach(() => {
   document.body.innerHTML = new DOMParser().parseFromString(pagina, "text/html").body.innerHTML;
 });
 
-/** Pinta un resultado y toca Compartir, como quien llegó a la página. */
-async function tocarCompartir(): Promise<void> {
+/** Pinta un resultado con ese veredicto y toca Compartir, como quien llegó a la página. */
+async function tocarCompartir(estado: "ok" | "partial" | "bad" | "working" = "ok"): Promise<void> {
   await import("./i18n");
-  const { renderResult } = await import("./verify");
+  const { renderResult, verdict } = await import("./verify");
+  verdict(estado, estado === "bad" ? "vNoProof" : "vVerdictOkChain", "");
   const names = ["Ana", "Beto", "Carla"];
   renderResult({ names, prize: "Un libro" } as never, { ronda: 7, firma: "ab", semilla: "cd", ganadores: [1], nombres: names, ancla: { tipo: "libre" } } as never, "Un libro", {
     fromChain: false,
@@ -74,6 +75,17 @@ describe("compartir desde la verificación", () => {
     h.abrirSorteo.mockClear();
     vi.resetModules();
     await tocarCompartir();
+    expect(h.abrirSorteo).toHaveBeenCalledTimes(1);
+    const args = h.abrirSorteo.mock.calls[0] as unknown[];
+    expect((args[0] as { enlace: string }).enlace).not.toBe(CORTO);
+    expect(args).toHaveLength(1);
+  });
+});
+
+describe("el corto de la vista en vivo solo se comparte con el comprobante en verde", () => {
+  it.each(["bad", "partial", "working"] as const)("con el veredicto %s comparte el enlace verificado, como siempre", async (estado) => {
+    sessionStorage.setItem("tinkazo.corto-del-vivo", JSON.stringify({ r: RUTA, c: CORTO, t: Date.now() }));
+    await tocarCompartir(estado);
     expect(h.abrirSorteo).toHaveBeenCalledTimes(1);
     const args = h.abrirSorteo.mock.calls[0] as unknown[];
     expect((args[0] as { enlace: string }).enlace).not.toBe(CORTO);

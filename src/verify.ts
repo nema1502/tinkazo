@@ -145,7 +145,7 @@ function repintarDetalles(): void {
  * honesto es decir que la cuenta está bien pero que nadie atestigua que esa
  * fuera la lista original. Eso es `partial`, y es justo lo que compra anclar.
  */
-function verdict(state: "ok" | "partial" | "bad" | "working", titleKey: string, detail: string): void {
+export function verdict(state: "ok" | "partial" | "bad" | "working", titleKey: string, detail: string): void {
   // El logo de quien armó el enlace corto, debajo del veredicto y solo en verde o amarillo: nunca decide nada.
   estadoDelVeredicto = state;
   pintarFranja(logoDelEnlace, state);
@@ -868,10 +868,12 @@ export function renderResult(
   const compartir = $<HTMLButtonElement>("btn-compartir");
   compartir.style.display = "";
   compartir.onclick = () => {
+    // Solo con el comprobante en verde: con otro veredicto se comparte el enlace verificado, como siempre.
+    const corto = estadoDelVeredicto === "ok" ? cortoDelVivo : null;
     const datos: Parameters<typeof abrirSorteo>[0] = {
       // Llegó desde la vista en vivo: se comparte el corto con el que entró ese celular, sin crear otro desde la
       // conexión del salón (el servicio de enlaces limita las altas por hora de cada conexión).
-      enlace: cortoDelVivo ?? enlaceVerificado,
+      enlace: corto ?? enlaceVerificado,
       ganadores: winners.map((i) => mostrar(names[i] ?? "")),
       total: names.length,
       // Con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas: cuando la lista
@@ -888,7 +890,7 @@ export function renderResult(
       // El logo del enlace, para la foto y el mismo corto (src/logo.ts).
       ...(logoDelEnlace && (estadoDelVeredicto === "ok" || estadoDelVeredicto === "partial") ? { logo: logoDelEnlace } : {}),
     };
-    if (cortoDelVivo) abrirSorteo(datos, undefined, { corto: false });
+    if (corto) abrirSorteo(datos, undefined, { corto: false });
     else abrirSorteo(datos);
   };
   // El contrato, solo si es uno de Tinkazo: el enlace a uno ajeno sería darle crédito.

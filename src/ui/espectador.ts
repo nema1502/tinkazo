@@ -79,10 +79,12 @@ export { datosDelEnlace, enlaceEspectador, type DatosEspectador } from "./espect
  * **El camino de antes** (un enlace sin `h`, de una sala con el sitio de antes): espera lo grabado, y después lo que
  * dice la regla, y arranca el show desde el principio.
  *
- * **Compartir lo que salió** lleva el enlace corto con el que entró este celular (`cortoDelEnlace`) o, si no lo conoce, el
- * enlace completo del comprobante: nada sale de este celular hacia el servicio de enlaces. El corto abre esta vista y no
- * el comprobante: por eso Lo que salió ofrece Ver el comprobante a todos, que lo lleva a la verificación con la lista. Es
- * un enlace que arma este mismo celular: no pide nada a nadie hasta que se toca.
+ * **Compartir lo que salió** lleva el enlace corto con el que entró este celular (`cortoDelEnlace`) solo si ese corto no
+ * puede cambiar. El del QR de la sala sí puede (quien organiza lo reescribe al pasar al premio siguiente) y quien recibe
+ * el mensaje abriría otro sorteo: con ese, o si no conoce el corto, se comparte el enlace completo del comprobante, que no
+ * cambia nunca. Nada sale de este celular hacia el servicio de enlaces. El corto abre esta vista y no el comprobante: por
+ * eso Lo que salió ofrece Ver el comprobante a todos, que lo lleva a la verificación con la lista. Es un enlace que arma
+ * este mismo celular: no pide nada a nadie hasta que se toca.
  *
  * Es solo para mirar: no hay sellar ni sortear, no toca la cadena más que para leer y no graba nada. No cuenta nada del
  * sorteo: la página suma una visita anónima, como cualquiera que entra al sitio (`analytics.ts`, sin la dirección
@@ -196,7 +198,7 @@ async function compartirElSorteo(
   volverA: HTMLElement,
   corto: string | null,
 ): Promise<void> {
-  // El corto con el que entró este celular, si lo conoce: así el mensaje es corto y la foto lleva su QR con cualquier lista.
+  // El corto con el que entró este celular, si no puede cambiar: así el mensaje es corto y la foto lleva su QR con cualquier lista.
   const enlace = corto ?? (await enlaceDelComprobante(datos, d));
   // Los nombres como los manda la sala: la línea sellada sin su marca cuando la lista se lee por persona, y el
   // nombre del equipo cuando la lista es de equipos con etiqueta (`etiquetaDe`).
@@ -227,8 +229,8 @@ async function compartirElSorteo(
       ref: refDe({ net: datos.net, contract: datos.k, id: datos.i }),
     },
     getLang(),
-    // Nada sale de este celular hacia el servicio de enlaces cortos: comparte el corto con el que entró (`c.ts`), si lo
-    // conoce, y si no el enlace completo.
+    // Nada sale de este celular hacia el servicio de enlaces cortos: comparte el corto con el que entró (`c.ts`), si es de
+    // los que no cambian, y si no el enlace completo.
     { corto: false },
   );
   // Al cerrarse el diálogo, el foco vuelve al botón que lo abrió. El navegador ya lo hace con un diálogo modal, pero si

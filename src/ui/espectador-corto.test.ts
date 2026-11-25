@@ -6,8 +6,8 @@ import { cortoDelEnlace } from "./espectador-enlace";
 /**
  * El corto con el que entró un celular a la vista del espectador (`cortoDelEnlace`), sin mockear el servicio de
  * enlaces: la cadena real es `c.ts` (`abrir`), lo que este equipo recuerda en `localStorage` y la dirección de la vista.
- * Sale siempre de lo que este equipo recordó al abrir el corto con esos mismos datos. La referencia del fragmento solo
- * tiene que coincidir: un fragmento armado a mano no lleva a compartir el corto de otro sorteo. Nunca va a la red ni escribe nada.
+ * Sale de lo que este equipo recordó al abrir el corto con esos mismos datos, y solo si ese corto no puede cambiar: el
+ * que trae la referencia en el fragmento lo puede reescribir quien organiza, y no se comparte. Nunca va a la red ni escribe nada.
  */
 
 const ORIGEN = "https://tinkazo.app";
@@ -53,11 +53,26 @@ describe("el corto con el que entró este celular", () => {
     expect(cortoDelEnlace(`#espectador=${DATOS}`, ORIGEN)).toBe(`${ORIGEN}/c/${ID}#${SECRETO}`);
   });
 
-  it("con la referencia en el fragmento, sale de ella si es el mismo corto que este equipo abrió para esos datos", async () => {
+  it("con la referencia en el fragmento el corto puede cambiar: no se comparte, aunque este equipo lo haya abierto", async () => {
+    const f = await servicioConContenido(`/#espectador=${DATOS}`, true);
+    const r = await abrir(ID, SECRETO, { fetch: f, origen: ORIGEN });
+    expect(r).toMatchObject({ cambia: true });
+    olvidarMemoria();
+    expect(cortoDelEnlace(`#espectador=${DATOS}.${ID}.${SECRETO}.3`, ORIGEN)).toBeNull();
+  });
+
+  it("la referencia sola basta para no compartirlo, aunque este equipo recuerde un corto fijo para esos datos", async () => {
     const f = await servicioConContenido(`/#espectador=${DATOS}`);
     await abrir(ID, SECRETO, { fetch: f, origen: ORIGEN });
     olvidarMemoria();
-    expect(cortoDelEnlace(`#espectador=${DATOS}.${ID}.${SECRETO}.3`, ORIGEN)).toBe(`${ORIGEN}/c/${ID}#${SECRETO}`);
+    expect(cortoDelEnlace(`#espectador=${DATOS}.${ID}.${SECRETO}.3`, ORIGEN)).toBeNull();
+  });
+
+  it("un corto que puede cambiar no queda recordado: quien abre después el enlace largo con los mismos datos no lo comparte", async () => {
+    const f = await servicioConContenido(`/#espectador=${DATOS}`, true);
+    await abrir(ID, SECRETO, { fetch: f, origen: ORIGEN });
+    olvidarMemoria();
+    expect(cortoDelEnlace(`#espectador=${DATOS}`, ORIGEN)).toBeNull();
   });
 
   it("un fragmento armado a mano con una referencia que este equipo nunca abrió no da corto: se comparte el largo", () => {
