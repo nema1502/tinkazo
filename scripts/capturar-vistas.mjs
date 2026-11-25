@@ -108,7 +108,7 @@ import { mkdirSync, readFileSync, appendFileSync, writeFileSync } from "node:fs"
 import { join, resolve } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { clicHasta, conTope, correrConPlazo, cortarFueraDelOrigen, crearComprobadorDeRutas, desplazar, describirGraficos, estadoDeLaPagina, evidenciaDelFallo, prepararFoto, problemaDeTemaEIdioma, problemaDelDocumento, puntoDelClicEn, recorrerVistas, vigilarDocumentos } from "./lib/vistas-pagina.mjs";
-import { TECLAS, TOPES, direccionDeVista, generarNombres, leerEntorno, leerVistas, plazoDeLaVista, problemaDeBase, problemaDeRama } from "./lib/vistas.mjs";
+import { TECLAS, TOPES, direccionDeVista, generarNombres, leerEntorno, leerVistas, plazoDeLaVista, problemaDeBase, problemaDeOrigen, problemaDeRama } from "./lib/vistas.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -141,6 +141,8 @@ if (errores.length) salirConErrores("la lista de vistas no vale", errores);
 if (args.includes("--validar")) {
   const rama = problemaDeRama(process.env.RAMA);
   if (rama) salirConErrores("la rama no vale", [rama]);
+  const origen = problemaDeOrigen({ ref: process.env.GITHUB_REF, ramaPorDefecto: process.env.RAMA_PRINCIPAL, rama: process.env.RAMA });
+  if (origen) salirConErrores("la rama no vale", [origen]);
   const entorno = leerEntorno(process.env.ENTORNO);
   if (entorno.errores.length) salirConErrores("las variables de construcción no valen", entorno.errores);
   const destino = opt("--entorno-en", "");

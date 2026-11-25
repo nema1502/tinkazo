@@ -115,6 +115,13 @@ describe("la documentación del modo de capturas", () => {
     expect(decision).toMatch(/caché de pnpm/);
   });
 
+  it("la decisión cuenta por qué desde la rama principal no se construye otra rama y qué referencias no se aceptan", () => {
+    expect(decision).toMatch(/lanzada desde la rama principal solo construye la principal/);
+    expect(decision).toMatch(/token de la corrida/);
+    expect(decision).toMatch(/pull\/N/);
+    expect(decision).not.toMatch(/donde lo leería después la revisión de esa rama/);
+  });
+
   /** Los renglones de comando de un comentario: sin la marca de comentario y con la barra de continuación. */
   function comandosDeComentario(texto, desde, marca) {
     const renglones = texto.split("\n");

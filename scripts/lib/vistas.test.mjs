@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DEFECTOS, TOPES, direccionDeVista, plazoDeLaVista, generarNombres, leerEntorno, leerVistas, problemaDeBase, problemaDeRama, problemaDeRuta, validarVistas } from "./vistas.mjs";
+import { DEFECTOS, TOPES, direccionDeVista, plazoDeLaVista, generarNombres, leerEntorno, leerVistas, problemaDeBase, problemaDeOrigen, problemaDeRama, problemaDeRuta, validarVistas } from "./vistas.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const guion = join(aqui, "..", "capturar-vistas.mjs");
@@ -280,6 +280,48 @@ describe("la rama", () => {
   it("rechaza lo que no es un nombre de rama", () => {
     for (const r of ["-f", "a b", "a;b", "$(id)", "a..b", "a`b", "x".repeat(201), "a\nb"]) expect(problemaDeRama(r), r).not.toBe("");
   });
+  it("rechaza una referencia completa o de un pedido: puede ser código de una bifurcación", () => {
+    for (const r of ["refs/pull/12/head", "refs/pull/12/merge", "refs/heads/main", "refs/tags/v1", "pull/12/head", "pull/7/merge", "Refs/pull/1/head"]) expect(problemaDeRama(r), r).toMatch(/pedido|referencia|refs/i);
+    // Un nombre que solo se parece sigue valiendo.
+    for (const r of ["pull-arreglo", "usuario/pull/arreglo", "pulls", "refsa"]) expect(problemaDeRama(r), r).toBe("");
+  });
+});
+
+describe("el origen de la corrida: una rama pedida no corre con la caché de la principal", () => {
+  const principal = { ref: "refs/heads/main", ramaPorDefecto: "main" };
+
+  it("desde la rama principal, pedir otra rama se rechaza y el motivo dice qué hacer", () => {
+    const m = problemaDeOrigen({ ...principal, rama: "otra-rama" });
+    expect(m).toMatch(/principal/);
+    expect(m).toMatch(/caché/);
+    expect(m).toMatch(/--ref/);
+  });
+
+  it("desde la rama principal vale no pedir rama (se construye la principal) o pedir la principal misma", () => {
+    expect(problemaDeOrigen({ ...principal, rama: "" })).toBe("");
+    expect(problemaDeOrigen({ ...principal, rama: undefined })).toBe("");
+    expect(problemaDeOrigen({ ...principal, rama: "main" })).toBe("");
+  });
+
+  it("un commit o una etiqueta también son una rama pedida distinta", () => {
+    expect(problemaDeOrigen({ ...principal, rama: "cb7e69ef7affe04b394027441dfdc0b38da5a7bc" })).not.toBe("");
+    expect(problemaDeOrigen({ ...principal, rama: "v1.2.3" })).not.toBe("");
+  });
+
+  it("desde otra rama vale pedir cualquiera: la caché que quede es la de esa rama, no la de la principal", () => {
+    expect(problemaDeOrigen({ ref: "refs/heads/capturas-en-github", ramaPorDefecto: "main", rama: "main" })).toBe("");
+    expect(problemaDeOrigen({ ref: "refs/heads/capturas-en-github", ramaPorDefecto: "main", rama: "otra" })).toBe("");
+  });
+
+  it("si la corrida dice desde dónde sale pero no cuál es la principal, no se arriesga", () => {
+    expect(problemaDeOrigen({ ref: "refs/heads/main", ramaPorDefecto: "", rama: "otra" })).not.toBe("");
+    expect(problemaDeOrigen({ ref: "refs/heads/x", ramaPorDefecto: undefined, rama: "otra" })).not.toBe("");
+  });
+
+  it("fuera de GitHub (sin ref) no hay nada que cuidar", () => {
+    expect(problemaDeOrigen({ ref: "", ramaPorDefecto: "", rama: "otra" })).toBe("");
+    expect(problemaDeOrigen({ rama: "otra" })).toBe("");
+  });
 });
 
 describe("el guion de línea de comandos, sin abrir el navegador", () => {
@@ -317,6 +359,24 @@ describe("el guion de línea de comandos, sin abrir el navegador", () => {
     expect(e.status).toBe(2);
     expect(e.stderr).toContain("las variables de construcción no valen");
     const r = correr({ VISTAS_JSON: buena, RAMA: "a;b" }, "--validar");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("la rama no vale");
+  });
+
+  it("la corrida lanzada desde la rama principal con otra rama pedida se corta antes de construir", () => {
+    const buena = JSON.stringify([vista()]);
+    const r = correr({ VISTAS_JSON: buena, RAMA: "otra", GITHUB_REF: "refs/heads/main", RAMA_PRINCIPAL: "main" }, "--validar");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("la rama no vale");
+    expect(r.stderr).toMatch(/principal/);
+    const ok = correr({ VISTAS_JSON: buena, RAMA: "otra", GITHUB_REF: "refs/heads/capturas", RAMA_PRINCIPAL: "main" }, "--validar");
+    expect(ok.status).toBe(0);
+    const sinRama = correr({ VISTAS_JSON: buena, GITHUB_REF: "refs/heads/main", RAMA_PRINCIPAL: "main" }, "--validar");
+    expect(sinRama.status).toBe(0);
+  });
+
+  it("una referencia de pedido se corta en la validación", () => {
+    const r = correr({ VISTAS_JSON: JSON.stringify([vista()]), RAMA: "refs/pull/9/head" }, "--validar");
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("la rama no vale");
   });

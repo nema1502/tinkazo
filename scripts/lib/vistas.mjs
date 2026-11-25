@@ -306,7 +306,27 @@ export function problemaDeRama(rama) {
   if (!r) return "";
   if (r.length > TOPES.largoRama) return `la rama no puede pasar de ${TOPES.largoRama} caracteres`;
   if (!/^[A-Za-z0-9._/-]+$/.test(r) || r.startsWith("-") || r.includes("..")) return "la rama solo puede llevar letras, números y los signos _ . / - (sin empezar con guion ni llevar dos puntos seguidos)";
+  // Una referencia completa o la de un pedido (pull/N/head) puede ser código de una bifurcación: nunca se construye.
+  if (/^refs\//i.test(r) || /^pull\/\d+(\/|$)/i.test(r)) return "la rama no puede ser una referencia completa (refs/...) ni la de un pedido (pull/N/...): dá el nombre de una rama del repositorio, una etiqueta o un commit";
   return "";
+}
+
+/**
+ * Desde dónde se lanzó la corrida y qué rama se pide. El trabajo construye código de la rama pedida con el
+ * token de la corrida, y lo que ese código guarde en la caché de Actions queda en el ámbito de la rama desde la
+ * que se lanzó: si es la principal, lo lee después la revisión de la principal. Por eso, lanzada desde la rama
+ * principal, solo se construye ella misma (sin `rama`, o con su nombre). Devuelve el motivo si no.
+ * Sin `ref` (fuera de GitHub) no hay nada que cuidar.
+ */
+export function problemaDeOrigen({ ref, ramaPorDefecto, rama } = {}) {
+  const pedida = String(rama ?? "");
+  const desde = String(ref ?? "");
+  if (!desde || !pedida) return "";
+  const principal = String(ramaPorDefecto ?? "");
+  if (!principal) return "la corrida no dice cuál es la rama principal del repositorio: no se construye una rama pedida sin saber si se lanzó desde ella";
+  if (desde !== `refs/heads/${principal}`) return "";
+  if (pedida === principal) return "";
+  return `esta corrida se lanzó desde la rama principal (${principal}) y pidió construir ${pedida.slice(0, 80)}: el código de otra rama podría dejar en la caché de la principal algo que después lee la revisión de la principal. Lanzala desde otra rama (gh workflow run auditores.yml --ref MI-RAMA) o dejá rama vacía`;
 }
 
 /** Un generador chico y repetible: la misma semilla da siempre los mismos números. */

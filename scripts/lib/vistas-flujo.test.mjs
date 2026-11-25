@@ -94,6 +94,29 @@ describe("el flujo de auditores a pedido: seguridad", () => {
     expect(subida).toMatch(/^\s*retention-days: 1$/m);
   });
 
+  it("la validación sabe cuál es la rama principal sin leerlo de los datos de entrada", () => {
+    const validar = pasos(trabajos().capturas).find((p) => p.includes("--validar"));
+    // GITHUB_REF ya llega a todo comando (los GITHUB_* no se pisan desde env): la validación lo lee de ahí.
+    expect(validar).not.toMatch(/^\s*GITHUB_REF:/m);
+    expect(validar).toMatch(/^\s*RAMA_PRINCIPAL: \$\{\{ github\.event\.repository\.default_branch \}\}$/m);
+    expect(validar).toMatch(/^\s*RAMA: \$\{\{ inputs\.rama \}\}$/m);
+  });
+
+  it("el sitio pedido se descarga después de validar la rama", () => {
+    const orden = pasos(trabajos().capturas);
+    const validar = orden.findIndex((p) => p.includes("--validar"));
+    const sitio = orden.findIndex((p) => p.includes("path: sitio"));
+    expect(validar).toBeGreaterThan(-1);
+    expect(sitio).toBeGreaterThan(validar);
+  });
+
+  it("la cabecera no dice que lo guardado no se lee desde la principal: dice por qué se rechaza la rama pedida", () => {
+    const cabecera = flujo.split("\nname:")[0];
+    expect(cabecera).not.toMatch(/donde lo leería después la revisión de esa rama/);
+    expect(cabecera).toMatch(/rama principal/);
+    expect(cabecera).toMatch(/caché/);
+  });
+
   it("las acciones van fijadas por SHA", () => {
     const usos = flujo.split("\n").filter((r) => /^\s*(- )?uses:/.test(r));
     expect(usos.length).toBeGreaterThan(5);
