@@ -248,26 +248,13 @@ const sinFoco = (): boolean => !document.activeElement || document.activeElement
  */
 let retomaTerminada: Promise<void> = Promise.resolve();
 /**
- * Cuánto esperan Entrar y el pedido de entrar a que termine la retoma: un segundo como mucho, como la sesión de la
- * campaña con su espera corta del restauro. La retoma sigue por detrás (si llega, abre la cuenta sola), pero quien tocó
- * Entrar sigue con su toque vivo: con una espera larga el navegador deja de ver el gesto y bloquea la ventana de Google.
+ * Entrar y el pedido de entrar esperan la primera mirada de la retoma, como en la rama principal: la retoma suelta esta
+ * promesa a los 8 segundos (o con el fusible, a los 12) y sigue por detrás con paciencia. Mientras la sesión guardada
+ * todavía puede volver no se abre una ventana de Google nueva: quien tocó Entrar con una sesión válida y lenta entra solo,
+ * sin elegir otra cuenta ni gastar un ingreso del tope por minuto que comparte todo el wifi del salón.
  */
-export const ESPERA_DE_ENTRAR_MS = 1_000;
-
-/** Espera a que termine la retoma, un segundo como mucho (`ESPERA_DE_ENTRAR_MS`). Sin retoma en camino, no espera. */
 async function esperarLaRetoma(): Promise<void> {
-  if (!retomando) return;
-  let reloj: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      retomaTerminada,
-      new Promise<void>((resolver) => {
-        reloj = setTimeout(resolver, ESPERA_DE_ENTRAR_MS);
-      }),
-    ]);
-  } finally {
-    clearTimeout(reloj);
-  }
+  if (retomando) await retomaTerminada;
 }
 /** Se llegó con ganas de entrar pero sin un toque (el final de la demo o del ensayo): la ventana de Google no se abre sola. */
 let pidiendoEntrar = false;
@@ -330,9 +317,9 @@ function marcarQueVaASortear(): void {
  * entrar dicen "Conectando…" (`pintarCuenta`); si el navegador la bloquea o la
  * persona la cierra, la pantalla lo dice y se puede volver a intentar.
  *
- * Si la sesión guardada todavía está volviendo, se espera a que termine, con
- * cuenta o sin ella, pero un segundo como mucho (`ESPERA_DE_ENTRAR_MS`): el toque tiene que seguir vivo para que el
- * navegador deje abrir la ventana de Google. Hasta el 26 de octubre de 2026 se mandaba a la persona a la
+ * Si la sesión guardada todavía está volviendo, se espera a que termine la primera mirada de la retoma (ocho segundos
+ * como mucho), con cuenta o sin ella: abrir Google a ciegas dejaba a quien tenía una sesión válida con una ventana de
+ * ingreso nueva. Hasta el 26 de octubre de 2026 se mandaba a la persona a la
  * herramienta a mirar "Retomando tu cuenta…" hasta ocho segundos, y si la marca
  * era vieja caía en "Para sellar, entrá con tu cuenta" sin que Google se
  * hubiera abierto nunca: "Entrar con Google a veces lleva al sorteo sin pasar por Pollar".
