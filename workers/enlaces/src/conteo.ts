@@ -195,6 +195,13 @@ export function contratoOficial(ref: Pick<Ref, "net" | "contract">, oficiales: R
 /** Lo más que puede medir un conteo, en bytes. */
 export const MAX_CUERPO = 512;
 
+/**
+ * Conteos por IP (en IPv6, por /64) y por hora. En memoria: la IP no se guarda, y si el objeto se duerme vuelven a cero.
+ * Un evento de unas 150 personas sale por una sola conexión (el wifi del salón) y cada persona cuenta varios pasos: con
+ * 1.000 por hora el final del evento se perdía en silencio. El tope por día en total sigue en `index.ts`.
+ */
+export const CONTEOS_POR_IP_POR_HORA = 5_000;
+
 const ES_CONTRATO = /^C[A-Z2-7]{55}$/;
 const ES_NUMERO = /^[1-9][0-9]{0,19}$/;
 const U64_MAX = 18_446_744_073_709_551_615n;

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import deployments from "../../../src/stellar/deployments.json";
 import { CONTRACT_ERRORS } from "../../../src/stellar/errores";
 import {
+  CONTEOS_POR_IP_POR_HORA,
   ERRORES,
   EVENTOS,
   type Evento,
@@ -150,6 +151,18 @@ describe("la lista cerrada del contador", () => {
       // El contrato de testnet no vale como referencia de mainnet.
       expect(conteo.validarRef({ ...REF, net: "mainnet" })).toBeNull();
     });
+  });
+
+  it("el tope de conteos por conexión alcanza para un evento entero que sale por una sola dirección", () => {
+    // 150 personas desde el wifi de un salón comparten una sola dirección: con 1.000 por hora el final del evento se
+    // perdía en silencio. El Worker usa este mismo número, sin copiarlo.
+    expect(CONTEOS_POR_IP_POR_HORA).toBe(5_000);
+    const personas = 150;
+    const porPersona = 20;
+    expect(CONTEOS_POR_IP_POR_HORA).toBeGreaterThanOrEqual(personas * porPersona);
+    const index = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    expect(index).toMatch(/dentroDelCupo\(this\.porIp, ip, CONTEOS_POR_IP_POR_HORA, ahora\)/);
+    expect(index).not.toMatch(/const CONTEOS_POR_IP_POR_HORA\s*=/);
   });
 
   it("el tope por dirección agrupa IPv6 por /64", () => {
