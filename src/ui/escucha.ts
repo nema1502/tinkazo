@@ -15,7 +15,7 @@ import {
   type IdentidadDelJuego,
 } from "../music";
 import { reanudarSiHaceFalta } from "../sound";
-import { idiomaDeLaEscucha, nombreDeJuego, texto, type IdiomaEscucha } from "./escucha-textos";
+import { idiomaDeLaEscucha, nombreDeEtiqueta, nombreDeJuego, texto, type IdiomaEscucha } from "./escucha-textos";
 
 /**
  * La página de escucha: las candidatas de música por juego, armadas con el secuenciador de
@@ -113,6 +113,8 @@ export async function renderizarFase(fase: FaseDeEscucha, id: IdentidadDelJuego)
       nivel: (t: number): number => nivelDelShow(t + desde),
       // Los últimos tres segundos del ganador son solo el bombo, como en el show (`musicFinal`).
       soloBomboDesde: HORA_DEL_SOLO_BOMBO >= desde ? HORA_DEL_SOLO_BOMBO - desde : undefined,
+      // En el show en vivo la música calla en el golpe: lo que sigue es el remate y el festejo, aparte.
+      hastaGolpe: SEGUNDO_DEL_GOLPE - desde,
     });
     if (fase !== "espera" && fase !== "tension") rematDeHoyEn(armarBanda(ctx, ctx.destination, SEMILLA_DE_LA_ESCUCHA, 1), SEGUNDO_DEL_GOLPE - desde);
     return await ctx.startRendering();
@@ -143,24 +145,90 @@ export function prepararContextoDeEscucha(): AudioContext | null {
   }
 }
 
+/** Corta la pieza que suena y suelta su nodo. */
+export function pararSonido(): void {
+  const src = suenaAhora;
+  suenaAhora = null;
+  if (!src) return;
+  src.onended = null;
+  try {
+    src.stop();
+  } catch {
+    /* ya había terminado */
+  }
+  try {
+    src.disconnect();
+  } catch {
+    /* ya estaba suelto */
+  }
+}
+
 /** Hace sonar un buffer ya renderizado, parando el anterior: una pieza a la vez, como en el parlante del stand. */
 export function hacerSonar(buffer: AudioBuffer): boolean {
   try {
     const ctx = prepararContextoDeEscucha();
     if (!ctx) return false;
-    if (suenaAhora) {
-      suenaAhora.stop();
-      suenaAhora = null;
-    }
+    pararSonido();
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.connect(ctx.destination);
+    // Al terminar solo, el nodo se suelta y deja de contar como la pieza que suena.
+    src.onended = (): void => {
+      if (suenaAhora === src) suenaAhora = null;
+      try {
+        src.disconnect();
+      } catch {
+        /* ya estaba suelto */
+      }
+    };
     src.start();
     suenaAhora = src;
     return true;
   } catch {
     return false;
   }
+}
+
+/** El número del último pedido de pieza: una pieza que termina de armarse después de otro toque ya no suena. */
+let ultimaPeticion = 0;
+
+/** Cómo anda el pedido: armando la pieza, o nada pendiente (suena, falló o se canceló). */
+export type EstadoDelPedido = "preparando" | "listo";
+
+interface DependenciasDelPedido {
+  render: (fase: FaseDeEscucha, id: IdentidadDelJuego) => Promise<AudioBuffer | null>;
+  sonar: (buffer: AudioBuffer) => boolean;
+}
+
+/**
+ * Pide una pieza: la arma y, solo si sigue siendo el último pedido, la hace sonar. Una pieza larga (el show entero
+ * tarda en armarse, sobre todo en un celular) no le gana a otra que se tocó después: manda el último toque, no el
+ * último render en terminar. `alEstado` avisa cuando empieza y cuando termina el armado.
+ */
+export async function pedirPieza(
+  fase: FaseDeEscucha,
+  id: IdentidadDelJuego,
+  alEstado: (e: EstadoDelPedido) => void = () => undefined,
+  dep: DependenciasDelPedido = { render: renderizarFase, sonar: hacerSonar },
+): Promise<void> {
+  const mia = ++ultimaPeticion;
+  alEstado("preparando");
+  let buffer: AudioBuffer | null = null;
+  try {
+    buffer = await dep.render(fase, id);
+  } catch {
+    /* si no se pudo armar, no suena y el aviso de armando se va igual */
+  }
+  if (mia !== ultimaPeticion) return;
+  alEstado("listo");
+  if (buffer) dep.sonar(buffer);
+}
+
+/** Corta lo que suena y cancela lo que todavía se está armando. */
+export function pararPieza(alEstado: (e: EstadoDelPedido) => void = () => undefined): void {
+  ultimaPeticion++;
+  pararSonido();
+  alEstado("listo");
 }
 
 /* ---------------------------------------------------------------- la página */
@@ -178,6 +246,8 @@ export interface OpcionesEscucha {
   votarMenos: (juego: string) => Votos;
   /** Renderiza y hace sonar una pieza (la página real); en pruebas siembra un aviso al llamar. */
   reproducir: (fase: FaseDeEscucha, juego: string) => void;
+  /** Corta lo que suena y lo que se está armando. */
+  parar?: () => void;
 }
 
 /** Arma la página entera en el documento. Es lo único que hace `escucha.ts` al cargar. */
@@ -194,7 +264,11 @@ export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
   }
 
   const encabezado = doc.createElement("header");
-  encabezado.innerHTML = `<h1>${t("titulo")}</h1><p>${t("subtitulo")}</p><p class="nota">${t("notaSemilla")}</p><p class="nota">${t("etiquetaTexto")}</p><p class="aviso-sin-audio">${t("sinAudio")}</p>`;
+  const w = (doc.defaultView ?? window) as unknown as { AudioContext?: unknown; webkitAudioContext?: unknown; OfflineAudioContext?: unknown };
+  // El aviso sale solo cuando este navegador de verdad no puede tocar la pieza: sin contexto de audio o sin armarla.
+  const hayAudio = !!(w.AudioContext || w.webkitAudioContext) && !!w.OfflineAudioContext;
+  const otro: IdiomaEscucha = o.lang === "en" ? "es" : "en";
+  encabezado.innerHTML = `<h1>${t("titulo")}</h1><p class="nota"><a class="idioma" href="?escucha=1&amp;lang=${otro}" lang="${otro}">${t("otroIdioma")}</a></p><p>${t("subtitulo")}</p><p class="nota">${t("notaSemilla")}</p><p class="nota">${t("etiquetaTexto")}</p>${hayAudio ? "" : `<p class="aviso-sin-audio">${t("sinAudio")}</p>`}`;
   raiz.append(encabezado);
   // El adelgazado de capas nace apagado: desde acá se abre un show de prueba con él prendido para escucharlo.
   const prueba = doc.createElement("p");
@@ -205,6 +279,18 @@ export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
   enlace.textContent = t("probarAdelgazado");
   prueba.append(enlace);
   encabezado.append(prueba);
+  // Lo que pasa con la pieza (armándose) y cómo cortarla: el show entero tarda en armarse y no hay otra señal.
+  const estado = doc.createElement("p");
+  estado.className = "estado";
+  estado.id = "estado-escucha";
+  estado.setAttribute("role", "status");
+  estado.setAttribute("aria-live", "polite");
+  const parar = doc.createElement("button");
+  parar.type = "button";
+  parar.className = "parar";
+  parar.textContent = `■ ${t("parar")}`;
+  parar.addEventListener("click", () => o.parar?.());
+  encabezado.append(parar, estado);
 
   let ponerTitulo = true;
   for (const id of Object.values(IDENTIDADES)) {
@@ -233,7 +319,7 @@ export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
 
     const etiquetas = doc.createElement("p");
     etiquetas.className = "etiquetas";
-    etiquetas.innerHTML = `${t("ritmos")}: ${id.ritmos.map((r) => `<span class="chip">${r}</span>`).join(" ")}. ${t("instrumentos")}: ${id.instrumentos.map((d) => `<span class="chip">${d}</span>`).join(" ")}`;
+    etiquetas.innerHTML = `${t("ritmos")}: ${id.ritmos.map((r) => `<span class="chip">${nombreDeEtiqueta(r, o.lang)}</span>`).join(" ")}. ${t("instrumentos")}: ${id.instrumentos.map((d) => `<span class="chip">${nombreDeEtiqueta(d, o.lang)}</span>`).join(" ")}`;
     tarjeta.append(etiquetas);
 
     const capas = doc.createElement("div");
@@ -284,21 +370,31 @@ export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
 /** Lo que la página hace al cargar: medir la bandera, el idioma, los votos, y armar. */
 export function montarEscucha(doc: Document): void {
   const lang = idiomaDeLaEscucha();
+  const prendida = escuchaPrendida();
+  const estado = (e: EstadoDelPedido): void => {
+    const p = doc.getElementById("estado-escucha");
+    if (p) p.textContent = e === "preparando" ? texto(lang, "preparando") : "";
+  };
   armarEscucha(doc, {
     lang,
-    prendida: escuchaPrendida(),
+    prendida,
     votos: votosDe(),
     reproducir: (fase, juego) => {
       const id = IDENTIDADES[juego];
       if (!id) return;
       // El contexto nace acá, dentro del toque: después del render ya no hay gesto que lo deje sonar.
       prepararContextoDeEscucha();
-      void renderizarFase(fase, id).then((buffer) => {
-        if (buffer) hacerSonar(buffer);
-      });
+      void pedirPieza(fase, id, estado);
     },
+    parar: () => pararPieza(estado),
     votarMas: (juego) => votar(juego, 1),
     votarMenos: (juego) => votar(juego, -1),
+  });
+  if (!prendida || typeof window === "undefined") return;
+  // Al irse de la página la pieza se corta. Al volver a la vista, el contexto que el teléfono cortó se reanuda.
+  window.addEventListener("pagehide", () => pararPieza(estado));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && contextoDeEscucha) reanudarSiHaceFalta(contextoDeEscucha);
   });
 }
 

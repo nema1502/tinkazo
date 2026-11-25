@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { IDIOMAS_ESCUCHA, NOMBRES_ESCUCHA, TEXTOS_ESCUCHA, idiomaDeLaEscucha, nombreDeJuego, texto, type ClaveEscucha, type IdiomaEscucha } from "./escucha-textos";
+import { ETIQUETAS_ESCUCHA, IDIOMAS_ESCUCHA, NOMBRES_ESCUCHA, nombreDeEtiqueta, TEXTOS_ESCUCHA, idiomaDeLaEscucha, nombreDeJuego, texto, type ClaveEscucha, type IdiomaEscucha } from "./escucha-textos";
 import { IDENTIDADES } from "../music";
 
 /**
@@ -60,6 +60,29 @@ describe("el diccionario de la página de escucha", () => {
     }
     // Un id que no existe cae con el id, que nunca queda sin nombre.
     expect(nombreDeJuego("no-existe", "en")).toBe("no-existe");
+  });
+});
+
+describe("lo que lee la persona en la página de escucha", () => {
+  it("cada ritmo y cada instrumento de las identidades tiene su par en los dos idiomas", () => {
+    for (const id of Object.values(IDENTIDADES)) {
+      for (const etiqueta of [...id.ritmos, ...id.instrumentos]) {
+        expect(ETIQUETAS_ESCUCHA[etiqueta], etiqueta).toBeTruthy();
+        for (const lang of LANGS) expect(nombreDeEtiqueta(etiqueta, lang).length, `${etiqueta} ${lang}`).toBeGreaterThan(0);
+      }
+    }
+    expect(nombreDeEtiqueta("zampoña", "en")).toBe("panpipes");
+    expect(nombreDeEtiqueta("no-existe", "en")).toBe("no-existe");
+  });
+
+  it("ninguna cadena obliga a leer una dirección ni usa jerga de técnico, ni comillas angulares ni punto y coma", () => {
+    for (const lang of LANGS) {
+      for (const [clave, v] of Object.entries(TEXTOS_ESCUCHA[lang])) {
+        expect(v, `${lang}.${clave}`).not.toMatch(/\?\w+=/);
+        expect(v, `${lang}.${clave}`).not.toMatch(/semilla|sintetizad|seed|synthesi/i);
+        expect(v, `${lang}.${clave}`).not.toMatch(/[«»;]/);
+      }
+    }
   });
 });
 
