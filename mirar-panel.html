@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  Página de prueba para mirar el panel de la campaña con datos de mentira. No se publica ni se une a nada: vive solo en una
+  rama descartable. Aloja el panel real (src/ui/campana-sala.ts) en los mismos contenedores que la herramienta (index.html):
+  la sección de participantes, con su cabecera, y el panel delante de la fila de orígenes. El estado se elige con ?estado=.
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Mirar el panel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+<meta name="robots" content="noindex" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+</head>
+<body data-vista="app" data-tab="nuevo" data-sesion="si">
+<header>
+  <div class="stripe"></div>
+  <div class="bar">
+    <a class="wordmark" href="/" aria-label="Tinkazo"><span class="wm-text">Tinka<b>zo</b></span></a>
+    <nav class="topnav" aria-label="páginas">
+      <a href="/#sortear" class="nav-app">Sortear</a>
+      <a href="/#mis-sorteos">Mis sorteos</a>
+    </nav>
+    <div class="header-lado">
+      <nav class="langs" aria-label="idioma">
+        <button id="l-es" class="on">es</button>
+        <button id="l-en">en</button>
+      </nav>
+      <div class="auth" id="wallet-box"></div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="block app-only tab-nuevo" id="sec-participants">
+    <div class="head"><h2><span id="p1-titulo">Participantes</span></h2><span class="kicker" id="src-label"></span></div>
+    <div class="body">
+      <div class="row origenes" id="origenes" style="margin: 0 0 14px">
+        <button class="chip live" type="button" id="btn-pegar">Pegar lista</button>
+      </div>
+    </div>
+  </section>
+</main>
+<script type="module" src="/src/mirar-panel.ts"></script>
+</body>
+</html>
