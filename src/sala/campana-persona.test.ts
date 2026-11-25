@@ -223,7 +223,8 @@ describe("crear una campaña de personas", () => {
     firmarParaLaPrueba(mundo.llavePrivada, campanaDePrueba(AHORA, cambios));
 
   it("con algún interruptor apagado la sala la rechaza con un motivo fijo, y no gasta el evento", async () => {
-    for (const extra of [{}, { DIFERIDA: "0", GOOGLE_CLIENT_ID: CLIENTE }, { DIFERIDA: "1" }, { DIFERIDA: "1", GOOGLE_CLIENT_ID: "  " }, { GOOGLE_CLIENT_ID: CLIENTE }]) {
+    const apagados: Record<string, string>[] = [{}, { DIFERIDA: "0", GOOGLE_CLIENT_ID: CLIENTE }, { DIFERIDA: "1" }, { DIFERIDA: "1", GOOGLE_CLIENT_ID: "  " }, { GOOGLE_CLIENT_ID: CLIENTE }];
+    for (const extra of apagados) {
       const mundo = await montarMundo(extra);
       const r = await mundo.pedir("/v1/campana", { cuerpo: archivo(mundo, { identidad: "persona" }) });
       expect(r.status, JSON.stringify(extra)).toBe(503);
@@ -252,7 +253,8 @@ describe("crear una campaña de personas", () => {
   });
 
   it("un valor que no es persona ni cuenta no se acepta, con los interruptores como estén", async () => {
-    for (const extra of [{}, { DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE }]) {
+    const interruptores: Record<string, string>[] = [{}, { DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE }];
+    for (const extra of interruptores) {
       const mundo = await montarMundo(extra);
       for (const valor of ["otra", "", null, 1]) {
         const r = await mundo.pedir("/v1/campana", { cuerpo: archivo(mundo, { identidad: valor }) });
@@ -480,7 +482,7 @@ describe("el alta de una persona con Google", () => {
     expect(filas(mundo, cuentas)).toEqual([]);
     expect(falso.pedidos).toBe(0);
     // Y una sala que no existe contesta lo mismo que una de cuentas.
-    const nada = await mundo.pedir("/v1/sala/inexistente/campana/alta", { cuerpo: { google: await tokenDeGoogle(1), d: "A".repeat(60), llave: llaveDe(1) } });
+    const nada = await mundo.pedir("/v1/sala/AbCdEf12/campana/alta", { cuerpo: { google: await tokenDeGoogle(1), d: "A".repeat(60), llave: llaveDe(1) } });
     expect(nada.status).toBe(400);
   });
 
@@ -558,7 +560,7 @@ describe("la consulta propia con la llave sola", () => {
     const r = await yoPorLlave(mundo, cuentas, llaveDe(1));
     expect(r.status).toBe(400);
     expect(await r.json()).toEqual({ error: "forma" });
-    expect((await yoPorLlave(mundo, { id: "inexistente", token: "x" }, llaveDe(1))).status).toBe(400);
+    expect((await yoPorLlave(mundo, { id: "AbCdEf12", token: "x" }, llaveDe(1))).status).toBe(400);
   });
 
   it("con una cuenta y su llave, el camino de siempre sigue contestando", async () => {
@@ -700,7 +702,8 @@ describe("activar una campaña de personas", () => {
   });
 
   it("un valor de identidad que no existe no se activa con los interruptores como estén", async () => {
-    for (const extra of [{}, { DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE }]) {
+    const interruptores: Record<string, string>[] = [{}, { DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE }];
+    for (const extra of interruptores) {
       const m = await montarMundoDeActivar(extra);
       vi.setSystemTime(HORA_DE_LA_PRUEBA);
       m.horizon.pagos = [m.pagoCompleto("casa-andina-k7p2")];
