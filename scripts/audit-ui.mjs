@@ -922,7 +922,7 @@ async function run() {
           );
           check(
             `${etiqueta} ${tema}: sin cuenta, "Entrar para sellar" es la acción principal y su línea tranquiliza`,
-            f.ariaSellar === "true" && f.textoSellar === "Entrar para sellar" && f.principalSellar && f.lineaVisible && esLaLinea(FRASES_LINEA_SELLAR, f.lineaTexto),
+            f.ariaSellar === "true" && f.textoSellar === "Entrar para sellar" && f.principalSellar && f.lineaVisible && esLaLinea(FRASES_LINEA_SELLAR, f.lineaTexto, "es"),
             `aria-disabled ${f.ariaSellar}, "${f.textoSellar}", principal ${f.principalSellar}, línea ${f.lineaVisible ? "visible" : "oculta"}: "${f.lineaTexto}"`,
           );
           const sq = JSON.parse(await sinCuenta.eval(PROBE));

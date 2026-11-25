@@ -10,7 +10,7 @@ import { T } from "./i18n";
  */
 describe("el auditor de interfaz acompaña a la línea de Entrar para sellar", () => {
   const auditor = readFileSync(new URL("../scripts/audit-ui.mjs", import.meta.url), "utf8");
-  const ayuda = async (): Promise<{ frasesDeLaLinea: (t: string) => string[]; esLaLinea: (frases: string[], texto: unknown) => boolean }> => {
+  const ayuda = async (): Promise<{ frasesDeLaLinea: (t: string) => string[]; esLaLinea: (frases: string[], texto: unknown, idioma?: string) => boolean }> => {
     const ruta = "../scripts/lib/linea-sellar.mjs";
     return import(/* @vite-ignore */ ruta);
   };
@@ -36,18 +36,28 @@ describe("el auditor de interfaz acompaña a la línea de Entrar para sellar", (
   it("compara la frase completa: una que solo empieza igual no pasa", async () => {
     const { frasesDeLaLinea, esLaLinea } = await ayuda();
     const frases = frasesDeLaLinea(fuente);
-    expect(esLaLinea(frases, String(T.es.sellarSinCuenta))).toBe(true);
-    expect(esLaLinea(frases, String(T.en.sellarSinCuenta).replace("'", "\u2019"))).toBe(true);
+    expect(esLaLinea(frases, String(T.es.sellarSinCuenta), "es")).toBe(true);
+    expect(esLaLinea(frases, String(T.en.sellarSinCuenta).replace("'", "\u2019"), "en")).toBe(true);
     expect(esLaLinea(frases, "Tu gente no necesita crear cuenta")).toBe(false);
     expect(esLaLinea(frases, "Tu gente no necesita crear cuenta, salvo que quieras otra cosa.")).toBe(false);
     expect(esLaLinea(frases, "Your people don't need an account")).toBe(false);
     expect(esLaLinea(frases, undefined)).toBe(false);
   });
 
+  it("compara solo con la frase del idioma de la página: la del otro idioma no pasa", async () => {
+    const { frasesDeLaLinea, esLaLinea } = await ayuda();
+    const frases = frasesDeLaLinea(fuente);
+    // Una página en español que dejó la línea en inglés (la clave del idioma equivocada) tiene que fallar, y al revés.
+    expect(esLaLinea(frases, String(T.en.sellarSinCuenta), "es")).toBe(false);
+    expect(esLaLinea(frases, String(T.es.sellarSinCuenta), "en")).toBe(false);
+    // Sin decir el idioma no se acepta nada: la medida no puede quedar floja.
+    expect(esLaLinea(frases, String(T.es.sellarSinCuenta))).toBe(false);
+  });
+
   it("el auditor usa esa ayuda y no un comienzo escrito a mano", () => {
     expect(auditor).toContain('from "./lib/linea-sellar.mjs"');
     expect(auditor).not.toContain("COMIENZO_LINEA_SELLAR");
     expect(auditor).not.toContain("startsWith(c)");
-    expect(auditor).toContain("esLaLinea(FRASES_LINEA_SELLAR, f.lineaTexto)");
+    expect(auditor).toContain('esLaLinea(FRASES_LINEA_SELLAR, f.lineaTexto, "es")');
   });
 });

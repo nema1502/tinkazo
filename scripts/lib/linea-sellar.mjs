@@ -19,7 +19,12 @@ export function frasesDeLaLinea(textoDelDiccionario) {
   return frases;
 }
 
-/** ¿El texto de la página es, entero, una de las frases? El apóstrofo curvo vale como el recto. */
-export function esLaLinea(frases, texto) {
-  return typeof texto === "string" && frases.includes(texto.replace(/[’‘]/g, "'").trim());
+/**
+ * ¿El texto de la página es, entero, la frase de su idioma ("es" o "en")? El apóstrofo curvo vale como el recto. Sin un idioma
+ * conocido no acepta nada: con una de las dos frases cualquiera, una página en español con la línea en inglés pasaba por buena.
+ */
+export function esLaLinea(frases, texto, idioma) {
+  const indice = { es: 0, en: 1 }[idioma];
+  if (indice === undefined || typeof texto !== "string") return false;
+  return texto.replace(/[’‘]/g, "'").trim() === frases[indice];
 }
