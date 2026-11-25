@@ -22,6 +22,8 @@ const GANADORA = "GCCIWHCU5XZ4VAK2GAFJBBTJJXIWPWBPK56JOGEPS6N6LP7AYLILD7F3";
 /** Un premio de 10 dólares en unidades mínimas del activo. */
 const DIEZ = "100000000";
 const HASTA = 1_800_000_000_000;
+/** Un momento de la vuelta antes del plazo (ms). */
+const AHORA = 1_772_000_000_000;
 
 const deLaTabla = (contractId: string): ContratoDePremios => ({
   red: "testnet",
@@ -53,12 +55,12 @@ async function leida(fixture: { result: { latestLedger: number; entries: { key: 
 
 describe("los premios de una cuenta, en estados claros", () => {
   it("la cuenta que ganó el primer premio lo ve recibido, con su monto y sin fecha", async () => {
-    const r = premiosDeLaCuenta(await leida(rpcCC, CC, "8"), GANADORA, HASTA);
+    const r = premiosDeLaCuenta(await leida(rpcCC, CC, "8"), GANADORA, HASTA, AHORA);
     expect(r).toEqual({ ok: true, premios: [{ puesto: 0, monto: DIEZ, estado: "recibido", hastaMs: null }] });
   });
 
   it("una cuenta que no ganó: la lista queda vacía, sin inventar un estado", async () => {
-    const r = premiosDeLaCuenta(await leida(rpcCC, CC, "8"), "GDZWSRVKR5PHXSMC52J5TAJRFJTUD67XD6B6GRAEUN3A4LGFH5LMROFZ", HASTA);
+    const r = premiosDeLaCuenta(await leida(rpcCC, CC, "8"), "GDZWSRVKR5PHXSMC52J5TAJRFJTUD67XD6B6GRAEUN3A4LGFH5LMROFZ", HASTA, AHORA);
     expect(r).toEqual({ ok: true, premios: [] });
   });
 
@@ -67,7 +69,7 @@ describe("los premios de una cuenta, en estados claros", () => {
     if (!promocion.ok) throw new Error("el fixture tiene que leerse");
     for (const estado of ["Owed", "Held"] as const) {
       const conElEstado: LecturaDeLaPromocion = { ...promocion, promocion: { ...promocion.promocion, premios: promocion.promocion.premios.map((p) => ({ ...p, state: estado })) } };
-      expect(premiosDeLaCuenta(conElEstado, GANADORA, HASTA), estado).toEqual({
+      expect(premiosDeLaCuenta(conElEstado, GANADORA, HASTA, AHORA), estado).toEqual({
         ok: true,
         premios: [{ puesto: 0, monto: DIEZ, estado: "por-recibir", hastaMs: HASTA }],
       });
@@ -79,7 +81,7 @@ describe("los premios de una cuenta, en estados claros", () => {
     if (!promocion.ok) throw new Error("el fixture tiene que leerse");
     const devuelto: LecturaDeLaPromocion = { ...promocion, promocion: { ...promocion.promocion, premios: promocion.promocion.premios.map((p) => ({ ...p, state: "Returned" as const })) } };
     const ganadoraDevuelta = promocion.promocion.premios[0] as PremioDeLaPromocion;
-    expect(premiosDeLaCuenta(devuelto, ganadoraDevuelta.winner, HASTA)).toEqual({
+    expect(premiosDeLaCuenta(devuelto, ganadoraDevuelta.winner, HASTA, AHORA)).toEqual({
       ok: true,
       premios: [{ puesto: 0, monto: "50000000", estado: "volvio", hastaMs: null }],
     });
@@ -90,48 +92,81 @@ describe("los premios de una cuenta, en estados claros", () => {
     if (!promocion.ok) throw new Error("el fixture tiene que leerse");
     for (const status of ["Cancelled", "Refunded"] as const) {
       const quedaSinPagar: LecturaDeLaPromocion = { ...promocion, promocion: { ...promocion.promocion, premios: promocion.promocion.premios.map((p) => ({ ...p, state: "Held" as const })), status } };
-      expect(premiosDeLaCuenta(quedaSinPagar, GANADORA, HASTA), status).toEqual({
+      expect(premiosDeLaCuenta(quedaSinPagar, GANADORA, HASTA, AHORA), status).toEqual({
         ok: true,
         premios: [{ puesto: 0, monto: DIEZ, estado: "volvio", hastaMs: null }],
       });
       const primero = promocion.promocion.premios[0] as PremioDeLaPromocion;
       const segundo = promocion.promocion.premios[1] as PremioDeLaPromocion;
       const losDos: LecturaDeLaPromocion = { ...promocion, promocion: { ...promocion.promocion, premios: [{ ...primero, state: "Owed" as const, position: 0 }, { ...segundo, state: "Paid" as const, position: 1 }], status } };
-      expect(premiosDeLaCuenta(losDos, segundo.winner, HASTA), status).toEqual({
+      expect(premiosDeLaCuenta(losDos, segundo.winner, HASTA, AHORA), status).toEqual({
         ok: true,
         premios: [{ puesto: 1, monto: DIEZ, estado: "recibido", hastaMs: null }],
       });
     }
   });
 
+  it("pasado el plazo para cobrar el premio que esperaba no se muestra por recibir: venció, sin fecha", async () => {
+    const promocion = await leida(rpcCC, CC, "8");
+    if (!promocion.ok) throw new Error("el fixture tiene que leerse");
+    for (const estado of ["Owed", "Held"] as const) {
+      const esperando: LecturaDeLaPromocion = { ...promocion, promocion: { ...promocion.promocion, premios: promocion.promocion.premios.map((p) => ({ ...p, state: estado })) } };
+      // Justo el día del plazo ya está vencido, como lo decide la entrega.
+      expect(premiosDeLaCuenta(esperando, GANADORA, HASTA, HASTA), estado).toEqual({ ok: true, premios: [{ puesto: 0, monto: DIEZ, estado: "vencido", hastaMs: null }] });
+      expect(premiosDeLaCuenta(esperando, GANADORA, HASTA, HASTA + 1), estado).toEqual({ ok: true, premios: [{ puesto: 0, monto: DIEZ, estado: "vencido", hastaMs: null }] });
+      expect(premiosDeLaCuenta(esperando, GANADORA, HASTA, HASTA - 1), estado).toEqual({ ok: true, premios: [{ puesto: 0, monto: DIEZ, estado: "por-recibir", hastaMs: HASTA }] });
+    }
+  });
+
+  it("una promoción sin sello o un estado que no se entiende no promete nada: sin confirmar, sin fecha", async () => {
+    const promocion = await leida(rpcCC, CC, "8");
+    if (!promocion.ok) throw new Error("el fixture tiene que leerse");
+    const esperando = promocion.promocion.premios.map((p) => ({ ...p, state: "Owed" as const }));
+    const sinSello: LecturaDeLaPromocion = { ...promocion, promocion: { ...promocion.promocion, premios: esperando, status: "Funded" } };
+    expect(premiosDeLaCuenta(sinSello, GANADORA, HASTA, AHORA)).toEqual({ ok: true, premios: [{ puesto: 0, monto: DIEZ, estado: "sin-confirmar", hastaMs: null }] });
+    const raro: LecturaDeLaPromocion = { ...promocion, promocion: { ...promocion.promocion, premios: promocion.promocion.premios.map((p) => ({ ...p, state: "Otro" as unknown as "Owed" })) } };
+    expect(premiosDeLaCuenta(raro, GANADORA, HASTA, AHORA)).toEqual({ ok: true, premios: [{ puesto: 0, monto: DIEZ, estado: "sin-confirmar", hastaMs: null }] });
+  });
+
+  it("un plazo o un momento que no son un número finito no se adivinan: sin confirmar y sin fecha", async () => {
+    const promocion = await leida(rpcCC, CC, "8");
+    if (!promocion.ok) throw new Error("el fixture tiene que leerse");
+    const esperando: LecturaDeLaPromocion = { ...promocion, promocion: { ...promocion.promocion, premios: promocion.promocion.premios.map((p) => ({ ...p, state: "Owed" as const })) } };
+    for (const malo of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, undefined as unknown as number, null as unknown as number]) {
+      const esperado = { ok: true, premios: [{ puesto: 0, monto: DIEZ, estado: "sin-confirmar", hastaMs: null }] };
+      expect(premiosDeLaCuenta(esperando, GANADORA, malo, AHORA), `plazo ${String(malo)}`).toEqual(esperado);
+      expect(premiosDeLaCuenta(esperando, GANADORA, HASTA, malo), `momento ${String(malo)}`).toEqual(esperado);
+    }
+  });
+
   it("una promoción sin estado no inventa un premio: se dice que no se pudo leer", () => {
-    expect(premiosDeLaCuenta({ ok: false, error: "sin-estado" }, GANADORA, HASTA)).toEqual({ ok: false, error: "sin-estado" });
+    expect(premiosDeLaCuenta({ ok: false, error: "sin-estado" }, GANADORA, HASTA, AHORA)).toEqual({ ok: false, error: "sin-estado" });
   });
 
   it("lo demás que no pudo leerse se dice tal cual: red caída, respuesta inválida y contrato ajeno", () => {
     for (const error of ["red-caida", "respuesta-invalida", "contrato-ajeno"] as const) {
-      expect(premiosDeLaCuenta({ ok: false, error }, GANADORA, HASTA)).toEqual({ ok: false, error });
+      expect(premiosDeLaCuenta({ ok: false, error }, GANADORA, HASTA, AHORA)).toEqual({ ok: false, error });
     }
   });
 });
 
 describe("el lector de la red: la pieza cliente de get_prize", () => {
   it("lee los premios del contrato de verdad con el fetch falso: sin lanzar nunca", async () => {
-    const r = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "8", cuenta: GANADORA, cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCC).fetch, esperaMs: 0 });
+    const r = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "8", cuenta: GANADORA, cobrarHastaMs: HASTA, ahoraMs: AHORA, fetch: rpcFalso(rpcCC).fetch, esperaMs: 0 });
     expect(r).toEqual({ ok: true, premios: [{ puesto: 0, monto: DIEZ, estado: "recibido", hastaMs: null }] });
     // El premio del otro contrato, el que quedó pagado en el ensayo chico.
-    const uno = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CD3), promo: "1", cuenta: "GA647PFT46KI2BVCRGL3DJBNJXT2KCEEPSNKCTPI4JFIWLLY4BHVIQ7C", cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCD3).fetch, esperaMs: 0 });
+    const uno = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CD3), promo: "1", cuenta: "GA647PFT46KI2BVCRGL3DJBNJXT2KCEEPSNKCTPI4JFIWLLY4BHVIQ7C", cobrarHastaMs: HASTA, ahoraMs: AHORA, fetch: rpcFalso(rpcCD3).fetch, esperaMs: 0 });
     expect(uno).toEqual({ ok: true, premios: [{ puesto: 0, monto: "50000000", estado: "recibido", hastaMs: null }] });
     // El del contrato anterior, con un Config viejo: se lee igual, y una cuenta sin premio no inventa nada.
-    const otro = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CD5), promo: "1", cuenta: GANADORA, cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCD5).fetch, esperaMs: 0 });
+    const otro = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CD5), promo: "1", cuenta: GANADORA, cobrarHastaMs: HASTA, ahoraMs: AHORA, fetch: rpcFalso(rpcCD5).fetch, esperaMs: 0 });
     expect(otro).toEqual({ ok: true, premios: [] });
   });
 
   it("lo que la red no contesta no lanza y no se inventa", async () => {
-    const caida = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "8", cuenta: GANADORA, cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCC, "corte").fetch, esperaMs: 0, intentos: 1 });
+    const caida = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "8", cuenta: GANADORA, cobrarHastaMs: HASTA, ahoraMs: AHORA, fetch: rpcFalso(rpcCC, "corte").fetch, esperaMs: 0, intentos: 1 });
     expect(caida).toEqual({ ok: false, error: "red-caida" });
     // El contrato de premios no designa nada todavía (#167): la consulta de la instancia archivada es sin estado.
-    const sinPromo = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "9", cuenta: GANADORA, cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCC).fetch, esperaMs: 0 });
+    const sinPromo = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "9", cuenta: GANADORA, cobrarHastaMs: HASTA, ahoraMs: AHORA, fetch: rpcFalso(rpcCC).fetch, esperaMs: 0 });
     expect(sinPromo).toEqual({ ok: false, error: "sin-estado" });
   });
 });

@@ -41,7 +41,7 @@ describe("los textos de la pantalla del premio", () => {
   });
 
   it("hay un texto para cada estado del premio y para cada resultado de la línea", () => {
-    for (const k of ["prGanoTitulo", "prGanoMonto", "prRecibirBtn", "prEnCaminoLinea", "prListoLinea", "prListoEnlaceTx", "prVolvioLinea", "prEstadoRecibido", "prEstadoPorRecibir", "prEstadoVolvio"]) {
+    for (const k of ["prGanoTitulo", "prGanoMonto", "prRecibirBtn", "prEnCaminoLinea", "prListoLinea", "prListoEnlaceTx", "prVolvioLinea", "prEstadoRecibido", "prEstadoPorRecibir", "prEstadoVolvio", "prEstadoVencido", "prEstadoSinConfirmar"]) {
       expect(typeof ES[k], k).toBe("string");
     }
     for (const k of ["activada", "enviada", "hecho", "en-curso", "no-aprobada", "ahora-no", "no-coincide", "no-coincide-tope", "no-patrocina", "sin-xlm", "otra-red", "sin-red", "no-salio", "no-corre", "apagada", "cuenta-creandose", "proteger"]) {
