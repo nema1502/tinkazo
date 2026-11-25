@@ -96,7 +96,16 @@ Lo sellado no se pierde: el resultado depende solo de la ronda y de la lista, as
 
 ## El sorteo por el servicio, en el sitio
 
-Con `VITE_SORTEO_SERVIDOR=1` (y `VITE_ALTA=1`) el sitio le pide al servicio que mande el sorteo de una cuenta de Google o de correo en la red principal, y confirma el resultado leyendo el contrato (D-31). El orden para prenderlo es primero el servicio, después el sitio y al final los créditos por sorteo. Se apaga quitando la variable del sitio o con `SORTEO_SERVIDOR` en `"0"`: el sitio cae solo al camino de siempre y deja de preguntar diez minutos en esa pestaña. Cada vuelta al camino de siempre es una firma que aparece entre las firmas sin explicar.
+Con `VITE_SORTEO_SERVIDOR=1` (y `VITE_ALTA=1`) el sitio le pide al servicio que mande el sorteo de una cuenta de Google o de correo en la red principal, y confirma el resultado leyendo el contrato (D-31). Se apaga quitando la variable del sitio o con `SORTEO_SERVIDOR` en `"0"`: el sitio cae solo al camino de siempre y deja de preguntar diez minutos en esa pestaña.
+
+**El orden para prenderlo, por la vigilancia de firmas.** Con `SORTEO_SERVIDOR` en `"1"` el portero deja de contar como explicados los sorteos que firma una persona, porque supone que los manda el servicio. Desde ese momento, cada sorteo que una cuenta de Google firma por el camino de siempre queda entre las firmas sin explicar: una vuelta al camino de siempre (el servicio caído o en pausa, un tope, un sorteo marcado) y, sobre todo, cada pestaña que todavía tenga el sitio viejo abierto. El portero que se prende es el ya desplegado, sin cambios, y su tope de 10 firmas sin explicar en 24 horas es una constante, no una variable: pasado el tope escribe `error-firmas`, y la vigilancia diaria avisa que alguien firma por fuera del sitio, con el correo de 10, 50 y 200. Por eso el orden es otro:
+
+1. Primero el sitio, con `VITE_SORTEO_SERVIDOR=1` y el portero todavía en `"0"`. Cada pestaña pregunta una vez, el servicio contesta que está apagado y esa pestaña sigue por el camino de siempre y deja de preguntar diez minutos. Las firmas siguen explicadas.
+2. Esperar a que no queden pestañas con el sitio viejo. No hay forma de medirlo: un día entero es el margen, y mejor un momento sin sorteos en curso.
+3. Recién ahí prender `SORTEO_SERVIDOR`, al empezar el día y sin sorteos a la vista, y mirar `estado` al empezar y al terminar.
+4. Al final los créditos por sorteo.
+
+Lo esperado después de prender: unas pocas firmas sin explicar por día, las de las vueltas al camino de siempre. Si llegan a más de 10 en 24 horas y la causa es esta, no es un ataque: la vigilancia diaria falla con el aviso de siempre y nadie la silencia por código. Quien opera la compara con los sorteos que el servicio mandó (la bitácora trae `sorteo-servidor`) y con los que se hicieron ese día, y la deja fallar hasta que baje. Si sube sin explicación, se apaga el servicio con `SORTEO_SERVIDOR` en `"0"` y se mira de nuevo. Separar los dos casos en el portero queda para después: contar como explicado el sorteo que firma una cuenta del libro cuando no lo mandó la sorteadora.
 
 ## La venta de paquetes y la carga con QR: variables y rutas
 
