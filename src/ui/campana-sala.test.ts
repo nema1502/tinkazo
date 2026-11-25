@@ -893,6 +893,61 @@ describe("cerrar la lista", () => {
       expect(hora as number).toBeLessThanOrEqual(horaDeLaSala + 12 * 3_600_000);
     });
 
+    it("con la compu adelantada casi dos minutos y medio la hora nueva no pasa el máximo de la sala", async () => {
+      const m = mundo();
+      const p = nuevoPanel(m);
+      await abrirInscripcion(m, p);
+      for (let i = 0; i < 36; i++) {
+        boton(p, "15 minutos más").click();
+        await vi.waitFor(() => expect(m.fases).toHaveLength(i + 2));
+        await suelta();
+      }
+      await alta(m, 1, "Ana");
+      await alta(m, 2, "Nora");
+      await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
+      boton(p, "Cerrar la lista").click();
+      await confirmarCierre(m, p, "Cerrar con 2 personas");
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+      // La hora de la sala cae dentro de [hasta - 2 min, hasta). Con la compu 29 segundos pasada del hasta, la sala puede ir
+      // 149 segundos atrás sin que se estime ningún desfase: el máximo se mide desde el comienzo de esa ventana.
+      m.hastaDelPase = m.ahora - 29_000;
+      boton(p, "Volver a abrir la lista").click();
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+      const hora = m.fases[m.fases.length - 1]?.[1];
+      expect(typeof hora).toBe("number");
+      const salaMasAtrasada = m.hastaDelPase - 120_000;
+      expect(hora as number).toBeLessThanOrEqual(salaMasAtrasada + 12 * 3_600_000 - 4 * 60_000);
+    });
+
+    it("al retomar una lista cerrada, si el pase falla por la conexión no manda nada y deja volver a tocar", async () => {
+      const m = mundo();
+      m.sala.fase = "cerrada";
+      m.sala.cierraMs = m.ahora - 10 * 60_000;
+      guardarOrg(m.almacen, { sala: SALA, cuenta: null, fase: "cerrada" });
+      m.paginas.push([await equipoDe(m, 1, "Ana"), await equipoDe(m, 2, "Nora")]);
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+      await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
+      const fasesAntes = m.fases.length;
+      m.respuestasAlPase.push("red");
+      boton(p, "Volver a abrir la lista").click();
+      await vi.waitFor(() => expect(texto(p, "#cpo-aviso")).toBe("Sin conexión. Probá de nuevo."));
+      expect(m.fases).toHaveLength(fasesAntes);
+      expect(vistaDe(p)).toBe("cerrada");
+      boton(p, "Volver a abrir la lista").click();
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+      expect(m.fases).toHaveLength(fasesAntes + 1);
+    });
+
+    it("con el reloj ya estimado de antes y el pase caído, vuelve a abrir como siempre", async () => {
+      const m = mundo();
+      const p = await cerrada(m);
+      m.respuestasAlPase.push("red");
+      boton(p, "Volver a abrir la lista").click();
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+      expect(m.fases[m.fases.length - 1]).toEqual(["abierta", AHORA + 3 * 3_600_000 + 900_000]);
+    });
+
     it("con el cierre ya vencido, la hora cuenta desde ahora", async () => {
       const m = mundo();
       const p = await cerrada(m);

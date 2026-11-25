@@ -439,6 +439,8 @@ const TEXTO_DEL_MOTIVO: Record<MotivoDeSalida, string> = {
 const QUINCE_MIN = 15 * 60_000;
 /** Lo más lejos que la sala acepta un cierre: doce horas desde ahora. */
 const DOCE_HORAS = 12 * 3_600_000;
+/** Lo que se queda por debajo de ese máximo: cubre lo que la hora de esta compu puede ir adelantada sin que se note. */
+const MARGEN_DE_LAS_DOCE_HORAS = 4 * 60_000;
 const DESHACER_MS = 5_000;
 /** Si una quita no llegó a la sala, se vuelve a mandar sola: quitar dos veces es lo mismo que una. */
 const REINTENTO_QUITA_MS = 3_000;
@@ -617,6 +619,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let paseEnCurso = false;
   /** Cuánto adelanta (o atrasa) la hora de la sala respecto de esta compu, estimado con cada pase. */
   let desfase = 0;
+  /** Si ya llegó algún pase que permita corregir el reloj: sin eso, `desfase` en cero es solo que no se sabe. */
+  let relojEstimado = false;
   const filas = new Map<number, Fila>();
   /** Las filas que llegaron o están por descifrarse: cuenta lo que pidió la sala aunque la fila todavía no esté lista. */
   const llegados = new Set<number>();
@@ -762,6 +766,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const ahora = deps.ahora();
     const dentro = ahora >= hasta - VENTANA_DEL_PASE_MS && ahora < hasta + HOLGURA_DEL_RELOJ_MS;
     desfase = dentro ? 0 : hasta - VENTANA_DEL_PASE_MS / 2 - ahora;
+    relojEstimado = true;
   }
 
   const pasoLaHora = (): boolean => ahoraSala() >= cierraMs;
@@ -1033,6 +1038,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     paseRechazado = false;
     paseEnCurso = false;
     desfase = 0;
+    relojEstimado = false;
     ultimoEnlace = "";
     faseSala = "lista";
     retomada = false;
@@ -2383,12 +2389,20 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       trabajando = false;
       pintar();
       return p === "token" ? tomada() : void sospechaDeBorrada(s);
+    } else if (!relojEstimado) {
+      // El pase falló por la conexión y el reloj de la sala sigue sin conocerse: con el de esta compu la sala podría
+      // rechazar la hora y la pantalla diría que no vale, cuando la causa fue la conexión. No se manda nada.
+      trabajando = false;
+      mensaje = tx("cpoSinConexion");
+      return pintar();
     }
     // Siempre con una hora nueva: el máximo entre el cierre que tenía y ahora, más quince minutos, con el reloj estimado de
     // la sala. Sin hora la sala conserva la anterior y, con los relojes desfasados, puede rechazarla por vencida. Nunca
-    // más de lo que la sala acepta (doce horas desde ahora).
+    // más de lo que la sala acepta (doce horas desde ahora). Con el pase, ese máximo se mide desde lo más atrás que puede
+    // estar la sala (el comienzo de la ventana que cierra en `hasta`) y no desde esta compu, que puede ir adelantada.
     const ahora = ahoraSala();
-    const nuevo = Math.min(Math.max(cierraMs, ahora) + QUINCE_MIN, ahora + DOCE_HORAS - 60_000);
+    const enLaSala = typeof p === "object" ? Math.min(ahora, p.hasta - VENTANA_DEL_PASE_MS) : ahora;
+    const nuevo = Math.min(Math.max(cierraMs, ahora) + QUINCE_MIN, enLaSala + DOCE_HORAS - MARGEN_DE_LAS_DOCE_HORAS);
     const r = await aplicarFase(s, "abierta", nuevo, "cerrada");
     trabajando = false;
     if (!r.ok) return pintar();
@@ -2514,6 +2528,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     paseRechazado = false;
     paseEnCurso = false;
     desfase = 0;
+    relojEstimado = false;
     ultimoEnlace = "";
     faseSala = "lista";
     retomada = false;
