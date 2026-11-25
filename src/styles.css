@@ -1852,11 +1852,12 @@
   }
   /* Y de 412 a 520 px, con las campañas abiertas, la fila aprieta el relleno de sus cuatro entradas y el aire junto a Sortear: unos
      veinte píxeles que, en los celulares de 412 y 414 px, son la diferencia entre entrar con la letra del sistema al 120 % o no.
-     Cerradas las campañas la fila lleva tres entradas y queda como era. */
+     Cerradas las campañas la fila lleva tres entradas y queda como era. Los selectores son de hijos directos (>): los renglones de la
+     lista que abre Más también cuelgan de .topnav y, con un espacio, esta regla les quitaba su relleno de 16 px. */
   @media (min-width: 412px) and (max-width: 520px) {
-    html[data-campanas="1"] header .topnav a, html[data-campanas="true"] header .topnav a,
+    html[data-campanas="1"] header .topnav > a, html[data-campanas="true"] header .topnav > a,
     html[data-campanas="1"] header .topnav .mas-btn, html[data-campanas="true"] header .topnav .mas-btn { padding-inline: 5px; }
-    html[data-campanas="1"] header .topnav a.nav-app, html[data-campanas="true"] header .topnav a.nav-app { margin-right: 4px; }
+    html[data-campanas="1"] header .topnav > a.nav-app, html[data-campanas="true"] header .topnav > a.nav-app { margin-right: 4px; }
   }
   /* En la fila quedan cinco: Sortear, Mis sorteos, Juegos, Cómo funciona y Para empresas (la quinta se sumó el 25 de noviembre
      de 2026; Seguridad y Precios bajaron al pie el 8 de noviembre). Con siete, entre 1101 y 1279 px y con la cuenta abierta,
