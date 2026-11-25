@@ -141,3 +141,22 @@ describe("el enlace de escritorio dice Empresas de 1101 a 1439 px y Para empresa
     expect([...orden].sort((a, b) => a - b)).toEqual(orden);
   });
 });
+
+describe("los tres pasos de la portada, en una fila desde 761 px", () => {
+  it("desde 761 px la grilla pide 220 px por columna y 20 px de hueco: tres columnas caben en 700 px, el ancho útil de 761 px es 721", () => {
+    const base = css.match(/\.steps \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\((\d+)px, 1fr\)\); gap: 14px (\d+)px;/);
+    // Por debajo de 761 px quedan como estaban.
+    expect(base?.[1]).toBe("260");
+    expect(base?.[2]).toBe("28");
+    const bloque = css.match(/@media \(min-width: 761px\) \{ \.steps \{ grid-template-columns: repeat\(auto-fit, minmax\((\d+)px, 1fr\)\); gap: 14px (\d+)px; \} \}/);
+    expect(bloque).not.toBeNull();
+    const columna = Number(bloque?.[1]);
+    const hueco = Number(bloque?.[2]);
+    const relleno = 40;
+    const barra = 15;
+    const util761 = 761 - relleno - barra;
+    expect(3 * columna + 2 * hueco, "tres columnas").toBeLessThanOrEqual(util761);
+    // Lo que queda de la columna para el título y la línea, después del dibujo de 64 px y su hueco de 16 px.
+    expect(columna - 64 - 16).toBeGreaterThanOrEqual(140);
+  });
+});

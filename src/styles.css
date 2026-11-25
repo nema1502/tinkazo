@@ -143,6 +143,10 @@
   /* Los tres pasos van sin caja ni sombra: un dibujo chico al lado del título y la línea. Así explican sin competir con las
      puertas de arriba, que son las que llevan a una acción. */
   .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 28px; margin: 6px 0 44px; }
+  /* Desde 761 px los tres pasos van en una fila. Con 260 px por columna entre 767 y 875 px quedaban dos arriba y el tercero
+     solo abajo, con media fila vacía. El ancho útil es el de la ventana menos 40 px de relleno (y la barra de recorrer, si hay):
+     a 761 px son 721 px, y tres columnas de 220 px con dos huecos de 20 px piden 700 px. Por debajo de 761 px no cambia nada. */
+  @media (min-width: 761px) { .steps { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px 20px; } }
   .steps article { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 16px; align-items: start; padding: 8px 0; }
   .steps article:nth-child(1) .num { background: var(--magenta); }
   .steps article:nth-child(2) .num { background: var(--orange); }
