@@ -4043,15 +4043,16 @@ class PollarWallet implements SubmittingWallet {
   /**
    * El token de la sesión de Pollar, solo con la sesión verificada por Pollar (`verified: true`): una sesión que el kit
    * retomó de lo guardado y todavía no revalidó no sirve. Si no está verificada, espera: la primera mirada hasta
-   * `tope`; si cuando vence el kit dice que la sesión sigue abierta pero sin verificar, la ventana paciente
-   * (`VENTANA_TOKEN_MS`, issue 88) con espera creciente — una sesión recién creada es justo la que tarda en verificarse,
+   * `tope`; si cuando vence el kit dice que la sesión sigue abierta pero sin verificar, y quien pide no puso su propio
+   * tope, la ventana paciente (`VENTANA_TOKEN_MS`, issue 88) con espera creciente — una sesión recién creada es justo la que tarda en verificarse,
    * y entregar `null` al primer vencido tiraba al paso «Dejá tu cuenta lista» a ofrecer «Entrar de nuevo» a quien ya
    * entró. Cuando el kit dice que la sesión ya no existe, sí sale con `null` al toque: ahí conviene entrar de nuevo. No
    * borra nunca la marca de la sesión. Es lo que pide el servidor de las altas (`alta-api.ts`) para saber quién es. No
    * se guarda ni se anota: se pide cada vez, y nunca va en una dirección, en la consola ni en un mensaje de error. Sin
    * token no se le pregunta nada al servidor. No toca la firma ni lo que se aprueba: solo lee la sesión.
    */
-  tokenDeSesion(tope = TOPE_TOKEN_MS): Promise<string | null> {
+  tokenDeSesion(topeDeQuienPide?: number): Promise<string | null> {
+    const tope = topeDeQuienPide ?? TOPE_TOKEN_MS;
     const client = this.#client;
     if (!client) return Promise.resolve(null);
     const deLaSesion = (s: unknown): string | null => {
@@ -4069,8 +4070,9 @@ class PollarWallet implements SubmittingWallet {
     if (ya) return Promise.resolve(ya);
     if (typeof client.onAuthStateChange !== "function") return Promise.resolve(null);
     return new Promise<string | null>((resolve) => {
-      // El esperado total lo fija quien llamó, o la ventana paciente: el más largo de los dos.
-      const total = Math.max(tope, VENTANA_TOKEN_MS);
+      // La ventana paciente es de la espera de siempre (el paso de la cuenta). Quien pide su propio tope, como la lectura
+      // del celular o la sala de campaña, tiene exactamente el suyo: ni más corto ni estirado a la ventana.
+      const total = topeDeQuienPide === undefined ? Math.max(tope, VENTANA_TOKEN_MS) : tope;
       let gastado = 0;
       let pausa = tope;
       let listo = false;

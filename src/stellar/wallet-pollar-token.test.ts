@@ -82,6 +82,22 @@ describe("el token de la sesión", () => {
     expect(h.oyentes.sesion.size).toBe(0);
   });
 
+  it("quien pide su propio tope lo tiene: la ventana paciente es solo de la espera de siempre", async () => {
+    vi.useFakeTimers();
+    // La sesión sigue abierta pero sin verificar: con el tope de siempre la ventana sigue, con uno propio cierra a su hora.
+    const propio = pollarWallet.tokenDeSesion(2_000);
+    await vi.advanceTimersByTimeAsync(2_001);
+    await expect(propio).resolves.toBeNull();
+    expect(h.oyentes.sesion.size).toBe(0);
+    const deSiempre = pollarWallet.tokenDeSesion();
+    let listo = false;
+    void deSiempre.then(() => { listo = true; });
+    await vi.advanceTimersByTimeAsync(TOPE_TOKEN_MS + 2_001);
+    expect(listo).toBe(false);
+    await vi.advanceTimersByTimeAsync(VENTANA_TOKEN_MS);
+    await expect(deSiempre).resolves.toBeNull();
+  });
+
   it("sin sesión abierta, o con un token vacío, no hay token (la sesión muerta sale en el primer vencido)", async () => {
     vi.useFakeTimers();
     h.verificada = true;
