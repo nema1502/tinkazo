@@ -269,6 +269,45 @@ vaya a rechazar (un `sorteo_ms` que falta, un enlace de red que no es de esa red
 llave privada dentro del repositorio, ni en la copia principal cuando se corre desde una copia de trabajo anidada, ni por un
 enlace simbólico o una junction.
 
+### Campañas de personas: anotarse sin billetera
+
+Quien solo se anota en una campaña no necesita una billetera. Una campaña lo pide con `"identidad": "persona"` en su texto
+firmado. Sin el campo, o con `"cuenta"`, la campaña es la de siempre y ninguna ruta cambia. Cualquier otro valor no se firma ni
+se acepta (`400 forma`).
+
+Nacen apagadas. Hacen falta dos variables en `wrangler.toml`: `DIFERIDA` en `"1"` y un `GOOGLE_CLIENT_ID` (el identificador de
+cliente de Google de Tinkazo, que es público). Si falta una, crear una campaña de personas da `503 personas-apagadas`, activarla
+al pagar da `400 forma` con el campo `identidad`, y el alta y la consulta propia de una ya creada dan `503 personas-apagadas`.
+La sala guarda el modo en la clave `identidad` de la sala, solo en esas campañas.
+
+- **El alta** es `POST /v1/sala/<id>/campana/alta` con `{"google","d","llave","p"?}`. `google` es el token de identidad que
+  entrega el botón de Google, y la sala lo verifica sola con `identidad-google.ts`: firma contra las llaves públicas de Google,
+  emisor, audiencia igual al `GOOGLE_CLIENT_ID`, caducidad y correo verificado. No le pregunta nada al proveedor de cuentas y
+  nunca contesta `sin-billetera`. Valen los mismos topes, el mismo pase del QR, el mismo cupo, la misma fase y el mismo cierre por
+  hora que en una campaña de cuentas. Un token rechazado da `401 sesion` (y suma a los rechazos de la ficha y de la conexión),
+  Google sin contestar da `502 google` y no suma. La respuesta es `201 {"anotada":true}` o, si la misma cuenta de Google ya
+  estaba, `200 {"anotada":true,"ya":true}`: no lleva la línea de la persona ni nada que la identifique.
+- **Una entrada por persona.** La misma cuenta de Google no se anota dos veces en la misma campaña, tampoco desde otro celular:
+  la sala la reconoce por su línea, el celular nuevo pasa a ser el suyo y recibe `ya`.
+- **Lo que se sella.** En la fila de la lista va la línea de la persona (`linea-persona.ts`, ver `docs/premios.md`) en la misma
+  columna donde una campaña de cuentas guarda su cuenta. La lista sale igual que siempre: sin repetidas, ordenada como texto,
+  una línea por fila. Quitar a alguien, cerrar, sellar, sortear y el resultado andan igual, y el resultado nombra a quienes
+  ganaron por su línea. Quien organiza marca el aviso de una ganadora por su línea (`campana/avisar` con `{"cuenta":"p1:..."}`),
+  y la sala solo acepta una línea en una campaña de personas.
+- **Saber si estoy anotada.** El celular no tiene cuenta que mandar: `POST campana/yo` con `{"llave"}` sola. La sala busca la fila
+  que anotó esa llave y contesta lo mismo que con una cuenta y su llave. Quien no tiene la llave de una fila no ve nada de esa
+  fila. En una campaña de cuentas, un pedido sin `cuenta` sigue siendo `400 forma`.
+- **Lo que no se guarda.** Ni el correo, ni el identificador de Google, ni el token quedan en una tabla, en una respuesta pública
+  o en el registro: del token solo sale la línea, que viene de un HMAC con la sal de la sala. El registro lleva el motivo de un
+  rechazo (`google-rechazado`), nunca el token.
+- **El correo a quien gana no se manda** en estas campañas, y el estado público lo dice con `"correo": false`. La línea no dice a
+  quién escribir y la sala no guarda ningún dato que lo diga. Avisar por correo, y el reclamo del premio, son de otra etapa.
+- **El interruptor apagado en medio de un evento** no toca lo que ya está anotado: la sala sigue mostrando el estado, el panel de
+  quien organiza sigue cerrando, sellando y guardando el resultado. Solo dejan de andar el alta y la consulta propia.
+
+La prueba `src/sala/campana-paridad-cuenta.test.ts` compara cada ruta de una campaña de cuentas, con sus cabeceras y su cuerpo,
+contra un archivo grabado con la sala de antes de este modo. `src/sala/campana-persona.test.ts` prueba el modo nuevo.
+
 ### Activar una campaña al pagar (`POST /v1/activar`)
 
 Hasta ahora una campaña solo nacía si Tinkazo firmaba su archivo a mano con la llave de siempre. La activación al pagar deja que
