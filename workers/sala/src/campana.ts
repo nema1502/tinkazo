@@ -39,20 +39,6 @@ export const REINGRESOS_POR_PERSONA_POR_HORA = 6;
 export const MEMORIA_DE_FICHA_MS = 60_000;
 /** Cuánto vale un permiso de evento sin confirmar: pasado este tiempo se lo da por abandonado (hubo un corte). */
 export const ESPERA_RESERVA_MS = 60_000;
-/**
- * El margen sobre el cupo del evento para el tope de altas por conexión: cubre los reintentos del alta y las personas que
- * prueban antes de entrar de verdad, así el tope nunca deja afuera a quien viene a anotarse.
- */
-export const MARGEN_DE_ALTAS_CAMPANA = 100;
-/**
- * El tope de altas nuevas por conexión y por ventana: el cupo del evento más un margen (issue #168). Todo el recinto
- * puede salir por una sola dirección, así que el tope tiene que alcanzar para anotar al evento entero desde ella, y solo
- * frenar a quien manda más que eso. Hoy el cupo del evento es `CAMPANA_MAX`; si la campaña llega a nombrar un cupo
- * propio, la función queda lista para tomarlo (queda para el issue #182).
- */
-export function altasDeCampanaPorConexion(cupo: number): number {
-  return cupo + MARGEN_DE_ALTAS_CAMPANA;
-}
 /** Envíos con sesión verificada por conexión y por ventana, incluidos los de quien ya estaba. */
 export const ENVIOS_CAMPANA_POR_CONEXION = 800;
 /** Altas por minuto en la sala. Solo cuentan las sesiones verificadas. */
@@ -949,10 +935,6 @@ export function anotarPersona(
   if (!porMinuto()) {
     contarEnvio(sql, alta.grupo, ritmo.ventana, false);
     return { ok: false, motivo: "rapido" };
-  }
-  if (ritmo.altas >= altasDeCampanaPorConexion(CAMPANA_MAX)) {
-    contarEnvio(sql, alta.grupo, ritmo.ventana, false);
-    return { ok: false, motivo: "cupo-conexion", esperaS: ritmo.esperaS };
   }
   const v = siguienteVersion(sql);
   const n = sql<{ n: number }>(
