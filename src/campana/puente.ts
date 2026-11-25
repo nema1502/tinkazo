@@ -13,6 +13,8 @@ export interface FilaDeGanadora {
   nombre: string;
   avisada: boolean;
   alta: EstadoDeAltaPremio | "esperando";
+  /** El código de entrega de esta ganadora, si ya se tiene. Solo en las campañas de premio en mano, y vive en la memoria de la pestaña. */
+  codigo?: string;
 }
 
 export type PasoDelPuente =
@@ -39,7 +41,11 @@ export type PasoDelPuente =
   | { paso: "ganadoras"; n: number }
   | { paso: "boton-avisar" }
   | { paso: "mandando" | "boton-resultado" | "guardar-sorteo" }
-  | { paso: "resultado"; filas: FilaDeGanadora[]; otraBilletera: boolean };
+  /**
+   * Con `enMano` el premio se entrega en persona: no hay billetera ni pago, la línea es la de entregar y nada habla de recibir.
+   * Solo lo pone quien leyó que todas las ganadoras son líneas de persona.
+   */
+  | { paso: "resultado"; filas: FilaDeGanadora[]; otraBilletera: boolean; enMano?: true };
 
 /**
  * ¿Le falta al panel avisarle algo a los celulares? Si es así, dejar la campaña ahora los dejaría sin su sello o sin su
@@ -65,6 +71,8 @@ export interface AccionesDelPuente {
   comprobarDeNuevo?: () => void;
   mandarResultado?: () => void;
   avisarA?: (cuenta: string) => void;
+  /** Vuelve a pedir los códigos de entrega cuando no se pudieron leer. */
+  verCodigos?: () => void;
   reintentarAlta?: (cuenta: string) => void;
   cambiarDeCuenta?: () => void;
 }
@@ -129,6 +137,8 @@ export function lineaDelPaso(p: PasoDelPuente): LineaDelPaso | null {
     case "mandando":
       return null;
     case "resultado":
+      // El premio en mano se entrega en el evento: una sola línea verdadera en todos los estados, nunca la de recibir ni la de avisar a Tinkazo.
+      if (p.enMano) return sin(p.filas.length > 0 && p.filas.every((f) => f.codigo !== undefined) ? "cpoEntregaConCodigo" : "cpoEntregaEnMano");
       // Con otra billetera, o con una ganadora que el servicio dijo que no (un fallo final), hay una sola línea de apoyo: la de
       // avisarle a Tinkazo, no esa y la de los celulares.
       return sin(p.otraBilletera || p.filas.some(conFalloFinal) ? "cpoAvisaleATinkazo" : "cpoCelularesResultado");

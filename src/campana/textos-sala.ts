@@ -225,6 +225,13 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoAntesCerrada: "Quienes se anotaron antes salen con su número.",
     // Las que siguen son de las campañas de personas: van juntas al final de cada idioma.
     cpoListaRara: "La lista de la sala no se puede sortear. Avisale a Tinkazo.",
+    cpoEntregaEnMano: "Entregá cada premio en mano.",
+    cpoEntregaConCodigo: "Entregá cada premio a quien te muestre su código.",
+    cpoGanadoraN: "Ganadora {n}",
+    cpoRepetidaPersona: "Persona repetida",
+    cpoCodigoDeEntrega: "Código {codigo}",
+    cpoVerCodigos: "Ver los códigos",
+    cpoMarcadaAvisada: "Marcada como avisada.",
   },
   en: {
     cpoTitulo: "Company campaign",
@@ -445,5 +452,12 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoAntesCerrada: "People who signed up earlier show with their number.",
     // These are for people campaigns: they stay together at the end of each language.
     cpoListaRara: "The list on the server can't be drawn. Let Tinkazo know.",
+    cpoEntregaEnMano: "Hand each prize over in person.",
+    cpoEntregaConCodigo: "Hand each prize to whoever shows you their code.",
+    cpoGanadoraN: "Winner {n}",
+    cpoRepetidaPersona: "Duplicate person",
+    cpoCodigoDeEntrega: "Code {codigo}",
+    cpoVerCodigos: "Show the codes",
+    cpoMarcadaAvisada: "Marked as notified.",
   },
 };
