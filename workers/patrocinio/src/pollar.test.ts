@@ -123,22 +123,27 @@ describe("verificar", () => {
     }
   });
 
-  it("la sesión conserva el valor de la vía saneado: minúsculas, solo letras, números y . - _ :, hasta 32", async () => {
+  it("la sesión conserva el valor de la vía saneado: minúsculas, solo letras, números y . - _ :, hasta 32, con ~ si se perdió algo", async () => {
     const casos: Array<[unknown, string]> = [
       ["GOOGLE", "google"],
       [" Google ", "google"],
+      ["\tGoogle\n", "google"],
       ["EMAIL", "email"],
       ["google.com", "google.com"],
       ["google-oauth2", "google-oauth2"],
-      ["auth0|123", "auth0123"],
-      ["goo gle!!", "google"],
-      ["goo​gle", "google"],
-      ["Ana@Example.org", "anaexample.org"],
-      ["x".repeat(500), "x".repeat(32)],
+      ["auth0|123", "auth0123~"],
+      ["goo gle!!", "google~"],
+      ["goo\u200Bgle", "google~"],
+      ["google\u200B", "google~"],
+      ["google!", "google~"],
+      ["Ana@Example.org", "anaexample.org~"],
+      ["x".repeat(500), `${"x".repeat(31)}~`],
+      ["x".repeat(32), "x".repeat(32)],
+      ["x".repeat(33), `${"x".repeat(31)}~`],
       ["a1:b_c-d.e", "a1:b_c-d.e"],
       ["", "vacio"],
       ["   ", "vacio"],
-      ["!!!", "vacio"],
+      ["!!!", "~"],
       [undefined, "sin-campo"],
       [null, "sin-campo"],
       [12, "no-es-texto"],
@@ -152,13 +157,32 @@ describe("verificar", () => {
     }
   });
 
-  it("el valor saneado de la vía nunca lleva una arroba ni pasa de 32 caracteres", () => {
-    for (const x of ["ana@example.org", "@".repeat(100), `${"a".repeat(40)}@x.org`, "A B C @ D"]) {
+  it("el registro dice exactamente google si y solo si la sala decide google", async () => {
+    const entradas: unknown[] = [
+      "google", "GOOGLE", "Google", " google ", "\tGoogle\n", "gOoGlE", "\u00A0google\u00A0", "\uFEFFgoogle", "\u2028google",
+      "goo gle", "goo\u200Bgle", "google\u200B", "\u200Bgoogle", "google\u200D", "go\u00ADogle", "google!", "google.", "google:", "google_",
+      "google-", "google.com", "google-oauth2", "googlex", "xgoogle", "google google", "google\u0000", "g\u043Eogle", "googl\u0435",
+      "\u0130google", "google\u0307", "GOOGLE\u2063", "\uFF47\uFF4F\uFF4F\uFF47\uFF4C\uFF45", "google~", "~", "google~~", "email", "EMAIL", "apple.com", "auth0|123",
+      "ana@example.org", "Ana@Example.org", "a".repeat(32), "a".repeat(33), "a".repeat(5000), `google${" ".repeat(40)}x`, `${" ".repeat(40)}google`,
+      `google${"\u200B".repeat(40)}`, "", "   ", "\n", "!!!", "vacio", "sin-campo", "no-es-texto", undefined, null, 12, {}, ["google"], true,
+    ];
+    for (const authProvider of entradas) {
+      const { p } = montar(() => verificado({ authProvider }));
+      const s = await p.verificar(TOKEN);
+      if (!s.ok) throw new Error(`la sesión debía pasar: ${JSON.stringify(authProvider)}`);
+      expect(s.viaCruda === "google", JSON.stringify(authProvider)).toBe(s.via === "google");
+    }
+  });
+
+  it("el valor saneado nunca lleva una arroba, pasa de 32 caracteres ni sale como google si se perdió algo", () => {
+    for (const x of ["ana@example.org", "@".repeat(100), `${"a".repeat(40)}@x.org`, "A B C @ D", "goo gle", "google!", "google\u200B"]) {
       const v = sanearVia(x);
       expect(v, x).not.toContain("@");
       expect(v.length, x).toBeLessThanOrEqual(32);
-      expect(v, x).toMatch(/^[a-z0-9._:-]+$/);
+      expect(v, x).toMatch(/^[a-z0-9._:-]*~?$/);
+      expect(v, x).not.toBe("google");
     }
+    for (const x of ["google", "GOOGLE", " Google "]) expect(sanearVia(x), x).toBe("google");
   });
 
   it("un token con forma rara no llama a Pollar", async () => {
