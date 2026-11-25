@@ -1091,6 +1091,21 @@ describe("compartir el sorteo desde la vista en vivo", () => {
     expect(irA).toHaveBeenCalled();
   });
 
+  it("con Escape mantenida apretada, las repeticiones no sacan de la vista cuando el diálogo ya se cerró", async () => {
+    await hastaElFin();
+    capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+    await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    // El navegador cierra el diálogo con el primer Escape y las repeticiones llegan después.
+    dialogo().querySelector<HTMLButtonElement>("[data-cerrar]")?.click();
+    for (let i = 0; i < 5; i++) window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", repeat: true }));
+    expect(irA).not.toHaveBeenCalled();
+    expect(capa()).toBeTruthy();
+    // Soltada y apretada de nuevo, Escape sale como siempre.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(irA).toHaveBeenCalled();
+  });
+
   it("si el archivo del diálogo no baja, lo dice con el tono del sitio y deja tocar de nuevo", async () => {
     const real = (): Promise<typeof import("./compartir")> => import("./compartir");
     const cargar = vi.fn(real).mockRejectedValueOnce(new Error("sin red"));
