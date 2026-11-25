@@ -100,8 +100,15 @@ describe("verificar", () => {
     expect(await p.verificar(TOKEN)).toMatchObject({ ok: true, via: null });
   });
 
+  it("Google se reconoce sin importar mayúsculas ni espacios alrededor", async () => {
+    for (const authProvider of ["GOOGLE", "Google", " google ", "\tGoogle\n", "gOoGlE"]) {
+      const { p } = montar(() => verificado({ authProvider }));
+      expect(await p.verificar(TOKEN), JSON.stringify(authProvider)).toMatchObject({ ok: true, via: "google" });
+    }
+  });
+
   it("cualquier otro texto es otra vía, escrito como se escriba", async () => {
-    const otros = ["email", "apple.com", "auth0|123", "github2", "google.com", "google-oauth2", "Google", "GOOGLE", " google", "google "];
+    const otros = ["email", "EMAIL", "oidc", "github", "apple.com", "auth0|123", "github2", "google.com", "googlex", "google-oauth2", "goo gle", "goo\u200Bgle", "google\u200B", "\u200Bgoogle"];
     for (const authProvider of otros) {
       const { p } = montar(() => verificado({ authProvider }));
       expect(await p.verificar(TOKEN), authProvider).toMatchObject({ ok: true, via: "otra" });

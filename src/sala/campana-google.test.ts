@@ -91,6 +91,22 @@ describe("el alta con la vía de la sesión", () => {
     expect(e.vias).toEqual({ google: 1, sinDato: 0 });
   });
 
+  it("una sesión que dice Google en mayúsculas o con espacios alrededor entra y se cuenta como Google", async () => {
+    await montar();
+    for (const [i, via] of ["GOOGLE", "Google", " google "].entries()) {
+      expect((await altaConVia(i + 1, { authProvider: via })).estado, via).toBe(201);
+    }
+    const e = await estado();
+    expect(e.total).toBe(3);
+    expect(e.vias).toEqual({ google: 3, sinDato: 0 });
+  });
+
+  it("una sesión que dice EMAIL en mayúsculas no entra", async () => {
+    await montar();
+    expect(await altaConVia(1, { authProvider: "EMAIL" })).toEqual({ estado: 403, cuerpo: { error: "solo-google" } });
+    expect((await estado()).total).toBe(0);
+  });
+
   it("sin configurar nada, una sesión que no dice por dónde entró no se anota y da solo-google", async () => {
     await montar();
     const r = await altaConVia(1, { authProvider: undefined });
@@ -109,7 +125,7 @@ describe("el alta con la vía de la sesión", () => {
 
   it("en estricto, cualquier otro texto en la vía da solo-google, escrito como se escriba", async () => {
     await montar();
-    const otros = ["email", "wallet", "apple.com", "auth0|123", "github2", "google.com", "google-oauth2", "Google", "GOOGLE"];
+    const otros = ["email", "wallet", "apple.com", "auth0|123", "github2", "EMAIL", "oidc", "github", "google.com", "googlex", "google-oauth2", "goo gle", "goo\u200Bgle"];
     for (const [i, via] of otros.entries()) {
       const r = await altaConVia(i + 1, { authProvider: via });
       expect(r, via).toEqual({ estado: 403, cuerpo: { error: "solo-google" } });

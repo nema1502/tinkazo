@@ -186,7 +186,7 @@ este orden:
    acá, sin llamar al proveedor.
 3. Comprueba que exista la configuración del proveedor y verifica la sesión fuera del objeto persistente.
 4. Una falla del proveedor da `502 pollar`; una sesión inválida da `401 sesion` y una de otra app da `403 otra-app`.
-5. Solo entra quien el proveedor dice, exactamente, que es de Google (una lista de lo permitido): cualquier otra vía, o un
+5. Solo entra quien el proveedor dice que es de Google, escrito como lo escriba (una lista de lo permitido): cualquier otra vía, o un
    campo que no viene, da `403 solo-google`. En el modo suave, que es un interruptor de emergencia, entra además quien no dice
    por dónde entró y se cuenta aparte.
 6. Si la persona ya estaba, reconoce su nueva llave y contesta `200 {"cuenta","ya":true}` sin duplicarla. Cada persona
@@ -231,11 +231,12 @@ La configuración no secreta vive en `wrangler.toml`:
 - `RPC_MAINNET`: los RPC de la red principal, separados por comas. La sala los prueba en orden al sellar y al guardar.
 - `PASE`: `1` exige el pase del QR. `0` lo apaga únicamente como salida de emergencia durante el evento.
 - `SOLO_GOOGLE`: `estricto` (el valor del repositorio y el que vale si la variable falta o trae cualquier otra cosa) deja
-  entrar solo a quien el proveedor dice, exactamente, que es de Google. `suave` es un interruptor de emergencia: también deja
+  entrar solo a quien el proveedor dice que es de Google, escrito como lo escriba. `suave` es un interruptor de emergencia: también deja
   entrar, y cuenta aparte, a quien el proveedor no dice por dónde entró. Una vía que no es Google no entra en ningún modo.
   El nombre del campo del verify (`authProvider`) y el valor que dice Google (`google`) están en una sola constante,
-  `VIA_DE_LA_SESION` en `workers/patrocinio/src/pollar.ts`, y son una suposición hasta confirmarlos con una respuesta real.
-  Si no coinciden, en modo estricto no entra nadie.
+  `VIA_DE_LA_SESION` en `workers/patrocinio/src/pollar.ts`. Se compara sin importar mayúsculas ni espacios alrededor
+  (`google`, `GOOGLE` y `Google` valen), pero lo que escribe el verify con una cuenta de Google todavía no se midió con una
+  respuesta real. Si no coincide, en modo estricto no entra nadie.
 
 `POLLAR_SECRETO` es la misma llave secreta del portero de la red principal y no se escribe en el repositorio. Se carga desde
 esta carpeta con:
