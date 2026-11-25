@@ -160,23 +160,26 @@ function redDe(x: unknown): Red {
 
 /**
  * Dónde dice el verify por dónde entró la persona, y cómo dice que es Google. Es el único lugar donde viven las dos
- * cosas, y los dos valores son una SUPOSICIÓN: todavía falta confirmarlos con una respuesta de verdad del verify, una con
- * una cuenta de Google y otra con una de correo (se mide antes de abrir una campaña). Mientras no se confirmen, la sala de
- * las campañas rechaza a todos si el campo no viene o dice otra cosa, que es lo seguro. Para corregirlos se cambia
- * esta constante y nada más.
+ * cosas. Lo que se sabe: el campo existe, y con una cuenta de correo vale `email` en minúsculas (medido el 18 de noviembre
+ * de 2026). La lista de usuarios de la herramienta de gestión del proveedor escribe las vías en mayúsculas (`GOOGLE`,
+ * `EMAIL`), o sea que el proveedor escribe la misma vía de dos formas según por dónde se la pregunte. Lo que todavía no se
+ * sabe: qué escribe el verify con una cuenta de Google. Por eso `viaDe` compara sin importar mayúsculas ni espacios
+ * alrededor, y nada más. Mientras no se mida con una respuesta de verdad, la sala de las campañas rechaza a todos si el campo
+ * no viene o dice otra cosa, que es lo seguro. Para corregirlo se cambia esta constante y nada más.
  */
 export const VIA_DE_LA_SESION = { campo: "authProvider", google: "google" } as const;
 
 /**
  * Por dónde entró la persona. Lo usa la sala de las campañas, que solo anota cuentas de Google, con una lista de lo
- * permitido: `google` solo si el campo dice exactamente el valor de Google. Cualquier otro texto (`email`, `apple.com`,
- * `auth0|123`, `Google `) es `otra`, sin importar cómo esté escrito. `null` es que el verify no lo dice: el campo falta, no
- * es texto o viene vacío.
+ * permitido: `google` solo si el campo, sin espacios al principio ni al final y pasado a minúsculas, dice exactamente el
+ * valor de Google (`GOOGLE`, `Google` y ` google ` valen). Cualquier otro texto (`email`, `EMAIL`, `apple.com`, `google.com`,
+ * `googlex`, `goo gle`, uno con un carácter invisible adentro) es `otra`. `null` es que el verify no lo dice: el campo falta,
+ * no es texto o viene vacío.
  */
 function viaDe(contenido: Record<string, unknown>): "google" | "otra" | null {
   const x = contenido[VIA_DE_LA_SESION.campo];
   if (typeof x !== "string" || x.trim() === "") return null;
-  return x === VIA_DE_LA_SESION.google ? "google" : "otra";
+  return x.trim().toLowerCase() === VIA_DE_LA_SESION.google ? "google" : "otra";
 }
 
 /** Una G de Stellar con su suma de control, o null. */
