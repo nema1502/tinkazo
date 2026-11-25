@@ -256,12 +256,16 @@ const leerFormularioDeTexto = (archivo: string, texto: string): Formulario => {
     if (!enBody) continue;
     const campo = /^ {2}- type:\s*(\S+)\s*$/.exec(linea);
     if (campo) {
-      campos.push({ type: campo[1]!, opciones: [] });
+      campos.push({ type: campo[1]!, opciones: [], atributos: false, formas: [] });
       enOpciones = false;
       continue;
     }
     const actual = campos[campos.length - 1];
     if (!actual) continue;
+    if (/^ {4}attributes:\s*$/.test(linea)) {
+      actual.atributos = true;
+      continue;
+    }
     const id = /^ {4}id:\s*(\S+)\s*$/.exec(linea);
     if (id) {
       actual.id = id[1]!;
@@ -294,8 +298,12 @@ const leerFormularioDeTexto = (archivo: string, texto: string): Formulario => {
     if (enOpciones) {
       const opcion = /^ {8}- (.*)$/.exec(linea);
       if (opcion) {
-        const conEtiqueta = /^label:\s*(.*)$/.exec(opcion[1]!);
-        actual.opciones.push(sinComillas(conEtiqueta ? conEtiqueta[1]! : opcion[1]!));
+        const crudo = opcion[1]!.trim();
+        const conEtiqueta = /^label:\s*(.*)$/.exec(crudo);
+        actual.opciones.push(sinComillas(conEtiqueta ? conEtiqueta[1]! : crudo));
+        const entreComillas = /^(".*"|'.*')$/.test(crudo);
+        const noEsTexto = /^(true|false|null|yes|no|on|off|~|[-+]?\d[\d_.,]*)$/i.test(crudo) || /^[\w-]+:(\s|$)/.test(crudo);
+        actual.formas!.push(conEtiqueta ? "label" : !entreComillas && noEsTexto ? "otro" : "texto");
       } else if (linea.trim() !== "" && sangria(linea) <= 6) {
         enOpciones = false;
       }
@@ -325,21 +333,30 @@ const problemasDeEstructura = (f: Formulario): string[] => {
   }
   if (!f.claves["name"]) en("falta name");
   if (!f.claves["description"]) en("falta description");
-  if (!("body" in f.claves) || f.campos.length === 0) en("falta body con campos");  const ids: string[] = [];
+  if (!("body" in f.claves) || f.campos.length === 0) en("falta body con campos");
+  else if (f.campos.every((c) => c.type === "markdown")) en("no tiene ningún campo para rellenar, solo markdown");
+  const ids: string[] = [];
   f.campos.forEach((c, n) => {
     const donde = `campo ${n + 1} (${c.type})`;
     if (!TIPOS.has(c.type)) en(`${donde} tiene un tipo inválido`);
+    if (c.atributos === false) en(`${donde} no tiene el bloque attributes`);
     if (c.type === "markdown") {
       if (!c.value) en(`${donde} no tiene value`);
       return;
     }
     if (!c.id) en(`${donde} no tiene id`);
     else if (ids.includes(c.id)) en(`${donde} repite el id ${c.id}`);
-    else ids.push(c.id);    if (!c.label) en(`${donde} no tiene label`);
+    else ids.push(c.id);
+    if (c.id && !/^[A-Za-z0-9_-]+$/.test(c.id)) en(`${donde} tiene un id con caracteres no permitidos (${c.id})`);
+    if (!c.label) en(`${donde} no tiene label`);
     if (c.type === "dropdown" || c.type === "checkboxes") {
       if (c.opciones.length === 0) en(`${donde} no tiene opciones`);
       if (c.opciones.some((o) => o === "")) en(`${donde} tiene una opción vacía`);
-      if (new Set(c.opciones).size !== c.opciones.length) en(`${donde} repite una opción`);    }
+      if (new Set(c.opciones).size !== c.opciones.length) en(`${donde} repite una opción`);
+      const formas = c.formas ?? [];
+      if (c.type === "dropdown" && formas.some((x) => x !== "texto")) en(`${donde} tiene una opción que no es texto simple`);
+      if (c.type === "checkboxes" && formas.some((x) => x !== "label")) en(`${donde} tiene una opción sin label`);
+    }
   });
   return p;
 };
