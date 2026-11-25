@@ -1,6 +1,6 @@
 import { PACES, type Frozen, type Game, type Pace } from "../state";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { acortarEspectador, actualizarCorto, rutaDe } from "../enlace-corto";
+import { acortarEspectador, actualizarCorto, cortoGuardado, esCortoDe, rutaDe } from "../enlace-corto";
 import { anotarQrMostrado, anotarVersion, delSello, type EnlaceMostrado } from "./espectadores-de-la-sala";
 import { esc } from "../dom";
 import { t } from "../i18n";
@@ -112,6 +112,29 @@ const FRAGMENTO = /^#espectador=([A-Za-z0-9_-]+)(?:\.([0-9A-Za-z]{8})\.([A-Za-z0
 export function refDelEnlace(hash: string = location.hash): { id: string; clave: string; n: number } | null {
   const m = FRAGMENTO.exec(hash);
   return m?.[2] && m[3] && m[4] ? { id: m[2], clave: m[3], n: Number(m[4]) } : null;
+}
+
+/**
+ * El enlace corto con el que entró este celular, o null si no lo conoce. Sale de la referencia del fragmento, si la
+ * trae (`c.ts` la agrega cuando el servicio dice que el enlace puede cambiar) y, si no, de lo que este equipo recordó
+ * al abrir el corto (`abrir`), con el fragmento tal como llegó. Es el único camino que no depende de la referencia:
+ * el QR del panel de la pantalla, por ejemplo, entra sin ella. Solo lee: no escribe ni va a la red, y nunca devuelve
+ * un corto de otro origen.
+ */
+export function cortoDelEnlace(hash: string = location.hash, origen: string = location.origin): string | null {
+  const m = FRAGMENTO.exec(hash);
+  if (!m?.[1]) return null;
+  if (m[2] && m[3]) {
+    const c = `${origen}/c/${m[2]}#${m[3]}`;
+    return esCortoDe(c, origen) ? c : null;
+  }
+  try {
+    // Con los datos tal como están en el fragmento: ya releídos serían otros y darían otra llave.
+    const c = cortoGuardado(`${origen}/#espectador=${m[1]}`)?.corto;
+    return esCortoDe(c, origen) ? c : null;
+  } catch {
+    return null;
+  }
 }
 
 export function datosDelEnlace(hash: string = location.hash): DatosEspectador | null {

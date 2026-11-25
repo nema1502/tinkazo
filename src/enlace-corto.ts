@@ -623,3 +623,45 @@ export function tomarLogoEntrante(ruta: string): Logo | null {
     return null;
   }
 }
+
+/* ---------------------------------------- de la vista en vivo a verificar.html */
+
+const DEL_VIVO = "tinkazo.corto-del-vivo";
+
+/**
+ * Quien mira un sorteo desde su celular entró por un enlace corto (`c.ts`) y, al pasar a la página del comprobante, esa
+ * página no lo sabe: sin él, compartir desde ahí crearía un corto nuevo desde la conexión del salón, y con cientos de
+ * celulares se gastaría el tope de altas por hora. Antes de irse, la vista deja el corto en `sessionStorage`, atado a la
+ * ruta a la que va, igual que el logo (`dejarLogoEntrante`). No va a la red. Sin `sessionStorage`, no deja nada.
+ */
+export function dejarCortoDelVivo(ruta: string, corto: string): void {
+  try {
+    sessionStorage.setItem(DEL_VIVO, JSON.stringify({ r: ruta, c: corto }));
+  } catch {
+    /* sin almacenamiento, la página comparte como siempre */
+  }
+}
+
+/** Lo que tiene que ser un corto de este sitio: `/c/<id>#<clave>`. */
+const ES_RUTA_CORTA = /^\/c\/[0-9A-Za-z]{8}#[A-Za-z0-9_-]{22}$/;
+
+/** Si `corto` es `<origen>/c/<id>#<clave>`, con ese origen y ninguna otra cosa. */
+export function esCortoDe(corto: unknown, origen: string): corto is string {
+  return typeof corto === "string" && corto.startsWith(`${origen}/c/`) && ES_RUTA_CORTA.test(corto.slice(origen.length));
+}
+
+/**
+ * El corto que dejó la vista en vivo para esta ruta, si es para esta y es un corto de este mismo sitio. Se vuelve a
+ * validar: lo que hay en `sessionStorage` lo puede tocar cualquiera. Cualquier otra cosa da null.
+ */
+export function tomarCortoDelVivo(ruta: string, origen: string = location.origin): string | null {
+  try {
+    const raw = sessionStorage.getItem(DEL_VIVO);
+    if (!raw) return null;
+    const j = JSON.parse(raw) as { r?: unknown; c?: unknown };
+    if (j.r !== ruta) return null;
+    return esCortoDe(j.c, origen) ? j.c : null;
+  } catch {
+    return null;
+  }
+}
