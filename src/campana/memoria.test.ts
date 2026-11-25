@@ -6,6 +6,7 @@ import {
   claveDeMemoria,
   guardarMemoria,
   leerMemoria,
+  SIN_CUENTA,
   VIDA_MEMORIA_MS,
   type MemoriaDeCampana,
 } from "./memoria";
@@ -86,5 +87,30 @@ describe("la memoria de una campaña", () => {
     expect(leerMemoria(bloqueado, SALA, AHORA)).toBeNull();
     expect(() => guardarMemoria(bloqueado, SALA, recuerdo())).not.toThrow();
     expect(() => borrarMemoria(bloqueado, SALA)).not.toThrow();
+  });
+});
+
+describe("el recuerdo de una campaña de personas", () => {
+  it("guarda y lee la marca sin cuenta, y no escribe ninguna cuenta ni nada de la persona", () => {
+    const a = almacen();
+    guardarMemoria(a, SALA, { ...recuerdo(), cuenta: SIN_CUENTA });
+    expect(leerMemoria(a, SALA, AHORA)?.cuenta).toBe(SIN_CUENTA);
+    const crudo = a.getItem(claveDeMemoria(SALA)) ?? "";
+    expect(Object.keys(JSON.parse(crudo) as object).sort()).toEqual(["comprobante", "cuenta", "fase", "guardado", "resultado"]);
+    expect(crudo).not.toMatch(/G[A-Z2-7]{55}/u);
+  });
+
+  it("solo vale la marca exacta: otra palabra o una cuenta mal escrita no se lee", () => {
+    const a = almacen();
+    for (const cuenta of ["Persona", "personas", "", "G123", "p1:aaaaaaaaaaaaaaaaaaaaaaaaaa"]) {
+      a.setItem(claveDeMemoria(SALA), JSON.stringify({ ...recuerdo(), cuenta }));
+      expect(leerMemoria(a, SALA, AHORA), cuenta).toBeNull();
+    }
+  });
+
+  it("la memoria de siempre con su cuenta se lee como antes", () => {
+    const a = almacen();
+    guardarMemoria(a, SALA, recuerdo());
+    expect(leerMemoria(a, SALA, AHORA)?.cuenta).toBe(CUENTA);
   });
 });

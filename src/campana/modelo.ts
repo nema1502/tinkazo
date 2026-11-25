@@ -44,6 +44,11 @@ export interface Campana {
   sorteoMs: number;
   recibirHastaMs: number;
   entrada: "google" | "google-correo";
+  /**
+   * Solo en una campaña de personas (anotarse sin billetera): quien se anota entra con Google y la lista lleva una línea por
+   * persona. Falta en las campañas de siempre, que se anotan con su cuenta.
+   */
+  identidad?: "persona";
   pasos: PasoDeCampana[];
   bases: Bilingue;
   anotadas: number;
@@ -245,6 +250,8 @@ export function leerCampana(x: unknown): LecturaDeCampana {
   const horas = leerHoras(x);
   if (esFallo(horas)) return horas;
   if (!esMiembro(x.entrada, ["google", "google-correo"] as const)) return fallo("entrada");
+  // Ausente o "cuenta" es la campaña de siempre y no deja ninguna clave en el resultado.
+  if (x.identidad !== undefined && x.identidad !== "cuenta" && x.identidad !== "persona") return fallo("identidad");
   const pasos = leerPasos(x.pasos);
   if (!Array.isArray(pasos)) return pasos;
   const bases = leerBilingue(x.bases, "bases", 6000, true);
@@ -271,6 +278,7 @@ export function leerCampana(x: unknown): LecturaDeCampana {
       premios,
       ...horas,
       entrada: x.entrada,
+      ...(x.identidad === "persona" ? { identidad: "persona" as const } : {}),
       pasos,
       bases,
       anotadas: x.anotadas,

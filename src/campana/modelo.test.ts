@@ -443,3 +443,37 @@ describe("leerCampana", () => {
     expect(leerCampana(base())).toHaveProperty("ok", true);
   });
 });
+
+describe("leerCampana: la identidad de quien se anota", () => {
+  it("una campaña de siempre no trae el campo y la lectura no suma ninguna clave", () => {
+    const lectura = leerCampana(base());
+    expect(lectura.ok).toBe(true);
+    if (lectura.ok) expect("identidad" in lectura.campana).toBe(false);
+  });
+
+  it("identidad cuenta es la de siempre y tampoco deja clave", () => {
+    const lectura = leerCampana({ ...base(), identidad: "cuenta" });
+    expect(lectura.ok).toBe(true);
+    if (lectura.ok) expect("identidad" in lectura.campana).toBe(false);
+  });
+
+  it("identidad persona se lee y queda en la campaña", () => {
+    const lectura = leerCampana({ ...base(), identidad: "persona" });
+    expect(lectura.ok).toBe(true);
+    if (lectura.ok) expect(lectura.campana.identidad).toBe("persona");
+  });
+
+  it("cualquier otro valor rechaza la campaña con el campo identidad", () => {
+    for (const valor of ["Persona", "personas", "", null, 1, true, {}, []]) {
+      expect(campo({ identidad: valor }), String(valor)).toBe("identidad");
+    }
+  });
+
+  it("lo demás de la campaña se lee igual con o sin el campo", () => {
+    const sin = leerCampana(base());
+    const con = leerCampana({ ...base(), identidad: "persona" });
+    if (!sin.ok || !con.ok) throw new Error("se esperaba una lectura buena");
+    const { identidad: _identidad, ...resto } = con.campana;
+    expect(resto).toEqual(sin.campana);
+  });
+});
