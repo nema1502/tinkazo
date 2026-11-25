@@ -30,12 +30,18 @@ import type { AnchorStep } from "./anchor";
  *   aseguró que no lo manda, cuando la red cerró su envío sin dejar el sorteo hecho, o cuando pasado un tope de reloj no
  *   hay una respuesta que se pueda comprobar y la red dice que el sorteo no está. Un pedido que no contestó en su tope se
  *   vuelve a pedir una vez más (el servicio no manda dos veces el mismo sello, y devuelve el mismo número): una cola larga
- *   no es una falla. Con la red sin poder leerse no se manda nada más: se sigue mirando hasta lo que da el camino de
- *   siempre (`TOPE_DE_LA_DUDA_SIN_RED_MS`) y recién entonces termina en `sin-confirmar`.
+ *   no es una falla. Una cola más larga que la etapa y la duda no se puede esperar sin hacer esperar a la sala: se sigue por
+ *   el camino de siempre y, si el envío del servicio entra después, uno de los dos falla con `AlreadyDrawn` (cuesta una
+ *   comisión y no cambia el resultado). Lo mismo con un repetido de un envío que se cortó y quizás nunca llegó.
+ *   Con la red sin poder leerse no se manda nada más: se sigue mirando hasta lo que da el camino de siempre
+ *   (`TOPE_DE_LA_DUDA_SIN_RED_MS`) y recién entonces termina en `sin-confirmar`.
  * - **Ninguna espera sin tope.** Todo se mide por el reloj de pared, no por vueltas: una pestaña en segundo plano estira
  *   los temporizadores, y al volver se revisa la hora y se abandona lo que ya pasó de su tope. La etapa de pedir dura como
  *   mucho 20 segundos y la duda, con la red leyéndose, unos 8 más: eso es lo que la sala puede esperar de más antes de que
- *   arranque el camino de siempre, al que `grabar-sorteo.ts` le descuenta lo gastado con un mínimo.
+ *   arranque el camino de siempre, al que `grabar-sorteo.ts` le descuenta lo gastado con un mínimo. Un envío que el servicio
+ *   mandó y la red tarda en cerrar se espera como mucho `TOPE_DE_LA_SALA_MS` desde la entrada (lo que vive hoy la
+ *   transacción de una cuenta de Google): pasado eso termina en `sin-confirmar`, sin marca, y el botón Guardar vuelve a
+ *   preguntar. El servicio devuelve el mismo número y se sigue esperando el mismo envío.
  * - **Sin textos nuevos.** Los pasos son solo `sending` y `confirmed`: con la cuenta de Google ninguno pide aprobar nada.
  *
  * La lógica es pura: lo que toca la red y la pantalla entra por `Fuentes`, y se prueba con un reloj manual.
@@ -65,8 +71,14 @@ export const TOPE_DE_LECTURA_MS = 5_000;
 export const TOPE_DE_LECTURA_DEL_QUE_ENTRO_MS = 12_000;
 /** Lo que se sigue leyendo el contrato después de que la transacción entró, antes de rendirse. */
 export const TOPE_DE_LAS_LECTURAS_DEL_QUE_ENTRO_MS = 30_000;
-/** Lo que se le da a un número de transacción que el servicio dio por repetido para que la red lo conozca. */
-export const VISTO_SIN_RED_MS = 30_000;
+/**
+ * Lo que se le da a un número de transacción que el servicio dio por repetido, sin haberlo visto pendiente, para que la red
+ * lo conozca. Un repetido puede ser el de un envío cortado que quizás nunca llegó: con la red contestando y sin conocerlo,
+ * no se espera más y se mira el contrato.
+ */
+export const VISTO_SIN_RED_MS = 15_000;
+/** Lo más que la sala espera, desde la entrada, un envío del servicio que la red todavía no cerró: lo que vive la transacción de hoy. */
+export const TOPE_DE_LA_SALA_MS = 60_000;
 /** Cuánto se espera sin poder hablar con la red antes de rendirse (lo mismo que espera hoy un envío). */
 export const SIN_RED_MS = 15_000;
 /** La vida de la transacción del servicio, y la holgura entre el reloj del servicio y el de la red. */
@@ -74,6 +86,8 @@ export const VENTANA_DEL_SERVICIO_S = 240;
 export const HOLGURA_DE_RELOJES_S = 30;
 /** Cuánto se deja de lado al servicio en esta pestaña después de una falla suya. */
 export const DISYUNTOR_MS = 600_000;
+/** Lo mismo cuando lo que falló fue un mal momento de la red (una ronda que no llega, la red llena) y no el servicio. */
+export const DISYUNTOR_CORTO_MS = 60_000;
 const ULTIMA_VUELTA_MS = 10_000;
 const LECTURAS_VACIAS_DEL_QUE_ENTRO = 3;
 const ENTRE_LECTURAS_DEL_QUE_ENTRO_MS = 2_000;
@@ -125,6 +139,10 @@ const vistos = new Map<string, Visto>();
 /** Los sorteos que ya quedaron por el camino de siempre: no se le vuelve a pedir al servicio. */
 const marcados = new Set<string>();
 let disyuntorHasta = 0;
+/** Deja de lado al servicio hasta `hasta`, sin acortar un tiempo que ya estaba corriendo. */
+const dejarDeLado = (hasta: number): void => {
+  disyuntorHasta = Math.max(disyuntorHasta, hasta);
+};
 
 /** Olvida todo lo que se recordaba (las pruebas). Nada de esto se guarda en el navegador: una recarga lo pierde. */
 export function reiniciarElServicio(): void {
@@ -167,6 +185,8 @@ export interface Fuentes {
   valorDe(valor: unknown): Promise<Ganadores | null>;
   /** Una lectura o una consulta falló: si el RPC no sirve, se pasa al otro. */
   alFallar(e: unknown): void;
+  /** La red no tomó la transacción del servicio por estar llena: el chequeo de la red lo cuenta (amarillo). */
+  saturada?(): void;
   /** Fija el RPC vigente mientras dura la confirmación. Devuelve cómo soltarlo. */
   fijar(): () => void;
   olvidarElEstado(): void;
@@ -199,6 +219,7 @@ export function fuentesDeVerdad(): Fuentes {
       return { winners: d.winners.map(Number), randomness: hex(d.randomness) };
     },
     alFallar: (e) => void rpcRed().fallo(e),
+    saturada: () => void import("../stellar/registro-red").then((m) => m.anotarSaturacion()),
     fijar: () => rpcRed().fijar(),
     olvidarElEstado,
     horaDeLaRed: horaDeLaRonda,
@@ -305,12 +326,17 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
   const rechazo = await f.rechazoSinGrabar();
   if (rechazo) return { estado: "error", error: rechazo };
 
-  let entrada = ahora();
+  /** La hora de la entrada: de acá se miden los topes de la sala, que no se reinician con una vuelta. */
+  const inicio = ahora();
+  /** El comienzo de la etapa de pedir. Una vuelta por un sello gemelo arranca otra etapa, pero no pasa del minuto de la sala. */
+  let entrada = inicio;
+  const hastaSala = inicio + TOPE_DE_LA_SALA_MS;
   alPaso("sending");
 
-  const caminoDeHoy = (o: { marca?: boolean; disyuntor?: boolean } = {}): FinDelServicio => {
+  const caminoDeHoy = (o: { marca?: boolean; disyuntor?: boolean; disyuntorCorto?: boolean } = {}): FinDelServicio => {
     if (o.marca) marcados.add(clave);
-    if (o.disyuntor) disyuntorHasta = ahora() + DISYUNTOR_MS;
+    if (o.disyuntor) dejarDeLado(ahora() + DISYUNTOR_MS);
+    else if (o.disyuntorCorto) dejarDeLado(ahora() + DISYUNTOR_CORTO_MS);
     return { estado: "camino-de-hoy" };
   };
   const listo = (v: Ganadores, yaEstaba: boolean, txHash?: string): FinDelServicio => ({
@@ -336,7 +362,7 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
   /** Lo que se hace con una respuesta que dejó todo incierto: mirar la red hasta saber. */
   const duda = async (): Promise<FinDelServicio> => {
     const t0 = ahora();
-    const fin = entrada + TOPE_DE_LA_DUDA_SIN_RED_MS;
+    const fin = inicio + TOPE_DE_LA_DUDA_SIN_RED_MS;
     let ultimoError: unknown = new Error("sin-confirmar");
     for (let vuelta = 0; ; vuelta++) {
       // La primera lectura se hace siempre: si la pestaña volvió con el reloj adelantado, igual hay que mirar la red.
@@ -360,9 +386,14 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
     for (;;) {
       const l = await leer(hasta);
       if (l.ok && l.v) return listo(l.v, true);
-      // El servicio aseguró que no manda nada: el camino de siempre lo encuentra con su propia simulación. Con la marca,
-      // un nuevo clic en Guardar no vuelve a pasar por acá.
-      if (ahora() + LEER_CADA_MS > hasta) return caminoDeHoy({ marca: true });
+      if (ahora() + LEER_CADA_MS > hasta) {
+        // El servicio acaba de decir que el sorteo existe: si la red no se deja leer, no se sabe nada y no se manda por el
+        // otro camino. Sin marca, el botón Guardar vuelve a preguntar.
+        if (!l.ok) return sinConfirmar(l.error);
+        // Limpio y vacío: el servicio aseguró que no manda nada y el camino de siempre lo encuentra con su propia
+        // simulación. Con la marca, un nuevo clic en Guardar no vuelve a pasar por acá.
+        return caminoDeHoy({ marca: true });
+      }
       await esperar(LEER_CADA_MS);
     }
   };
@@ -472,6 +503,12 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
           // Un repetido que la red, contestando, no conoce: no es una respuesta del servicio que se pueda comprobar.
           return sinSorteo();
         }
+        if (esPendiente && ahora() >= hastaSala && ahora() - ultimaRespuesta <= RED_CONTESTANDO_MS) {
+          // No es un fallo de la red: el envío sigue vivo y tarda más de lo que la sala espera. Una última mirada al contrato y
+          // se termina sin confirmar, sin marca: el servicio devuelve el mismo número al volver a preguntar.
+          const l = await leer(Number.POSITIVE_INFINITY);
+          return l.ok && l.v ? listo(l.v, true) : sinConfirmar(d.error, hash);
+        }
         if (ultima) return sinConfirmar(d.error, hash);
         f.alFallar(d.error);
         // Una última vuelta corta: la red puede haber vuelto.
@@ -488,7 +525,9 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
         return sinConfirmar(d.error, hash);
       };
 
-      const topeTotalMs = esPendiente ? Math.max(0, venceEn - f.horaDeLaRed()) * 1000 + RED_CONTESTANDO_MS : Math.max(3_000, (primera + VISTO_SIN_RED_MS / 1000 - f.horaDeLaRed()) * 1000);
+      // La transacción del servicio vive 240 segundos y la de hoy 60: la sala no espera más que un minuto desde la entrada.
+      const topeDeLaSalaMs = Math.max(3_000, hastaSala - ahora());
+      const topeTotalMs = Math.min(topeDeLaSalaMs, esPendiente ? Math.max(0, venceEn - f.horaDeLaRed()) * 1000 + RED_CONTESTANDO_MS : Math.max(3_000, (primera + VISTO_SIN_RED_MS / 1000 - f.horaDeLaRed()) * 1000));
       const d = await enviarYConfirmar({ consultar, venceEn, sinRedMs: SIN_RED_MS, topePedidoMs: TOPE_DE_LECTURA_MS, topeTotalMs, ahora, dormir: esperar });
       return await resolver(d, false);
     } finally {
@@ -497,8 +536,8 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
   };
 
   for (;;) {
-    // La etapa de pedirle al servicio: como mucho `TOPE_DEL_SERVICIO_MS` desde la entrada.
-    const hastaServicio = entrada + TOPE_DEL_SERVICIO_MS;
+    // La etapa de pedirle al servicio: como mucho `TOPE_DEL_SERVICIO_MS` desde su comienzo, y sin pasar del minuto de la sala.
+    const hastaServicio = Math.min(entrada + TOPE_DEL_SERVICIO_MS, hastaSala);
     let vez = 0;
     let siguiente: FinDelServicio | "otra-vez" | null = null;
     while (siguiente === null) {
@@ -523,13 +562,22 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
       } else if (r.accion === "espera") {
         const espera = r.fijaMs ?? (ESPERAS_DEL_SERVICIO_MS[Math.min(vez, ESPERAS_DEL_SERVICIO_MS.length - 1)] as number);
         vez++;
+        // La red llena se anota para el aviso de red saturada, como lo hace el envío de siempre.
+        if (r.causa === "ocupada") f.saturada?.();
         // Otro pedido tiene que caber entero: si no, el servicio aseguró que no mandó y se sigue por el camino de siempre.
-        // Un servicio que no puede en 20 segundos se deja de lado un rato, para que el siguiente sorteo no pague la etapa.
         // Antes se mira el contrato una vez: una red ocupada o una secuencia a veces responden después de haber mandado.
+        // Un servicio que no puede en 20 segundos se deja de lado diez minutos, para que el siguiente sorteo no pague la
+        // etapa. Si la causa fue la red (una ronda que no llega, la red llena) y no el servicio, solo un minuto.
         if (ahora() + espera + TOPE_DEL_PEDIDO_MS > hastaServicio) {
           const l = await leer(Number.POSITIVE_INFINITY);
-          siguiente = l.ok && l.v ? listo(l.v, true) : caminoDeHoy({ marca: true, disyuntor: true });
+          const deLaRed = r.causa === "ronda" || r.causa === "ocupada";
+          siguiente = l.ok && l.v ? listo(l.v, true) : caminoDeHoy({ marca: true, ...(deLaRed ? { disyuntorCorto: true } : { disyuntor: true }) });
         } else await esperar(espera);
+      } else if (r.accion === "red-del-servicio" && ahora() + (ESPERAS_DEL_SERVICIO_MS[Math.min(vez, ESPERAS_DEL_SERVICIO_MS.length - 1)] as number) + TOPE_MINIMO_DEL_PEDIDO_MS <= hastaServicio) {
+        // Un error del RPC del servicio, quizás antes de mandar y quizás después: pedir otra vez es seguro (devuelve el mismo
+        // número si ya salió). Un tropiezo de un instante no deja a la sala sin el servicio.
+        await esperar(ESPERAS_DEL_SERVICIO_MS[Math.min(vez, ESPERAS_DEL_SERVICIO_MS.length - 1)] as number);
+        vez++;
       } else if (r.accion === "ya") {
         siguiente = await yaDicho();
       } else if (r.accion === "mandado") {
@@ -545,6 +593,8 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
       }
     }
     if (siguiente !== "otra-vez") return siguiente;
+    // Otra etapa de pedir cabe solo si queda lugar en el minuto de la sala: la vuelta no reinicia el tope.
+    if (hastaSala - ahora() < TOPE_DEL_PEDIDO_MS) return caminoDeHoy({ marca: true });
     entrada = ahora();
   }
 }

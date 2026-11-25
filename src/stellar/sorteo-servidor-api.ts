@@ -21,8 +21,17 @@ export type RespuestaDelSorteo =
   | { accion: "mandado"; hash: string; pendiente: boolean }
   /** El servicio dice que el sorteo ya está hecho. Se comprueba en la red antes de creerlo. */
   | { accion: "ya" }
-  /** El servicio aseguró que no mandó nada y que conviene volver a pedir. `fijaMs`: la espera, si el servicio la dice. */
-  | { accion: "espera"; fijaMs?: number }
+  /**
+   * El servicio aseguró que no mandó nada y que conviene volver a pedir. `fijaMs`: la espera, si el servicio la dice.
+   * `causa`: por qué no pudo. `ronda` (la red todavía no alcanzó la hora de la ronda) y `ocupada` (la red no tomó la
+   * transacción por estar llena) son de la red y no del servicio. `lectura` es del servicio al leer o simular.
+   */
+  | { accion: "espera"; fijaMs?: number; causa?: "ronda" | "ocupada" | "lectura" }
+  /**
+   * El servicio no pudo hablar con su red (un error de su RPC). No se sabe si fue antes de mandar, así que no se da por no
+   * mandado, pero pedir otra vez es seguro: el servicio no manda dos veces el mismo sello y devuelve el mismo número.
+   */
+  | { accion: "red-del-servicio" }
   /**
    * El servicio aseguró que no lo va a mandar: sigue el camino de siempre. `marca`: este sorteo ya no es suyo.
    * `disyuntor`: el problema es del servicio y no del sorteo, así que por un rato no se le pregunta más.
@@ -42,7 +51,9 @@ const hoy = (m: { marca?: boolean; disyuntor?: boolean; olvidar?: boolean } = {}
 /** Un no que habla del servicio y no del sorteo: se sigue por el camino de siempre y por un rato no se le pregunta. */
 const delServicio = (olvidar = false): RespuestaDelSorteo => hoy({ disyuntor: true, olvidar });
 
-const DETALLES_DE_LECTURA = new Set(["lectura-sorteo", "simulacion", "secuencia", "ocupada"]);
+const DETALLES_DE_LECTURA = new Set(["lectura-sorteo", "simulacion", "secuencia"]);
+/** Los errores de su RPC: `rpc-corte`, `rpc-503`, `rpc-error`, `rpc-respuesta`, `rpc-vacio`, `rpc-cortado` y `sin-rpc`. */
+const ERROR_DE_RPC = /^(rpc-[a-z0-9]+|sin-rpc)$/;
 
 const texto = (x: unknown): string => (typeof x === "string" ? x : "");
 
@@ -58,10 +69,13 @@ export function leerRespuestaDelSorteo(estado: number, cuerpo: unknown): Respues
     if (HASH.test(hash) && (c.status === "PENDING" || c.status === "DUPLICATE")) return { accion: "mandado", hash: hash.toLowerCase(), pendiente: c.status === "PENDING" };
     return { accion: "incierto" };
   }
-  if (estado === 409) return motivo === "ronda-no-lista" ? { accion: "espera", fijaMs: ESPERA_RONDA_NO_LISTA_MS } : delServicio();
+  if (estado === 409) return motivo === "ronda-no-lista" ? { accion: "espera", fijaMs: ESPERA_RONDA_NO_LISTA_MS, causa: "ronda" } : delServicio();
   if (estado === 502) {
-    if (motivo === "red" && DETALLES_DE_LECTURA.has(detalle)) return { accion: "espera" };
-    // Un corte del servicio con la red puede venir de la etapa de envío: puede haber salido.
+    if (motivo === "red" && detalle === "ocupada") return { accion: "espera", causa: "ocupada" };
+    if (motivo === "red" && DETALLES_DE_LECTURA.has(detalle)) return { accion: "espera", causa: "lectura" };
+    // Un error del RPC del servicio puede venir de antes de mandar (la lectura, la simulación, la secuencia) o de la
+    // etapa de envío: no se sabe si salió, pero pedir otra vez es seguro.
+    if (motivo === "red" && ERROR_DE_RPC.test(detalle)) return { accion: "red-del-servicio" };
     return { accion: "incierto" };
   }
   if (estado === 429) return motivo === "cupo-cuenta" ? { accion: "error", error: errorDeRespuesta(429, cuerpo) } : delServicio();

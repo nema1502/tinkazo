@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RespuestaDelSorteo } from "../stellar/sorteo-servidor-api";
-import { DISYUNTOR_MS, type Fuentes, type FinDelServicio, fuentesDeVerdad, loTomaElServicio, reiniciarElServicio, sortearPorElServicio } from "./sorteo-del-servicio";
+import { DISYUNTOR_CORTO_MS, DISYUNTOR_MS, type Fuentes, type FinDelServicio, fuentesDeVerdad, loTomaElServicio, reiniciarElServicio, sortearPorElServicio } from "./sorteo-del-servicio";
 
 /**
  * Cuándo toma el servicio un sorteo en esta pestaña, con la red principal, una cuenta de Google y la bandera prendida
@@ -189,6 +189,26 @@ describe("cada salida al camino de siempre deja marcado el sorteo, y solo ese", 
     expect(loTomaElServicio(7n, false)).toBe(false);
     expect(loTomaElServicio(8n, false)).toBe(false);
     // El reloj simulado corrió unos segundos de más: se mira bien pasado el rato.
+    expect(loTomaElServicio(8n, false, () => Date.now() + DISYUNTOR_MS + 60_000)).toBe(true);
+  });
+});
+
+describe("lo que deja de lado al servicio y por cuánto", () => {
+  it.each<["ronda" | "ocupada", string]>([
+    ["ronda", "la ronda que la red todavía no alcanzó"],
+    ["ocupada", "la red ocupada"],
+  ])("%s: %s es un mal momento de la red, no del servicio, y solo lo deja de lado un minuto", async (causa) => {
+    const r = await correr(fuentes({ pedir: async () => ({ accion: "espera", causa }) }));
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(loTomaElServicio(7n, false)).toBe(false);
+    expect(loTomaElServicio(8n, false, () => Date.now() + 10_000)).toBe(false);
+    expect(loTomaElServicio(8n, false, () => Date.now() + DISYUNTOR_CORTO_MS + 60_000)).toBe(true);
+  });
+
+  it("una lectura o una secuencia que el servicio no logra en 20 segundos sí lo deja de lado diez minutos", async () => {
+    const r = await correr(fuentes({ pedir: async () => ({ accion: "espera", causa: "lectura" }) }));
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(loTomaElServicio(8n, false, () => Date.now() + DISYUNTOR_CORTO_MS + 60_000)).toBe(false);
     expect(loTomaElServicio(8n, false, () => Date.now() + DISYUNTOR_MS + 60_000)).toBe(true);
   });
 });
