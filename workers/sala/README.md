@@ -206,6 +206,11 @@ sesión, guardada solo como huella con sal) suma una sola vez a ese tope de la c
 5 veces en diez minutos: la sexta ni llega al proveedor. Así una persona que repite una ficha mala no deja afuera a las demás.
 Quien salió con su motivo y repite su alta tampoco suma a los envíos de la conexión. Una sala admite 300 personas.
 
+Lo que acota el camino de `409 sin-billetera`, que no tiene tope propio por conexión: cada ficha puede esperar su cuenta
+5 veces por ventana (la sexta ni llega al proveedor), y cada ficha distinta es una sesión válida de esta aplicación, que cuesta
+un ingreso real con Google, limitado por el proveedor por dirección de red. Además la cuenta de cada persona se crea sola en
+segundos, y desde entonces esa sesión ya no puede dar `sin-billetera`. No se sumó un contador por conexión para este camino.
+
 Lo que estos topes no frenan: quien manda 300 fichas distintas y falsas desde la misma conexión del recinto en diez minutos
 agota el tope de rechazos de esa conexión, y las personas nuevas de esa conexión esperan hasta que termine la ventana. Cada una
 de esas fichas costó una llamada al proveedor, que es lo que el tope protege. La regla de límite de Cloudflare delante de

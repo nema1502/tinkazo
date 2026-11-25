@@ -47,7 +47,7 @@ La tabla es la que traduce el cliente del celular (`src/sala/campana.ts`, `leerA
 | `429 {"error":"rapido"}` | Más de 300 altas por minuto en la sala (`CAMPANA_POR_MINUTO`). | Familia `rapido`: 10, 20 y 30 s, estirada hasta el cambio de minuto. |
 | `429 {"error":"llena"}` | La sala llegó a 300 anotadas (`CAMPANA_MAX`). | Final `llena`. |
 | `429 {"error":"cupo-conexion"}` | La conexión gastó su tope de la ventana (800 envíos en 10 min) o su tope de reingresos. Las altas nuevas no tienen tope por conexión: todo el recinto sale por una sola y el límite es el cupo de la sala. | Final `wifi`, con `Retry-After`. |
-| `429 {"error":"rechazos"}` | 300 rechazos de la conexión, o 5 de una misma ficha, en la ventana. La sesión que espera su cuenta (`sin-billetera`) cuenta para su ficha y no para la conexión. | Final `espera`, con `Retry-After`. |
+| `429 {"error":"rechazos"}` | 300 rechazos de la conexión, o 5 de una misma ficha, en la ventana. La sesión que espera su cuenta (`sin-billetera`) cuenta para su ficha y no para la conexión. Ese camino lo acota el tope de 5 por ficha: cada ficha distinta es una sesión válida de esta aplicación, que cuesta un ingreso real con Google limitado por el proveedor por dirección de red, y su cuenta se crea sola en segundos. | Final `espera`, con `Retry-After`. |
 | `409 {"error":"cerrada"}` | La sala ya no está abierta. | Final `cerro`. |
 | `409 {"error":"pase"}` | El pase del enlace no vale. Solo con `PASE` distinto de `0`: en el servicio de pruebas está apagado, y por eso la corrida no lo ve. | Final `pase`. |
 | `409 {"error":"sin-billetera"}` | La sesión no tiene cuenta de Stellar y no se le pudo crear. | Familia `creando`: dos reintentos y final `cuentas`. |
