@@ -1005,14 +1005,14 @@ describe("la calcomanía de la sala cuando nace el número", () => {
 /**
  * La presentación de la lista sellada durante la cuenta (`games-teaser.ts`,
  * issue #78): el show de la espera en grande presenta a cada persona que
- * participa, y todo lo que presenta sale de lo sellado — nada del resultado,
+ * participa, y todo lo que presenta sale de lo sellado: nada del resultado,
  * que todavía no existe, y nada que cambie la selección del juego.
  */
 describe("la presentación de la lista sellada durante la cuenta", () => {
   /** Las tarjetas de la presentación, en el orden sellado. */
   const tarjetas = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".espera-teaser-tarjeta")];
 
-  /** S3: con una lista sellada de 3, las tres presentaciones se ven durante la cuenta. */
+  /** Con una lista sellada de 3, las tres presentaciones se ven durante la cuenta. */
   it("con una lista sellada de 3, las tres presentaciones se muestran durante la cuenta, antes de que nazca la ronda", async () => {
     const { setLang } = await import("../i18n");
     const { T } = await import("../i18n");
@@ -1028,7 +1028,7 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
     expect(sortear).not.toHaveBeenCalled();
   });
 
-  /** S4 (guard): en el show antes de la ronda no hay señal del ganador ni de la selección. */
+  /** En el show antes de la ronda no hay señal del ganador ni de la selección. */
   it("guard: nada del resultado antes de la ronda, y la selección no se toca", async () => {
     const { setLang } = await import("../i18n");
     setLang("es");

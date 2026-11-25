@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 describe("la presentación de la lista sellada durante la cuenta", () => {
-  it("S1: con una lista sellada de 3, cada persona se presenta en el orden sellado, con el gancho visual del juego elegido", () => {
+  it("con una lista sellada de 3, cada persona se presenta en el orden sellado, con el gancho visual del juego elegido", () => {
     const c = caja();
     presentarTeaser(c, "race", ["Ana", "Beto", "Cami"]);
     // Las tres presentaciones, montadas mientras cuenta la espera.
@@ -45,7 +45,7 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
     }
   });
 
-  it("S2 (guard): la presentación sale de la lista que entra y de nada más — no agrega, no reordena, no habla del resultado", () => {
+  it("guard: la presentación sale de la lista que entra y de nada más, no agrega, no reordena y no habla del resultado", () => {
     const c = caja();
     presentarTeaser(c, "race", ["Cami", "Ana", "Beto"]);
     // El orden es el de la lista sellada, tal cual entra.
@@ -58,7 +58,7 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
     expect(c.querySelector<HTMLElement>(".espera-teaser")?.dataset.fuente).toBe("sellada");
   });
 
-  it("S1: con un juego sin gancho visual el show no imagina la captura: la presentación sale sin imagen y igual presenta a cada uno", () => {
+  it("con un juego sin gancho visual el show no imagina la captura: la presentación sale sin imagen y igual presenta a cada uno", () => {
     const c = caja();
     presentarTeaser(c, "quien", ["Ana", "Beto"]);
     expect(tarjetas(c).map((t) => t.dataset.nombre)).toEqual(["Ana", "Beto"]);
