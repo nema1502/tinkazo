@@ -590,8 +590,8 @@ describe("la vigilancia y lo que falta con los pagos de premios y retiros", () =
         desde: T0 - DIA_MS,
       },
       firmasPagos: { premios: 1, retiros: 1 },
-      // El bloque cuentas (issue 177): solo hay firmas en el día, así que las 25 horas del día vienen en cero.
-      cuentas: { porHora: expect.any(Array), completo: true },
+      // El bloque cuentas (issue 177): solo hay firmas en el día, así que las cuentas de la última hora vienen en cero.
+      cuentas: { minutos: 60, nuevas: 0, activaciones: 0 },
       patrocinioPollar: { esperado: true, prendidos: [] },
     });
   });
@@ -604,36 +604,49 @@ describe("la vigilancia y lo que falta con los pagos de premios y retiros", () =
     expect(Object.keys((await montarAltas().puerta.vigilancia()).firmas as object).sort()).toEqual(claves);
   });
 
-  it("las cuentas nuevas y las activaciones por hora, desde movimientos simulados, salen en el bloque cuentas (issue 177)", async () => {
+  it("las cuentas nuevas de los últimos 60 minutos salen en el bloque cuentas, de la consulta de uso y no de la página de movimientos (issue 177)", async () => {
     const m = montarAltas();
-    const cuentaNueva = (ms: number) => ({ event: "wallet.created:STELLAR:COSIGNED", amount: -15, createdAt: new Date(ms).toISOString() });
-    // Las firmas no cuentan para las cuentas, y una cuenta nueva más vieja cae en su propia hora.
-    m.pm.movimientos = [firma(T0 - HORA), cuentaNueva(T0 - 30 * 60_000), cuentaNueva(T0 - 30 * 60_000), cuentaNueva(T0 - 2 * HORA)];
-    const c = (await m.puerta.vigilancia()).cuentas as { porHora: Array<{ hora: string; nuevas: number; activaciones: number }>; completo: boolean } | null;
-    expect(c).not.toBeNull();
-    const horasDe = (ms: number) => new Date(Math.floor(ms / 3_600_000) * 3_600_000).toISOString();
-    expect(c!.porHora).toHaveLength(25);
-    expect(c!.porHora.filter((f) => [horasDe(T0 - 2 * HORA), horasDe(T0 - HORA), horasDe(T0)].includes(f.hora))).toEqual([
-      { hora: horasDe(T0 - 2 * HORA), nuevas: 1, activaciones: 0 },
-      { hora: horasDe(T0 - HORA), nuevas: 2, activaciones: 0 },
-      { hora: horasDe(T0), nuevas: 0, activaciones: 0 },
-    ]);
-    expect(c!.completo).toBe(true);
+    // Miles de firmas llenan la página de movimientos: no importa, las cuentas salen de la consulta de uso por ventana.
+    m.pm.movimientos = Array.from({ length: 200 }, (_, i) => firma(T0 - i * 1000));
+    m.pm.uso = [
+      { event: "cosign.signature:STELLAR", count: 4200, credits: "84000" },
+      { event: "wallet.created:STELLAR:COSIGNED", count: 37, credits: "555" },
+      { event: "account.active:monthly", count: 5, credits: "50" },
+    ];
+    const v = await m.puerta.vigilancia();
+    expect(v.cuentas).toEqual({ minutos: 60, nuevas: 37, activaciones: 5 });
+    // Una sola consulta, con la ventana de los 60 minutos corridos y la hora del reloj de la puerta.
+    expect(m.pm.consultasDeUso).toEqual([{ from: new Date(T0 - HORA).toISOString(), to: new Date(T0).toISOString() }]);
   });
 
-  it("una fecha de Pollar fuera de lo que una fecha puede ser no tira el estado: el movimiento cuenta en la hora del reloj y el resto sigue", async () => {
+  it("sin cuentas en la ventana el bloque trae ceros: es un dato", async () => {
+    expect((await montarAltas().puerta.vigilancia()).cuentas).toEqual({ minutos: 60, nuevas: 0, activaciones: 0 });
+  });
+
+  it("si la consulta de uso falla, o no tiene la forma esperada, cuentas es null y todo lo demás sigue igual: nunca un cero inventado", async () => {
+    for (const rota of [
+      (m: ReturnType<typeof montarAltas>) => void (m.pm.usoCaido = true),
+      (m: ReturnType<typeof montarAltas>) => void (m.pm.uso = undefined),
+      (m: ReturnType<typeof montarAltas>) => void (m.pm.uso = [{ event: "wallet.created:STELLAR:COSIGNED", count: -3 }]),
+    ]) {
+      const m = montarAltas();
+      rota(m);
+      m.pm.movimientos = [firma(T0 - HORA)];
+      const v = await m.puerta.vigilancia();
+      expect(v.cuentas).toBeNull();
+      expect(v.firmasSinExplicar).toBe(1);
+      expect(v.patrocinioPollar).toEqual({ esperado: true, prendidos: [] });
+    }
+  });
+
+  it("la consulta de uso se pide una vez por minuto como mucho: leer el estado varias veces seguidas no la multiplica", async () => {
     const m = montarAltas();
-    const horasDe = (ms: number) => new Date(Math.floor(ms / 3_600_000) * 3_600_000).toISOString();
-    const cuentaDeFecha = (createdAt: unknown) => ({ event: "wallet.created:STELLAR:COSIGNED", amount: -15, createdAt });
-    m.pm.movimientos = [firma(T0 - HORA), cuentaDeFecha(1e20), cuentaDeFecha(8.64e15 + 1), cuentaDeFecha(new Date(T0 - 30 * 60_000).toISOString())];
-    const v = await m.puerta.vigilancia();
-    expect(v.firmasSinExplicar).toBe(1);
-    expect(v.patrocinioPollar).toEqual({ esperado: true, prendidos: [] });
-    const c = v.cuentas as { porHora: Array<{ hora: string; nuevas: number }> };
-    expect(c.porHora.filter((f) => f.nuevas > 0)).toEqual([
-      { hora: horasDe(T0 - HORA), nuevas: 1, activaciones: 0 },
-      { hora: horasDe(T0), nuevas: 2, activaciones: 0 },
-    ]);
+    m.pm.uso = [{ event: "wallet.created:STELLAR:COSIGNED", count: 2 }];
+    for (let i = 0; i < 5; i++) await m.puerta.vigilancia();
+    expect(m.pm.consultasDeUso).toHaveLength(1);
+    m.mover(61_000);
+    await m.puerta.vigilancia();
+    expect(m.pm.consultasDeUso).toHaveLength(2);
   });
 
   it("con las tablas y sin nada prendido ni nada en el día, la vigilancia es la de siempre: no aparece firmasPagos", async () => {
