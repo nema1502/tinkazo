@@ -3048,10 +3048,15 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
    * Mira en la red si el premio está en la cuenta, una vez por cuenta, total y estado del cobro (al pagarse el servicio el saldo
    * baja, y se vuelve a mirar). `forzar` es la vuelta a la pestaña: quien cargó dólares en otra ventana lo ve al volver, sin
    * pedir más de una vez cada 5 segundos. Nunca frena nada: es solo la línea.
+   *
+   * Con el cobro prendido y todavía sin pagar no se mira ni se dice nada: lo que hay que cargar es el premio más lo que se cobra,
+   * y eso ya lo dice el control del cobro con su propia lectura del saldo. Una línea que dijera que el premio está en la cuenta
+   * mientras el cobro pide cargar más se contradiría en la misma pantalla. Pagado el servicio, el saldo ya no lleva esa parte
+   * y la línea compara contra el premio solo.
    */
   function mirarElDeposito(forzar = false): void {
     const lector = deps.deposito;
-    if (!lector || vista !== "previa" || campana === null || campana.red !== "mainnet") return;
+    if (!lector || vista !== "previa" || campana === null || campana.red !== "mainnet" || cm?.bloqueaElAbrir()) return;
     const cuenta = cuentaDelPremio();
     if (cuenta === null) return;
     const total = totalDePremios(campana.premios);
@@ -3076,7 +3081,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   /** La línea del premio en la vista previa: está, o cuánto falta. Con la lectura fallida no dice nada. */
   function pintarDeposito(): void {
-    const estado = vista === "previa" && campana !== null ? (deposito?.estado ?? null) : null;
+    const estado = vista === "previa" && campana !== null && !cm?.bloqueaElAbrir() ? (deposito?.estado ?? null) : null;
     let texto = "";
     if (estado?.tipo === "alcanza") texto = fmt("cpoDepAlcanza", { premios: dolaresEnTexto(estado.total, deps.idioma()) });
     else if (estado?.tipo === "falta") texto = fmt("cpoDepFalta", { falta: dolaresEnTexto(estado.falta, deps.idioma()) });
