@@ -17,7 +17,7 @@ body:
     id: como-repetirlo
     attributes:
       label: Cómo se repite
-      description: Los pasos, en orden. Si la falla es de un sorteo, el enlace de su comprobante.
+      description: Los pasos, en orden. Si no sabés cómo repetirlo, escribí que pasó una sola vez y cuándo. Si la falla es de un sorteo, decí el número de sorteo o la dirección del contrato. No pegues el enlace del comprobante, porque lleva los nombres de la lista. Si hace falta, te lo pedimos en privado.
       placeholder: |
         1. Abro...
         2. Toco...
@@ -53,5 +53,5 @@ body:
     attributes:
       label: Antes de enviar
       options:
-        - label: No puse secretos, llaves ni datos de otras personas
+        - label: No puse secretos, llaves, enlaces de comprobantes ni datos de otras personas
           required: true
