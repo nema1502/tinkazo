@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "descripcion": "Vectores de la linea de persona (campanas de identidad persona): p1: mas los primeros 16 bytes del HMAC-SHA256 del usuario con la sal de la campana, en base32 sin relleno y en minusculas.",
+  "casos": [
+    {
+      "sal": "00112233445566778899aabbccddeeff",
+      "usuario": "google:100000000000000000001",
+      "linea": "p1:gd3ipw5vlh6roxgq3vs6tb3m5y"
+    },
+    {
+      "sal": "00112233445566778899aabbccddeeff",
+      "usuario": "google:100000000000000000002",
+      "linea": "p1:jzczprmdcyres5t5loijt4tzrm"
+    },
+    {
+      "sal": "ffeeddccbbaa99887766554433221100",
+      "usuario": "google:100000000000000000001",
+      "linea": "p1:dmtw6vnlfj5s622s6zxn5zw6hi"
+    },
+    {
+      "sal": "ffeeddccbbaa99887766554433221100",
+      "usuario": "google:100000000000000000002",
+      "linea": "p1:26nh2yuikfx7mixwisb4hp5rqq"
+    },
+    {
+      "sal": "0123456789abcdef0123456789abcdef",
+      "usuario": "google:118273645501928374655",
+      "linea": "p1:k7ygtm6y4xz6vk3ih4q7rjaeiu"
+    },
+    {
+      "sal": "0123456789abcdef0123456789abcdef",
+      "usuario": "google:7",
+      "linea": "p1:3oim4hckts2l2xihu3kojunz5m"
+    }
+  ],
+  "campana": {
+    "sal": "00112233445566778899aabbccddeeff",
+    "usuarios": [
+      "google:100000000000000000001",
+      "google:100000000000000000002",
+      "google:100000000000000000003"
+    ],
+    "lineas": [
+      "p1:gd3ipw5vlh6roxgq3vs6tb3m5y",
+      "p1:jzczprmdcyres5t5loijt4tzrm",
+      "p1:x6uesmj3nqqeihvd5cto7qqwmm"
+    ],
+    "ordenadas": [
+      "p1:gd3ipw5vlh6roxgq3vs6tb3m5y",
+      "p1:jzczprmdcyres5t5loijt4tzrm",
+      "p1:x6uesmj3nqqeihvd5cto7qqwmm"
+    ]
+  },
+  "formas": {
+    "validas": [
+      "p1:gd3ipw5vlh6roxgq3vs6tb3m5y",
+      "p1:aaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "p1:77777777777777777777777774"
+    ],
+    "invalidas": [
+      "",
+      "p1:",
+      "P1:aaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "p1:aaaaaaaaaaaaaaaaaaaaaaaaa",
+      "p1:aaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "p1:AAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "p1:aaaaaaaaaaaaaaaaaaaaaaaaab",
+      "p1:11111111111111111111111111",
+      "p1:aaaaaaaaaaaaaaaaaaaaaaaaa=",
+      "p2:aaaaaaaaaaaaaaaaaaaaaaaaaa",
+      " p1:aaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "p1:aaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+      "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "google:100000000000000000001"
+    ]
+  }
+}
