@@ -30,7 +30,8 @@ describe("Para empresas en la cabecera y en el pie", () => {
     const enlaces = [...document.querySelectorAll<HTMLElement>('a[href="/crear-campana.html"]')];
     expect(enlaces.length).toBeGreaterThanOrEqual(3);
     for (const e of enlaces) {
-      const marcado = e.closest<HTMLElement>("[data-campana-enlace]");
+      // El aviso del premio en plata se esconde y se muestra solo, con su propia prueba (src/ui/premio-plata.test.ts).
+      const marcado = e.closest<HTMLElement>("[data-campana-enlace], #prize-plata");
       expect(marcado, e.outerHTML).not.toBeNull();
       expect(marcado?.hasAttribute("hidden"), e.outerHTML).toBe(true);
     }
