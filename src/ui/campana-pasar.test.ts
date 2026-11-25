@@ -431,8 +431,7 @@ describe("pasar la lista de una campaña de personas", () => {
     m.filas = [[filaDePersona(3), filaDePersona(1), filaDePersona(2)]];
     const fin = await crearPaso(m.d).correr(SALA, contexto(m));
     expect(fin).toBe("pasada");
-    const lineas = m.cuadro.lista.split("
-");
+    const lineas = m.cuadro.lista.split("\n");
     expect(lineas).toEqual([lineaDePrueba(1), lineaDePrueba(2), lineaDePrueba(3)].sort());
     expect(ultimo(m)).toEqual({ paso: "en-el-sorteo", n: 3 });
     expect(m.entradas.get("testnet/evento-uno")?.huella).toBe(`huella:${lineas.join(",")}`);
