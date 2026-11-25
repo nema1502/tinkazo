@@ -105,6 +105,11 @@ const H2 = "b2".repeat(32);
 const GANADORES = { winners: [4, 11, 3], randomness: "00ff" };
 const mandado = (hash: string, pendiente = true): RespuestaDelSorteo => ({ accion: "mandado", hash, pendiente });
 const enSegundos = (): number => Date.now() / 1000;
+/** La red cierra un primer ledger a la hora de siempre y, enseguida, otro mucho después del vencimiento: la transacción venció. */
+const vencida = (): (() => Promise<{ status: string; cierre: number }>) => {
+  let vez = 0;
+  return async () => ({ status: "NOT_FOUND", cierre: enSegundos() + (vez++ === 0 ? 0 : 100_000) });
+};
 const entro = async () => ({ status: "SUCCESS", cierre: enSegundos(), valor: "x" });
 
 /** Las fuentes de verdad con la red y el servicio de mentira. El reloj de la red es el simulado. */
@@ -158,7 +163,7 @@ describe("cada salida al camino de siempre deja marcado el sorteo, y solo ese", 
   });
 
   it("el envío del servicio venció sin entrar y el contrato no tiene el sorteo", async () => {
-    const r = await correr(fuentes({ consultar: async () => ({ status: "NOT_FOUND", cierre: enSegundos() + 100_000 }) }));
+    const r = await correr(fuentes({ consultar: vencida() }));
     expect(r).toEqual({ estado: "camino-de-hoy" });
     marcado();
   });
@@ -227,7 +232,7 @@ describe("con la red sin poder leerse no se manda nada más por el camino de sie
   });
 
   it("el envío venció y el contrato no se deja leer: lo mismo", async () => {
-    const r = await correr(fuentes({ consultar: async () => ({ status: "NOT_FOUND", cierre: enSegundos() + 100_000 }), leer: caido }));
+    const r = await correr(fuentes({ consultar: vencida(), leer: caido }));
     expect(sinConfirmarCon(r)).toMatchObject({ message: "sin-confirmar", txHash: H1 });
     sinMarca();
   });
