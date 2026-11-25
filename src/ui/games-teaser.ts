@@ -9,7 +9,7 @@ import type { Game } from "../state";
  *
  * Mientras la espera en grande cuenta los segundos que faltan, cada persona
  * que participa se presenta una vez: su nombre, su lugar en la lista sellada
- * («1 de 3») y, cuando el juego elegido lo trae, su gancho visual: la captura
+ * ("1 de 3") y, cuando el juego elegido lo trae, su gancho visual: la captura
  * que el juego ya publica (`/juegos/selector/…`, la usan el selector de la
  * página y el panel de la espera). Para la Carrera de llamas esa captura es la
  * largada, con la fila de llamas lista para arrancar. El show entra en el
@@ -123,4 +123,9 @@ export function presentarTeaser(caja: HTMLElement | null, juego: string, nombres
     // Las tarjetas, una por persona y en el orden sellado: nacen y mueren con la capa, que muere entera al nacer el número.
     nombres.map((nombre, i) => tarjeta(nombre, gancho, i, nombres.length)).join("") +
     `</div>`;
+  // Una captura que no llega (la red del evento falla) se esconde sin quitarla: su lugar ya está reservado, así que la tarjeta
+  // no cambia de tamaño, nada empuja al reloj y tampoco queda el ícono de imagen rota.
+  for (const img of caja.querySelectorAll<HTMLImageElement>(".sel-img")) {
+    img.addEventListener("error", () => img.setAttribute("data-fallo", ""), { once: true });
+  }
 }
