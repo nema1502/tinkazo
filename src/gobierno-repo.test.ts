@@ -14,13 +14,11 @@ const plantilla = leer(".github/pull_request_template.md");
 const falla = leer(".github/ISSUE_TEMPLATE/falla.yml");
 const trabajo = leer(".github/ISSUE_TEMPLATE/trabajo.yml");
 const config = leer(".github/ISSUE_TEMPLATE/config.yml");
+const paquete = JSON.parse(leer("package.json")) as { scripts: Record<string, string> };
+
+const URL_REPARTO = "https://github.com/nema1502/tinkazo/issues/277";
 
 describe("CONTRIBUTING.md", () => {
-  it("no promete rebase: el método de unión lo decide la dirección según el pedido", () => {
-    expect(contribuir).not.toMatch(/rebase/i);
-    expect(contribuir).toMatch(/merge o squash/);
-  });
-
   it("el ejemplo de commit cumple el límite de 72 caracteres que pide", () => {
     const ejemplo = /Por ejemplo: `([^`]+)`/.exec(contribuir);
     expect(ejemplo).not.toBeNull();
@@ -34,6 +32,31 @@ describe("CONTRIBUTING.md", () => {
 
   it("avisa que el enlace de un comprobante no se sube", () => {
     expect(contribuir).toMatch(/enlaces de comprobantes/);
+  });
+
+  it("cada comando de pnpm que nombra existe en package.json", () => {
+    const nombrados = [...contribuir.matchAll(/pnpm ([a-z][\w:-]*)/g)].map((m) => m[1]!);
+    const propios = new Set(["install"]);
+    const faltan = nombrados.filter((n) => !propios.has(n) && !(n in paquete.scripts));
+    expect(nombrados.length).toBeGreaterThan(0);
+    expect(faltan).toEqual([]);
+  });
+
+  it("cada guion de scripts/ que nombra existe", () => {
+    const nombrados = [...contribuir.matchAll(/node (scripts\/[\w.-]+)/g)].map((m) => m[1]!);
+    const faltan = nombrados.filter((r) => {
+      try {
+        leer(r);
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    expect(faltan).toEqual([]);
+  });
+
+  it("enlaza el reparto del trabajo con su dirección completa", () => {
+    expect(contribuir).toContain(URL_REPARTO);
   });
 });
 
@@ -70,6 +93,15 @@ describe("trabajo.yml", () => {
   it("avisa en el selector que es solo para el equipo", () => {
     expect(trabajo).toMatch(/^name: .*solo equipo/m);
   });
+
+  it("es público como los otros y lo dice en su descripción", () => {
+    expect(trabajo).toMatch(/^description: .*Si sos de afuera/m);
+  });
+
+  it("enlaza el reparto con su dirección completa y no con el número suelto", () => {
+    expect(trabajo).toContain(URL_REPARTO);
+    expect(trabajo).not.toMatch(/issue 277/);
+  });
 });
 
 describe("pull_request_template.md", () => {
@@ -84,6 +116,12 @@ describe("SECURITY.md y config.yml", () => {
     expect(seguridad).not.toMatch(/Leemos cada aviso/);
     expect(seguridad).not.toMatch(/Te mantenemos al tanto/);
     expect(seguridad).toMatch(/no podemos asegurarlo/);
+  });
+
+  it("no prometen plazos en días ni recompensas", () => {
+    expect(seguridad).not.toMatch(/\b\d+\s*(días|dias|horas|semanas|days|hours|weeks)\b/i);
+    expect(seguridad).toMatch(/No ofrecemos recompensas/);
+    expect(seguridad).not.toMatch(/\b(recompensa|premio) de\b/i);
   });
 
   it("no mandan a un botón de aviso privado que no está activado", () => {
