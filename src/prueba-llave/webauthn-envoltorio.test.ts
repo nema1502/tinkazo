@@ -53,6 +53,71 @@ describe("el envoltorio de WebAuthn", () => {
   });
 });
 
+describe("el aviso de la autenticación y el contador", () => {
+  const pedido = { optionsJSON: { challenge: "x", rpId: "ejemplo.org" } as never };
+
+  it("el aviso corre con la respuesta y se espera antes de devolverla", async () => {
+    const { impl } = falsa();
+    const w = conNombreVisible(impl, "Otro");
+    const orden: string[] = [];
+    w.armar(async (r) => {
+      orden.push(`aviso ${r.id}`);
+      await new Promise((ok) => setTimeout(ok, 5));
+      orden.push("aviso listo");
+    });
+    const r = await w.startAuthentication(pedido);
+    orden.push("devuelta");
+    expect(r.id).toBe("cred");
+    expect(orden).toEqual(["aviso cred", "aviso listo", "devuelta"]);
+  });
+
+  it("vale para un solo uso", async () => {
+    const { impl } = falsa();
+    const w = conNombreVisible(impl, "Otro");
+    let veces = 0;
+    w.armar(async () => void veces++);
+    await w.startAuthentication(pedido);
+    await w.startAuthentication(pedido);
+    expect(veces).toBe(1);
+  });
+
+  it("desarmado no corre, y un error del aviso sale tal cual", async () => {
+    const { impl } = falsa();
+    const w = conNombreVisible(impl, "Otro");
+    let veces = 0;
+    w.armar(async () => void veces++);
+    w.desarmar();
+    await w.startAuthentication(pedido);
+    expect(veces).toBe(0);
+    const error = new Error("no hay cuenta");
+    w.armar(async () => {
+      throw error;
+    });
+    await expect(w.startAuthentication(pedido)).rejects.toBe(error);
+  });
+
+  it("si la persona cancela, el aviso sigue armado hasta que se desarma", async () => {
+    const cancelada = Object.assign(new Error("cancelada"), { name: "NotAllowedError" });
+    const impl = { startRegistration: async () => ({ id: "x" }), startAuthentication: async () => Promise.reject(cancelada) } as unknown as ImplementacionDeWebAuthn;
+    const w = conNombreVisible(impl, "Otro");
+    let veces = 0;
+    w.armar(async () => void veces++);
+    await expect(w.startAuthentication(pedido)).rejects.toBe(cancelada);
+    expect(veces).toBe(0);
+    w.desarmar();
+  });
+
+  it("cuenta cada vez que se pide la llave y el registro no cuenta", async () => {
+    const { impl } = falsa();
+    const w = conNombreVisible(impl, "Otro");
+    expect(w.autenticaciones()).toBe(0);
+    await w.startAuthentication(pedido);
+    await w.startAuthentication(pedido);
+    await w.startRegistration({ optionsJSON: opciones as never });
+    expect(w.autenticaciones()).toBe(2);
+  });
+});
+
 describe("el identificador del usuario", () => {
   it("con el nombre corto y el peor azar posible queda lejos del tope de 64 bytes", () => {
     const peorAzar = 0.00000123456789012345678;
