@@ -348,21 +348,60 @@ describe("ninguna excepción de la línea tumba el panel", () => {
 });
 
 describe("la línea no queda vieja", () => {
-  it("pasado un minuto vuelve a leer, y mientras lee no afirma nada", async () => {
+  it("a los 50 segundos vuelve a leer y el texto sigue a la vista hasta que llega la lectura nueva", async () => {
     const pendientes: Array<(l: SaldoDeDolares) => void> = [];
     const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
     leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
     leer.mockImplementation(() => new Promise<SaldoDeDolares>((resolver) => void pendientes.push(resolver)));
     const p = await previa(m);
     expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
-    await m.correr(59_000);
+    await m.correr(49_000);
     expect(leer).toHaveBeenCalledTimes(1);
-    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
     await m.correr(2_000);
     expect(leer).toHaveBeenCalledTimes(2);
-    expect(linea(p)).toBe("");
+    // La lectura vieja tiene 51 segundos: todavía se afirma.
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    await m.correr(8_000);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
     pendientes[0]?.({ tipo: "saldo", saldo: "25.0000000" });
     await suelta(6);
+    expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: "15,00" }));
+  });
+
+  it("si a los 60 segundos la lectura nueva no llegó, la línea queda escondida y no vuelve a afirmar lo viejo", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
+    const p = await previa(m);
+    await m.correr(59_000);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    await m.correr(2_000);
+    expect(linea(p)).toBe("");
+    expect($(p, "#cpo-deposito").hidden).toBe(true);
+  });
+
+  it("una relectura con el mismo resultado no vuelve a escribir la línea", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = await previa(m);
+    const mudanzas: MutationRecord[] = [];
+    const ojo = new MutationObserver((r) => void mudanzas.push(...r));
+    ojo.observe($(p, "#cpo-deposito"), { childList: true, characterData: true, subtree: true, attributes: true });
+    await m.correr(130_000);
+    for (let i = 0; i < 5; i++) p.pintar();
+    await suelta(4);
+    ojo.disconnect();
+    expect(leer.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(mudanzas.length).toBe(0);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+  });
+
+  it("una relectura con otro resultado cambia el texto", async () => {
+    let saldo = "125.0000000";
+    const { m, leer } = armar({ tipo: "saldo", saldo });
+    leer.mockImplementation(async () => ({ tipo: "saldo", saldo }));
+    const p = await previa(m);
+    saldo = "25.0000000";
+    await m.correr(51_000);
     expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: "15,00" }));
   });
 
@@ -448,12 +487,13 @@ describe("la primera lectura que falla se reintenta una vez", () => {
     expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
   });
 
-  it("si el reintento también falla, no vuelve a probar hasta el minuto", async () => {
+  it("si el reintento también falla, no vuelve a probar hasta los 50 segundos y la línea queda escondida", async () => {
     const { m, leer } = armar("falla");
     const p = await previa(m);
     await m.correr(30_000);
     expect(leer).toHaveBeenCalledTimes(2);
     expect(linea(p)).toBe("");
+    expect($(p, "#cpo-deposito").hidden).toBe(true);
   });
 
   it("una primera lectura que anda no se reintenta", async () => {
@@ -494,5 +534,165 @@ describe("el lugar de la línea está reservado", () => {
     const regla = css.slice(inicio, css.indexOf("}", inicio));
     expect(regla).toContain("display: block");
     expect(regla).toMatch(/min-height:\s*\d/u);
+  });
+});
+
+describe("la línea habla solo de la cuenta que entró", () => {
+  const OTRA = cuentaDePrueba(9);
+  const conPide = (pide: string): string => archivoDe({ red: "mainnet", organizadora: pide });
+
+  it("si la campaña pide otra cuenta distinta de la que entró, no hay línea ni se lee nada", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = nuevoPanel(m);
+    await suelta(4);
+    await elegirArchivo(m, p, conPide(OTRA));
+    await suelta(6);
+    expect(vistaDe(p)).toBe("previa");
+    expect(leer).not.toHaveBeenCalled();
+    expect(linea(p)).toBe("");
+    const el = p.raiz.querySelector<HTMLElement>("#cpo-deposito");
+    expect(el === null || el.hidden).toBe(true);
+    await m.correr(180_000);
+    expect(leer).not.toHaveBeenCalled();
+  });
+
+  it("si la campaña pide justo la cuenta que entró, la línea está y lee esa cuenta", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = nuevoPanel(m);
+    await suelta(4);
+    await elegirArchivo(m, p, conPide(CUENTA));
+    await suelta(6);
+    expect(leer).toHaveBeenCalledWith(CUENTA);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+  });
+});
+
+describe("lo que se pinta es de la clave de ahora", () => {
+  /** El panel con la línea ya pintada (alcanza) y las lecturas siguientes colgadas. */
+  async function pintada() {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
+    const p = await previa(m);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    return { m, leer, p };
+  }
+
+  it("al cerrar la sesión la línea se apaga en el mismo dibujo, sin esperar al minuto", async () => {
+    const { m, p } = await pintada();
+    m.cuenta = null;
+    p.pintar();
+    expect(linea(p)).toBe("");
+    expect($(p, "#cpo-deposito").hidden).toBe(true);
+  });
+
+  it("al volver a entrar con la misma cuenta lee de nuevo en vez de mostrar lo guardado", async () => {
+    const { m, leer, p } = await pintada();
+    m.cuenta = null;
+    p.pintar();
+    m.cuenta = CUENTA;
+    p.pintar();
+    await suelta(4);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(linea(p)).toBe("");
+  });
+
+  it("al cambiar de cuenta con la pestaña a la vista no queda el texto de la otra", async () => {
+    const { m, p } = await pintada();
+    m.cuenta = cuentaDePrueba(6);
+    p.pintar();
+    expect(linea(p)).toBe("");
+  });
+
+  it("al cambiar de cuenta con la pestaña escondida tampoco", async () => {
+    const { m, p } = await pintada();
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    m.cuenta = cuentaDePrueba(6);
+    p.pintar();
+    expect(linea(p)).toBe("");
+  });
+
+  it("al cambiar el total de premios no queda el texto del total anterior", async () => {
+    const { m, p } = await pintada();
+    await elegirArchivo(m, p, archivoDe({ red: m.red, premios: ["600000000"] }));
+    await suelta(4);
+    expect(vistaDe(p)).toBe("previa");
+    expect(linea(p)).toBe("");
+  });
+
+  it("con la pestaña escondida y otro total tampoco se afirma lo guardado", async () => {
+    const { m, p } = await pintada();
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    await elegirArchivo(m, p, archivoDe({ red: m.red, premios: ["600000000"] }));
+    await suelta(4);
+    expect(linea(p)).toBe("");
+  });
+});
+
+describe("sin hueco en blanco", () => {
+  it("con la primera lectura y su reintento fallidos la línea queda escondida y no reservada", async () => {
+    const { m, leer } = armar("falla");
+    const p = await previa(m);
+    // Primera lectura fallida y reintento pendiente: el lugar sigue reservado.
+    expect($(p, "#cpo-deposito").hidden).toBe(false);
+    expect(linea(p)).toBe("");
+    await m.correr(6_000);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect($(p, "#cpo-deposito").hidden).toBe(true);
+    await m.correr(60_000);
+    expect($(p, "#cpo-deposito").hidden).toBe(true);
+  });
+
+  it("una primera lectura que no vuelve en un minuto deja de reservar el lugar", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
+    const p = await previa(m);
+    expect($(p, "#cpo-deposito").hidden).toBe(false);
+    await m.correr(61_000);
+    expect($(p, "#cpo-deposito").hidden).toBe(true);
+  });
+
+  it("una relectura fallida de una lectura buena no reserva lugar: queda escondida", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
+    leer.mockImplementation(async () => {
+      throw new Error("sin conexión");
+    });
+    const p = await previa(m);
+    await m.correr(52_000);
+    expect(linea(p)).toBe("");
+    expect($(p, "#cpo-deposito").hidden).toBe(true);
+  });
+
+  it("la línea sigue siendo un aviso de estado para quien usa lector de pantalla", async () => {
+    const { m } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = await previa(m);
+    expect($(p, "#cpo-deposito").getAttribute("role")).toBe("status");
+  });
+});
+
+describe("el alto reservado según el ancho", () => {
+  const css = readFileSync("src/campana/campana-sala.css", "utf8");
+  const bloque = (consulta: string): string => {
+    const inicio = css.indexOf(consulta);
+    if (inicio < 0) return "";
+    let nivel = 0;
+    for (let i = css.indexOf("{", inicio); i < css.length; i++) {
+      if (css[i] === "{") nivel++;
+      if (css[i] === "}") nivel--;
+      if (nivel === 0) return css.slice(inicio, i + 1);
+    }
+    return "";
+  };
+
+  it("son dos renglones por defecto, tres por debajo de 400 px y uno desde 900 px", () => {
+    const base = css.indexOf(".cpo-deposito:empty:not([hidden]) {");
+    expect(css.slice(base, css.indexOf("}", base))).toContain("min-height: 2.7em");
+    expect(bloque("@media (max-width: 399px)")).toMatch(/\.cpo-deposito:empty:not\(\[hidden\]\)\s*\{[^}]*min-height:\s*4\.05em/u);
+    expect(bloque("@media (min-width: 900px) {")).toMatch(/\.cpo-deposito:empty:not\(\[hidden\]\)\s*\{[^}]*min-height:\s*1\.35em/u);
+  });
+
+  it("la regla de tres renglones va después de la base para ganarle", () => {
+    expect(css.indexOf("@media (max-width: 399px)")).toBeGreaterThan(css.indexOf(".cpo-deposito:empty:not([hidden]) {"));
   });
 });
