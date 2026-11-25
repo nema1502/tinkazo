@@ -433,6 +433,15 @@ curl -fsS -X PUT -H "Authorization: Bearer $T" -H "Content-Type: application/jso
 
   El workflow está prendido, pero mientras la clave no esté ni en el Environment ni entre los secretos del repositorio no hace nada y sale bien. Si solo hay una copia entre los secretos del repositorio, la toma de ahí: por eso el paso 4 no es opcional. Con el mismo nombre en los dos lugares gana el del Environment. No se cambia el nombre del secreto: lo nombra el workflow. Para mirarlo a mano: `curl -fsS -H "Authorization: Bearer $T" https://pm.tinkazo.app/v1/patrocinio/estado -o e.json && node scripts/lib/vigilar-portero.mjs e.json` (dice qué problemas hay, sin cifras: esas están en `e.json`).
 
+### Las cuentas nuevas de la última hora (issue 177)
+
+`GET /v1/patrocinio/estado` suma el bloque `cuentas`, que lee el vigilante ([workers/vigilante](../vigilante/README.md)) para avisar cuando una ronda de cuentas pasa su umbral. Crear una cuenta no pasa por el portero: lo hace el proveedor de cuentas al entrar, y un guion podría hacerlo desde afuera con el QR a la vista.
+
+- **De dónde sale el número**: de la consulta de uso del proveedor por ventana de tiempo (`GET /v3/billing/usage?from=…&to=…`, los dos en ISO 8601 con Z), que devuelve la cantidad exacta por tipo de cobro. La ventana son los últimos 60 minutos corridos (`from` es ahora menos 60 minutos y `to` es ahora). No sale de la lista de movimientos de los créditos: es una sola página de hasta 200 movimientos que comparten las firmas, las activaciones y las cuentas nuevas, y en un evento las firmas la llenan. Una cuenta nueva se reconoce por el comienzo del nombre del cobro (`wallet.created`, que en la práctica llega como `wallet.created:STELLAR:COSIGNED`), nunca por igualdad, y se suman todos los que empiezan así. Las activaciones salen del mismo cobro `account.active`, cuyo nombre sigue sin confirmarse: el vigilante no avisa por ellas.
+- **La forma**: `cuentas: { minutos: 60, nuevas, activaciones }`.
+- **Cada cuánto se pide**: como mucho una vez por minuto por instancia, y solo al leer el estado. Se recuerda lo leído un minuto, bien o mal, y las lecturas a la vez comparten una sola consulta. Nunca va en el camino de un pago, de un sello ni de una firma.
+- **Cuando no se puede contar**: si la consulta falla, tarda más que la espera de siempre con el proveedor (8 segundos) o contesta algo que no se entiende (falta la lista de eventos, o una cantidad no es un número entero mayor o igual a cero), el bloque vale `null`. Nunca un cero inventado: un cero que no es cero apagaría el aviso. El resto del estado sale igual, y la bitácora anota `error-pollar` con la llamada `usage` y un código fijo.
+
 ## Desplegar y encender (pendiente de la palabra de quien mantiene el proyecto)
 
 1. **Pasar la cuenta de Cloudflare al plan de US$5 antes de desplegar** (el pedido en frío no entra en el plan gratis, ver [Cifras](#cifras-de-arranque-y-cpu)).

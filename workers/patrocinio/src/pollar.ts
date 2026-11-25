@@ -2,7 +2,8 @@
  * Lo que el portero de mainnet le pregunta a Pollar con la llave secreta de la app (`POLLAR_SECRETO`): quién es la
  * persona que manda una sesión (`tokens/verify`), cuál es su billetera de Stellar (`users`), cuántos créditos le
  * quedan a la app y qué se cobró en el día (`billing/credits`, para el piso y la vigilancia de firmas), el patrocinio
- * de la app (`treasury/sponsorship`, solo lectura), en la fase 2, abrir la cuenta de quien tiene acceso
+ * de la app (`treasury/sponsorship`, solo lectura), las cuentas nuevas de la última hora (`billing/usage`, una consulta
+ * por minuto como mucho, solo al leer el estado), en la fase 2, abrir la cuenta de quien tiene acceso
  * (`wallets/fund`) y, para el correo de bienvenida, el correo, el nombre de pila y el idioma de la fila de la persona
  * (`users`), que no se guardan. Nada más.
  *
@@ -16,6 +17,7 @@
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
 import { type IdiomaDelCorreo, MAX_NOMBRE, esCorreo, limpiarTexto } from "./correo-bienvenida";
+import { type CuentasDeLaVentana, VENTANA_CUENTAS_MINUTOS, contarCuentasEnUso } from "./lectura-cuentas";
 import { type Fetch, ServidorAjeno, haciaPollar } from "./servidores";
 import { MAX_MOVIMIENTOS } from "./vigilancia";
 
@@ -27,6 +29,9 @@ export const MEMORIA_SESION_MS = 60_000;
 export const MEMORIA_CREDITOS_MS = 60_000;
 /** Con Pollar caído, hasta cuándo vale el último saldo leído. Después, lo nuevo se pausa. */
 export const ULTIMO_CREDITOS_MS = 10 * 60_000;
+/** Cuánto se recuerda el conteo de cuentas nuevas, bien o mal leído, antes de volver a consultar: una consulta por minuto como mucho. */
+export const MEMORIA_CUENTAS_MS = 60_000;
+export { VENTANA_CUENTAS_MINUTOS };
 /** Tras una falla al leer los créditos, no se vuelve a preguntar durante este tiempo: un corte cuesta una espera, no una por pedido. */
 export const PAUSA_CREDITOS_MS = 30_000;
 
@@ -46,6 +51,8 @@ export type Creditos = { ok: true; disponibles: number; leido: number; deMemoria
 export type Apertura = { ok: true; estado: "pedido"; pedido: string } | { ok: true; estado: "abierta" } | { ok: false; motivo: "sin-creditos" | "sin-billetera" | "pollar" };
 /** Los últimos movimientos de los créditos, tal como vienen (los cuenta `vigilancia.ts`). */
 export type Movimientos = { ok: true; movimientos: unknown[] } | { ok: false };
+/** Las cuentas nuevas y las activaciones de los últimos 60 minutos, según la consulta de uso del proveedor. */
+export type CuentasDeUso = ({ ok: true } & CuentasDeLaVentana) | { ok: false };
 /** Las banderas del patrocinio de la app (`sponsor_…`). */
 export type Patrocinio = { ok: true; banderas: Record<string, boolean> } | { ok: false };
 /**
@@ -228,6 +235,8 @@ export class Pollar {
   private readonly enCurso = new Map<string, Promise<Sesion>>();
   private creditosEnCurso: Promise<number | null> | null = null;
   private creditosCaidoHasta = 0;
+  private cuentasMemoria: { ms: number; valor: CuentasDeUso } | null = null;
+  private cuentasEnCurso: Promise<CuentasDeUso> | null = null;
 
   constructor(o: OpcionesPollar) {
     if (typeof o.secreto !== "string" || o.secreto.trim().length < 16 || /^sec_testnet_/i.test(o.secreto)) throw new Error("pollar-llave");
@@ -543,6 +552,40 @@ export class Pollar {
       return { ok: false };
     }
     return { ok: true, movimientos: c.movements };
+  }
+
+  /**
+   * Las cuentas nuevas y las activaciones de los últimos 60 minutos corridos, con UNA consulta de uso por ventana de
+   * tiempo (`GET /v3/billing/usage?from=…&to=…`, los dos en ISO 8601 con Z): la cantidad exacta por tipo de cobro aunque
+   * haya miles de firmas. El resultado se recuerda un minuto, bien o mal leído, y las lecturas a la vez comparten la
+   * consulta: como mucho una por minuto por instancia. Se pide solo al leer el estado, nunca en el camino de un pago. Si la
+   * consulta falla, tarda más que la espera de siempre o no tiene la forma esperada, no hay conteo (`ok: false`): nunca un cero.
+   */
+  async cuentasDeLaUltimaHora(): Promise<CuentasDeUso> {
+    const ahora = this.reloj();
+    const guardada = this.cuentasMemoria;
+    if (guardada && ahora - guardada.ms >= 0 && ahora - guardada.ms < MEMORIA_CUENTAS_MS) return guardada.valor;
+    this.cuentasEnCurso ??= this.leerCuentas(ahora).finally(() => (this.cuentasEnCurso = null));
+    return this.cuentasEnCurso;
+  }
+
+  private async leerCuentas(ahora: number): Promise<CuentasDeUso> {
+    let valor: CuentasDeUso = { ok: false };
+    try {
+      const hasta = new Date(ahora).toISOString();
+      const desde = new Date(ahora - VENTANA_CUENTAS_MINUTOS * 60_000).toISOString();
+      const l = await this.llamar(`/v3/billing/usage?from=${encodeURIComponent(desde)}&to=${encodeURIComponent(hasta)}`, { method: "GET" });
+      const c = this.contenido("usage", l, "SERVER_BILLING_USAGE");
+      if (c) {
+        const n = contarCuentasEnUso(c.events);
+        if (n) valor = { ok: true, ...n };
+        else this.falla("usage", "forma-eventos");
+      }
+    } catch {
+      this.falla("usage", "interno");
+    }
+    this.cuentasMemoria = { ms: ahora, valor };
+    return valor;
   }
 
   /**
