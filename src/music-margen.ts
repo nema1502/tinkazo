@@ -50,7 +50,7 @@ export function adelgazadoPrendido(busqueda?: string): boolean {
   if (forzado !== null) return forzado;
   try {
     const v = new URLSearchParams(busqueda ?? location.search).get("musicagracia");
-    return v !== null && v !== "0";
+    return v === "1";
   } catch {
     return false;
   }

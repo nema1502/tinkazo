@@ -164,6 +164,11 @@ describe("el interruptor del adelgazado", () => {
     expect(adelgazadoPrendido("?musicagracia=0")).toBe(false);
   });
 
+  it("solo el valor 1 lo prende: vacío, false, off, no o cualquier otro lo dejan apagado", () => {
+    for (const v of ["", "false", "off", "no", "true", "2", "01", " 1"]) expect(adelgazadoPrendido(`?musicagracia=${v}`), v).toBe(false);
+    expect(adelgazadoPrendido("?musicagracia")).toBe(false);
+  });
+
   it("la dirección con ?musicagracia=1 lo prende", () => {
     expect(adelgazadoPrendido("?musicagracia=1")).toBe(true);
     expect(adelgazadoPrendido("?demo=race&musicagracia=1")).toBe(true);
