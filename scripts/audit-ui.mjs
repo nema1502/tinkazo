@@ -37,6 +37,7 @@
  *   CDP_PORT=<puerto> si otra auditoría tiene el Chrome por defecto.
  */
 
+import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
@@ -45,12 +46,12 @@ import { emitirJson } from "./lib/resumen.mjs";
 import { ABRIR_OTRAS_FORMAS_JS, HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { CUENTA_FALSA, freighterFalsa } from "./lib/freighter-falsa.mjs";
 import { UMBRALES, sondaTexto } from "./lib/texto-minimo.mjs";
+import { esLaLinea, frasesDeLaLinea } from "./lib/linea-sellar.mjs";
 
-// La línea bajo Entrar para sellar tranquiliza a quien organiza. Se compara el comienzo de la frase, en los dos idiomas, y no
-// la frase entera: el texto sigue con lo que cambia según el modo (por ejemplo la campaña con premio) y se retoca seguido.
-// src/auditor-interfaz.test.ts cuida que el diccionario siga empezando así.
-const COMIENZO_LINEA_SELLAR = { es: "Tu gente no necesita crear cuenta", en: "Your people don't need an account" };
-const lineaTranquiliza = (texto) => typeof texto === "string" && Object.values(COMIENZO_LINEA_SELLAR).some((c) => texto.replace(/[’‘]/g, "'").startsWith(c));
+// La línea bajo Entrar para sellar tranquiliza a quien organiza. Se compara la frase COMPLETA, en español y en inglés, leída del
+// diccionario (src/i18n.ts): así el auditor sigue al texto cuando se retoca y no deja pasar otra frase que empiece igual.
+// src/auditor-interfaz.test.ts cuida esta lectura.
+const FRASES_LINEA_SELLAR = frasesDeLaLinea(readFileSync(new URL("../src/i18n.ts", import.meta.url), "utf8"));
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -920,7 +921,7 @@ async function run() {
           );
           check(
             `${etiqueta} ${tema}: sin cuenta, "Entrar para sellar" es la acción principal y su línea tranquiliza`,
-            f.ariaSellar === "true" && f.textoSellar === "Entrar para sellar" && f.principalSellar && f.lineaVisible && lineaTranquiliza(f.lineaTexto),
+            f.ariaSellar === "true" && f.textoSellar === "Entrar para sellar" && f.principalSellar && f.lineaVisible && esLaLinea(FRASES_LINEA_SELLAR, f.lineaTexto),
             `aria-disabled ${f.ariaSellar}, "${f.textoSellar}", principal ${f.principalSellar}, línea ${f.lineaVisible ? "visible" : "oculta"}: "${f.lineaTexto}"`,
           );
           const sq = JSON.parse(await sinCuenta.eval(PROBE));
