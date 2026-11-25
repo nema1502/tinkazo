@@ -1097,6 +1097,79 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
     expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
   });
 
+  /**
+   * jsdom no tiene diseño: se simula el alto de la capa. Lo fijo (premio, reloj, cintas, pie, QR) escala con `--ajuste` y con
+   * cada nivel de cintas quitadas, y la presentación suma su alto fijo mientras la capa no la esconda.
+   */
+  function simularAlto(visible: number, fijo: number, presentacion: number): { visible: (v: number) => void; restaurar: () => void } {
+    const sd = Object.getOwnPropertyDescriptor(Element.prototype, "scrollHeight");
+    const cd = Object.getOwnPropertyDescriptor(Element.prototype, "clientHeight");
+    let vis = visible;
+    const esCapa = (e: Element): e is HTMLElement => e.classList.contains("espera");
+    Object.defineProperty(Element.prototype, "scrollHeight", {
+      configurable: true,
+      get(this: Element) {
+        if (!esCapa(this)) return 0;
+        const ajuste = Number.parseFloat(this.style.getPropertyValue("--ajuste") || "1");
+        const nivel = Number(this.dataset.apretada ?? 0);
+        return fijo * ajuste * (1 - 0.1 * nivel) + (this.dataset.sinTeaser ? 0 : presentacion);
+      },
+    });
+    Object.defineProperty(Element.prototype, "clientHeight", { configurable: true, get: (): number => vis });
+    return {
+      visible: (v) => void (vis = v),
+      restaurar: () => {
+        if (sd) Object.defineProperty(Element.prototype, "scrollHeight", sd);
+        if (cd) Object.defineProperty(Element.prototype, "clientHeight", cd);
+      },
+    };
+  }
+  const capa = (): HTMLElement => document.querySelector<HTMLElement>(".espera") as HTMLElement;
+  const nombres150 = Array.from({ length: 150 }, (_, i) => `Persona ${i + 1}`);
+
+  it("en una pantalla donde el reloj y las cintas no entran con la presentación, se esconde ella y el reloj queda del tamaño completo", async () => {
+    // 1366 x 768: lo de siempre ocupa 700 y la presentación suma 130.
+    const alto = simularAlto(768, 700, 130);
+    try {
+      await abrirEspera(1, { nombres: nombres150 });
+      expect(capa().dataset.sinTeaser).toBe("1");
+      expect(capa().dataset.apretada).toBeUndefined();
+      expect(capa().style.getPropertyValue("--ajuste")).toBe("1");
+      // Con más alto, al cambiar el tamaño la presentación vuelve.
+      alto.visible(1000);
+      window.dispatchEvent(new Event("resize"));
+      expect(capa().dataset.sinTeaser).toBeUndefined();
+      expect(capa().style.getPropertyValue("--ajuste")).toBe("1");
+    } finally {
+      alto.restaurar();
+    }
+  });
+
+  it("donde todo entra con la presentación al tamaño completo, la presentación se queda", async () => {
+    const alto = simularAlto(1080, 700, 130);
+    try {
+      await abrirEspera(1, { nombres: nombres150 });
+      expect(capa().dataset.sinTeaser).toBeUndefined();
+      expect(capa().dataset.apretada).toBeUndefined();
+      expect(capa().style.getPropertyValue("--ajuste")).toBe("1");
+    } finally {
+      alto.restaurar();
+    }
+  });
+
+  it("si lo de siempre tampoco entra, se achica como antes y la presentación ya no suma", async () => {
+    const alto = simularAlto(600, 700, 130);
+    try {
+      await abrirEspera(1, { nombres: nombres150 });
+      expect(capa().dataset.sinTeaser).toBe("1");
+      const ajuste = Number.parseFloat(capa().style.getPropertyValue("--ajuste"));
+      expect(ajuste).toBeLessThan(1);
+      expect(ajuste).toBeGreaterThanOrEqual(0.7);
+    } finally {
+      alto.restaurar();
+    }
+  });
+
   /** Con 150 personas la presentación tiene tope: el reloj y las cintas de nombres siguen en la pantalla. */
   it("con 150 personas presenta hasta el tope, deja el reloj y las cintas, y no agrega ningún reloj", async () => {
     const { TOPE_TARJETAS } = await import("./games-teaser");
