@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { abrir, cifrar, olvidarMemoria } from "../enlace-corto";
 import { cortoDelEnlace } from "./espectador-enlace";
