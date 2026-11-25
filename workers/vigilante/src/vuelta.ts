@@ -24,7 +24,7 @@ import {
   revisarPortero,
 } from "../../../scripts/lib/revision-portero.mjs";
 import { type Canal, canalesActivos, faltaConfigurar, horasDeResumen, secreto, urlDelPortero } from "./config";
-import { MOTIVOS_CUENTAS, cuentasDelEstado, umbralDeCuentas, vigilarCuentas } from "./cuentas";
+import { MOTIVOS_CUENTAS, type RecordadoDeCuentas, cuentasDelEstado, umbralDeCuentas, vigilarCuentas } from "./cuentas";
 import { codigoDe, enviarPor, motivoDe } from "./envio";
 import { olvidarMemoriaDeLaRuta } from "./memoria-ruta";
 import { type Contexto, type Mensaje, mensajeDeAlerta, mensajeDeArreglo, mensajeDeCuentas, mensajeDeResumen } from "./mensaje";
@@ -96,8 +96,8 @@ export interface Memoria {
   salioBien: boolean;
   /** El comienzo de la ranura del último resumen armado. */
   resumenEn: string | null;
-  /** Las cuentas por hora (issue 177): la última hora cuyo aviso se armó, y qué motivos se avisaron en ella. */
-  cuentasAviso: { hora: string; motivos: string[] } | null;
+  /** Las cuentas de la última hora (issue 177): cuándo se avisó cada motivo por última vez, para no repetirlo durante 60 minutos. */
+  cuentasAviso: RecordadoDeCuentas | null;
   /** Vueltas seguidas en que el portero mandó el conteo de cuentas en null o sin entenderse. */
   cuentasSinConteo: number;
   pendientes: Aviso[];
@@ -133,13 +133,15 @@ const fechaOnull = (x: unknown): string | null => (typeof x === "string" && !Num
 const entero = (x: unknown): number => (typeof x === "number" && Number.isSafeInteger(x) && x >= 0 ? x : 0);
 
 /** Lo que se recuerda de un aviso de cuentas, o null si lo guardado no se entiende. */
-function cuentasAvisoDe(x: unknown): { hora: string; motivos: string[] } | null {
+function cuentasAvisoDe(x: unknown): RecordadoDeCuentas | null {
   if (!x || typeof x !== "object" || Array.isArray(x)) return null;
   const o = x as Record<string, unknown>;
-  if (typeof o.hora !== "string" || o.hora.length > 40 || Number.isNaN(Date.parse(o.hora))) return null;
-  const motivos = Array.isArray(o.motivos) ? o.motivos.filter((m): m is string => typeof m === "string" && (MOTIVOS_CUENTAS as readonly string[]).includes(m)) : [];
-  if (motivos.length === 0) return null;
-  return { hora: o.hora, motivos };
+  const recordado: RecordadoDeCuentas = {};
+  for (const motivo of MOTIVOS_CUENTAS) {
+    const cuando = fechaOnull(o[motivo]);
+    if (cuando !== null) recordado[motivo] = cuando;
+  }
+  return Object.keys(recordado).length === 0 ? null : recordado;
 }
 const TIPOS: TipoDeAviso[] = ["alerta", "arreglo", "resumen"];
 const CANALES: Canal[] = ["correo", "telegram"];
@@ -335,25 +337,23 @@ export async function vuelta(env: Entorno, dep: Dependencias): Promise<Resultado
     }
   }
 
-  // 2b. Las cuentas nuevas y las activaciones por hora (issue 177): el portero las cuenta desde los movimientos de los
-  // créditos de Pollar (`lectura-cuentas.ts`) y las manda en el bloque `cuentas` de `/estado`. Un aviso por hora y por
-  // motivo: lo avisado en una hora queda anotado y la hora nueva manda el aviso de vuelta, si sigue arriba del umbral.
+  // 2b. Las cuentas nuevas de los últimos 60 minutos (issue 177): el portero las pide al proveedor de cuentas con la
+  // consulta de uso por ventana de tiempo y las manda en el bloque `cuentas` de `/estado`. Un aviso por oleada: lo
+  // avisado queda anotado con su hora y no se repite durante 60 minutos, cambie o no la hora de reloj.
   if (canales.length > 0 && bloqueDeCuentas !== undefined) {
     const decisionCuentas = vigilarCuentas({
       cuentas: bloqueDeCuentas,
       ...umbralDeCuentas(env),
       ahoraMs: ahora.getTime(),
-      recordado: { hora: m.cuentasAviso?.hora ?? null, motivos: m.cuentasAviso?.motivos ?? [] },
+      recordado: m.cuentasAviso ?? {},
     });
     // Un bloque en null es que el portero no pudo contar (el proveedor de cuentas no contestó): el aviso quedaría mudo sin rastro.
     if (!decisionCuentas.conDatos) registrar("error-cuentas", { conteo: bloqueDeCuentas === null ? "sin-conteo" : "sin-leer" });
     if (decisionCuentas.avisar.length > 0) {
-      const horaDelConteo = decisionCuentas.hora ?? decisionCuentas.avisar[0]!.hora;
-      m.cuentasAviso = {
-        hora: horaDelConteo,
-        motivos: unicas([...(m.cuentasAviso && m.cuentasAviso.hora === horaDelConteo ? m.cuentasAviso.motivos : []), ...decisionCuentas.avisar.map((a) => a.motivo)]),
-      };
-      nuevos.push({ tipo: "alerta", mensaje: mensajeDeCuentas({ desbordados: decisionCuentas.avisar, completo: decisionCuentas.completo, hora: horaDelConteo }, contexto) });
+      const recordado: RecordadoDeCuentas = { ...(m.cuentasAviso ?? {}) };
+      for (const a of decisionCuentas.avisar) recordado[a.motivo] = ahora.toISOString();
+      m.cuentasAviso = recordado;
+      nuevos.push({ tipo: "alerta", mensaje: mensajeDeCuentas({ desbordados: decisionCuentas.avisar }, contexto) });
     }
   }
 
