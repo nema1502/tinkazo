@@ -12,7 +12,7 @@ import {
   registrarAcciones,
 } from "../campana/puente";
 import { anotarDuenaDelBorrador, borradorEsDeOtra, borrarBorrador, leerBorrador } from "../campana/borrador";
-import { DOLAR, dolaresEnTexto, esDeCentavosJustos } from "../campana/comision";
+import { DOLAR, dolaresEnTexto, esDeCentavosJustos, totalDePremios } from "../campana/comision";
 import { fechaTexto, horaTexto, premiosTexto } from "../campana/formato";
 import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
 import { reglaQueFalla } from "../campana/reglas-de-activar";
@@ -69,6 +69,7 @@ import { activeWallet } from "../stellar/wallet-lite";
 import { type PantallaGrande, crearPantallaGrande, rellenar } from "./campana-grande";
 import { type AccionDeComision, type ControlDeComision, type DepsDeComision, crearControlDeComision } from "./campana-comision";
 import { cambiarDeCuentaReal, depsDeComisionReales, entrarConGoogleReal } from "./campana-comision-real";
+import { type DepsDeDeposito, type EstadoDelDeposito, depsDeDepositoReales, estadoDelDeposito } from "./campana-deposito";
 import { depsDeTusReales } from "./campana-tus-real";
 import { crearFilaViva } from "./fila-viva";
 import type { ContextoDelPaso } from "./campana-pasar";
@@ -223,6 +224,11 @@ export interface DepsDelPanelDeCampana {
   ir?: (direccion: string) => void;
   /** Tus campañas desde cualquier navegador y Usar en esta compu. Sin esto, el panel no cambia en nada. */
   tus?: DepsDeTus;
+  /**
+   * Cuántos dólares digitales puede usar la cuenta que paga el premio (`campana-deposito.ts`). Con esto, en la vista previa de
+   * una campaña de la red principal el panel suma una línea que dice si el premio está o cuánto falta. Sin esto no mira nada.
+   */
+  deposito?: DepsDeDeposito;
 }
 
 const NOMBRE_DEL_CANAL = "tinkazo-campana-org";
@@ -293,6 +299,8 @@ export function depsReales(): DepsDelPanelDeCampana {
     },
     ir: (direccion) => location.assign(direccion),
     tus: depsDeTusReales(),
+    // El saldo se lee en la red principal: en la de prueba no hay premio de verdad que mirar.
+    ...(network.name === "mainnet" ? { deposito: depsDeDepositoReales() } : {}),
   };
 }
 
@@ -441,6 +449,8 @@ const QUINCE_MIN = 15 * 60_000;
 const DOCE_HORAS = 12 * 3_600_000;
 /** Lo que se queda por debajo de ese máximo: cubre lo que la hora de esta compu puede ir adelantada sin que se note. */
 const MARGEN_DE_LAS_DOCE_HORAS = 4 * 60_000;
+/** Quien vuelve a la pestaña no hace mirar el premio más de una vez cada 5 segundos. */
+const ENTRE_MIRADAS_DEL_DEPOSITO_MS = 5_000;
 const DESHACER_MS = 5_000;
 /** Si una quita no llegó a la sala, se vuelve a mandar sola: quitar dos veces es lo mismo que una. */
 const REINTENTO_QUITA_MS = 3_000;
@@ -643,6 +653,12 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let firmaDeAcciones = "";
   let punteroDentro = false;
   let marca = 0;
+  /** Lo que se leyó del premio en la cuenta que lo paga y de qué lectura es. Sin `deps.deposito` no se mira nada. */
+  let deposito: { clave: string; estado: EstadoDelDeposito | null } | null = null;
+  let ultimaMiradaDelDeposito = 0;
+  let depositoDetenido = false;
+  /** La línea del premio: se arma recién cuando hay algo que decir, así sin ella el panel es el de siempre. */
+  let depositoEl: HTMLElement | null = null;
   let escucha: { parar: () => void; consultar: () => Promise<void> } | null = null;
   let pararPase: (() => void) | null = null;
   let pararCierre: (() => void) | null = null;
@@ -3030,10 +3046,70 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     ganadorasEl.replaceChildren(...filasDeGanadoras);
   }
 
+  /** La cuenta que paga el premio: la que la campaña pide para sellar o, si no pide ninguna, la que entró. */
+  function cuentaDelPremio(): string | null {
+    return pide ?? deps.cuenta();
+  }
+
+  /**
+   * Mira en la red si el premio está en la cuenta, una vez por cuenta, total y estado del cobro (al pagarse el servicio el saldo
+   * baja, y se vuelve a mirar). `forzar` es la vuelta a la pestaña: quien cargó dólares en otra ventana lo ve al volver, sin
+   * pedir más de una vez cada 5 segundos. Nunca frena nada: es solo la línea.
+   */
+  function mirarElDeposito(forzar = false): void {
+    const lector = deps.deposito;
+    if (!lector || vista !== "previa" || campana === null || campana.red !== "mainnet") return;
+    const cuenta = cuentaDelPremio();
+    if (cuenta === null) return;
+    const total = totalDePremios(campana.premios);
+    const clave = [cuenta, total.toString(), cm?.estado().tipo ?? ""].join("|");
+    const igual = deposito?.clave === clave;
+    if (igual && (!forzar || deps.ahora() - ultimaMiradaDelDeposito < ENTRE_MIRADAS_DEL_DEPOSITO_MS)) return;
+    ultimaMiradaDelDeposito = deps.ahora();
+    const esta: { clave: string; estado: EstadoDelDeposito | null } = { clave, estado: igual ? (deposito?.estado ?? null) : null };
+    deposito = esta;
+    void Promise.resolve()
+      .then(() => lector.leer(cuenta))
+      .then(
+        (lectura) => estadoDelDeposito(lectura, total),
+        (): EstadoDelDeposito => ({ tipo: "sin-lectura" }),
+      )
+      .then((estado) => {
+        if (deposito !== esta || depositoDetenido) return;
+        esta.estado = estado;
+        pintar();
+      });
+  }
+
+  /** La línea del premio en la vista previa: está, o cuánto falta. Con la lectura fallida no dice nada. */
+  function pintarDeposito(): void {
+    const estado = vista === "previa" && campana !== null ? (deposito?.estado ?? null) : null;
+    let texto = "";
+    if (estado?.tipo === "alcanza") texto = fmt("cpoDepAlcanza", { premios: dolaresEnTexto(estado.total, deps.idioma()) });
+    else if (estado?.tipo === "falta") texto = fmt("cpoDepFalta", { falta: dolaresEnTexto(estado.falta, deps.idioma()) });
+    if (texto === "" && depositoEl === null) return;
+    if (depositoEl === null) {
+      depositoEl = document.createElement("p");
+      depositoEl.id = "cpo-deposito";
+      depositoEl.className = "cpo-linea cpo-deposito";
+      depositoEl.setAttribute("role", "status");
+      premioEl.after(depositoEl);
+    }
+    if (depositoEl.textContent !== texto) depositoEl.textContent = texto;
+  }
+
+  /** Al volver a esta pestaña se mira de nuevo el premio: quien cargó dólares en otra ventana lo ve sin recargar. */
+  const alVolverAVer = (): void => {
+    if (document.visibilityState === "visible") mirarElDeposito(true);
+  };
+  document.addEventListener("visibilitychange", alVolverAVer);
+
   function pintarBloques(): void {
     const enAbierta = vista === "abierta";
     const verLista = vista === "abierta" || vista === "cerrada";
     previaEl.hidden = vista !== "previa" || !campana;
+    mirarElDeposito();
+    pintarDeposito();
     if (campana && vista === "previa") {
       // Con el cobro prendido todos los montos del panel llevan dos decimales: el premio también (120,00 y no 120).
       premioEl.textContent = premiosTexto(campana.premios, deps.idioma(), cm?.activo() === true);
@@ -3393,6 +3469,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   }
 
   function detener(): void {
+    document.removeEventListener("visibilitychange", alVolverAVer);
+    depositoDetenido = true;
     reintentoDeLaDuena?.();
     reintentoDeLaDuena = null;
     dejarDeEscuchar();
