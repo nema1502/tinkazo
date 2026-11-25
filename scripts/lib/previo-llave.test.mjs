@@ -1,7 +1,7 @@
 import { Contract } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
 import { RED_DE_PRUEBA } from "../../src/prueba-llave/red";
-import { claveDeCodigo, claveDeInstancia, controlPrevio, ledgerDelIndice, RED } from "./previo-llave.mjs";
+import { atrasoDelIndice, claveDeCodigo, claveDeInstancia, controlPrevio, ledgerDelIndice, RED } from "./previo-llave.mjs";
 
 const respuesta = (cuerpo, status = 200) => new Response(JSON.stringify(cuerpo), { status });
 
@@ -107,6 +107,12 @@ describe("el control previo", () => {
     const r = await controlPrevio({ fetchFn: redFalsa({ indice: new Error("caído") }).fetchFn });
     expect(r.salida).toBe(0);
     expect(r.datos.atrasoDelIndice).toBeNull();
+  });
+
+  it("el atraso del índice se puede volver a medir solo", async () => {
+    expect(await atrasoDelIndice(redFalsa().fetchFn)).toBe(10);
+    expect(await atrasoDelIndice(redFalsa({ indice: new Error("caído") }).fetchFn)).toBeNull();
+    expect(await atrasoDelIndice(redFalsa({ ledger: new Error("caído") }).fetchFn)).toBeNull();
   });
 
   it("nunca sale con 1, que es el de la prueba fallida", async () => {

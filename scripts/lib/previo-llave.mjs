@@ -65,6 +65,17 @@ export function ledgerDelIndice(stats) {
   return candidatos.length ? Math.max(...candidatos) : null;
 }
 
+/** Cuántos ledgers va atrasado el índice respecto de la red ahora mismo, o `null` si no se pudo medir. */
+export async function atrasoDelIndice(fetchFn = fetch) {
+  try {
+    const ledgerActual = Number((await rpc(fetchFn, "getLatestLedger", {})).sequence);
+    const indexado = ledgerDelIndice(await json(fetchFn, `${RED.indice}/api/stats`, {}));
+    return indexado !== null && Number.isFinite(ledgerActual) ? Math.max(0, ledgerActual - indexado) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * @param {{ fetchFn?: typeof fetch }} [o]
  * @returns {Promise<{ salida: 0 | 2, motivo: string | null, datos: Record<string, unknown>, fallas: string[] }>}

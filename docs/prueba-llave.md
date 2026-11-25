@@ -46,7 +46,7 @@ La llave queda atada al anfitrión exacto donde se creó. En una vista previa y 
 - `scripts/lib/sin-prueba-de-llave.test.mjs` corre en `pnpm test` con rutas de la forma real del almacén de pnpm, con barras y con contrabarras.
 - `prueba-llave.yml`, aparte y sin frenar nada: corre el recorrido automático de verdad contra la red de prueba, con Chrome sin pantalla y un autenticador virtual, y deja `medidas-llave.json` como artefacto durante 14 días. Depende del grifo, de la red de prueba, del servicio de azar público y de un índice ajeno, y por eso puede fallar sin que el sitio tenga nada roto.
 
-El recorrido sale con 0 si dio bien, con 1 si la prueba falló y con 2 si no se pudo medir (la red de prueba cambió o el grifo, la red o el servicio de azar no contestaron). El paso de otro aparato, que borra lo guardado en la página y entra con la llave que quedó en el autenticador, nunca cambia el código de salida: depende de un índice que puede ir atrasado.
+El recorrido sale con 0 si dio bien, con 1 si la prueba falló y con 2 si no se pudo medir (la red de prueba cambió o el grifo, la red o el servicio de azar no contestaron). El paso de otro aparato, que borra lo guardado en la página y entra con la llave que quedó en el autenticador, nunca cambia el código de salida: depende de un índice que puede ir atrasado. Si la página no carga o se acaba el tiempo del recorrido, sale con 1, y lo que nunca se llegó a medir cuenta como falla. Si el servicio de azar no contesta, sale con 2. Del paso de otro aparato queda anotado el texto del error del kit y el atraso del índice medido al final, y solo se rotula como índice atrasado si el kit lo dijo y el atraso supera lo que se esperó.
 
 ## Desacuerdo abierto: el borrado de la red de prueba
 

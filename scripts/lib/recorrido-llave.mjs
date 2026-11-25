@@ -36,18 +36,40 @@ export async function esperarEstado(cdp, pedidos, ms, { fallas = ESTADOS_DE_FALL
   return { estado, ok: r.ok && pedidos.includes(estado) };
 }
 
+/** Lo que tiene que haber dado bien para que la prueba cuente como buena. Si un check no se emitió, es que no se llegó. */
+export const CHECKS_PRINCIPALES = ["previo", "carga", "crear", "sellar", "sortear", "coincide", "verificacion-ok"];
+
+/** Las fallas que no son de la prueba: el grifo o el servicio de azar público no contestaron. */
+const FALLA_AJENA = /^(grifo|ronda)/;
+
 /**
  * El código de salida: 0 si lo principal dio bien, 1 si la prueba falló, 2 si no se pudo medir (la red cambió o el grifo,
  * la red o el servicio de azar no contestaron). El paso de otro aparato nunca lo cambia.
+ * Un check principal que nunca se emitió (la página no cargó, se acabó el tiempo) cuenta como falla, y el check `tope` en
+ * falso también.
  * @param {{ checks: Array<{ nombre: string, ok: boolean }>, fallas: Array<{ motivo: string }>, previo?: { salida: number } }} o
  */
 export function codigoDeSalida(o) {
   if (o.previo && o.previo.salida === 2) return 2;
-  const principales = ["previo", "crear", "sellar", "sortear", "coincide", "verificacion-ok"];
-  const malos = o.checks.filter((c) => principales.includes(c.nombre) && !c.ok);
-  if (malos.length === 0) return 0;
-  const delGrifo = o.fallas.length > 0 && o.fallas.every((f) => /^grifo/.test(f.motivo));
-  return delGrifo ? 2 : 1;
+  const vistos = new Map(o.checks.map((c) => [c.nombre, c.ok]));
+  const faltan = CHECKS_PRINCIPALES.some((n) => vistos.get(n) !== true);
+  const sinTope = vistos.get("tope") === false;
+  if (!faltan && !sinTope) return 0;
+  const ajena = o.fallas.length > 0 && o.fallas.every((f) => FALLA_AJENA.test(f.motivo));
+  return ajena && !sinTope ? 2 : 1;
+}
+
+/**
+ * Qué decir del paso de otro aparato cuando no se pudo entrar. `indice-atrasado` solo si el kit dijo que el índice estaba
+ * atrasado y el atraso de ahora, en segundos de ledger (unos 5 cada uno), supera lo que se esperó. Cualquier otra cosa es
+ * `fallo`, con el texto del error para que se pueda leer.
+ * @param {{ estado: string | null, error: string, atrasoAhora: number | null, segundos: number }} o
+ */
+export function clasificarOtroAparato(o) {
+  const dijoAtrasado = /indexer is stale/i.test(o.error ?? "");
+  const supera = typeof o.atrasoAhora === "number" && o.atrasoAhora * 5 > o.segundos;
+  const resultado = o.estado === "no-aparece" && dijoAtrasado && supera ? "indice-atrasado" : "fallo";
+  return { resultado, estado: o.estado, error: o.error ?? "", atrasoAlFinal: o.atrasoAhora };
 }
 
 /** El archivo de medidas, con la forma de la sección de la prueba. */

@@ -13,8 +13,8 @@
  */
 import { writeFileSync } from "node:fs";
 import { launch, sleep } from "./lib/browser.mjs";
-import { controlPrevio } from "./lib/previo-llave.mjs";
-import { armarDatos, codigoDeSalida, esperarEstado, tocar } from "./lib/recorrido-llave.mjs";
+import { atrasoDelIndice, controlPrevio } from "./lib/previo-llave.mjs";
+import { armarDatos, clasificarOtroAparato, codigoDeSalida, esperarEstado, tocar } from "./lib/recorrido-llave.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -65,54 +65,63 @@ if (previo.salida !== 0) {
       await cdp.send("Page.navigate", { url: `${base}/prueba/llave/?lang=es` });
     };
 
+    // El tope cuenta de punta a punta y se mira antes de cada paso: nada queda corriendo de fondo cuando vence.
+    let vencido = false;
+    const restante = () => topeMs - (Date.now() - inicio);
+    const hasta = (ms) => {
+      if (restante() <= 0) {
+        vencido = true;
+        throw new Error("tope");
+      }
+      return Math.min(ms, restante());
+    };
+
     const principal = async () => {
-      // Un recorrido que se rinde antes de tiempo: se imprime lo que haya y se sale con 1.
-      const tope = new Promise((_, rechazar) => setTimeout(() => rechazar(new Error("tope")), topeMs - (Date.now() - inicio)));
-      const trabajo = (async () => {
-        await abrir();
-        const r0 = await esperarEstado(cdp, ["inicio", "ya-hay-llave"], 30_000);
-        check("carga", r0.ok, r0.estado ?? "sin estado");
-        if (!r0.ok) return;
+      await abrir();
+      const r0 = await esperarEstado(cdp, ["inicio", "ya-hay-llave"], hasta(30_000));
+      check("carga", r0.ok, r0.estado ?? "sin estado");
+      if (!r0.ok) return;
 
-        await tocar(cdp, "#principal");
-        const crear = await esperarEstado(cdp, ["cuenta-lista"], 150_000);
-        check("crear", crear.ok, crear.estado ?? "sin estado");
-        if (!crear.ok) return;
+      await tocar(cdp, "#principal");
+      const crear = await esperarEstado(cdp, ["cuenta-lista"], hasta(150_000));
+      check("crear", crear.ok, crear.estado ?? "sin estado");
+      if (!crear.ok) return;
 
-        await tocar(cdp, "#principal");
-        const esperando = await esperarEstado(cdp, ["esperando"], 120_000);
-        check("sellar", esperando.ok, esperando.estado ?? "sin estado");
-        if (!esperando.ok) return;
+      await tocar(cdp, "#principal");
+      const esperando = await esperarEstado(cdp, ["esperando"], hasta(120_000));
+      check("sellar", esperando.ok, esperando.estado ?? "sin estado");
+      if (!esperando.ok) return;
 
-        const listo = await esperarEstado(cdp, ["listo"], 300_000);
-        medidas = await leerMedidas();
-        check("sortear", listo.ok, listo.estado ?? "sin estado");
-        check("coincide", medidas?.sorteo?.coincide === true, JSON.stringify(medidas?.sorteo?.ganadores ?? null));
-        if (!listo.ok) return;
+      const listo = await esperarEstado(cdp, ["listo"], hasta(300_000));
+      medidas = await leerMedidas();
+      check("sortear", listo.ok, listo.estado ?? "sin estado");
+      check("coincide", medidas?.sorteo?.coincide === true, JSON.stringify(medidas?.sorteo?.ganadores ?? null));
+      if (!listo.ok) return;
 
-        const enlace = await cdp.eval("window.__pruebaLlave?.enlace ?? ''");
-        await cdp.send("Page.navigate", { url: enlace });
-        const veredicto = await cdp.waitFor(`(() => { const t = document.getElementById("verdict-title")?.textContent ?? ""; return t && !/^(Revisando el sorteo|Checking the draw)$/.test(t.trim()); })()`, 60_000);
-        await sleep(500);
-        const clase = await cdp.eval(`document.getElementById("verdict")?.className ?? ""`);
-        const texto = String(await cdp.eval(`document.getElementById("verdict-title")?.textContent ?? ""`)).trim();
-        const estado = /\bok\b/.test(clase) ? "ok" : /\bpartial\b/.test(clase) ? "partial" : /\bbad\b/.test(clase) ? "bad" : "working";
-        verificacion = { estado, texto };
-        check("verificacion-ok", veredicto.ok && estado === "ok", `${estado}: ${texto}`);
-      })();
-      await Promise.race([trabajo, tope]);
+      const enlace = await cdp.eval("window.__pruebaLlave?.enlace ?? ''");
+      await cdp.send("Page.navigate", { url: enlace });
+      const veredicto = await cdp.waitFor(`(() => { const t = document.getElementById("verdict-title")?.textContent ?? ""; return t && !/^(Revisando el sorteo|Checking the draw)$/.test(t.trim()); })()`, hasta(60_000));
+      await sleep(500);
+      const clase = await cdp.eval(`document.getElementById("verdict")?.className ?? ""`);
+      const texto = String(await cdp.eval(`document.getElementById("verdict-title")?.textContent ?? ""`)).trim();
+      const estado = /\bok\b/.test(clase) ? "ok" : /\bpartial\b/.test(clase) ? "partial" : /\bbad\b/.test(clase) ? "bad" : "working";
+      verificacion = { estado, texto };
+      check("verificacion-ok", veredicto.ok && estado === "ok", `${estado}: ${texto}`);
+      if (restante() <= 0 && !veredicto.ok) vencido = true;
     };
 
     try {
       await principal();
     } catch (e) {
       check("tope", false, e.message);
+      vencido = true;
       medidas = medidas ?? (await leerMedidas().catch(() => null));
     }
     medidas = medidas ?? (await leerMedidas().catch(() => null));
+    if (vencido && !checks.some((c) => c.nombre === "tope")) check("tope", false, "se acabó el tiempo");
 
     // Otro aparato: se borra lo guardado en la página y se entra con la llave que quedó en el autenticador.
-    if (!sinOtroAparato && checks.find((c) => c.nombre === "crear")?.ok) {
+    if (!sinOtroAparato && !vencido && checks.find((c) => c.nombre === "crear")?.ok) {
       const t0 = Date.now();
       const origen = new URL(base).origin;
       try {
@@ -138,8 +147,15 @@ if (previo.salida !== 0) {
             check("segundo-sello", s.ok && m2?.sello?.id !== primero?.id, s.estado ?? "sin estado");
             otroAparato = { resultado: "ok", minutos: Math.round((Date.now() - t0) / 6000) / 10 };
           } else {
-            const atraso = previo.datos.atrasoDelIndice;
-            otroAparato = { resultado: e.estado === "no-aparece" ? "indice-atrasado" : "fallo", minutos: Math.round((Date.now() - t0) / 6000) / 10, atrasoDelIndice: atraso, estado: e.estado };
+            // Qué dijo el kit y cuánto atraso hay ahora: el del control previo es de antes y de otra ruta del índice.
+            const error = String(await cdp.eval("window.__pruebaLlave?.error ?? ''").catch(() => ""));
+            const atrasoAhora = await atrasoDelIndice();
+            const segundos = Math.round((Date.now() - t0) / 1000);
+            otroAparato = {
+              ...clasificarOtroAparato({ estado: e.estado, error, atrasoAhora, segundos }),
+              minutos: Math.round(segundos / 6) / 10,
+              atrasoDelIndice: previo.datos.atrasoDelIndice,
+            };
           }
         } else {
           otroAparato = { resultado: "fallo", minutos: 0, estado: r.estado };

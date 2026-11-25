@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armarDatos, codigoDeSalida, esperarEstado, tocar } from "./recorrido-llave.mjs";
+import { armarDatos, clasificarOtroAparato, codigoDeSalida, esperarEstado, tocar } from "./recorrido-llave.mjs";
 
 /** Un CDP de mentira que anota lo que se le manda. */
 function cdpFalso({ rect = { x: 50, y: 30, foco: true }, estados = [] } = {}) {
@@ -74,7 +74,7 @@ describe("esperar una pantalla", () => {
 });
 
 describe("el código de salida", () => {
-  const bien = ["previo", "crear", "sellar", "sortear", "coincide", "verificacion-ok"].map((nombre) => ({ nombre, ok: true }));
+  const bien = ["previo", "carga", "crear", "sellar", "sortear", "coincide", "verificacion-ok"].map((nombre) => ({ nombre, ok: true }));
 
   it("0 si lo principal dio bien, aunque otro aparato falle", () => {
     expect(codigoDeSalida({ checks: [...bien, { nombre: "otro-aparato", ok: false }], fallas: [] })).toBe(0);
@@ -90,6 +90,28 @@ describe("el código de salida", () => {
     const checks = bien.map((c) => (c.nombre === "crear" ? { ...c, ok: false } : c));
     expect(codigoDeSalida({ checks, fallas: [{ motivo: "grifo-limitado" }] })).toBe(2);
     expect(codigoDeSalida({ checks, fallas: [{ motivo: "grifo-caido" }, { motivo: "simulacion" }] })).toBe(1);
+  });
+
+  it("1 si la página no cargó, aunque no haya fallas ni otros checks", () => {
+    const checks = [{ nombre: "previo", ok: true }, { nombre: "carga", ok: false }];
+    expect(codigoDeSalida({ checks, fallas: [] })).toBe(1);
+  });
+
+  it("1 si se acabó el tiempo después de crear: lo que nunca se midió cuenta como falla", () => {
+    const checks = [{ nombre: "previo", ok: true }, { nombre: "carga", ok: true }, { nombre: "crear", ok: true }, { nombre: "tope", ok: false }];
+    expect(codigoDeSalida({ checks, fallas: [] })).toBe(1);
+  });
+
+  it("1 si falta un check principal aunque los que hay estén bien", () => {
+    for (const falta of ["previo", "carga", "crear", "sellar", "sortear", "coincide", "verificacion-ok"]) {
+      expect(codigoDeSalida({ checks: bien.filter((c) => c.nombre !== falta), fallas: [] })).toBe(1);
+    }
+  });
+
+  it("2 si lo único que falló es el servicio de azar público", () => {
+    const checks = bien.map((c) => (["sortear", "coincide", "verificacion-ok"].includes(c.nombre) ? { ...c, ok: false } : c));
+    expect(codigoDeSalida({ checks, fallas: [{ motivo: "ronda" }] })).toBe(2);
+    expect(codigoDeSalida({ checks, fallas: [{ motivo: "ronda" }, { motivo: "simulacion" }] })).toBe(1);
   });
 });
 
@@ -113,5 +135,38 @@ describe("el archivo de medidas", () => {
     expect(d.otroAparato).toEqual({ resultado: "ok", minutos: 1, segundoSello: { totalStroops: 5 } });
     expect(d.verificacion).toEqual({ estado: "ok" });
     expect(d.fallas).toHaveLength(1);
+  });
+});
+
+describe("clasificar el paso de otro aparato", () => {
+  const procedencia = "no-aparece:Wallet C1 has unverified birth provenance. The indexer is stale at ledger 100; the network was at ledger 190 before lookup.";
+
+  it("indice-atrasado solo si el kit dice que el índice está atrasado y el atraso actual supera lo que se esperó", () => {
+    const r = clasificarOtroAparato({ estado: "no-aparece", error: procedencia, atrasoAhora: 86, segundos: 96 });
+    expect(r.resultado).toBe("indice-atrasado");
+  });
+
+  it("si el atraso actual ya es menor que lo esperado, no era el atraso: fallo con el texto", () => {
+    const r = clasificarOtroAparato({ estado: "no-aparece", error: procedencia, atrasoAhora: 5, segundos: 96 });
+    expect(r.resultado).toBe("fallo");
+  });
+
+  it("si no se pudo medir el atraso, es fallo", () => {
+    expect(clasificarOtroAparato({ estado: "no-aparece", error: procedencia, atrasoAhora: null, segundos: 96 }).resultado).toBe("fallo");
+  });
+
+  it("otro error del kit (no encontró la cuenta, otra llave) es fallo aunque el índice vaya atrasado", () => {
+    for (const error of ["no-aparece:Smart account contract not found on-chain", "no-aparece:The indexer did not return one complete schema-2 birth claim.", ""]) {
+      expect(clasificarOtroAparato({ estado: "no-aparece", error, atrasoAhora: 500, segundos: 96 }).resultado).toBe("fallo");
+    }
+  });
+
+  it("un estado que no es no-aparece es fallo", () => {
+    expect(clasificarOtroAparato({ estado: "falla", error: procedencia, atrasoAhora: 500, segundos: 96 }).resultado).toBe("fallo");
+  });
+
+  it("guarda el error y el atraso para el archivo", () => {
+    const r = clasificarOtroAparato({ estado: "no-aparece", error: procedencia, atrasoAhora: 86, segundos: 96 });
+    expect(r).toMatchObject({ estado: "no-aparece", error: procedencia, atrasoAlFinal: 86 });
   });
 });
