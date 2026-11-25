@@ -121,9 +121,12 @@ Para medir el recorrido del organizador sin datos personales: sin nombres y sin 
 
 **Los topes**, para que nadie lo llene ni le quite el plan gratis a los enlaces (los dos comparten las 100.000 filas escritas y los 5 millones de filas leídas por día de la cuenta):
 
-- 1.000 conteos y 60 consultas por dirección y por hora, en memoria, como el tope de los enlaces: la IP no se guarda, y si el objeto se duerme vuelven a cero. En IPv6 cuenta el /64, no la dirección entera (con la entera, un solo bloque /64 daba millones de topes). Se recuerdan hasta 20.000 direcciones por hora; con el mapa lleno, una dirección nueva espera (antes se vaciaba, y vaciarlo se podía forzar).
+- 5.000 conteos y 60 consultas por dirección y por hora, en memoria, como el tope de los enlaces: la IP no se guarda, y si el objeto se duerme vuelven a cero. En IPv6 cuenta el /64, no la dirección entera (con la entera, un solo bloque /64 daba millones de topes). Se recuerdan hasta 20.000 direcciones por hora; con el mapa lleno, una dirección nueva espera (antes se vaciaba, y vaciarlo se podía forzar).
+  Los 5.000 conteos por hora (eran 1.000) cubren un evento entero de unas 150 personas que sale por una sola conexión, con el wifi de un salón. Vale desde que se despliegue este servicio: hasta entonces el que está publicado sigue con 1.000 y con lo que ya tiene.
 - 20.000 conteos por día en total, y 2.000 combinaciones distintas por día (evento, propiedades y sorteo): con el día lleno, solo suman las que ya existen.
 - 500 consultas por día que leen la base; una consulta repetida sale de la memoria durante 5 minutos.
+
+**Si el sitio sale antes que este servicio:** el servicio publicado hoy rechaza (400) lo que todavía no conoce. El sitio lo toma así. La cuenta conectada con la red o con el origen tarjeta se reenvía una vez sin esa novedad, y se cuenta como antes. Las etapas del paso de la cuenta (`oficial_step`) no tienen equivalente anterior: el sitio manda la primera, ve el rechazo y descarta en silencio las demás de esa pestaña. Hasta desplegar este servicio esas etapas no se cuentan. Con el servicio ya desplegado, todo sale una sola vez y completo.
 
 **Lo que los topes no cuidan:** en el plan gratis, la cuenta de Cloudflare tiene 100.000 pedidos por día para todos sus Workers, y un conteo rechazado también es un pedido. Pasado eso, `c.tinkazo.app` deja de abrir enlaces y QR hasta la medianoche UTC. Por eso, antes de encenderlo, una de dos, que decide quien mantiene el proyecto (§4.8): Workers Paid (US$5 por mes; 10 millones de pedidos por mes) o una regla de límite de pedidos de Cloudflare delante de `/v1/contar`.
 
