@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { T } from "../i18n";
+import { montarPremios, ponerPremio, reiniciarPremios } from "./premios";
 import { avisoDePlataVisible, montarAvisoDePlata, parecePremioEnPlata, reiniciarAvisoDePlata } from "./premio-plata";
 
 /**
@@ -179,6 +180,77 @@ describe("el aviso debajo del campo del premio", () => {
     expect(aviso().getAttribute("role")).toBe("status");
     // El cierre se toca con el pulgar.
     expect(document.getElementById("prize-plata-x")?.getAttribute("aria-label") ?? "").not.toBe("");
+  });
+});
+
+describe("con los premios armados, escribir no mueve Sellar la lista", () => {
+  beforeEach(() => {
+    reiniciarPremios();
+    montarPremios();
+    montarAvisoDePlata(true);
+  });
+  afterEach(() => reiniciarPremios());
+
+  it("cada letra del campo llama a lo que pinta el largo y el aviso sigue escondido hasta salir del campo", () => {
+    premio().focus();
+    escribir(premio(), "5");
+    escribir(premio(), "50 USD");
+    expect(aviso().hidden).toBe(true);
+    premio().blur();
+    salir(premio());
+    expect(aviso().hidden).toBe(false);
+  });
+
+  it("también en los campos de los demás lugares", () => {
+    const nw = document.getElementById("nw") as HTMLInputElement;
+    nw.value = "3";
+    nw.dispatchEvent(new Event("input", { bubbles: true }));
+    const otro = document.querySelector<HTMLInputElement>("#prize-lugares input") as HTMLInputElement;
+    otro.focus();
+    escribir(otro, "20 dólares");
+    expect(aviso().hidden).toBe(true);
+  });
+
+  it("un cambio hecho por código, con el foco fuera del campo, sí lo actualiza", () => {
+    (document.getElementById("btn-freeze") as HTMLButtonElement).focus();
+    ponerPremio("50 USD");
+    expect(aviso().hidden).toBe(false);
+    ponerPremio("Termo");
+    expect(aviso().hidden).toBe(true);
+  });
+});
+
+describe("tocar un botón justo después de escribir, en un navegador que no da foco a los botones", () => {
+  const tocar = (destino: Element): void => {
+    destino.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+  };
+
+  it("Safari no da foco al botón al tocarlo: el foco sale sin destino, pero el toque fue a Sellar la lista", () => {
+    montarAvisoDePlata(true);
+    escribir(premio(), "50 USD");
+    tocar(document.getElementById("btn-freeze") as HTMLElement);
+    salir(premio(), null);
+    expect(aviso().hidden).toBe(true);
+  });
+
+  it("un toque en otro lado, o uno viejo, no lo frena", () => {
+    montarAvisoDePlata(true);
+    escribir(premio(), "50 USD");
+    tocar(document.body);
+    salir(premio());
+    expect(aviso().hidden).toBe(false);
+
+    reiniciarAvisoDePlata();
+    document.body.innerHTML = html.slice(html.indexOf("<body>") + 6, html.indexOf("</body>"));
+    montarAvisoDePlata(true);
+    escribir(premio(), "50 USD");
+    const ahora = vi.spyOn(performance, "now");
+    ahora.mockReturnValue(1000);
+    tocar(document.getElementById("btn-freeze") as HTMLElement);
+    ahora.mockReturnValue(5000);
+    salir(premio());
+    ahora.mockRestore();
+    expect(aviso().hidden).toBe(false);
   });
 });
 
