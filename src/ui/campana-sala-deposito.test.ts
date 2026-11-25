@@ -931,9 +931,13 @@ describe("la vuelta a la pestaña y el panel detenido", () => {
     m.ahora += 61_000;
     expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
     document.dispatchEvent(new Event("visibilitychange"));
-    expect(leer).toHaveBeenCalledTimes(2);
+    // La línea cambia en el mismo instante, sin esperar a ninguna lectura.
     expect(linea(p)).toBe(SIN_LECTURA);
     expect(visible(p)).toBe(true);
+    // Y la lectura nueva sale, aunque no vuelva: el texto no se afirma mientras tanto.
+    await suelta(4);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(linea(p)).toBe(SIN_LECTURA);
   });
 
   it("al volver a la pestaña con un texto todavía fresco no lo cambia", async () => {
