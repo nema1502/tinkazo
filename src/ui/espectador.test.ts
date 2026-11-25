@@ -46,7 +46,7 @@ vi.mock("./draw", () => ({
 vi.mock("./espectador-reloj", () => ({ desfaseDelReloj: () => h.desfaseDelReloj() }));
 // El QR y el enlace corto del panel del espectador; la sala, para la vista del participante.
 vi.mock("./qr", () => ({ pintarQr: (...a: unknown[]) => h.pintarQr(...a) }));
-vi.mock("../enlace-corto", () => ({
+vi.mock("../enlace-corto", async (orig) => ({
   acortar: (...a: unknown[]) => h.acortar(...a),
   enlaceParaElQr: (...a: unknown[]) => h.enlaceParaElQr(...a),
   // Lo que pide el diálogo de compartir al armar el enlace y el logo: en la prueba, sin red ni registro.
@@ -55,6 +55,8 @@ vi.mock("../enlace-corto", () => ({
   releerCorto: (...a: unknown[]) => Promise.resolve(null),
   cortoGuardado: (...a: unknown[]) => h.cortoGuardado(...a),
   dejarCortoDelVivo: (...a: unknown[]) => h.dejarCortoDelVivo(...a),
+  // La forma de un corto de este sitio es la de verdad: lo que la vista acepta como corto propio.
+  esCortoDe: (await orig<typeof import("../enlace-corto")>()).esCortoDe,
 }));
 vi.mock("../sala/cliente", () => ({ servicioDeSala: () => "http://sala.test" }));
 // El diálogo de compartir (`compartir.ts`) pinta la foto: en la prueba, un PNG que no toca el canvas.

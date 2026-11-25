@@ -48,11 +48,11 @@ import {
   reglaDelShow,
   segundosDelJuego,
 } from "./espectador-regla";
-import { contratoDelEnlace, datosDelEnlace, refDelEnlace, type DatosEspectador } from "./espectador-enlace";
+import { contratoDelEnlace, cortoDelEnlace, datosDelEnlace, refDelEnlace, type DatosEspectador } from "./espectador-enlace";
 import type { ShowALaPar, ShowDelEspectador } from "./draw";
 import { ANCLA_ANTES_S, anclaDeLaRondaUnaVez, anclaVirtual, horaDeLaRonda, medirElReloj, type Ancla } from "../reloj-de-la-ronda";
 import { soltarElFinal } from "../games/en-hora";
-import { releerCorto } from "../enlace-corto";
+import { dejarCortoDelVivo, releerCorto } from "../enlace-corto";
 
 export { datosDelEnlace, enlaceEspectador, type DatosEspectador } from "./espectador-enlace";
 
@@ -79,6 +79,11 @@ export { datosDelEnlace, enlaceEspectador, type DatosEspectador } from "./espect
  * **El camino de antes** (un enlace sin `h`, de una sala con el sitio de antes): espera lo grabado, y después lo que
  * dice la regla, y arranca el show desde el principio.
  *
+ * **Compartir lo que salió** lleva el enlace corto con el que entró este celular (`cortoDelEnlace`) o, si no lo conoce, el
+ * enlace completo del comprobante: nada sale de este celular hacia el servicio de enlaces. Quien abre la vista 10 minutos
+ * o más después de la ronda no está en la sala sino que recibió el enlace: ve Ver el comprobante, que lo lleva a la
+ * verificación con la lista (`ABIERTO_DESPUES_S`).
+ *
  * Es solo para mirar: no hay sellar ni sortear, no toca la cadena más que para leer y no graba nada. No cuenta nada del
  * sorteo: la página suma una visita anónima, como cualquiera que entra al sitio (`analytics.ts`, sin la dirección
  * después de la ruta). El modo stand, la demo y el ensayo no muestran el QR (`sinGrabar`, en `espera.ts`).
@@ -92,6 +97,13 @@ export { datosDelEnlace, enlaceEspectador, type DatosEspectador } from "./espect
 
 /** Lo que se espera a saber si el reloj del teléfono está corrido antes de dejar que la cuenta llegue a cero. */
 const ESPERA_DEL_RELOJ_MS = 4_000;
+
+/**
+ * Con la vista abierta 10 minutos o más después de la ronda, quien mira no está en la sala sino que recibió el enlace:
+ * ve el comprobante y no la invitación al QR nuevo. Antes, con todo el salón mirando, nadie carga la verificación junto
+ * con los demás (todos leerían la red a la vez).
+ */
+const ABIERTO_DESPUES_S = 600;
 
 /** Para las pruebas: el reloj, la cadena, el enlace y el número sin red, el azar de sus pausas y a dónde se va al salir. */
 export interface OpcionesDeLaVista {
@@ -107,6 +119,8 @@ export interface OpcionesDeLaVista {
   releer?: typeof releerCorto;
   /** La referencia al enlace corto, si no es la del fragmento. */
   ref?: { id: string; clave: string; n: number } | null;
+  /** El enlace corto con el que entró este celular, si no es el del fragmento o el recordado (las pruebas). */
+  corto?: string | null;
   /** El archivo del diálogo de compartir (`compartir.ts`): en las pruebas, uno que falla o que se hace esperar. */
   cargarCompartir?: () => Promise<typeof import("./compartir")>;
 }
@@ -187,8 +201,10 @@ async function compartirElSorteo(
   d: NonNullable<(typeof app)["drawn"]>,
   cargar: () => Promise<typeof import("./compartir")>,
   volverA: HTMLElement,
+  corto: string | null,
 ): Promise<void> {
-  const enlace = await enlaceDelComprobante(datos, d);
+  // El corto con el que entró este celular, si lo conoce: así el mensaje es corto y la foto lleva su QR con cualquier lista.
+  const enlace = corto ?? (await enlaceDelComprobante(datos, d));
   // Los nombres como los manda la sala: la línea sellada sin su marca cuando la lista se lee por persona, y el
   // nombre del equipo cuando la lista es de equipos con etiqueta (`etiquetaDe`).
   const porPersona = seCuentaPorPersona(datos.n, modesVisible());
@@ -218,7 +234,8 @@ async function compartirElSorteo(
       ref: refDe({ net: datos.net, contract: datos.k, id: datos.i }),
     },
     getLang(),
-    // Nada sale de este celular hacia el servicio de enlaces cortos: el enlace va completo, el que este celular ya tiene.
+    // Nada sale de este celular hacia el servicio de enlaces cortos: comparte el corto con el que entró (`c.ts`), si lo
+    // conoce, y si no el enlace completo.
     { corto: false },
   );
   // Al cerrarse el diálogo, el foco vuelve al botón que lo abrió. El navegador ya lo hace con un diálogo modal, pero si
@@ -257,6 +274,10 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
   }
   setLang(lang);
   const aLaPar = datos.h === 1;
+  // El corto con el que entró y si llegó tarde, una sola vez y antes de cualquier relectura: la hora de este celular alcanza,
+  // en una escala de diez minutos el desfase del reloj no pesa.
+  const cortoPropio = op.corto !== undefined ? op.corto : cortoDelEnlace(location.hash);
+  const abiertoDespues = Date.now() / 1000 >= roundTime(datos.r) + ABIERTO_DESPUES_S;
   // Un orden de turnos no tiene premio ni quien gane: el celular lo dice como la sala (`espera.ts`), con lo que está sellado.
   const orden = isTurnOrder(datos.n.length, datos.w, datos.z ?? "");
   // El show sale con el mismo ritmo y el mismo juego que el de la sala, sin cambiar el ritmo guardado de este navegador.
@@ -395,7 +416,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
         nombres.map((n) => `<li><img src="${avatar(n, 56)}" alt="" />${esc(n)}</li>`).join("") +
         `</ol>` +
         // Un orden no tiene otro premio: no se pregunta por uno.
-        (orden ? "" : `<p class="espectador-sigue">${esc(t("espFinSiguiente"))}</p>`) +
+        (orden || abiertoDespues ? "" : `<p class="espectador-sigue">${esc(t("espFinSiguiente"))}</p>`) +
         `<div class="espectador-acc">` +
         `<button class="ghost" type="button" data-otra-vez>${esc(t("espVerDeNuevo"))}</button>` +
         `<a class="espectador-propio" href="/">${esc(t("espHacerElTuyo"))}</a>` +
@@ -422,7 +443,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
       preparando = true;
       compartir.setAttribute("aria-busy", "true");
       if (aviso) aviso.textContent = "";
-      compartirElSorteo(datos, app.drawn, op.cargarCompartir ?? (() => import("./compartir")), compartir)
+      compartirElSorteo(datos, app.drawn, op.cargarCompartir ?? (() => import("./compartir")), compartir, cortoPropio)
         .catch(() => {
           // El archivo no bajó o el diálogo no pudo armarse: se dice y el botón queda listo para otro toque.
           if (aviso?.isConnected) aviso.textContent = t("espCompartirFallo");
@@ -433,6 +454,29 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
         });
     });
     sigue?.querySelector<HTMLElement>(".espectador-acc")?.insertBefore(compartir, sigue.querySelector(".espectador-propio"));
+    // Quien llegó tarde recibió el enlace: ve el comprobante, que arma este mismo celular y no publica nada. Se crea cuando
+    // está listo, así nunca hay un enlace vacío a la vista.
+    const acc = sigue?.querySelector<HTMLElement>(".espectador-acc");
+    if (abiertoDespues && acc) {
+      void enlaceDelComprobante(datos, d)
+        .then((u) => {
+          // Sin comprobante (cayó a la ronda del faro), o la vista ya cambió de pantalla: no se muestra.
+          if (!/\/verificar\.html[?#]/.test(u) || !acc.isConnected || fase !== "fin" || acc.querySelector("[data-comprobante]")) return;
+          const a = document.createElement("a");
+          a.className = "espectador-propio";
+          a.dataset.comprobante = "";
+          a.href = u;
+          a.textContent = t("espVerComprobante");
+          // Sin cancelar el clic: se navega en la misma pestaña, y la verificación toma el corto de `sessionStorage`.
+          a.addEventListener("click", () => {
+            if (!cortoPropio) return;
+            const v = new URL(u, location.origin);
+            dejarCortoDelVivo(v.pathname + v.hash, cortoPropio);
+          });
+          acc.insertBefore(a, acc.querySelector('a[href="/"]'));
+        })
+        .catch(() => undefined);
+    }
     otraVez?.focus({ preventScroll: true });
   };
 
