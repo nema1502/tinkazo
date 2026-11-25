@@ -120,6 +120,22 @@ describe("mensajeDeCuentas: el texto en el patrón de los avisos", () => {
     expect(aviso.texto).not.toMatch(/[;«“”—–·]/);
   });
 
+  it("no manda a pausar las altas del portero, que no frenan las cuentas nuevas, y dice dónde mirar y quién decide el corte", () => {
+    const uno = (motivo: "cuentas-nuevas" | "activaciones") =>
+      mensajeDeCuentas({ desbordados: [{ motivo, hubo: 250, umbral: 200 }] }, { estado: estadoBien(), ahora: new Date(T0), portero: "https://pm.tinkazo.app" }).texto;
+    for (const texto of [uno("cuentas-nuevas"), uno("activaciones")]) {
+      // La pausa de las altas frena el canje de cupones, no el ingreso con Google que es lo que crea las cuentas.
+      expect(texto).not.toMatch(/Pausá las altas/);
+      expect(texto).toContain("Pausar las altas del portero no frena esto");
+      expect(texto).toContain("panel de Pollar");
+      expect(texto).toContain("quien mantiene el proyecto");
+      expect(texto).toContain("Qué hacer con cada aviso");
+      // El vigilante no guarda cuentas ni nombres: no manda a buscarlos en su propio registro.
+      expect(texto).not.toMatch(/registro del portero/);
+      expect(texto).not.toMatch(/[;«“”—–·]/);
+    }
+  });
+
   it("con los dos motivos, nombra los dos; el asunto como el de fila de la hoja", () => {
     const aviso = mensajeDeCuentas(
       {
