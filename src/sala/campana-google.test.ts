@@ -174,7 +174,7 @@ describe("el alta con la vía de la sesión", () => {
       await altaConVia(2, { authProvider: 12 });
       await altaConVia(3, { authProvider: "ana@example.org" });
     });
-    expect(lineas.map((l) => JSON.parse(l).datos.valor)).toEqual(["sin-campo", "no-es-texto", "anaexample.org"]);
+    expect(lineas.map((l) => JSON.parse(l).datos.valor)).toEqual(["sin-campo", "no-es-texto", "anaexample.org~"]);
     expect(lineas.join("")).not.toContain("@");
   });
 
