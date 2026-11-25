@@ -162,6 +162,8 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
 .cpo-aviso { margin: 0 0 12px; font-weight: 800; font-size: 18px; }
 .cpo-aviso:not(:empty) { border-left: 6px solid var(--magenta); padding-left: 10px; }
 .cpo-aviso:empty, .cpo-linea:empty { display: none; }
+/* La pregunta de dejar la campaña, cuando no lleva línea: el título no queda pegado al botón. */
+.cpo-panel[data-vista="olvidar"] h2:has(+ .cpo-linea:empty) { margin-bottom: 12px; }
 .cpo-conexion { margin: 0 0 12px; font-weight: 800; font-size: 20px; border-left: 6px solid var(--magenta); padding-left: 10px; }
 .cpo-panel button { min-height: 48px; }
 .cpo-panel button.primary { width: 100%; min-height: 56px; font-size: 18px; }
