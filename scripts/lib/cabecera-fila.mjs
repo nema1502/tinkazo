@@ -217,3 +217,46 @@ export function evaluarFilaCabecera(m, margen = MARGEN_FILA_PX, aireMinimo = AIR
   }
   return { ok: true, detalle: `el grupo de la derecha está en la fila del logo, con ${aire} px de aire (${m.entradas} entradas, hasta "${m.ultimoTexto}")` };
 }
+
+/** El relleno a cada lado de los renglones de la lista que abre Más en el celular (styles.css, .topnav .mas-lista a). */
+export const RELLENO_LISTA_MAS_PX = 16;
+
+/**
+ * Se evalúa en la página: abre Más con un toque, como lo haría la persona, y mide el relleno de cada renglón que se ve. Con las
+ * campañas forzadas abiertas, que es cuando la fila del celular aprieta su relleno y una regla mal acotada alcanzó a la lista.
+ * Devuelve el texto JSON del ancho de la pantalla, si la lista quedó abierta y el relleno izquierdo y derecho de cada renglón.
+ */
+export const SONDA_LISTA_MAS = `JSON.stringify((() => {
+  document.documentElement.setAttribute('data-campanas', '1');
+  const mas = document.querySelector('header .topnav .mas');
+  const boton = document.querySelector('header .topnav .mas-btn');
+  if (boton && boton.getAttribute('aria-expanded') !== 'true') boton.click();
+  const items = [...document.querySelectorAll('header .topnav .mas-lista a')]
+    .filter((a) => a.getClientRects().length > 0)
+    .map((a) => {
+      const e = getComputedStyle(a);
+      return { texto: (a.textContent || '').trim(), izquierda: parseFloat(e.paddingLeft), derecha: parseFloat(e.paddingRight) };
+    });
+  return { ancho: document.documentElement.clientWidth, abierta: !!(mas && mas.classList.contains('abierto')), items };
+})())`;
+
+/**
+ * Evalúa la lista de Más. Falla, con el motivo en claro, si no hay medida, si la lista no se abrió, si no hay renglones a la
+ * vista o si alguno tiene menos de "minimo" píxeles de relleno a cualquiera de los dos lados: el texto queda pegado al borde de
+ * la caja y el resalte del toque, sin aire.
+ * @returns {{ ok: boolean, detalle: string }}
+ */
+export function evaluarListaMas(m, minimo = RELLENO_LISTA_MAS_PX) {
+  if (!m) return { ok: false, detalle: "no hay medida de la lista de Más" };
+  if (!m.abierta) return { ok: false, detalle: `la lista de Más no se abrió con un toque al botón con ${m.ancho} px de ancho: no se midió` };
+  if (!m.items || m.items.length === 0) return { ok: false, detalle: `la lista de Más no tiene renglones a la vista con ${m.ancho} px de ancho` };
+  const flojos = m.items.filter((i) => Math.min(i.izquierda, i.derecha) < minimo);
+  if (flojos.length > 0) {
+    const lista = flojos.map((i) => `"${i.texto}" (${Math.min(i.izquierda, i.derecha)} px)`).join(", ");
+    return {
+      ok: false,
+      detalle: `en la lista de Más, ${lista} con menos de ${minimo} px de relleno con ${m.ancho} px de ancho: el texto queda pegado al borde de la caja`,
+    };
+  }
+  return { ok: true, detalle: `la lista de Más conserva ${minimo} px de relleno en sus ${m.items.length} renglones con ${m.ancho} px de ancho` };
+}
