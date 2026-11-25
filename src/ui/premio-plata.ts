@@ -10,6 +10,11 @@ import { montoDelPremio } from "../stellar/pagos";
  * ("Entrada $10") cuesta un toque en la cruz. Solo existe con las campañas abiertas y solo en el modo de sortear premios:
  * en el orden de turnos y en el amigo secreto el campo es el nombre del orden.
  *
+ * Aparece al salir del campo, cuando la persona terminó de escribir, y no mientras escribe: así no empuja Sellar la lista
+ * debajo de su dedo. Si el foco se va a un botón o a un enlace no aparece, porque la persona ya está tocando otra cosa.
+ * Al cerrarlo el foco no vuelve a un campo de texto, que en un celular abriría el teclado. El enlace abre en otra pestaña
+ * para no sacar a quien organiza de la lista que está armando.
+ *
  * Reconoce el monto con `montoDelPremio`, el mismo que usa Pagar premio para proponer cuánto pagar.
  */
 
@@ -47,13 +52,24 @@ function seCerroAntes(): boolean {
 /** ¿Se ve el aviso ahora? Para las pruebas y para quien lo quiera saber. */
 export const avisoDePlataVisible = (): boolean => aviso()?.hidden === false;
 
-/** Pone o saca el aviso según lo escrito. Se llama cada vez que cambia el campo o el modo. */
+/** Pone o saca el aviso según lo escrito. Se llama al salir del campo o al cambiar el modo. */
 export function actualizarAvisoDePlata(): void {
   const el = aviso();
   if (!el) return;
   const ver = montado && activo && enModoDeSorteo() && !seCerroAntes() && textosDelPremio().some(parecePremioEnPlata);
   if (el.hidden === !ver) return;
   el.hidden = !ver;
+}
+
+/** ¿El foco se va a algo que se toca (un botón o un enlace)? Entonces la persona ya no está escribiendo. */
+function vaAUnBoton(destino: EventTarget | null): boolean {
+  return destino instanceof HTMLElement && destino.matches("button, a[href], summary, [role='button']");
+}
+
+/** La persona salió de un campo del premio: recién ahora se mira lo escrito. */
+function alSalirDelCampo(e: FocusEvent): void {
+  if (vaAUnBoton(e.relatedTarget)) return;
+  actualizarAvisoDePlata();
 }
 
 /** Cierra el aviso para el resto de la sesión. */
@@ -66,8 +82,9 @@ function cerrar(): void {
   }
   const el = aviso();
   if (el) el.hidden = true;
-  // El foco vuelve al campo: la cruz desaparece y el teclado no queda sin lugar.
-  document.getElementById("prize")?.focus({ preventScroll: true });
+  // La cruz desaparece con el foco adentro: pasa al enlace discreto de al lado, que ahora se ve, y nunca a un campo de texto (en
+  // un celular abriría el teclado) ni a Sellar la lista (un segundo Enter sellaría).
+  document.querySelector<HTMLElement>(".premio-campana a")?.focus({ preventScroll: true });
 }
 
 /** Se llama una vez, con la herramienta armada. Con las campañas cerradas no engancha nada. */
@@ -76,8 +93,9 @@ export function montarAvisoDePlata(campanas: boolean = campanasActivo()): void {
   montado = true;
   activo = campanas;
   if (!activo) return;
-  document.getElementById("prize")?.addEventListener("input", actualizarAvisoDePlata);
-  document.getElementById("prize-lugares")?.addEventListener("input", actualizarAvisoDePlata);
+  // Al salir del campo y no al escribir: `focusout` sube desde cada campo de los demás lugares.
+  document.getElementById("prize")?.addEventListener("focusout", alSalirDelCampo);
+  document.getElementById("prize-lugares")?.addEventListener("focusout", alSalirDelCampo);
   // Cambiar de modo cambia lo que quiere decir el campo.
   document.getElementById("modo-botones")?.addEventListener("click", () => queueMicrotask(actualizarAvisoDePlata));
   document.getElementById("prize-plata-x")?.addEventListener("click", cerrar);
