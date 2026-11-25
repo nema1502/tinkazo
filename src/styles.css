@@ -2215,6 +2215,10 @@
   @media (max-width: 859px) {
     .puertas, .puertas:has(> .puerta[hidden]) { grid-template-columns: minmax(0, 1fr); max-width: 520px; width: 100%; margin-inline: auto; gap: 8px; }
   }
+  /* En una tableta los renglones ocupan el ancho del contenido, alineados con el título de arriba. */
+  @media (min-width: 701px) and (max-width: 859px) {
+    .puertas, .puertas:has(> .puerta[hidden]) { max-width: none; }
+  }
   @media (max-width: 859px), (min-width: 860px) and (max-height: 820px) {
     .puerta { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 14px; row-gap: 0; align-items: center; align-content: center; padding: 6px 12px 6px 6px; border-width: 2px; box-shadow: var(--sh-sm); }
     .puerta-media, .puerta-empresa .puerta-media { grid-row: 1 / span 2; width: 64px; height: 64px; aspect-ratio: auto; flex: none; margin: 0; border: 2px solid var(--ink); background: var(--field); overflow: hidden; }
