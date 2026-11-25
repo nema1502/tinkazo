@@ -66,9 +66,35 @@ function vaAUnBoton(destino: EventTarget | null): boolean {
   return destino instanceof HTMLElement && destino.matches("button, a[href], summary, [role='button']");
 }
 
+/**
+ * Cuándo fue el último toque o clic sobre un botón o un enlace. Safari (en la Mac y en el iPhone) no da foco a un botón al
+ * tocarlo: al salir del campo el destino llega vacío aunque la persona esté tocando Sellar la lista, y el aviso, al aparecer,
+ * movería el botón entre que apoya el dedo y lo suelta. El toque llega antes que la salida del campo, y eso es lo que se mira.
+ */
+const VENTANA_DEL_TOQUE_MS = 1500;
+let ultimoToqueABoton = -Infinity;
+
+function alTocar(e: Event): void {
+  if (e.target instanceof Element && e.target.closest("button, a[href], summary, [role='button']")) ultimoToqueABoton = performance.now();
+}
+
+const tocabaUnBoton = (): boolean => performance.now() - ultimoToqueABoton < VENTANA_DEL_TOQUE_MS;
+
 /** La persona salió de un campo del premio: recién ahora se mira lo escrito. */
 function alSalirDelCampo(e: FocusEvent): void {
-  if (vaAUnBoton(e.relatedTarget)) return;
+  if (vaAUnBoton(e.relatedTarget) || tocabaUnBoton()) return;
+  actualizarAvisoDePlata();
+}
+
+/** ¿El foco está en un campo del premio? Entonces la persona está escribiendo y el aviso espera a que salga. */
+const escribiendoElPremio = (): boolean => {
+  const activo = document.activeElement;
+  return activo instanceof HTMLElement && activo.closest("#prize, #prize-lugares") !== null;
+};
+
+/** Para lo que cambia los campos sin que la persona escriba (un chip, el borrador, el idioma): no toca el aviso mientras escribe. */
+export function refrescarAvisoDePlata(): void {
+  if (escribiendoElPremio()) return;
   actualizarAvisoDePlata();
 }
 
@@ -94,6 +120,7 @@ export function montarAvisoDePlata(campanas: boolean = campanasActivo()): void {
   activo = campanas;
   if (!activo) return;
   // Al salir del campo y no al escribir: `focusout` sube desde cada campo de los demás lugares.
+  document.addEventListener("pointerdown", alTocar, true);
   document.getElementById("prize")?.addEventListener("focusout", alSalirDelCampo);
   document.getElementById("prize-lugares")?.addEventListener("focusout", alSalirDelCampo);
   // Cambiar de modo cambia lo que quiere decir el campo.
@@ -107,4 +134,6 @@ export function reiniciarAvisoDePlata(): void {
   montado = false;
   activo = false;
   cerrado = false;
+  ultimoToqueABoton = -Infinity;
+  document.removeEventListener("pointerdown", alTocar, true);
 }
