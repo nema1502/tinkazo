@@ -108,11 +108,19 @@ export async function cortarFueraDelOrigen(page, base) {
         anotada = "una dirección que no se entiende";
       }
     }
+    // Un pedido pausado que no se contesta deja la página colgada: se contesta siempre, aunque la conexión ya se haya cerrado.
+    const contestar = (metodo, params) => {
+      try {
+        page.send(metodo, params).catch(() => undefined);
+      } catch {
+        /* la conexión se cerró */
+      }
+    };
     if (corta) {
       fuera.push(anotada);
-      page.send("Fetch.failRequest", { requestId, errorReason: "Aborted" }).catch(() => undefined);
+      contestar("Fetch.failRequest", { requestId, errorReason: "Aborted" });
     } else {
-      page.send("Fetch.continueRequest", { requestId }).catch(() => undefined);
+      contestar("Fetch.continueRequest", { requestId });
     }
   });
   await page.send("Fetch.enable", { patterns: [{ resourceType: "Document", requestStage: "Request" }] });
