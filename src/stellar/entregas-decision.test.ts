@@ -128,6 +128,16 @@ describe("la decisión pura por premio", () => {
     }
   });
 
+  it("un momento de la vuelta que no es un número finito tampoco se adivina: no se llama y se dice sin saber", async () => {
+    const lectura = conEstados(await leida(rpcCD3, CD3, "1"), "Owed");
+    for (const ahoraMs of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, undefined as unknown as number, "1772000000000" as unknown as number]) {
+      expect(entregasDeLaPromocion(lectura, { cobrarHastaMs: HASTA, ahoraMs, laLineaDe: lineas() }), String(ahoraMs)).toEqual({
+        ok: true,
+        entregas: [expect.objectContaining({ accion: "no", motivo: "no-se-sabe" })],
+      });
+    }
+  });
+
   it("vencido no se llama, con el plazo que llega: justo el día del plazo ya no va", async () => {
     const lectura = conEstados(await leida(rpcCD3, CD3, "1"), "Owed");
     expect(entregasDeLaPromocion(lectura, { cobrarHastaMs: AHORA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
@@ -157,6 +167,16 @@ describe("la decisión pura por premio", () => {
       expect(entregasDeLaPromocion(quedaEsperando, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() }), estado).toEqual({
         ok: true,
         entregas: [expect.objectContaining({ accion: "no", motivo: "volvio" })],
+      });
+    }
+  });
+
+  it("el premio ya cobrado en una promoción cancelada o reembolsada sigue siendo recibido: no volvió a la empresa", async () => {
+    const lectura = await leida(rpcCD3, CD3, "1");
+    for (const estado of ["Cancelled", "Refunded"] as const) {
+      expect(entregasDeLaPromocion(conEstados(lectura, "Paid", estado), { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() }), estado).toEqual({
+        ok: true,
+        entregas: [expect.objectContaining({ accion: "no", motivo: "ya-recibido" })],
       });
     }
   });

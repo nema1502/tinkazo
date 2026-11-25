@@ -47,12 +47,12 @@ export type EntregaDelPremio =
 /** Lo que se mira antes de decidir cada premio. */
 export interface LaEntrega {
   /**
-   * Hasta cuándo se puede cobrar el premio (ms). Es un dato de entrada y la decisión no trae ningún plazo propio: lo
+   * Hasta cuándo se puede cobrar el premio (ms, la misma unidad que `ahoraMs`). Es un dato de entrada y la decisión no trae ningún plazo propio: lo
    * pone quien llama y tiene que ser el que deja el contrato de premios, no un plazo más corto de la campaña, o se
    * dejaría sin pagar a quien todavía puede cobrar.
    */
   cobrarHastaMs: number;
-  /** El momento de la vuelta (ms). Un premio con la fecha límite exacta ya está vencido. */
+  /** El momento de la vuelta, en milisegundos como `Date.now()` (no en segundos). Un premio con la fecha límite exacta ya está vencido. */
   ahoraMs: number;
   /** Si la cuenta de quien ganó ya tiene la línea de la moneda del premio. Lo que no se sabe es `null`. */
   laLineaDe: MirarLaLinea;
@@ -71,8 +71,8 @@ function entregaDelPremio(premio: PremioDeLaPromocion, c: LaEntrega): EntregaDel
   // igual que lo ve la persona en `src/campana/premios-de-la-cuenta.ts`.
   if (premio.state === "Returned") return { puesto: premio.position, cuenta: premio.winner, monto: monto, accion: "no", motivo: "volvio" };
   const espera = premio.state === "Owed" || premio.state === "Held";
-  // Un plazo que no es un número finito no dice hasta cuándo se puede cobrar: no se adivina ni se llama.
-  if (espera && !Number.isFinite(c.cobrarHastaMs)) return { puesto: premio.position, cuenta: premio.winner, monto: monto, accion: "no", motivo: "no-se-sabe" };
+  // Un plazo o un momento que no son un número finito no dicen si ya venció: no se adivina ni se llama.
+  if (espera && (!Number.isFinite(c.cobrarHastaMs) || !Number.isFinite(c.ahoraMs))) return { puesto: premio.position, cuenta: premio.winner, monto: monto, accion: "no", motivo: "no-se-sabe" };
   if (espera && c.ahoraMs >= c.cobrarHastaMs) return { puesto: premio.position, cuenta: premio.winner, monto: monto, accion: "no", motivo: "vencido" };
   if (espera) {
     // La línea no se puede saber también corta: un claim a una cuenta que no puede recibir el activo
@@ -100,7 +100,8 @@ export function entregasDeLaPromocion(lectura: LecturaDeLaPromocion, c: LaEntreg
   return {
     ok: true,
     entregas: promo.premios.map((premio) => {
-      if (nuncaPaga) return { puesto: premio.position, cuenta: premio.winner, monto: premio.amount, accion: "no", motivo: "volvio" };
+      // Lo que ya se cobró sigue cobrado aunque la promoción se cancele: no volvió a la empresa.
+      if (nuncaPaga) return { puesto: premio.position, cuenta: premio.winner, monto: premio.amount, accion: "no", motivo: premio.state === "Paid" ? "ya-recibido" : "volvio" };
       if (!huboSello) return { puesto: premio.position, cuenta: premio.winner, monto: premio.amount, accion: "no", motivo: "sin-sello" };
       return entregaDelPremio(premio, c);
     }) as EntregaDelPremio[],
