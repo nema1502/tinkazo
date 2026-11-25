@@ -278,6 +278,16 @@ describe("los pasos 01 a 03 de la portada", () => {
     expect(css).toMatch(/\.steps \.paso-media \{ width: 64px; height: 64px;/);
   });
 
+  it("en una tableta vertical (761 a 900 px) el dibujo va arriba del texto: el texto no queda en una columna de 140 px", () => {
+    const base = css.indexOf("  .steps article {");
+    const tableta = css.match(/@media \(min-width: 761px\) and \(max-width: 900px\) \{\s*\.steps article \{([^}]*)\}\s*\}/);
+    expect(tableta).not.toBeNull();
+    expect(tableta?.[1]).toMatch(/grid-template-columns: minmax\(0, 1fr\)/);
+    // Va después de la regla de base para ganarle, y no toca el celular ni la laptop.
+    expect(css.indexOf(tableta![0])).toBeGreaterThan(base);
+    expect(css).not.toMatch(/@media \(min-width: 901px\) \{\s*\.steps article/);
+  });
+
   it("no usa los stickers de la colección", () => {
     expect(html.slice(html.indexOf('class="steps'), html.indexOf('id="juegos"'))).not.toContain("marca/coleccion");
   });
