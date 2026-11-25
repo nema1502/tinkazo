@@ -1,4 +1,4 @@
-> **English:** to report a security issue, email hola@tinkazo.app with the subject "Security". Please do not open a public issue. In scope are the draw contract (`tinkazo-raffle`), the protocol, the site, the services in `workers/` (reading, changing or deleting other people's data, or getting a service to pay or sign something it should not) and the code in this repository. If we do not answer, you decide how and when to disclose it. We do not offer cash bounties and we do not commit to response times. Known and accepted risks are in [docs/threat-model.en.md](docs/threat-model.en.md).
+> **English:** to report a security issue, email hola@tinkazo.app with the subject "Security". Please do not open a public issue. In scope are the draw contract (`tinkazo-raffle`), the protocol, the site, the services in `workers/` (reading, changing or deleting other people's data, or getting a service to pay or sign something it should not) and the code in this repository. We ask you to give us time to fix it or to warn the people it affects before making it public. This is a request, not a condition: the decision to publish is always yours. Please test on the test network or with your own draws, without accessing other people's data or taking the service down. We do not offer cash bounties and we do not commit to response times. Known and accepted risks are in [docs/threat-model.en.md](docs/threat-model.en.md).
 
 # Política de seguridad
 
@@ -35,7 +35,7 @@ El contrato no se puede actualizar. Si la falla está en el contrato desplegado,
 
 No ofrecemos recompensas en dinero. Cuando publiquemos el arreglo podemos nombrarte como quien lo encontró, si lo querés.
 
-Te pedimos que nos des tiempo para arreglarla o para avisar a quienes afecta antes de hacerla pública. Si no te contestamos, vos decidís cómo y cuándo contarla.
+Te pedimos que nos des tiempo para arreglarla o para avisar a quienes afecta antes de hacerla pública. Es un pedido, no una condición: la decisión de publicarla es siempre tuya.
 
 También te pedimos que pruebes en la red de prueba o con sorteos tuyos, sin entrar a datos de otras personas ni tumbar el servicio.
 

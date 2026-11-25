@@ -130,6 +130,23 @@ describe("SECURITY.md", () => {
     expect(enlaces.length).toBeGreaterThan(0);
     expect(enlaces.filter((r) => !existe(r))).toEqual([]);
   });
+
+  it("el resumen en inglés pide y permite lo mismo que el español", () => {
+    // Cada hecho tiene que estar en las dos versiones: el pedido de tiempo como pedido y no como
+    // condición, que la decisión de publicar es de quien reporta y cómo se prueba.
+    const hechos: [string, RegExp, RegExp][] = [
+      ["el pedido de tiempo", /Te pedimos que nos des tiempo/, /We ask you to give us time/],
+      ["que es un pedido y no una condición", /Es un pedido, no una condición/, /request, not a condition/],
+      ["que decide quien reporta", /siempre tuya/, /always yours/],
+      ["la forma de probar", /red de prueba o con sorteos tuyos/, /test network or with your own draws/],
+      ["no entrar a datos ajenos", /sin entrar a datos de otras personas/, /without (accessing|entering|reaching) (other people's|anyone else's) data/],
+    ];
+    const cuerpo = seguridad.split("\n").slice(1).join("\n");
+    for (const [que, es, en] of hechos) {
+      expect(es.test(cuerpo), `español: ${que}`).toBe(true);
+      expect(en.test(resumenIngles), `inglés: ${que}`).toBe(true);
+    }
+  });
 });
 
 /** Un campo de un formulario de issue, con lo que la prueba necesita mirar. */
