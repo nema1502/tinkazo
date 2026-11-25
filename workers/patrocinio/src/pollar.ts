@@ -43,7 +43,7 @@ const USUARIO = /^[A-Za-z0-9_\-.:|@]{1,200}$/;
 
 /** Quién es la persona de una sesión, según Pollar. `cuenta` es su billetera de Stellar si el verify la trae sin dudas. */
 export type Sesion =
-  | { ok: true; usuario: string; vence: number; cuenta: string | null; via: "google" | "otra" | null }
+  | { ok: true; usuario: string; vence: number; cuenta: string | null; via: "google" | "otra" | null; viaCruda?: string }
   | { ok: false; motivo: "sesion" | "otra-app" | "pollar" };
 export type Billetera = { ok: true; cuenta: string | null } | { ok: false };
 export type Creditos = { ok: true; disponibles: number; leido: number; deMemoria: boolean } | { ok: false };
@@ -171,8 +171,8 @@ export const VIA_DE_LA_SESION = { campo: "authProvider", google: "google" } as c
 
 /**
  * Por dónde entró la persona. Lo usa la sala de las campañas, que solo anota cuentas de Google, con una lista de lo
- * permitido: `google` solo si el campo, sin espacios al principio ni al final y pasado a minúsculas, dice exactamente el
- * valor de Google (`GOOGLE`, `Google` y ` google ` valen). Cualquier otro texto (`email`, `EMAIL`, `apple.com`, `google.com`,
+ * permitido: `google` solo si el campo, sin espacios al principio ni al final y pasado a minúsculas, dice el valor de
+ * Google (`GOOGLE`, `Google` y ` google ` valen). Cualquier otro texto (`email`, `EMAIL`, `apple.com`, `google.com`,
  * `googlex`, `goo gle`, uno con un carácter invisible adentro) es `otra`. `null` es que el verify no lo dice: el campo falta,
  * no es texto o viene vacío.
  */
@@ -180,6 +180,23 @@ function viaDe(contenido: Record<string, unknown>): "google" | "otra" | null {
   const x = contenido[VIA_DE_LA_SESION.campo];
   if (typeof x !== "string" || x.trim() === "") return null;
   return x.trim().toLowerCase() === VIA_DE_LA_SESION.google ? "google" : "otra";
+}
+
+/** Lo más largo que se conserva del valor de la vía que mandó el proveedor. */
+const LARGO_VIA_CRUDA = 32;
+
+/**
+ * El valor de la vía, listo para escribirlo en el registro del servicio y para nada más: minúsculas, solo letras, números,
+ * punto, guion, guion bajo y dos puntos (lo demás se descarta: espacios, arroba, barras, invisibles), cortado a 32. Una
+ * marca fija cuando el campo falta (`sin-campo`), no es texto (`no-es-texto`) o no deja nada (`vacio`). Sirve para ver qué
+ * mandó el proveedor si la sala rechaza a todos, sin que un dato de la persona pueda colarse. Nunca sale en una respuesta
+ * ni se guarda.
+ */
+export function sanearVia(x: unknown): string {
+  if (x === undefined || x === null) return "sin-campo";
+  if (typeof x !== "string") return "no-es-texto";
+  const v = x.toLowerCase().replace(/[^a-z0-9._:-]/g, "").slice(0, LARGO_VIA_CRUDA);
+  return v === "" ? "vacio" : v;
 }
 
 /** Una G de Stellar con su suma de control, o null. */
@@ -371,7 +388,7 @@ export class Pollar {
     if (c.applicationId !== this.appId || red === "prueba") return { ok: false, motivo: "otra-app" };
     if (red === null) return this.rota("forma-red");
     if (vence <= ahora) return { ok: false, motivo: "sesion" };
-    return { ok: true, usuario, vence, cuenta: unica(cuentasDe(c.wallet)), via: viaDe(c) };
+    return { ok: true, usuario, vence, cuenta: unica(cuentasDe(c.wallet)), via: viaDe(c), viaCruda: sanearVia(c[VIA_DE_LA_SESION.campo]) };
   }
 
   /** Una respuesta del verify que no se entiende: queda anotada y es «Pollar». */

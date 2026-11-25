@@ -9,6 +9,7 @@ import {
   Pollar,
   ULTIMO_CREDITOS_MS,
   VIA_DE_LA_SESION,
+  sanearVia,
   formaDeToken,
   pollarDe,
 } from "./pollar";
@@ -75,7 +76,7 @@ describe("la forma del token, antes de llamar a nadie", () => {
 describe("verificar", () => {
   it("pregunta a tokens/verify con la llave en x-pollar-api-key y devuelve quién es", async () => {
     const { p, falso } = montar(() => verificado({ wallet: { publicKey: G } }));
-    expect(await p.verificar(TOKEN)).toEqual({ ok: true, usuario: USUARIO, vence: T0 + 3_600_000, cuenta: G, via: "google" });
+    expect(await p.verificar(TOKEN)).toEqual({ ok: true, usuario: USUARIO, vence: T0 + 3_600_000, cuenta: G, via: "google", viaCruda: "google" });
     expect(falso.llamadas).toHaveLength(1);
     const [l] = falso.llamadas;
     expect(l?.url).toBe(`${POLLAR_SERVIDOR}/v3/tokens/verify`);
@@ -90,7 +91,7 @@ describe("verificar", () => {
     expect(VIA_DE_LA_SESION).toEqual({ campo: "authProvider", google: "google" });
   });
 
-  it("una sesión que dice exactamente el valor de Google trae via google", async () => {
+  it("una sesión que dice el valor de Google trae via google", async () => {
     const { p } = montar(() => verificado({ [VIA_DE_LA_SESION.campo]: VIA_DE_LA_SESION.google }));
     expect(await p.verificar(TOKEN)).toMatchObject({ ok: true, via: "google" });
   });
@@ -119,6 +120,44 @@ describe("verificar", () => {
     for (const authProvider of [undefined, 12, null, {}, ["google"], "", "   "]) {
       const { p } = montar(() => verificado({ authProvider }));
       expect(await p.verificar(TOKEN), String(authProvider)).toMatchObject({ ok: true, via: null });
+    }
+  });
+
+  it("la sesión conserva el valor de la vía saneado: minúsculas, solo letras, números y . - _ :, hasta 32", async () => {
+    const casos: Array<[unknown, string]> = [
+      ["GOOGLE", "google"],
+      [" Google ", "google"],
+      ["EMAIL", "email"],
+      ["google.com", "google.com"],
+      ["google-oauth2", "google-oauth2"],
+      ["auth0|123", "auth0123"],
+      ["goo gle!!", "google"],
+      ["goo​gle", "google"],
+      ["Ana@Example.org", "anaexample.org"],
+      ["x".repeat(500), "x".repeat(32)],
+      ["a1:b_c-d.e", "a1:b_c-d.e"],
+      ["", "vacio"],
+      ["   ", "vacio"],
+      ["!!!", "vacio"],
+      [undefined, "sin-campo"],
+      [null, "sin-campo"],
+      [12, "no-es-texto"],
+      [{}, "no-es-texto"],
+      [["google"], "no-es-texto"],
+    ];
+    for (const [authProvider, esperado] of casos) {
+      const { p } = montar(() => verificado({ authProvider }));
+      const s = await p.verificar(TOKEN);
+      expect(s, JSON.stringify(authProvider)).toMatchObject({ ok: true, viaCruda: esperado });
+    }
+  });
+
+  it("el valor saneado de la vía nunca lleva una arroba ni pasa de 32 caracteres", () => {
+    for (const x of ["ana@example.org", "@".repeat(100), `${"a".repeat(40)}@x.org`, "A B C @ D"]) {
+      const v = sanearVia(x);
+      expect(v, x).not.toContain("@");
+      expect(v.length, x).toBeLessThanOrEqual(32);
+      expect(v, x).toMatch(/^[a-z0-9._:-]+$/);
     }
   });
 

@@ -339,6 +339,18 @@ describe("los permisos y los rechazos", () => {
     expect(m.mundo.ejecutar("cupos", "SELECT n FROM activar_rechazos")).toEqual([{ n: 1 }]);
   });
 
+  it("quien no entró por Google deja una sola línea de la vía rechazada, sin nada de la persona", async () => {
+    const espia = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const correo = personaDePrueba(m.mundo, 5, { authProvider: "Email" });
+      expect((await listar(correo.token)).status).toBe(403);
+      const lineas = espia.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("via-rechazada"));
+      expect(lineas).toEqual([JSON.stringify({ evento: "via-rechazada", datos: { valor: "email", modo: "estricto" } })]);
+    } finally {
+      espia.mockRestore();
+    }
+  });
+
   it("el listado 31 de una cuenta en 10 minutos es 429 cupo-cuenta con Retry-After", async () => {
     for (let i = 0; i < LISTADOS_POR_CUENTA; i++) expect((await listar(m.organizadora.token)).status).toBe(200);
     const r = await listar(m.organizadora.token);
