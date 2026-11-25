@@ -157,7 +157,9 @@ export function escritoDeMeta(operaciones: unknown): Escrito[] {
     const datos = obj(entrada?.["data"]);
     const clase = String(datos?.["type"] ?? "desconocida");
     const interior = rama(datos, clase);
-    const durabilidad = interior && interior["durability"] !== undefined ? String(obj(interior["durability"])?.["type"] ?? interior["durability"]) : undefined;
+    // La vida de un dato del contrato es un enumerado con `name` (`persistent`, `temporary`); a mano puede venir como `type`.
+    const vida = obj(interior?.["durability"]);
+    const durabilidad = vida ? (typeof vida["name"] === "string" ? vida["name"] : typeof vida["type"] === "string" ? vida["type"] : undefined) : undefined;
     salida.push({ tipo: clase, ...(durabilidad ? { durabilidad } : {}), bytes: bytesDeUnValor(entrada), cambio });
   }
   return salida;

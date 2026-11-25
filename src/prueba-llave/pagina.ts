@@ -1,3 +1,4 @@
+import "../version-nueva";
 import { initialLang } from "../idioma";
 import type { Lang } from "../idioma";
 import { enNavegadorDeApp } from "../navegador";

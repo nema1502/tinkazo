@@ -84,7 +84,8 @@ function esSelloPendiente(x: unknown): x is SelloPendiente {
 function esCreacionPendiente(x: unknown): x is CreacionPendiente {
   if (typeof x !== "object" || x === null) return false;
   const o = x as Record<string, unknown>;
-  return esTexto(o["credentialId"]) && esTexto(o["hashCreacion"]);
+  // El hash queda vacío hasta que se manda la creación.
+  return esTexto(o["credentialId"]) && typeof o["hashCreacion"] === "string";
 }
 
 export function guardarSelloPendiente(s: SelloPendiente, almacen: Almacen | null = almacenDelNavegador()): void {

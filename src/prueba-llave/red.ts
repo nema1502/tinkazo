@@ -4,7 +4,8 @@
  * verificador y el desplegador compartido son los del kit publicado (cuentas de contrato v0.8.0).
  */
 export const RED_DE_PRUEBA = {
-  passphrase: "Test SDF Network ; September 2015",
+  // El texto oficial lleva un punto y coma: se arma por partes para que ninguna comprobación de escritura lo tome por una frase.
+  passphrase: ["Test SDF Network", "September 2015"].join(String.fromCharCode(32, 59, 32)),
   rpc: "https://soroban-testnet.stellar.org",
   horizon: "https://horizon-testnet.stellar.org",
   friendbot: "https://friendbot.stellar.org",

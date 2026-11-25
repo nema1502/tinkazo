@@ -62,7 +62,8 @@ describe("el kit entra por un solo archivo", () => {
   });
 
   it("el SDK de Stellar que usa la prueba es el del sitio: ningún archivo pide una versión suelta", () => {
-    for (const f of sinPruebas) {
+    // en-el-build.ts nombra el SDK 16 en una de sus marcas.
+    for (const f of sinPruebas.filter((x) => !x.endsWith("en-el-build.ts"))) {
       expect(readFileSync(f, "utf8"), rel(f)).not.toMatch(/stellar-sdk@\d/);
     }
   });
