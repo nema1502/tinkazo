@@ -9,6 +9,17 @@ import { pistaCallar, pistaDelJuego, pistaRemata, pistasConContexto } from "./so
 
 let audioCtx: AudioContext | null = null;
 
+/**
+ * Los estados desde los que un contexto de audio se puede reanudar. Chrome solo dice `suspended`; Safari en el
+ * iPhone nombra `interrupted` a su estado de cortado (una llamada, el ahorro de batería). Si solo se mirara el
+ * primero, después de una interrupción el sorteo entero corría mudo y nada lo volvía a prender (S1, S7).
+ * `AudioContextState` no conoce `interrupted`, por eso se mira como cadena.
+ */
+export function reanudarSiHaceFalta(ctx: AudioContext): void {
+  const estado = ctx.state as string;
+  if (estado === "suspended" || estado === "interrupted") void ctx.resume();
+}
+
 const MUTE_KEY = "tinkazo.muted";
 
 function initialMute(): boolean {
@@ -111,11 +122,22 @@ function techoDeLaMezcla(ctx: BaseAudioContext, prendido: boolean): void {
 /** La cadena, lista para sonar. */
 function chain(): { ctx: AudioContext; out: GainNode } | null {
   const c = contexto();
-  // El contexto nace suspendido si el primer sonido no salió de un clic. Sin
-  // esto el sorteo entero corre en silencio y nadie entiende por qué.
-  if (c?.ctx.state === "suspended") void c.ctx.resume();
+  // El contexto nace suspendido si el primer sonido no salió de un clic, y el iPhone deja el suyo interrumpido
+  // después de una llamada. Sin esto el sorteo entero corre en silencio y nadie entiende por qué.
+  if (c) reanudarSiHaceFalta(c.ctx);
   return c;
 }
+
+/**
+ * Cuando la pestaña vuelve a la vista, el contexto puede haber quedado suspendido o interrumpido (el iPhone lo
+ * corta al esconder la página, o con una llamada): se reanuda acá, en un solo lugar, para que la música y los
+ * efectos vuelvan donde estaban y nada suene roto (S1).
+ */
+function alVolverALaVista(): void {
+  if (document.visibilityState !== "visible") return;
+  if (audioCtx) reanudarSiHaceFalta(audioCtx);
+}
+if (typeof document !== "undefined") document.addEventListener("visibilitychange", alVolverALaVista);
 
 /**
  * Hace sonar un archivo del banco por el mismo bus que los osciladores (el techo, el paso bajo y el silenciador
