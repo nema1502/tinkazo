@@ -10,9 +10,7 @@
 
 ## Issue
 
-<!-- Closes #N solo si el issue queda hecho entero. Si queda algo pendiente, Refs #N. -->
-
-Refs #
+<!-- Escribí Closes #N solo si el issue queda hecho entero. Si queda algo pendiente, escribí Refs #N. -->
 
 ## Zona
 
@@ -38,8 +36,6 @@ Refs #
 ## Qué despliega o configura al unirse
 
 <!-- Escribí Nada si no hay nada. Si hay un servicio, un secreto, una variable o un orden de despliegue, decilo acá. Unir a main no despliega ningún servicio. -->
-
-Nada.
 
 ## Antes de pedir la revisión
 
