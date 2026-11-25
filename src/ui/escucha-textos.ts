@@ -1,5 +1,5 @@
 /**
- * Lo que dice la página de escucha (`src/ui/escucha.html`), en su propio diccionario y no en el de
+ * Lo que dice la página de escucha (`escucha.html`), en su propio diccionario y no en el de
  * `src/i18n.ts`: esa página es la mesa de trabajo del dueño para elegir la música juego por juego,
  * no parte del sitio, y el diccionario global es lo más pesado que baja la herramienta (`vite.config.ts`).
  * Paridad es/en, probada en `escucha-textos.test.ts`.
@@ -32,6 +32,7 @@ export const TEXTOS_ESCUCHA = {
     preparando: "Armando la pieza…",
     notaSemilla: "La pieza sale de una semilla fija: la misma candidata suena igual cada vez que se escucha.",
     fueraDelSelector: "Juegos que salieron del selector y siguen abriendo con ?demo=",
+    probarAdelgazado: "Abrir un show de prueba donde la música se aligera cuando el equipo va lento",
   },
   en: {
     titulo: "Listening page",
@@ -55,6 +56,7 @@ export const TEXTOS_ESCUCHA = {
     preparando: "Building the piece…",
     notaSemilla: "The piece comes from a fixed seed: the same candidate sounds the same every time.",
     fueraDelSelector: "Games that left the selector and still open with ?demo=",
+    probarAdelgazado: "Open a test show where the music thins out when the device is slow",
   },
 } as const;
 
@@ -63,9 +65,18 @@ export type ClaveEscucha = keyof typeof TEXTOS_ESCUCHA.es;
 /** Un texto de la página, en el idioma dado. */
 export const texto = (lang: IdiomaEscucha, clave: ClaveEscucha): string => TEXTOS_ESCUCHA[lang][clave];
 
-/** El idioma del que escucha: `?lang=en` para inglés, el resto español. */
-export const idiomaDeLaEscucha = (search: string = typeof location === "undefined" ? "" : location.search): IdiomaEscucha =>
-  new URLSearchParams(search).get("lang") === "en" ? "en" : "es";
+/**
+ * El idioma del que escucha: el de `?lang=`, y si no viene, el que ya eligió en el sitio (`tinkazo.lang`). Sin nada, español.
+ */
+export const idiomaDeLaEscucha = (search: string = typeof location === "undefined" ? "" : location.search): IdiomaEscucha => {
+  const pedido = new URLSearchParams(search).get("lang");
+  if (pedido === "en" || pedido === "es") return pedido;
+  try {
+    return localStorage.getItem("tinkazo.lang") === "en" ? "en" : "es";
+  } catch {
+    return "es";
+  }
+};
 
 /**
  * El nombre de cada juego, en el idioma del dueño. Los ids son los del show

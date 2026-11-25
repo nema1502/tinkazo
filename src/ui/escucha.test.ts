@@ -102,6 +102,19 @@ describe("la página armada", () => {
     expect(orden.slice(donde + 1)).toContain("stellar");
   });
 
+  it("trae un enlace para abrir un show de prueba con el adelgazado prendido, en el idioma de la página", () => {
+    const docEs = pagina();
+    armarEscucha(docEs, opciones(true, () => undefined));
+    const a = docEs.querySelector<HTMLAnchorElement>("a.prueba-adelgazado");
+    expect(a?.textContent).toBe(es.probarAdelgazado);
+    expect(a?.getAttribute("href")).toBe("/?demo=race&lead=3&musicagracia=1");
+    const docEn = pagina();
+    armarEscucha(docEn, { ...opciones(true, () => undefined), lang: "en" });
+    expect(docEn.querySelector("a.prueba-adelgazado")?.getAttribute("href")).toBe("/?demo=race&lead=3&musicagracia=1&lang=en");
+    expect(docEn.documentElement.lang).toBe("en");
+    expect(docEs.documentElement.lang).toBe("es");
+  });
+
   it("el botón de cada capa pide tocar esa fase de ese juego", () => {
     const doc = pagina();
     const pedidos: [string, string][] = [];

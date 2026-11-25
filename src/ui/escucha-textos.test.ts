@@ -31,6 +31,17 @@ describe("el diccionario de la página de escucha", () => {
     expect(texto("en", "capaTension")).toBe("Tension");
   });
 
+  it("sin ?lang= se usa el idioma que la persona ya eligió en el sitio", () => {
+    try {
+      localStorage.setItem("tinkazo.lang", "en");
+      expect(idiomaDeLaEscucha("")).toBe("en");
+      expect(idiomaDeLaEscucha("?lang=es")).toBe("es");
+    } finally {
+      localStorage.removeItem("tinkazo.lang");
+    }
+    expect(idiomaDeLaEscucha("")).toBe("es");
+  });
+
   it("el idioma sale de la dirección: ?lang=en, el resto español", () => {
     expect(idiomaDeLaEscucha("?lang=en")).toBe("en");
     expect(idiomaDeLaEscucha("?lang=es")).toBe("es");
@@ -53,7 +64,7 @@ describe("el diccionario de la página de escucha", () => {
 });
 
 describe("la página usa el diccionario propio, sin data-i del global", () => {
-  const html = readFileSync("src/ui/escucha.html", "utf8");
+  const html = readFileSync("escucha.html", "utf8");
 
   it("el HTML no trae claves del diccionario global (los textos los arma escucha.ts)", () => {
     expect(html).not.toMatch(/data-(?:i|i-html|i-title)\s*=/);

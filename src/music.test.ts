@@ -17,7 +17,7 @@ import { ACORDES, type AcordeId } from "./sonidos/carrera";
 
 /**
  * Las capas del show por juego: la identidad de cada juego es un mapa puro de datos que la página de
- * escucha (`src/ui/escucha.ts`) toca con el secuenciador de siempre, y nada más — en producción no prende nada
+ * escucha (`src/ui/escucha.ts`) toca con el secuenciador de siempre, y nada más. En producción no prende nada
  * nuevo: eso lo decide el dueño escuchando. Y el núcleo del freno: el tick de la música mide cuánto
  * tardó el tick y baja con gracia a algo más simple, sin cortar nunca.
  */
