@@ -24,7 +24,7 @@ Límites: 256 KB por enlace, 60 altas por hora por dirección IP (se cuentan en 
 
 ## Reescribir el enlace del QR de espectadores
 
-Desde el 16 de noviembre de 2026 (escrito y probado con `wrangler dev`, todavía sin desplegar). Con el QR de espectadores de la espera en grande a la vista, quien organiza puede cambiar el juego. La sala reescribe su propio enlace con el juego nuevo, cifrado con la misma clave, y los celulares que ya escanearon lo vuelven a leer antes del show (`src/enlace-corto.ts`, `actualizarCorto` y `releerCorto`). El QR no cambia y el servicio sigue sin ver nada:
+Desde el 16 de noviembre de 2026, desplegado el 19 de noviembre de 2026 desde `main` (8ffdc872). Con el QR de espectadores de la espera en grande a la vista, quien organiza puede cambiar el juego. La sala reescribe su propio enlace con el juego nuevo, cifrado con la misma clave, y los celulares que ya escanearon lo vuelven a leer antes del show (`src/enlace-corto.ts`, `actualizarCorto` y `releerCorto`). El QR no cambia y el servicio sigue sin ver nada:
 
 - **Solo cambia un enlace que nació para cambiar.** Un comprobante no puede cambiar nunca: con una reescritura libre, quien armó uno podría cambiarlo por el de otro sorteo después de compartirlo. Un `PUT` a un enlace creado sin `?cambia=1` contesta `409`. Y la página del enlace corto (`src/c.ts`) no abre un comprobante ni un evento desde un enlace que puede cambiar: lo dice como un enlace roto.
 - **Con el permiso de ese enlace**, el mismo que sirve para borrarlo, y desde los mismos orígenes que el alta.
@@ -33,7 +33,7 @@ Desde el 16 de noviembre de 2026 (escrito y probado con `wrangler dev`, todavía
 - **Vence y tiene tope.** Se reescribe hasta 6 horas después de creado y hasta 50 veces (`src/reescribir.ts`), con 300 reescrituras por hora por dirección y 20.000 por día en total. Reescribir no hace crecer lo guardado.
 - **La migración:** las columnas `cambia`, `version` y `cambios` se suman a la tabla de enlaces al despertar cada objeto. Los enlaces de antes quedan sin poder cambiar.
 
-Mientras no se despliegue, el sitio anda igual: el servicio de hoy crea el enlace como siempre, la sala no intenta reescribirlo y, si se cambia el juego con el QR a la vista, arma un QR nuevo para quienes escanean después.
+Si hiciera falta volver atrás, `npx wrangler rollback` deja la versión anterior del servicio y el sitio anda igual: ese servicio crea el enlace como siempre, no avisa que se puede reescribir, la página del enlace corto (`src/c.ts`) no agrega la referencia, los celulares no vuelven a leerlo y la sala, si se cambia el juego con el QR a la vista, arma un QR nuevo para quienes escanean después.
 
 ## Borrar a pedido
 
