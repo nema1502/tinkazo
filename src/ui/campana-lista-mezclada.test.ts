@@ -6,9 +6,9 @@ import { depsDelPasoReales } from "./campana-pasar-real";
 import { depsDelResultadoReales } from "./campana-resultado-real";
 
 /**
- * Lo que los pasos de pasar la lista y de mostrar el resultado hacen, hasta que tengan su propio aviso, con una lista que la
- * sala devuelve mezclada: no piden que se distinga, así que es la falla que más se le parece. La lista no se lee y el
- * resultado no se lee, como antes de que existieran las campañas de personas. No se ve ningún aviso nuevo.
+ * Lo que los pasos de pasar la lista y de mostrar el resultado hacen con una lista que la sala devuelve mezclada. Al pasar la
+ * lista se pide distinguir la mezcla, porque reintentar no la cambia y tiene su propio aviso. El resultado todavía no lo pide:
+ * una mezcla es la falla que más se le parece y no se ve ningún aviso nuevo.
  */
 
 const SALA: SalaDeCampana = {
@@ -52,9 +52,15 @@ describe("pasar la lista con una lista mezclada", () => {
     expect(Array.isArray(leidas) && leidas.map((f) => f.cuenta)).toEqual([cuentaDePrueba(1), cuentaDePrueba(2)]);
   });
 
-  it("una lista mezclada se trata como una lectura que falló: null, sin ningún aviso nuevo", async () => {
+  it("una lista toda de líneas de persona se lee como una lista", async () => {
+    conSala(lectura([fila(1, lineaDePrueba(1)), fila(2, lineaDePrueba(2))]));
+    const leidas = await depsDelPasoReales().leer(SALA);
+    expect(Array.isArray(leidas) && leidas.map((f) => f.cuenta)).toEqual([lineaDePrueba(1), lineaDePrueba(2)]);
+  });
+
+  it("una lista mezclada se lee como mezclada, solo después de una lectura estable de punta a punta", async () => {
     const rutas = conSala(lectura([fila(1, cuentaDePrueba(1)), fila(2, lineaDePrueba(1))]));
-    expect(await depsDelPasoReales().leer(SALA)).toBeNull();
+    expect(await depsDelPasoReales().leer(SALA)).toBe("mezclada");
     expect(rutas).toEqual(["/campana/estado", "/equipos?desde=0", "/equipos?desde=2", "/campana/estado", "/equipos?desde=2"]);
   });
 

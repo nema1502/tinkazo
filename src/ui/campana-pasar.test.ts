@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { cuentaDePrueba } from "../campana/cuentas-de-prueba";
+import { cuentaDePrueba, lineaDePrueba } from "../campana/cuentas-de-prueba";
 import type { SorteoDeCampana } from "../campana/en-curso";
 import { premioParaElCuadro } from "../campana/formato";
 import type { Campana } from "../campana/modelo";
-import { type PasoDelPuente, ponerRechazo } from "../campana/puente";
+import { type PasoDelPuente, botonDelPaso, lineaDelPaso, ponerRechazo } from "../campana/puente";
 import { cifrarEquipo } from "../equipos/datos";
 import type { SalaDeCampana } from "../sala/campana-org";
 import type { EquipoDeSala } from "../sala/cliente";
@@ -38,6 +38,8 @@ const entradaDe = (huella: string): SorteoDeCampana => ({
   pasadaEn: 1,
 });
 const fila = (n: number): EquipoDeSala => ({ n, cuenta: cuentaDePrueba(n), d: `d${n}`, estado: "aceptado", v: n });
+/** Una fila de una campaña de personas: en lugar de la cuenta, la línea de persona. */
+const filaDePersona = (n: number): EquipoDeSala => ({ ...fila(n), cuenta: lineaDePrueba(n) });
 
 interface Mundo {
   d: DepsDelPaso;
@@ -47,7 +49,7 @@ interface Mundo {
   pasos: PasoDelPuente[];
   cuadro: { lista: string; premio: string; ganadores: number; fijo: boolean; bloqueada: boolean; turnos: boolean; sorteado: boolean };
   entradas: Map<string, SorteoDeCampana>;
-  filas: (EquipoDeSala[] | null)[];
+  filas: (EquipoDeSala[] | "mezclada" | null)[];
   lecturas: number;
   esperas: number[];
   cuenta: string | null;
@@ -420,5 +422,101 @@ describe("lo que no se pasa", () => {
     m.entradas.set("testnet/evento-uno", { ...entradaDe("otra"), sorteo: "5", mandados: ["5"], aviso: "pendiente" });
     await crearPaso(m.d).correr(SALA, contexto(m));
     expect(m.entradas.get("testnet/evento-uno")).toMatchObject({ sorteo: "5", mandados: ["5"], aviso: "pendiente" });
+  });
+});
+
+describe("pasar la lista de una campaña de personas", () => {
+  it("una lista toda de líneas de persona pasa al cuadro, ordenada, y llega a en-el-sorteo", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(3), filaDePersona(1), filaDePersona(2)]];
+    const fin = await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(fin).toBe("pasada");
+    const lineas = m.cuadro.lista.split("
+");
+    expect(lineas).toEqual([lineaDePrueba(1), lineaDePrueba(2), lineaDePrueba(3)].sort());
+    expect(ultimo(m)).toEqual({ paso: "en-el-sorteo", n: 3 });
+    expect(m.entradas.get("testnet/evento-uno")?.huella).toBe(`huella:${lineas.join(",")}`);
+  });
+
+  it("las etiquetas son de personas y las de quien no tiene nombre son Persona con su número de la sala", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(1), filaDePersona(2)]];
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(m.etiquetasDe).toEqual(["personas"]);
+    expect(m.registro).toContain("etiquetas:2");
+  });
+
+  it("con menos líneas que premios dice cuántas hacen falta, como con cuentas", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(1), filaDePersona(2)]];
+    expect(await crearPaso(m.d).correr(SALA, contexto(m, [1n, 1n, 1n]))).toBe("pocos");
+    expect(ultimo(m)).toEqual({ paso: "pocos", n: 3 });
+    expect(m.cuadro.lista).toBe("");
+  });
+
+  it("una fila que no es cuenta ni línea de persona sigue siendo una lectura que falló", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(1), { ...fila(2), cuenta: "p1:corta" }]];
+    expect(await crearPaso(m.d).correr(SALA, contexto(m))).toBe("no-leyo");
+    expect(m.cuadro.lista).toBe("");
+  });
+});
+
+describe("una lista mezclada de cuentas y líneas de persona", () => {
+  it("termina en lista-rara, sin repetir la lectura y sin tocar el cuadro ni la entrada", async () => {
+    const m = mundo();
+    m.filas = ["mezclada", [fila(1), fila(2)], [fila(1), fila(2)]];
+    const fin = await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(fin).toBe("lista-rara");
+    expect(m.lecturas).toBe(1);
+    expect(m.esperas).toEqual([]);
+    expect(ultimo(m)).toEqual({ paso: "lista-rara" });
+    expect(m.registro).toEqual([]);
+    expect(m.cuadro.lista).toBe("");
+    expect(m.entradas.size).toBe(0);
+  });
+
+  it("no consulta a la organizadora ni descifra nada", async () => {
+    const m = mundo();
+    let consultas = 0;
+    m.d.organizadora = async () => {
+      consultas++;
+      return m.organizadora;
+    };
+    m.d.descifrar = async () => {
+      consultas++;
+      return null;
+    };
+    m.filas = ["mezclada"];
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(consultas).toBe(0);
+  });
+
+  it("el aviso no lleva botón de reintentar y dice lo de la lista, no lo de no pudimos leer", async () => {
+    const m = mundo();
+    m.filas = ["mezclada"];
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    const paso = ultimo(m) as PasoDelPuente;
+    expect(botonDelPaso(paso)).toBeNull();
+    expect(lineaDelPaso(paso)).toEqual({ clave: "cpoListaRara", vars: {} });
+  });
+
+  it("una corrida cancelada mientras lee no dice nada", async () => {
+    const m = mundo();
+    m.filas = ["mezclada"];
+    const paso = crearPaso(m.d);
+    const corrida = paso.correr(SALA, contexto(m));
+    paso.cancelar();
+    expect(await corrida).toBe("cancelada");
+    expect(ultimo(m)).toEqual({ paso: "leyendo" });
+  });
+
+  it("después de una mezcla, una lectura buena vuelve a pasar la lista", async () => {
+    const m = mundo();
+    m.filas = ["mezclada", [fila(1), fila(2)]];
+    const paso = crearPaso(m.d);
+    expect(await paso.correr(SALA, contexto(m))).toBe("lista-rara");
+    expect(await paso.correr(SALA, contexto(m))).toBe("pasada");
+    expect(ultimo(m)).toEqual({ paso: "en-el-sorteo", n: 2 });
   });
 });

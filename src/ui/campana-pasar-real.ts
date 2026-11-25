@@ -44,7 +44,8 @@ function fijarCantidadDeLaCampana(si: boolean): void {
 export function depsDelPasoReales(): DepsDelPaso {
   return {
     ahora: () => Date.now(),
-    leer: (s) => leerTodasLasAnotadas(s),
+    // Pide distinguir la mezcla de cuentas y líneas de persona: reintentar no la cambia, y tiene su propio aviso.
+    leer: (s) => leerTodasLasAnotadas(s, {}, { distinguirMezclada: true }),
     descifrar: descifrarEquipo,
     nombreYFiltro: (datos) => {
       const r = revisarEquipo(datos);

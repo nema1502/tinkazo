@@ -3,6 +3,8 @@
  *
  * Lo que se sella es exactamente lo que la sala va a comprobar: las cuentas anotadas y no quitadas, leídas de la sala (nunca
  * de las filas del panel, que esconden a quien se está quitando), ordenadas por cuenta con la misma función que usa la sala.
+ * En una campaña de personas las filas son líneas de persona y el camino es el mismo. Una lista que mezcla las dos formas no
+ * se sortea nunca: termina en `lista-rara`, sin reintentos y sin botón.
  * Los nombres viajan solo como etiquetas locales. Todo lo de afuera (la sala, el cuadro, el reloj) entra por `DepsDelPaso`,
  * para probarlo sin red ni pantalla.
  *
@@ -25,6 +27,7 @@ export type FinDelPaso =
   | "pasada"
   | "en-espera"
   | "no-leyo"
+  | "lista-rara"
   | "pocos"
   | "otra-cuenta"
   | "lista-sellada"
@@ -43,7 +46,8 @@ export interface ContextoDelPaso {
 
 export interface DepsDelPaso {
   ahora: () => number;
-  leer: (s: SalaDeCampana) => Promise<EquipoDeSala[] | null>;
+  /** Las anotadas de la sala, `null` si no se pudo leer, o `mezclada` si mezclan cuentas con líneas de persona. */
+  leer: (s: SalaDeCampana) => Promise<EquipoDeSala[] | "mezclada" | null>;
   descifrar: (clave: string, d: string) => Promise<DatosDeEquipo | null>;
   /** El nombre y si el filtro lo marcó, de lo descifrado. */
   nombreYFiltro: (datos: DatosDeEquipo) => { nombre: string; revisar: boolean } | null;
@@ -146,7 +150,7 @@ export function crearPaso(d: DepsDelPaso): PasoDeLaCampana {
       return vigente() ? "en-espera" : "cancelada";
     }
 
-    let leidas: EquipoDeSala[] | null = null;
+    let leidas: EquipoDeSala[] | "mezclada" | null = null;
     for (let intento = 0; intento < INTENTOS_DE_LECTURA && leidas === null; intento++) {
       if (intento > 0) await d.esperar(ESPERA_ENTRE_LECTURAS_MS);
       if (!vigente()) return "cancelada";
@@ -154,6 +158,8 @@ export function crearPaso(d: DepsDelPaso): PasoDeLaCampana {
       if (!vigente()) return "cancelada";
     }
     if (leidas === null) return decir({ paso: "no-leyo" }, "no-leyo");
+    // Una mezcla no cambia al volver a leer: el aviso no tiene botón de reintentar.
+    if (leidas === "mezclada") return decir({ paso: "lista-rara" }, "lista-rara");
 
     if (leidas.length < Math.max(2, premios)) return decir({ paso: "pocos", n: Math.max(2, premios) }, "pocos");
 
@@ -208,6 +214,7 @@ export function crearPaso(d: DepsDelPaso): PasoDeLaCampana {
     if (d.modoTurnos()) d.ponerModoTurnos(false);
     d.ponerEtiquetas(armada.etiquetas, "personas");
     d.setList(armada.lineas.join("\n"));
+    // Premio en mano: cuando el modelo tenga el premio escrito, acá va ponerPremio con ese texto en lugar del monto.
     d.ponerPremio(d.premioEnEspanol(campana.premios[0] ?? 0n));
     d.ponerGanadores(premios);
     d.fijarPorCampana(true);
