@@ -2877,7 +2877,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     let titulo = tx(TITULOS[vista] ?? "cpoTitulo");
     let linea = "";
     if (vista === "elegir") linea = tx("cpoElegirLinea");
-    if (vista === "confirmar" || vista === "cerrada") linea = tx("cpoCerrarLinea");
+    if (vista === "confirmar") linea = tx("cpoCerrarLinea");
+    // Con la lista cerrada y sin ningún paso en curso, la línea dice la consecuencia. Si un paso habla, habla él (la fila viva o su línea).
+    if (vista === "cerrada" && pasoDelPuente().paso === "nada") linea = tx("cpoCerrarLinea");
     if (vista === "cerrada" && sinLeer) linea = tx("cpoNoLeyo");
     if (vista === "tomada") linea = tx("cpoTomadaL");
     if (vista === "tus") linea = tx("cpoTusL");
