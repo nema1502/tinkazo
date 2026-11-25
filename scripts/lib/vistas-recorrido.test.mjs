@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { conTope, correrConPlazo, crearComprobadorDeRutas, describirGraficos, problemaDeTemaEIdioma, problemaDelDocumento, recorrerVistas, vigilarDocumentos } from "./vistas-pagina.mjs";
+import { conTope, correrConPlazo, crearComprobadorDeRutas, describirGraficos, problemaAlTerminar, problemaDeTemaEIdioma, problemaDelDocumento, recorrerVistas, vigilarDocumentos } from "./vistas-pagina.mjs";
+import { validarVistas } from "./vistas.mjs";
 
 const BASE = "http://localhost:4173";
 const PORTADA = "<html>portada</html>";
@@ -56,13 +60,6 @@ describe("crearComprobadorDeRutas: una ruta mal escrita no saca la portada", () 
     await c("/a.html");
     await c("/b.html");
     expect(srv.pedidos.filter((p) => p === `${BASE}/`)).toHaveLength(1);
-  });
-
-  it("si el servidor no contesta, no inventa un motivo: lo dirá la navegación", async () => {
-    const c = crearComprobadorDeRutas(BASE, async () => {
-      throw new Error("ECONNREFUSED");
-    });
-    expect(await c("/seguridad.html")).toBe("");
   });
 });
 
@@ -317,5 +314,125 @@ describe("recorrerVistas: el informe trae una fila por cada vista pedida", () =>
     const vistos = [];
     await correr(async (v, plan) => (vistos.push(plan), { nombre: v.nombre, ok: true }), { planear: () => ({ hacer: true, plazoMs: 777, porElTotal: false }) });
     expect(vistos[0]).toEqual({ hacer: true, plazoMs: 777, porElTotal: false });
+  });
+});
+
+describe("crearComprobadorDeRutas: sin poder comprobar, no da la ruta por buena", () => {
+  const rapido = { intentos: 3, pausaMs: 0 };
+  const pagina = { "/seguridad.html": { estado: 200, texto: "<html>seguridad</html>" } };
+
+  it("si el servidor no contesta ninguna vez, la vista falla diciendo que no pudo comprobar", async () => {
+    const c = crearComprobadorDeRutas(
+      BASE,
+      async () => {
+        throw new Error("ECONNREFUSED");
+      },
+      rapido,
+    );
+    const motivo = await c("/seguridad.html");
+    expect(motivo).toMatch(/no pude comprobar/);
+    expect(motivo).toContain("/seguridad.html");
+    expect(motivo).toContain("ECONNREFUSED");
+  });
+
+  it("un fallo suelto se reintenta y la ruta buena pasa", async () => {
+    const srv = servidor(pagina);
+    let llamadas = 0;
+    const buscar = async (url, opciones) => {
+      if (new URL(url).pathname === "/seguridad.html" && ++llamadas === 1) throw new Error("se cortó");
+      return srv.buscar(url, opciones);
+    };
+    expect(await crearComprobadorDeRutas(BASE, buscar, rapido)("/seguridad.html")).toBe("");
+    expect(llamadas).toBe(2);
+  });
+
+  it("un fallo suelto no deja pasar la ruta mal escrita: reintenta y la rechaza", async () => {
+    const srv = servidor(pagina);
+    let llamadas = 0;
+    const buscar = async (url, opciones) => {
+      if (new URL(url).pathname === "/seguridad" && ++llamadas === 1) throw new Error("se cortó");
+      return srv.buscar(url, opciones);
+    };
+    expect(await crearComprobadorDeRutas(BASE, buscar, rapido)("/seguridad")).toMatch(/portada/);
+  });
+
+  it("si la portada no se puede leer, la vista falla y la siguiente lo vuelve a intentar", async () => {
+    const srv = servidor(pagina);
+    let portadaCaida = true;
+    const buscar = async (url, opciones) => {
+      if (new URL(url).pathname === "/" && portadaCaida) throw new Error("la portada no contesta");
+      return srv.buscar(url, opciones);
+    };
+    const c = crearComprobadorDeRutas(BASE, buscar, rapido);
+    expect(await c("/seguridad.html")).toMatch(/no pude comprobar.*portada/s);
+    portadaCaida = false;
+    expect(await c("/seguridad.html")).toBe("");
+    expect(await c("/seguridad")).toMatch(/portada/);
+  });
+
+  it("una portada que contesta con error no sirve para comparar: no se da por buena la ruta", async () => {
+    const buscar = async (url) => {
+      const camino = new URL(url).pathname;
+      return camino === "/" ? { status: 503, ok: false, text: async () => "" } : { status: 200, ok: true, text: async () => "" };
+    };
+    expect(await crearComprobadorDeRutas(BASE, buscar, rapido)("/seguridad.html")).toMatch(/no pude comprobar.*503/s);
+  });
+});
+
+describe("problemaAlTerminar: la página terminó donde se pidió, con el estado y el tema pedidos", () => {
+  const ok = (url = `${BASE}/seguridad.html`) => ({ estado: 200, direccion: url });
+  const leido = { camino: "/seguridad.html", tema: "dark", idioma: "es" };
+  const base = { respuestas: [ok()], caminoPedido: "/seguridad.html", terminaEn: null, estado: leido, pedido: { tema: null, idioma: null } };
+
+  it("una vista que termina donde se pidió está bien", () => {
+    expect(problemaAlTerminar(base)).toBe("");
+  });
+
+  it("una vista que después de los pasos terminó en otra página falla y lo dice", () => {
+    const m = problemaAlTerminar({ ...base, estado: { ...leido, camino: "/" } });
+    expect(m).toContain("/seguridad.html");
+    expect(m).toMatch(/terminó en \//);
+  });
+
+  it("si se pidió terminar en otra página a propósito, vale esa y no la de la ruta", () => {
+    const e = { ...base, caminoPedido: "/", terminaEn: "/juegos.html", respuestas: [ok(`${BASE}/`), ok(`${BASE}/juegos.html`)] };
+    expect(problemaAlTerminar({ ...e, estado: { ...leido, camino: "/juegos.html" } })).toBe("");
+    expect(problemaAlTerminar({ ...e, estado: { ...leido, camino: "/" } })).toMatch(/juegos\.html/);
+  });
+
+  it("sin camino leído no se afirma nada", () => {
+    expect(problemaAlTerminar({ ...base, estado: { tema: "dark", idioma: "es" } })).toMatch(/camino/);
+  });
+
+  it("un documento con error sigue fallando, y el tema y el idioma también", () => {
+    expect(problemaAlTerminar({ ...base, respuestas: [{ estado: 404, direccion: `${BASE}/x.html` }] })).toMatch(/404/);
+    expect(problemaAlTerminar({ ...base, pedido: { tema: "light", idioma: null } })).toMatch(/tema/);
+    expect(problemaAlTerminar({ ...base, pedido: { tema: null, idioma: "en" } })).toMatch(/idioma/);
+  });
+
+  it("el guion lo usa al terminar los pasos y ya no llama a la comprobación sin camino", () => {
+    const guion = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "capturar-vistas.mjs"), "utf8");
+    expect(guion).toContain("problemaAlTerminar(");
+    expect(guion).not.toMatch(/problemaDelDocumento\(\{ respuestas: documentos\.respuestas, caminoPedido \}\)/);
+  });
+});
+
+describe("terminaEn: la página donde la vista tiene que terminar si navega a propósito", () => {
+  const vista = (extra = {}) => ({ nombre: "a", ruta: "/", ...extra });
+
+  it("vale un camino del sitio y sale en la vista validada", () => {
+    const { vistas, errores } = validarVistas([vista({ terminaEn: "/juegos.html" })]);
+    expect(errores).toEqual([]);
+    expect(vistas[0].terminaEn).toBe("/juegos.html");
+  });
+
+  it("sin él queda en null", () => {
+    expect(validarVistas([vista()]).vistas[0].terminaEn).toBeNull();
+  });
+
+  it("rechaza otro sitio, una consulta o un fragmento", () => {
+    for (const t of ["https://example.org/", "//example.org/", "juegos.html", "/juegos.html?x=1", "/juegos.html#a", 3]) {
+      expect(validarVistas([vista({ terminaEn: t })]).errores[0], String(t)).toContain('"terminaEn"');
+    }
   });
 });
