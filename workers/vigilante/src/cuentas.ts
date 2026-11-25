@@ -92,18 +92,24 @@ export interface OrdenDeCuentas {
   cuentas: unknown;
   base: number;
   cupoEvento: number | null;
+  /**
+   * Si también avisa por las activaciones. Apagado por defecto: el nombre del cobro de la activación no está confirmado
+   * contra una lectura real, y si fuera un cobro mensual de todas las cuentas activas caería junto en una sola hora y
+   * daría falsa alarma en pleno evento.
+   */
+  conActivaciones?: boolean;
   recordado: RecordadoDeCuentas;
 }
 
 /**
  * Qué desbordes hay que avisar ahora: los motivos que pasan el umbral en la hora más nueva del conteo y que todavía no
  * se avisaron en esa hora. Un motivo cruzado una vez avisa una sola vez por hora: si sigue arriba, vuelve a avisar en la
- * hora siguiente, con la hora nueva a la cabeza. Sin bloque, o con uno que no se entiende, no avisa nada.
+ * hora siguiente, con la hora nueva a la cabeza. Sin bloque, o con uno que no se entiende, no avisa nada. Las activaciones solo avisan con `conActivaciones`.
  */
 export function vigilarCuentas(o: OrdenDeCuentas): { avisar: DesbordeDeCuentas[]; conDatos: boolean; completo: boolean; hora: string | null } {
   const cuentas = cuentasDelEstado({ cuentas: o.cuentas });
   if (cuentas === null) return { avisar: [], conDatos: false, completo: true, hora: null };
-  const bin = cuentas.porHora[cuentas.porHora.length - 1]!;;
+  const bin = cuentas.porHora[cuentas.porHora.length - 1]!;
   const umbral = o.cupoEvento ?? o.base;
   const avisar: DesbordeDeCuentas[] = [];
   const yaEnEstaHora = o.recordado.hora === bin.hora;
@@ -113,7 +119,7 @@ export function vigilarCuentas(o: OrdenDeCuentas): { avisar: DesbordeDeCuentas[]
   if (pasa(bin.nuevas) && !(yaEnEstaHora && o.recordado.motivos.includes("cuentas-nuevas"))) {
     avisar.push({ motivo: "cuentas-nuevas", hubo: bin.nuevas, umbral, hora: bin.hora });
   }
-  if (pasa(bin.activaciones) && !(yaEnEstaHora && o.recordado.motivos.includes("activaciones"))) {
+  if (o.conActivaciones === true && pasa(bin.activaciones) && !(yaEnEstaHora && o.recordado.motivos.includes("activaciones"))) {
     avisar.push({ motivo: "activaciones", hubo: bin.activaciones, umbral, hora: bin.hora });
   }
   return { avisar, conDatos: true, completo: cuentas.completo, hora: bin.hora };

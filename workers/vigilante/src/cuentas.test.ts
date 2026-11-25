@@ -79,16 +79,23 @@ describe("vigilarCuentas: debajo del umbral no avisa y arriba avisa una vez por 
     expect(r.avisar.map((a) => a.motivo)).toEqual(["cuentas-nuevas"]);
   });
 
-  it("cada motivo se cuenta aparte: con las activaciones arriba, avisa por ellas", () => {
-    const r = vigilarCuentas({ cuentas: { porHora: [{ hora: iso(T0), nuevas: 1, activaciones: 75 }], completo: true }, ...umbrales, recordado: sinAviso });
+  it("cada motivo se cuenta aparte: con las activaciones arriba y el aviso de activaciones prendido, avisa por ellas", () => {
+    const r = vigilarCuentas({ cuentas: { porHora: [{ hora: iso(T0), nuevas: 1, activaciones: 75 }], completo: true }, ...umbrales, conActivaciones: true, recordado: sinAviso });
     expect(r.avisar).toEqual([{ motivo: "activaciones", hubo: 75, umbral: 60, hora: iso(T0) }]);
+  });
+
+  it("las activaciones no avisan hasta que se confirme el nombre de su cobro: por defecto el aviso de activaciones está apagado", () => {
+    const cuentas = { porHora: [{ hora: iso(T0), nuevas: 1, activaciones: 500 }], completo: true };
+    expect(vigilarCuentas({ cuentas, ...umbrales, recordado: sinAviso }).avisar).toEqual([]);
+    const juntas = { porHora: [{ hora: iso(T0), nuevas: 61, activaciones: 500 }], completo: true };
+    expect(vigilarCuentas({ cuentas: juntas, ...umbrales, recordado: sinAviso }).avisar.map((a) => a.motivo)).toEqual(["cuentas-nuevas"]);
   });
 
   it("los dos motivos arriba en la misma hora avisan juntos y quedan anotados los dos", () => {
     const cuentas = { porHora: [{ hora: iso(T0), nuevas: 61, activaciones: 61 }], completo: true };
-    const r = vigilarCuentas({ cuentas: cuentas, ...umbrales, recordado: sinAviso });
+    const r = vigilarCuentas({ cuentas: cuentas, ...umbrales, conActivaciones: true, recordado: sinAviso });
     expect(r.avisar.map((a) => a.motivo)).toEqual(["cuentas-nuevas", "activaciones"]);
-    const despues = vigilarCuentas({ cuentas: cuentas, ...umbrales, recordado: { hora: iso(T0), motivos: r.avisar.map((a) => a.motivo) } });
+    const despues = vigilarCuentas({ cuentas: cuentas, ...umbrales, conActivaciones: true, recordado: { hora: iso(T0), motivos: r.avisar.map((a) => a.motivo) } });
     expect(despues.avisar).toEqual([]);
   });
 
@@ -197,6 +204,16 @@ describe("la vuelta con el conteo del portero: debajo de todo, un aviso y ni uno
     const m = mundoFalso({ estado: estadoBien({ cuentas: { porHora: "no" } }) });
     await m.vuelta();
     expect(m.correo.enviados).toEqual([]);
+    expect(m.registro.some((l) => l.includes("error-cuentas"))).toBe(true);
+  });
+});
+
+describe("la vuelta con el conteo del portero sin leer: el aviso no queda mudo sin rastro", () => {
+  it("con el bloque en null (el proveedor de cuentas no contestó) anota el error y no avisa nada", async () => {
+    const m = mundoFalso({ estado: estadoBien({ cuentas: null }) });
+    const r = await m.vuelta();
+    expect(m.correo.enviados).toEqual([]);
+    expect(r.salioBien).toBe(true);
     expect(m.registro.some((l) => l.includes("error-cuentas"))).toBe(true);
   });
 });
