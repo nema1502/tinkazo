@@ -1,6 +1,6 @@
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
-import { ANCHOS_CABECERA, MARGEN_FILA_PX, SONDA_FILA_CABECERA, evaluarFilaCabecera } from "./cabecera-fila.mjs";
+import { AIRE_MINIMO_PX, ANCHOS_CABECERA, FORZAR_LETRA_ANCHA, LETRA_ANCHA, LETRA_MONO_ANCHA, MARGEN_FILA_PX, SONDA_FILA_CABECERA, evaluarFilaCabecera } from "./cabecera-fila.mjs";
 
 const caja = (arriba, abajo, izquierda, derecha) => ({ arriba, abajo, izquierda, derecha });
 /** Una cabecera de una sola fila: el logo a la izquierda, los enlaces en el medio y el grupo a la derecha. */
@@ -50,6 +50,34 @@ describe("la cabecera de escritorio en una sola fila", () => {
     expect(r.ok).toBe(false);
     expect(r.detalle).toMatch(/pisa 30 px/);
     expect(r.detalle).toContain("Empresas");
+  });
+
+  it("falla si el aire hasta el grupo de la derecha es menor al mínimo, aunque la fila entre", () => {
+    const justo = enUnaFila({ ultimoEnlace: caja(22, 66, 700, 900 - AIRE_MINIMO_PX) });
+    expect(evaluarFilaCabecera(justo).ok).toBe(true);
+    const corto = enUnaFila({ ultimoEnlace: caja(22, 66, 700, 900 - AIRE_MINIMO_PX + 1) });
+    const r = evaluarFilaCabecera(corto);
+    expect(r.ok).toBe(false);
+    expect(r.detalle).toContain(`${AIRE_MINIMO_PX - 1} px de aire`);
+    expect(r.detalle).toContain(`mínimo es de ${AIRE_MINIMO_PX} px`);
+    expect(r.detalle).toContain("letra ancha");
+  });
+
+  it("la letra ancha se pone con prioridad en la cabecera: la monoespaciada con una ancha monoespaciada y el resto con una ancha", () => {
+    const pone = [];
+    const el = (fuente) => ({ _f: fuente, style: { setProperty: (k, v, prio) => pone.push([fuente, k, v, prio]) } });
+    const lista = [el("system-ui, -apple-system, 'Segoe UI', sans-serif"), el("ui-monospace, Consolas, monospace"), el("Consolas")];
+    const documento = { querySelectorAll: (s) => (s === "header, header *" ? lista : []) };
+    const getComputedStyle = (e) => ({ fontFamily: e._f });
+    const cuantos = vm.runInNewContext(FORZAR_LETRA_ANCHA, { document: documento, getComputedStyle });
+    expect(cuantos).toBe(3);
+    expect(pone).toEqual([
+      [lista[0]._f, "font-family", LETRA_ANCHA, "important"],
+      [lista[1]._f, "font-family", LETRA_MONO_ANCHA, "important"],
+      [lista[2]._f, "font-family", LETRA_MONO_ANCHA, "important"],
+    ]);
+    expect(LETRA_ANCHA).toMatch(/Verdana/);
+    expect(LETRA_MONO_ANCHA).toMatch(/Courier New/);
   });
 
   it("falla, y lo dice, si no encuentra el logo o el grupo: no pasa a ciegas", () => {
