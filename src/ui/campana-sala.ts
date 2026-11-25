@@ -437,6 +437,8 @@ const TEXTO_DEL_MOTIVO: Record<MotivoDeSalida, string> = {
 };
 
 const QUINCE_MIN = 15 * 60_000;
+/** Lo más lejos que la sala acepta un cierre: doce horas desde ahora. */
+const DOCE_HORAS = 12 * 3_600_000;
 const DESHACER_MS = 5_000;
 /** Si una quita no llegó a la sala, se vuelve a mandar sola: quitar dos veces es lo mismo que una. */
 const REINTENTO_QUITA_MS = 3_000;
@@ -2371,8 +2373,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     trabajando = true;
     mensaje = "";
     pintar();
-    // Con el cierre a menos de un minuto la sala no lo acepta y los celulares verían una hora que ya pasó.
-    const nuevo = cierraMs - ahoraSala() > 60_000 ? null : ahoraSala() + QUINCE_MIN;
+    // Siempre con una hora nueva: el máximo entre el cierre que tenía y ahora, más quince minutos, con el reloj estimado de
+    // la sala. Sin hora la sala conserva la anterior y, con los relojes desfasados, puede rechazarla por vencida. Nunca
+    // más de lo que la sala acepta (doce horas desde ahora).
+    const ahora = ahoraSala();
+    const nuevo = Math.min(Math.max(cierraMs, ahora) + QUINCE_MIN, ahora + DOCE_HORAS - 60_000);
     const r = await aplicarFase(s, "abierta", nuevo, "cerrada");
     trabajando = false;
     if (!r.ok) return pintar();
