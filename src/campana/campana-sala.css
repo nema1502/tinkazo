@@ -164,10 +164,8 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
 .cpo-aviso:empty, .cpo-linea:empty { display: none; }
 /* La pregunta de dejar la campaña, cuando no lleva línea: el título no queda pegado al botón. */
 .cpo-panel[data-vista="olvidar"] h2:has(+ .cpo-linea:empty) { margin-bottom: 12px; }
-/* La línea del premio en la cuenta guarda su lugar solo mientras llega su primera lectura: al aparecer no corre el botón de abrir. Tres renglones por debajo de 400 px (cuánto falta ocupa tres en 320 a 360 px), dos de 400 a 899 px y uno desde 900 px. */
-.cpo-deposito:empty:not([hidden]) { display: block; min-height: 2.7em; line-height: 1.35; }
-.cpo-deposito { line-height: 1.35; }
-@media (max-width: 399px) { .cpo-deposito:empty:not([hidden]) { min-height: 4.05em; } }
+/* La línea del premio en la cuenta tiene siempre su alto, con texto o sin él: dos renglones por debajo de 900 px y uno desde ahí. Así, cuando llega el texto, cambia o la lectura falla, el botón de abrir no se mueve. */
+.cpo-deposito.cpo-linea:not([hidden]) { display: block; min-height: 2.7em; line-height: 1.35; }
 .cpo-conexion { margin: 0 0 12px; font-weight: 800; font-size: 20px; border-left: 6px solid var(--magenta); padding-left: 10px; }
 .cpo-panel button { min-height: 48px; }
 .cpo-panel button.primary { width: 100%; min-height: 56px; font-size: 18px; }
@@ -214,7 +212,7 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
 /* Mientras el QR no se dibujó, el recuadro está y la imagen vacía no muestra borde. */
 .cpo-qr img:not([src]) { visibility: hidden; }
 @media (min-width: 900px) {
-  .cpo-deposito:empty:not([hidden]) { min-height: 1.35em; }
+  .cpo-deposito.cpo-linea:not([hidden]) { min-height: 1.35em; }
   .cpo-panel[data-vista="abierta"] {
     grid-template-columns: 320px minmax(0, 1fr);
     grid-template-areas: "qr cab" "qr num" "qr acc" "qr lista";
