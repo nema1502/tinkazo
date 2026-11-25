@@ -1827,10 +1827,10 @@
      hidden lo saca main.ts). Desde el 25 de noviembre de 2026 ya no se esconde en la laptop: era la entrada de quien arma una
      campaña y casi siempre lo hace desde una compu. */
   .topnav .mas-lista a[data-campana-enlace][hidden] { display: none; }
-  /* El nombre corto de Para empresas va en la fila del celular, de 360 a 760 px. Ahí sale de Más para no repetirse; por debajo de
-     360 px la fila no tiene lugar y sigue dentro de Más. */
+  /* El nombre corto de Para empresas va en la fila del celular, de 375 a 760 px. Ahí sale de Más para no repetirse; por debajo de
+     375 px la fila no tiene lugar y sigue dentro de Más. */
   .topnav a.nav-empresas-cel { display: none; }
-  @media (min-width: 360px) and (max-width: 760px) {
+  @media (min-width: 375px) and (max-width: 760px) {
     .topnav a.nav-empresas-cel:not([hidden]) { display: inline-flex; order: 2; }
     .topnav .mas-lista a[data-campana-enlace] { display: none; }
   }
@@ -2107,7 +2107,7 @@
   /* El hero muestra el producto: una partida de verdad, con la llama encima. */
   .hero-portada { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 24px 40px; }
   /* A 64 px el título de doce palabras caía en tres renglones y dejaba "grande." solo en el de abajo (1920x1080): a 56 entra en dos. */
-  .hero-portada { padding-top: 40px; }
+  .hero-portada { padding-top: 28px; row-gap: 18px; }
   .hero-portada h1 { font-size: clamp(38px, 6.4vw, 56px); }
   .hero-shot { position: relative; display: block; }
   .hero-shot img { width: 100%; height: auto; display: block; border: var(--bw) solid var(--ink); box-shadow: var(--sh); transform: rotate(1.2deg); transition: transform 0.15s ease; }
@@ -2174,7 +2174,7 @@
   /* Lado a lado, la línea reserva dos renglones: los tres títulos y los tres botones quedan a la misma altura. */
   @media (min-width: 860px) { .puerta-b { min-height: 3em; } }
   /* La imagen se estira y absorbe el alto que sobra: con tres tarjetas de alto parejo, los botones quedan en la misma línea. */
-  .puerta .puerta-a { min-height: 48px; margin-top: 6px; display: inline-flex; align-items: center; justify-content: center; text-align: center; width: 100%; }
+  .puerta .puerta-a { min-height: 44px; margin-top: 2px; display: inline-flex; align-items: center; justify-content: center; text-align: center; width: 100%; }
   /* La tarjeta entera es el enlace: el área de toque del botón se estira a toda la tarjeta, así tocar la imagen también funciona. */
   .puerta .puerta-a::after { content: ""; position: absolute; inset: 0; }
   .puerta:has(.puerta-a:focus-visible) { outline: 3px solid var(--purple-ink); outline-offset: 3px; }
@@ -2196,12 +2196,12 @@
   .cp-nombres span { font-size: 16px; color: var(--ink2); }
   .cp-rotulo { flex: none; align-self: flex-start; background: var(--purple); color: var(--on-purple); font-size: 16px; font-weight: 800; padding: 2px 8px; border: 2px solid var(--ink); }
   .cp-premio { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; line-height: 1.2; }
-  .cp-pie { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .cp-pie { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
   .cp-premio span { font-size: 16px; color: var(--ink2); font-weight: 700; }
   .cp-premio strong { font-size: 20px; font-weight: 900; }
   .cp-estado {
     display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 16px; font-weight: 800;
-    background: var(--yellow); color: #191919; border: 2px solid var(--ink); padding: 4px 12px 4px 8px;
+    background: var(--yellow); color: #191919; border: 2px solid var(--ink); padding: 3px 10px 3px 6px;
   }
   .cp-gente { font-size: 16px; color: var(--ink2); line-height: 1.25; }
   @media (max-width: 359px) { .cp-nombres span { display: none; } }

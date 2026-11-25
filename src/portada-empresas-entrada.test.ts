@@ -62,9 +62,9 @@ describe("Empresas en la fila de la cabecera del celular", () => {
     expect(T.en.navEmpresasC).toBe("Companies");
   });
 
-  it("de 360 a 760 px se ve en la fila y sale de Más, y por debajo de 360 px sigue dentro de Más", () => {
+  it("de 375 a 760 px se ve en la fila y sale de Más, y por debajo de 375 px sigue dentro de Más", () => {
     expect(css).toMatch(/\.topnav a\.nav-empresas-cel \{ display: none; \}/);
-    const bloque = css.match(/@media \(min-width: 360px\) and \(max-width: 760px\) \{([^}]*\{[^}]*\}[^}]*\{[^}]*\})\s*\}/)?.[1] ?? "";
+    const bloque = css.match(/@media \(min-width: 375px\) and \(max-width: 760px\) \{([^}]*\{[^}]*\}[^}]*\{[^}]*\})\s*\}/)?.[1] ?? "";
     expect(bloque).toMatch(/nav-empresas-cel:not\(\[hidden\]\) \{ display: inline-flex; order: 2; \}/);
     expect(bloque).toMatch(/\.topnav \.mas-lista a\[data-campana-enlace\] \{ display: none; \}/);
   });
