@@ -77,6 +77,12 @@ describe("validar la lista de vistas", () => {
     expect(errores([vista({ nombre: "portada-1440.claro_1" })])).toEqual([]);
   });
 
+  it("los nombres que terminan en -FALLO quedan para la foto del fallo de otra vista", () => {
+    expect(errores([vista({ nombre: "portada-FALLO" })]).join(" ")).toContain("FALLO");
+    expect(errores([vista({ nombre: "portada-fallo" })]).join(" ")).toContain("FALLO");
+    expect(errores([vista({ nombre: "fallo-de-red" }), vista({ nombre: "sin-fallos" })])).toEqual([]);
+  });
+
   it("rechaza campos desconocidos: un error de tipeo no se pierde en silencio", () => {
     expect(errores([vista({ pausa: 10 })])[0]).toContain('"pausa"');
     expect(errores([{ ...vista(), pasos: [{ accion: "clic", selector: "#a", ms: 5 }] }])[0]).toContain('"ms"');
@@ -100,8 +106,7 @@ describe("validar la lista de vistas", () => {
     expect(con({ accion: "clicHasta", selector: "#a", hasta: "" })[0]).toContain('"hasta"');
     expect(con({ accion: "clicHasta", selector: "#a", hasta: "x".repeat(201) })[0]).toContain('"hasta"');
     expect(con({ accion: "clicHasta", selector: "#a", hasta: "#b", ms: 5 })[0]).toContain('"ms"');
-    expect(con({ accion: "clicHasta", selector: "#a", hasta: "#b
-" })[0]).toContain('"hasta"');
+    expect(con({ accion: "clicHasta", selector: "#a", hasta: "#b\n" })[0]).toContain('"hasta"');
     expect(con("clic")[0]).toContain("objeto");
     expect(errores([vista({ pasos: "clic" })])[0]).toContain("lista");
     expect(errores([vista({ pasos: Array.from({ length: 31 }, () => ({ accion: "pausa", ms: 1 })) })])[0]).toContain("tope es 30");

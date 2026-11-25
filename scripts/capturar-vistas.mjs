@@ -19,7 +19,9 @@
  *
  * Deja `<out>/<nombre>.png` por vista y `<out>/informe.json` con, por vista, si salió, el
  * error si no, la dirección final, si la página tiene scroll horizontal (scrollWidth contra
- * innerWidth) y los errores de consola. Sale con 1 si alguna vista no se pudo capturar (lo
+ * innerWidth) y los errores de consola. De una vista que falla deja además `<nombre>-FALLO.png`
+ * (lo que había en pantalla) y, en el informe, `archivoDelFallo`, `direccionEnElFallo` y los primeros
+ * 300 caracteres del texto visible (`textoVisible`): por eso ningún nombre puede terminar en -FALLO. Sale con 1 si alguna vista no se pudo capturar (lo
  * que sí salió queda escrito) y con 2 si la lista o los argumentos no valen.
  *
  * Cada vista es un objeto:
@@ -69,7 +71,7 @@
 import { mkdirSync, readFileSync, appendFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
-import { clicHasta } from "./lib/vistas-pagina.mjs";
+import { clicHasta, evidenciaDelFallo } from "./lib/vistas-pagina.mjs";
 import { TECLAS, TOPES, direccionDeVista, generarNombres, leerEntorno, leerVistas, problemaDeBase, problemaDeRama } from "./lib/vistas.mjs";
 
 const args = process.argv.slice(2);
@@ -223,7 +225,7 @@ async function fotografiar(page, archivo, entera) {
 
 async function capturar(browser, v) {
   const url = direccionDeVista(v, base);
-  const fila = { nombre: v.nombre, ok: false, archivo: null, error: null, direccion: url, direccionFinal: null, idiomaDeLaPagina: null, pantalla: `${v.ancho}x${v.alto}`, tema: v.tema, idioma: v.idioma, paginaEntera: v.paginaEntera, truncada: false, scrollHorizontal: null, anchoDelContenido: null, anchoDeLaPantalla: null, erroresDeConsola: [] };
+  const fila = { nombre: v.nombre, ok: false, archivo: null, error: null, direccion: url, direccionFinal: null, idiomaDeLaPagina: null, pantalla: `${v.ancho}x${v.alto}`, tema: v.tema, idioma: v.idioma, paginaEntera: v.paginaEntera, truncada: false, scrollHorizontal: null, anchoDelContenido: null, anchoDeLaPantalla: null, erroresDeConsola: [], archivoDelFallo: null, direccionEnElFallo: null, textoVisible: null };
   const page = await browser.open("about:blank");
   let errores = () => [];
   const trabajo = (async () => {
@@ -273,6 +275,8 @@ async function capturar(browser, v) {
   } catch (e) {
     fila.error = String(e.message ?? e).slice(0, 400);
     trabajo.catch(() => undefined);
+    // Lo que había en pantalla, antes de cerrar la pestaña. Con su propio intento: un error acá no tapa el de la vista.
+    Object.assign(fila, await evidenciaDelFallo(page, (nombre) => fotografiar(page, join(out, nombre), false), `${v.nombre}-FALLO.png`));
   } finally {
     clearTimeout(plazo);
     fila.erroresDeConsola = errores();
@@ -292,7 +296,7 @@ try {
     informe.vistas.push(fila);
     informe.falladas = informe.vistas.filter((f) => !f.ok).length;
     guardar();
-    console.log(`${fila.ok ? "OK    " : "FALLÓ "} ${v.nombre} (${fila.pantalla})${fila.ok ? `${fila.scrollHorizontal ? " con scroll horizontal" : ""}${fila.erroresDeConsola.length ? ` y ${fila.erroresDeConsola.length} errores de consola` : ""}` : `: ${fila.error}`}`);
+    console.log(`${fila.ok ? "OK    " : "FALLÓ "} ${v.nombre} (${fila.pantalla})${fila.ok ? `${fila.scrollHorizontal ? " con scroll horizontal" : ""}${fila.erroresDeConsola.length ? ` y ${fila.erroresDeConsola.length} errores de consola` : ""}` : `: ${fila.error}${fila.archivoDelFallo ? ` (foto: ${fila.archivoDelFallo})` : ""}`}`);
   }
 } finally {
   await browser.close();

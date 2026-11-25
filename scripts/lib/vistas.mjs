@@ -166,6 +166,8 @@ export function validarVistas(lista) {
     if (sobran.length) errores.push(`${etiqueta}: campos desconocidos ${sobran.map((k) => `"${k}"`).join(", ")} (los válidos son ${CAMPOS_VISTA.join(", ")})`);
     if (typeof v.nombre !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(v.nombre) || v.nombre.length > TOPES.largoNombre) {
       errores.push(`${etiqueta}: "nombre" tiene que llevar solo letras, números, punto, guion y guion bajo (hasta ${TOPES.largoNombre}) y empezar con letra o número`);
+    } else if (/-fallo$/i.test(v.nombre)) {
+      errores.push(`${etiqueta}: "nombre" no puede terminar en -FALLO (queda para la foto de una vista que falla)`);
     } else if (vistos.has(v.nombre.toLowerCase())) {
       errores.push(`${etiqueta}: el nombre se repite (saldría la misma imagen)`);
     } else vistos.add(v.nombre.toLowerCase());
