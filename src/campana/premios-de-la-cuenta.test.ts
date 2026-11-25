@@ -104,9 +104,8 @@ describe("los premios de una cuenta, en estados claros", () => {
     }
   });
 
-  it("una promoción sin estado: el premio cae en Por recibir, con la fecha de la campaña y monto sin saber", async () => {
-    const r = premiosDeLaCuenta({ ok: false, error: "sin-estado" }, GANADORA, HASTA);
-    expect(r).toEqual({ ok: true, premios: [{ puesto: null, monto: null, estado: "por-recibir", hastaMs: HASTA }] });
+  it("una promoción sin estado no inventa un premio: se dice que no se pudo leer", () => {
+    expect(premiosDeLaCuenta({ ok: false, error: "sin-estado" }, GANADORA, HASTA)).toEqual({ ok: false, error: "sin-estado" });
   });
 
   it("lo demás que no pudo leerse se dice tal cual: red caída, respuesta inválida y contrato ajeno", () => {
@@ -118,21 +117,21 @@ describe("los premios de una cuenta, en estados claros", () => {
 
 describe("el lector de la red: la pieza cliente de get_prize", () => {
   it("lee los premios del contrato de verdad con el fetch falso: sin lanzar nunca", async () => {
-    const r = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "8", cuenta: GANADORA, recibirHastaMs: HASTA, fetch: rpcFalso(rpcCC).fetch, esperaMs: 0 });
+    const r = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "8", cuenta: GANADORA, cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCC).fetch, esperaMs: 0 });
     expect(r).toEqual({ ok: true, premios: [{ puesto: 0, monto: DIEZ, estado: "recibido", hastaMs: null }] });
     // El premio del otro contrato, el que quedó pagado en el ensayo chico.
-    const uno = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CD3), promo: "1", cuenta: "GA647PFT46KI2BVCRGL3DJBNJXT2KCEEPSNKCTPI4JFIWLLY4BHVIQ7C", recibirHastaMs: HASTA, fetch: rpcFalso(rpcCD3).fetch, esperaMs: 0 });
+    const uno = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CD3), promo: "1", cuenta: "GA647PFT46KI2BVCRGL3DJBNJXT2KCEEPSNKCTPI4JFIWLLY4BHVIQ7C", cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCD3).fetch, esperaMs: 0 });
     expect(uno).toEqual({ ok: true, premios: [{ puesto: 0, monto: "50000000", estado: "recibido", hastaMs: null }] });
     // El del contrato anterior, con un Config viejo: se lee igual, y una cuenta sin premio no inventa nada.
-    const otro = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CD5), promo: "1", cuenta: GANADORA, recibirHastaMs: HASTA, fetch: rpcFalso(rpcCD5).fetch, esperaMs: 0 });
+    const otro = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CD5), promo: "1", cuenta: GANADORA, cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCD5).fetch, esperaMs: 0 });
     expect(otro).toEqual({ ok: true, premios: [] });
   });
 
   it("lo que la red no contesta no lanza y no se inventa", async () => {
-    const caida = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "8", cuenta: GANADORA, recibirHastaMs: HASTA, fetch: rpcFalso(rpcCC, "corte").fetch, esperaMs: 0, intentos: 1 });
+    const caida = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "8", cuenta: GANADORA, cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCC, "corte").fetch, esperaMs: 0, intentos: 1 });
     expect(caida).toEqual({ ok: false, error: "red-caida" });
     // El contrato de premios no designa nada todavía (#167): la consulta de la instancia archivada es sin estado.
-    const sinPromo = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "9", cuenta: GANADORA, recibirHastaMs: HASTA, fetch: rpcFalso(rpcCC).fetch, esperaMs: 0 });
+    const sinPromo = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "9", cuenta: GANADORA, cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCC).fetch, esperaMs: 0 });
     expect(sinPromo).toEqual({ ok: true, premios: [{ puesto: null, monto: null, estado: "por-recibir", hastaMs: HASTA }] });
   });
 });

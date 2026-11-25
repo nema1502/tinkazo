@@ -16,15 +16,13 @@ import {
  * premios. Esta pieza responde por una sola cuenta, con el estado que la persona entiende:
  *
  * - `Paid`: Recibido.
- * - `Owed` y `Held`: Por recibir, hasta la fecha que la campaña fijó.
+ * - `Owed` y `Held`: Por recibir, hasta cuando se puede cobrar (lo pone quien llama, con el límite que deja el contrato).
  * - `Returned`: Volvió a la empresa.
  *
  * Una promoción cancelada o reembolsada no va a pagar los premios que no pagó: esos también volvieron.
  *
- * Nunca lanza. Lo que no se pudo leer de la red se dice tal cual, menos `sin-estado`: el estado de un
- * contrato vence como todo lo demás, y mientras no se pueda probar lo contrario el premio sigue esperando
- * (cae en Por recibir, con la fecha de la campaña y sin monto, porque de qué premio es cada cuenta no hay
- * nada en la red que se pueda mirar).
+ * Nunca lanza. Lo que no se pudo leer de la red se dice tal cual, también `sin-estado`: sin leer el contrato no
+ * se sabe si esta cuenta ganó ni qué le toca, así que no se inventa ningún premio.
  */
 
 /** El estado de un premio, como lo ve quien ganó. */
@@ -32,12 +30,12 @@ export type EstadoVistoDelPremio = "recibido" | "por-recibir" | "volvio";
 
 /** Un premio de la cuenta, ya en la forma de la pantalla. */
 export interface PremioDeLaCuenta {
-  /** El puesto del premio en la promoción, desde 0. Sin estado, no se sabe de qué premio se trata. */
+  /** El puesto del premio en la promoción, desde 0. */
   puesto: number | null;
-  /** El monto, en unidades mínimas del activo, como texto. `null` si no se supo (sin estado). */
+  /** El monto, en unidades mínimas del activo, como texto. `null` si no se supo. */
   monto: string | null;
   estado: EstadoVistoDelPremio;
-  /** Hasta cuándo se lo puede recibir (ms), como lo dijo la campaña. Solo en Por recibir. */
+  /** Hasta cuándo se lo puede cobrar (ms), el dato que pone quien llama. Solo en Por recibir. */
   hastaMs: number | null;
 }
 
@@ -57,17 +55,13 @@ function estadoVistoDe(premio: PremioDeLaPromocion, promocion: Promocion): Estad
  * Los premios de la cuenta, en estados claros, a partir de una lectura del contrato. Pura: la lectura
  * la trae quien llama, así que la prueba la parte del fixture de la red y de las variantes del estado.
  */
-export function premiosDeLaCuenta(lectura: LecturaDeLaPromocion, cuenta: string, recibirHastaMs: number): VistaDeLosPremios {
-  if (!lectura.ok) {
-    // Sin estado no se afirma nada malo: el premio sigue esperando hasta que la red lo pueda leer otra vez.
-    if (lectura.error === "sin-estado") return { ok: true, premios: [{ puesto: null, monto: null, estado: "por-recibir", hastaMs: recibirHastaMs }] };
-    return { ok: false, error: lectura.error };
-  }
+export function premiosDeLaCuenta(lectura: LecturaDeLaPromocion, cuenta: string, cobrarHastaMs: number): VistaDeLosPremios {
+  if (!lectura.ok) return { ok: false, error: lectura.error };
   const premios: PremioDeLaCuenta[] = [];
   for (const premio of lectura.promocion.premios) {
     if (premio.winner !== cuenta) continue;
     const estado = estadoVistoDe(premio, lectura.promocion);
-    premios.push({ puesto: premio.position, monto: premio.amount, estado, hastaMs: estado === "por-recibir" ? recibirHastaMs : null });
+    premios.push({ puesto: premio.position, monto: premio.amount, estado, hastaMs: estado === "por-recibir" ? cobrarHastaMs : null });
   }
   return { ok: true, premios };
 }
@@ -80,8 +74,8 @@ export interface OpcionesDeLosPremiosDeLaCuenta extends OpcionesDeLaPromocion {
   promo: string;
   /** La cuenta de quien ganó. */
   cuenta: string;
-  /** Hasta cuándo se puede recibir el premio (ms), como lo dijo la campaña. */
-  recibirHastaMs: number;
+  /** Hasta cuándo se puede cobrar el premio (ms), con el límite que deja el contrato de premios. */
+  cobrarHastaMs: number;
 }
 
 /** La misma lista, leída de la red en el momento. Nunca lanza: lo que falló viene con su motivo. */
@@ -92,5 +86,5 @@ export async function premiosDeLaCuentaDeLaRed(o: OpcionesDeLosPremiosDeLaCuenta
     ...(o.intentos !== undefined ? { intentos: o.intentos } : {}),
     ...(o.esperaMs !== undefined ? { esperaMs: o.esperaMs } : {}),
   });
-  return premiosDeLaCuenta(lectura, o.cuenta, o.recibirHastaMs);
+  return premiosDeLaCuenta(lectura, o.cuenta, o.cobrarHastaMs);
 }
