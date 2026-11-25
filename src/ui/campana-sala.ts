@@ -3262,8 +3262,19 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const dicho = pasoDelPuente().paso;
     // El aviso del sello o del resultado dijo que el token no vale: otra compu tomó la campaña.
     if (sala && dicho === "tomada") return tomada();
-    if (sala && vista === "cerrada" && dicho === "avisada") irA("sellada", null);
-    else if (sala && (vista === "cerrada" || vista === "sellada") && dicho === "resultado") irA("sorteada", null);
+    // Con la pregunta de dejar la campaña abierta la fase sigue su camino: se mira la vista de la que se vino, la pregunta
+    // se queda en pantalla y, al cancelar, se vuelve a la fase nueva y no a la vieja.
+    const preguntando = vista === "olvidar";
+    const efectiva = preguntando ? vistaAntes : vista;
+    const nueva: FaseDeSala | null =
+      sala && efectiva === "cerrada" && dicho === "avisada" ? "sellada" : sala && (efectiva === "cerrada" || efectiva === "sellada") && dicho === "resultado" ? "sorteada" : null;
+    if (nueva) {
+      irA(nueva, null);
+      if (preguntando) {
+        vistaAntes = vista;
+        vista = "olvidar";
+      }
+    }
     pintar();
     grande.pintar();
   });
