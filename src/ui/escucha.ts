@@ -1,3 +1,4 @@
+import "../version-nueva";
 import {
   CAPAS_SHOW,
   IDENTIDADES,
