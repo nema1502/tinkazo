@@ -33,7 +33,10 @@ import { cuentaDePrueba } from "../campana/cuentas-de-prueba";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
 import type { ConfigDeComision } from "../stellar/comision-config";
 import type { SaldoDeDolares } from "../stellar/saldo-dolares";
+import { DOLAR_DIGITAL } from "../stellar/pago-con-saldo";
 import type { DepsDeComision } from "./campana-comision";
+import { depsDeDepositoReales, estadoDelDeposito } from "./campana-deposito";
+import { depsReales } from "./campana-sala";
 import {
   $,
   type Mundo,
@@ -694,5 +697,67 @@ describe("el alto reservado según el ancho", () => {
 
   it("la regla de tres renglones va después de la base para ganarle", () => {
     expect(css.indexOf("@media (max-width: 399px)")).toBeGreaterThan(css.indexOf(".cpo-deposito:empty:not([hidden]) {"));
+  });
+});
+
+describe("el armado real de la dependencia", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("en la red de prueba no existe la dependencia del depósito", () => {
+    h.red = "testnet";
+    expect(depsReales().deposito).toBeUndefined();
+  });
+
+  it("en la red principal la dependencia existe y sabe leer", () => {
+    h.red = "mainnet";
+    expect(typeof depsReales().deposito?.leer).toBe("function");
+  });
+
+  const cuerpo = (balance: string) => ({
+    balances: [{ asset_type: "credit_alphanum4", asset_code: DOLAR_DIGITAL.code, asset_issuer: DOLAR_DIGITAL.issuer, balance, selling_liabilities: "0.0000000" }],
+  });
+
+  it("la lectura real baja el módulo cuando hace falta y lee el saldo del servidor de la red", async () => {
+    const pedidos: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      pedidos.push(String(url));
+      return new Response(JSON.stringify(cuerpo("12.5000000")), { status: 200 });
+    });
+    const lectura = await depsDeDepositoReales().leer(CUENTA);
+    expect(lectura).toEqual({ tipo: "saldo", saldo: "12.5000000" });
+    expect(pedidos).toHaveLength(1);
+    expect(pedidos[0]).toContain(`/accounts/${CUENTA}`);
+    expect(estadoDelDeposito(lectura, 400000000n)).toEqual({ tipo: "falta", falta: 275000000n });
+  });
+
+  it("si el servidor de la red falla, no hay lectura y no se afirma nada", async () => {
+    vi.stubGlobal("fetch", async () => new Response("caído", { status: 503 }));
+    const lectura = await depsDeDepositoReales().leer(CUENTA);
+    expect(lectura).toEqual({ tipo: "sin-red" });
+    expect(estadoDelDeposito(lectura, 400000000n)).toEqual({ tipo: "sin-lectura" });
+  });
+
+  it("si el servidor de la red tarda más del tope, no hay lectura", async () => {
+    await import("../stellar/saldo-dolares");
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      (_url: string, o: { signal: AbortSignal }) => new Promise((_ok, no) => o.signal.addEventListener("abort", () => no(new Error("cortada")))),
+    );
+    const pendiente = depsDeDepositoReales().leer(CUENTA);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const lectura = await pendiente;
+    expect(lectura).toEqual({ tipo: "sin-red" });
+    expect(estadoDelDeposito(lectura, 400000000n)).toEqual({ tipo: "sin-lectura" });
+  });
+
+  it("una cuenta que no es una dirección no se lee en la red", async () => {
+    const f = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", f);
+    expect(await depsDeDepositoReales().leer("no-es-una-cuenta")).toEqual({ tipo: "sin-red" });
+    expect(f).not.toHaveBeenCalled();
   });
 });
