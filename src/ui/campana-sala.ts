@@ -3120,7 +3120,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   function mirarElDeposito(modo: "normal" | "volvio" | "ahora" | "reloj" | "reintento" = "normal"): void {
     try {
       const lector = deps.deposito;
-      if (!lector) return;
+      // Un panel ya detenido no lanza lecturas de más.
+      if (!lector || depositoDetenido) return;
       const datos = datosDelDeposito();
       if (datos === null) {
         if (deposito !== null) descartarElDeposito();
@@ -3286,7 +3287,10 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   /** Al volver a esta pestaña se mira de nuevo el premio: quien cargó dólares en otra ventana lo ve sin recargar. */
   const alVolverAVer = (): void => {
-    if (document.visibilityState === "visible") mirarElDeposito("volvio");
+    if (document.visibilityState !== "visible") return;
+    mirarElDeposito("volvio");
+    // Se repinta en el mismo instante: un texto que ya cumplió su minuto pasa a no se pudo ver sin esperar a la lectura nueva.
+    pintarDeposito();
   };
   document.addEventListener("visibilitychange", alVolverAVer);
 

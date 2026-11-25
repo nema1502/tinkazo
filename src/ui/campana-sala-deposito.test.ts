@@ -334,11 +334,15 @@ describe("los textos de la línea del premio", () => {
     expect(TEXTOS_SALA_CAMPANA.es.cpoDepFalta).toBe("Faltan {falta} dólares digitales en tu cuenta.");
     expect(TEXTOS_SALA_CAMPANA.en.cpoDepFalta).toBe("Your account is {falta} digital dollars short.");
     expect(TEXTOS_SALA_CAMPANA.es.cpoDepSinLectura).toBe("No pudimos ver si el premio está en tu cuenta.");
-    expect(TEXTOS_SALA_CAMPANA.en.cpoDepSinLectura).toBe("We could not check if the prize is in your account.");
+    expect(TEXTOS_SALA_CAMPANA.en.cpoDepSinLectura).toBe("We could not check the prize in your account.");
   });
 
   it("los dos de alcanza y falta miden como mucho 50 caracteres en español, aun con un monto de cuatro cifras", () => {
     for (const clave of CLAVES) expect(dice("es", clave, { falta: "1.250,00" }).length, clave).toBeLessThanOrEqual(50);
+  });
+
+  it("los tres miden como mucho 50 caracteres en inglés, aun con un monto de cuatro cifras", () => {
+    for (const clave of CLAVES) expect(dice("en", clave, { falta: "1,250.00" }).length, clave).toBeLessThanOrEqual(50);
   });
 
   it("con un monto de cuatro cifras la línea de falta sale entera", async () => {
@@ -913,6 +917,43 @@ describe("el costo de la línea con el panel abierto un rato", () => {
     p.pintar();
     expect(m.esperasEn().length).toBe(antes - 1);
     await m.correr(600_000);
+    expect(leer).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("la vuelta a la pestaña y el panel detenido", () => {
+  it("al volver a la pestaña repinta en el mismo instante: el texto de más de un minuto pasa a no se pudo ver mientras la lectura nueva va en camino", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = await previa(m);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
+    // La lectura nueva no vuelve nunca, y la hora corre sin que el reloj del panel alcance a despertarlo.
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
+    m.ahora += 61_000;
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(linea(p)).toBe(SIN_LECTURA);
+    expect(visible(p)).toBe(true);
+  });
+
+  it("al volver a la pestaña con un texto todavía fresco no lo cambia", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = await previa(m);
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
+    m.ahora += 6_000;
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", {}));
+  });
+
+  it("un panel ya detenido no lanza una lectura aunque se lo mande a mirar", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = await previa(m);
+    expect(leer).toHaveBeenCalledTimes(1);
+    p.detener();
+    // Pasa más de un minuto sin reloj: de no estar la guarda, un repintado pediría otra lectura.
+    m.ahora += 120_000;
+    p.pintar();
+    await suelta(6);
     expect(leer).toHaveBeenCalledTimes(1);
   });
 });
