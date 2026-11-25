@@ -621,6 +621,21 @@ describe("la vigilancia y lo que falta con los pagos de premios y retiros", () =
     expect(c!.completo).toBe(true);
   });
 
+  it("una fecha de Pollar fuera de lo que una fecha puede ser no tira el estado: el movimiento cuenta en la hora del reloj y el resto sigue", async () => {
+    const m = montarAltas();
+    const horasDe = (ms: number) => new Date(Math.floor(ms / 3_600_000) * 3_600_000).toISOString();
+    const cuentaDeFecha = (createdAt: unknown) => ({ event: "wallet.created:STELLAR:COSIGNED", amount: -15, createdAt });
+    m.pm.movimientos = [firma(T0 - HORA), cuentaDeFecha(1e20), cuentaDeFecha(8.64e15 + 1), cuentaDeFecha(new Date(T0 - 30 * 60_000).toISOString())];
+    const v = await m.puerta.vigilancia();
+    expect(v.firmasSinExplicar).toBe(1);
+    expect(v.patrocinioPollar).toEqual({ esperado: true, prendidos: [] });
+    const c = v.cuentas as { porHora: Array<{ hora: string; nuevas: number }> };
+    expect(c.porHora.filter((f) => f.nuevas > 0)).toEqual([
+      { hora: horasDe(T0 - HORA), nuevas: 1, activaciones: 0 },
+      { hora: horasDe(T0), nuevas: 2, activaciones: 0 },
+    ]);
+  });
+
   it("con las tablas y sin nada prendido ni nada en el día, la vigilancia es la de siempre: no aparece firmasPagos", async () => {
     const { m, puerta } = conPagos();
     const sinPagos = await montarAltas().puerta.vigilancia();
