@@ -30,6 +30,31 @@ export interface PiezasDeLaComprobacion {
   ahora?: () => number;
 }
 
+/**
+ * Lo que la sala dice de esta campaña, para que la comprobación no sea solo contra un contrato: el sello que la red
+ * atestigua tiene que ser el de esta campaña y no el de otro sorteo cualquiera del mismo contrato.
+ */
+export interface DeLaCampana {
+  /** El número del sorteo que la sala guardó al sellar. Sin él no se afirma nada. */
+  sorteo: string | null;
+  /** Las cuentas que la sala dio como ganadoras. */
+  ganadoras: readonly string[];
+  /** El número de la promoción, si la campaña la tiene. */
+  promo: string | null;
+}
+
+/** Pasa a reintentar solo con lo que puede ser pasajero. Lo que la red contradice o ya no guarda no se vuelve a pedir. */
+const REINTENTABLES: ReadonlySet<string> = new Set(["red-caida", "no-encontrada", "respuesta-invalida"]);
+
+/** Las esperas entre un intento y el siguiente: tres lecturas como mucho. */
+export const ESPERAS_DEL_SELLO_MS: readonly number[] = [4_000, 12_000];
+/** Desde el primer pedido, pasado esto no se espera ni se pide más. */
+export const TOPE_DEL_SELLO_MS = 40_000;
+
+export interface PiezasConReintento extends PiezasDeLaComprobacion {
+  esperar: (ms: number) => Promise<void>;
+}
+
 /** Un lector del historial real, armado a la primera y reusado después. Nunca lanza: los fallos vuelven como lectura. */
 export async function lectorDelHistorial(): Promise<(red: string, hash: string) => Promise<LecturaDelHistorial>> {
   const { crearLectorDeHistorial } = await import("../stellar/historial");
@@ -43,11 +68,11 @@ function hashDeTx(valor: unknown): string | null {
 }
 
 /**
- * Comprueba la cuenta contra el sello que la red guarda. Nunca lanza: lo que no se puedo leer es `null`, y la pantalla
+ * Comprueba la cuenta contra el sello que la red guarda. Nunca lanza: lo que no se pudo leer es `null`, y la pantalla
  * se queda callada en vez de inventar un veredicto.
  */
 export async function comprobarMiCuenta(
-  o: { comprobante: string; cuenta: string; red: string; contrato: string | null },
+  o: { comprobante: string; cuenta: string; red: string; contrato: string | null; campana: DeLaCampana },
   piezas: PiezasDeLaComprobacion,
 ): Promise<ComprobacionDelSello> {
   const corte = o.comprobante.indexOf("#");
@@ -78,12 +103,49 @@ export async function comprobarMiCuenta(
   }
   if (!lectura.ok) return null;
   const sello = lectura.sello;
+  // Es el sello de esta campaña: el sorteo que la sala guardó, la cantidad de premios y la promoción son los mismos.
+  if (o.campana.sorteo === null || prueba.id !== o.campana.sorteo) return null;
+  if (sello.numWinners !== o.campana.ganadoras.length) return null;
+  if (o.campana.promo !== null && sello.premio?.promocionId !== o.campana.promo) return null;
   if (bytesToHex(listHash(canonica)) !== sello.listHash.toLowerCase()) return null;
   if (sello.count !== canonica.length) return null;
-  if (o.contrato !== null && sello.contractId.toLowerCase() !== o.contrato.toLowerCase()) return null;
+  // Una campaña con premios sella en su contrato de premios, que sella adentro en el del sorteo: vale cualquiera de los dos.
+  const contratos = [sello.contractId, sello.premio?.contrato].filter((c): c is string => typeof c === "string");
+  if (o.contrato !== null && !contratos.some((c) => c.toLowerCase() === (o.contrato as string).toLowerCase())) return null;
   // La ronda todavía no salió: no puede atestiguar una lista para un sorteo que no existe.
   if (!Number.isSafeInteger(sello.round) || sello.round < 1 || roundTime(sello.round) * 1000 > (piezas.ahora ?? Date.now)()) {
     return null;
   }
+  // Las ganadoras que la sala dio salen de esta misma lista.
+  if (!o.campana.ganadoras.every((g) => canonica.includes(g))) return null;
   return canonica.some((nombre) => nombre === o.cuenta) ? "esta" : "no-esta";
+}
+
+/**
+ * La misma comprobación, con la lectura repetida si la red falla. Tres lecturas como mucho (esperas de 4 y 12 segundos) y
+ * nada pasados los 40 segundos desde el primer pedido. Solo se repite lo que puede ser pasajero: lo que la red contradice
+ * (una transacción fallida, que no es un sello o de un contrato ajeno) o que ya no guarda se queda sin decir.
+ */
+export async function comprobarConReintento(
+  o: Parameters<typeof comprobarMiCuenta>[0],
+  piezas: PiezasConReintento,
+): Promise<ComprobacionDelSello> {
+  const ahora = piezas.ahora ?? Date.now;
+  const inicio = ahora();
+  const leer = async (red: string, hash: string): Promise<LecturaDelHistorial> => {
+    let ultima: LecturaDelHistorial = { ok: false, error: "red-caida" };
+    for (let intento = 0; ; intento += 1) {
+      try {
+        ultima = await piezas.leer(red, hash);
+      } catch {
+        ultima = { ok: false, error: "red-caida" };
+      }
+      if (ultima.ok || !REINTENTABLES.has(ultima.error)) return ultima;
+      const espera = ESPERAS_DEL_SELLO_MS[intento];
+      if (espera === undefined || ahora() - inicio + espera > TOPE_DEL_SELLO_MS) return ultima;
+      await piezas.esperar(espera);
+      if (ahora() - inicio > TOPE_DEL_SELLO_MS) return ultima;
+    }
+  };
+  return comprobarMiCuenta(o, { leer, ahora });
 }
