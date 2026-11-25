@@ -241,6 +241,23 @@ describe("el contrato del alta de campaña en la sala (issue #168, residual en s
     expect(await total()).toBe(1);
   });
 
+  it("pasada la hora de cierre, una persona nueva recibe cerrada sin ninguna llamada al proveedor, con o sin cuenta", async () => {
+    mundo = await montarMundo();
+    sala = await campanaAbierta(mundo, AHORA_CONTRATO);
+    vi.setSystemTime(CIERRA_CONTRATO + 5 * 60_000);
+    const conCuenta = personaDePrueba(mundo, 3);
+    const sinCuenta = personaDePrueba(mundo, 4, { wallet: null });
+    mundo.proveedor.billeteras.set(sinCuenta.usuario, null);
+    for (const persona of [conCuenta, sinCuenta]) {
+      const r = await altaDe(mundo, sala.id, persona);
+      expect(r.status).toBe(409);
+      expect(await r.json()).toEqual({ error: "cerrada" });
+    }
+    // Ninguna ruta del proveedor, ni la que verifica la sesión ni la que busca la cuenta.
+    expect(mundo.proveedor.llamadas).toEqual({});
+    expect(await total()).toBe(0);
+  });
+
   it("el código del QR de otro evento no sirve; con el pase de esta sala la misma persona entra", async () => {
     mundo = await montarMundo({ PASE: "1" });
     sala = await campanaAbierta(mundo, AHORA_CONTRATO);
