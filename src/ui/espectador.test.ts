@@ -1215,7 +1215,7 @@ describe("compartir el sorteo desde la vista en vivo", () => {
       vi.setSystemTime(roundTime(R) * 1000 + despues * 1000);
       abrir(datos(), op);
       await vi.advanceTimersByTimeAsync(0);
-      await vi.advanceTimersByTimeAsync(RETRASO_TRAS_LO_GRABADO_MS + 100);
+      await vi.advanceTimersByTimeAsync(ESPERA_TARDE() + 1_000);
       (h.jugar.mock.calls[0]?.[0] as () => void)();
       await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000 + 10_000);
     };
