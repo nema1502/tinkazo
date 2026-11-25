@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Gracias por proponer. Un pedido concreto y chico se atiende más rápido que uno grande. Si es grande, contalo igual y lo partimos.
+        Gracias por proponer. Un pedido concreto y chico es más fácil de revisar. Si es grande, contalo igual y vemos cómo partirlo.
   - type: textarea
     id: que-pasa
     attributes:
