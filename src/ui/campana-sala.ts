@@ -2518,7 +2518,10 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   }
 
   /** Dejar la campaña: pide una confirmación de una línea. Con la sala todavía vacía, además la borra para liberar el archivo. */
-  function pedirOlvidar(): void {
+  function pedirOlvidar(deArmarOtra = false): void {
+    // Solo Armar otra campaña abre el selector al confirmar: cualquier otra pregunta lo apaga, aunque una anterior haya quedado
+    // abandonada sin cancelar ni confirmar (por ejemplo, si otra pestaña tomó la campaña mientras se preguntaba).
+    armandoOtra = deArmarOtra;
     vistaAntes = vista;
     vista = "olvidar";
     mensaje = "";
@@ -2530,8 +2533,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
    * dejaría a todas las personas sin su resultado, así que antes pregunta. Al confirmar se abre el selector de la siguiente.
    */
   function armarOtra(): void {
-    armandoOtra = true;
-    pedirOlvidar();
+    pedirOlvidar(true);
   }
 
   function cancelarOlvidar(): void {
@@ -2769,8 +2771,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         if (g) botones.push(principal(fmt("cpoAvisarA", { nombre: g.nombre }), () => accionesDelPuente().avisarA?.(g.cuenta)));
       }
       // Los celulares todavía leen el resultado: la sala no se borra, solo se deja de recordar en esta compu.
-      // Con un aviso pendiente a los celulares no se deja de un toque: la pregunta de siempre.
-      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (avisosPendientes(pasoDelPuente()) ? pedirOlvidar() : olvidar())));
+      // Con un aviso pendiente a los celulares no se deja de un toque: la pregunta de siempre. Con la lista sellada siempre se
+      // pregunta, y con el sorteo hecho también, salvo con el resultado ya avisado a todas o con la sala borrada.
+      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (avisosPendientes(pasoDelPuente(), vista === "sorteada") ? pedirOlvidar() : olvidar())));
     } else if (vista === "sin-red") {
       botones.push(principal(tx("cpoReintentar"), () => reintentar?.()));
       botones.push(otroArchivo());
