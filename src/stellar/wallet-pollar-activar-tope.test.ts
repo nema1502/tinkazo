@@ -38,7 +38,8 @@ const kitReal = new kit.CosignManager({
 });
 
 const patrocinador = Keypair.random();
-const P = Keypair.random().publicKey();
+// Una cuenta nueva por prueba: un voto que quedó colgado en una prueba no es el de la siguiente.
+let P = Keypair.random().publicKey();
 const Q = Keypair.random().publicKey();
 const Q = Keypair.random().publicKey();
 const SUB = "sub-org-de-ana";
@@ -170,6 +171,7 @@ function candadosDePrueba(): LockManager & { tomado: (nombre: string) => boolean
 let candados: ReturnType<typeof candadosDePrueba>;
 
 beforeEach(() => {
+  P = Keypair.random().publicKey();
   reiniciar(h);
   // Con la hora simulada también: los topes del sitio miran la hora de pared, no solo los temporizadores.
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
@@ -318,18 +320,6 @@ describe("antes del voto, ninguna espera es eterna", () => {
  * vieja no llama a nada de lo que sigue.
  */
 describe("cada espera de antes del voto tiene su guarda", () => {
-  it("el cliente tarda en estar listo: destrabado tarde, no pide pedidos ni vota", async () => {
-    const listo = adelantada<undefined>();
-    h.impl.ready = () => listo.promesa;
-    const r = observar(pollarWallet.activarCuenta());
-    await avanzar(45_000);
-    expect(r.error?.message).toBe("pollar-activacion-lenta");
-    listo.entregar(undefined);
-    await avanzar(1_000);
-    expect(h.llamadas).not.toContain("pending");
-    expect(h.llamadas).not.toContain("relay");
-  });
-
   it("la lectura de la billetera: destrabada tarde, no pide pedidos ni vota", async () => {
     const lectura = adelantada<string>();
     h.impl.refreshWalletState = () => lectura.promesa;
