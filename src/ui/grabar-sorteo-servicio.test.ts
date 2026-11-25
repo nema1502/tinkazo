@@ -12,17 +12,20 @@ const h = vi.hoisted(() => ({
   readDraw: vi.fn(),
   loToma: vi.fn(),
   sortearPorElServicio: vi.fn(),
+  reserva: vi.fn(),
+  clave: vi.fn(),
 }));
 vi.mock("./anchor", () => ({
   drawOnChain: (...a: unknown[]) => h.drawOnChain(...a),
   readDraw: (...a: unknown[]) => h.readDraw(...a),
 }));
 vi.mock("../protocol/drand", () => ({ decompressG1: (s: string) => `96:${s}` }));
-vi.mock("../stellar/errores", async (orig) => ({ ...(await orig<typeof import("../stellar/errores")>()), errorKey: () => "rpcDown" }));
+vi.mock("../stellar/errores", async (orig) => ({ ...(await orig<typeof import("../stellar/errores")>()), errorKey: (e: unknown) => h.clave(e) }));
 vi.mock("../stellar/alta-config", async (orig) => ({ ...(await orig<typeof import("../stellar/alta-config")>()), sorteoPorServidor: () => true }));
 vi.mock("./sorteo-del-servicio", () => ({
   loTomaElServicio: (...a: unknown[]) => h.loToma(...a),
   sortearPorElServicio: (...a: unknown[]) => h.sortearPorElServicio(...a),
+  reservaDelServicioViva: (...a: unknown[]) => h.reserva(...a),
 }));
 
 const R = 32254977;
@@ -36,6 +39,8 @@ beforeEach(() => {
   h.readDraw.mockReset().mockResolvedValue(null);
   h.loToma.mockReset().mockReturnValue(true);
   h.sortearPorElServicio.mockReset();
+  h.reserva.mockReset().mockReturnValue(false);
+  h.clave.mockReset().mockReturnValue("rpcDown");
   vi.stubEnv("VITE_SORTEO_SERVIDOR", "1");
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -180,6 +185,74 @@ describe("si el servicio no se puede ni preparar, sigue el camino de siempre", (
     const { grabarElSorteo } = await import("./grabar-sorteo");
     expect(await grabarElSorteo(base)).toEqual({ estado: "guardado", txHash: HASH, yaEstaba: false });
     expect(h.sortearPorElServicio).not.toHaveBeenCalled();
+    expect(h.drawOnChain).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("el tope de sorteos del mes cuando el servicio pudo dejar una reserva", () => {
+  const cupo = (): Error => Object.assign(new Error("portero-cupo-cuenta"), { name: "ErrorPortero", motivo: "cupo-cuenta", estado: 429, que: "sorteos" });
+  // Como en la aplicación: el tope de sorteos del portero no se arregla esperando.
+  beforeEach(() => h.clave.mockImplementation((e: unknown) => ((e as { name?: string }).name === "ErrorPortero" ? "porteroCupoSorteos" : "rpcDown")));
+
+  /** El reloj de la prueba corre solo con lo que se duerme. */
+  function reloj(): { ahora: () => number; dormir: (ms: number) => Promise<void> } {
+    let t = (roundTime(R) + 60) * 1000;
+    return { ahora: () => t, dormir: async (ms) => void (t += ms) };
+  }
+
+  it("con una reserva posible, el tope no es definitivo: se sigue mirando la red sin firmar de nuevo y se da por hecho cuando el servicio termina", async () => {
+    h.sortearPorElServicio.mockResolvedValue({ estado: "camino-de-hoy" });
+    h.reserva.mockReturnValue(true);
+    h.drawOnChain.mockRejectedValue(cupo());
+    h.readDraw.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValue(GANADORES);
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    const fin = await grabarElSorteo({ ...base, ...reloj() });
+    expect(fin).toEqual({ estado: "guardado", yaEstaba: true });
+    expect(h.drawOnChain).toHaveBeenCalledTimes(1);
+    expect(h.readDraw.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(h.reserva).toHaveBeenCalledWith(7n, base.ahora);
+  });
+
+  it("si el sorteo no aparece en lo que dura el presupuesto, el error del tope se muestra, con una sola firma", async () => {
+    h.sortearPorElServicio.mockResolvedValue({ estado: "camino-de-hoy" });
+    h.reserva.mockReturnValue(true);
+    const e = cupo();
+    h.drawOnChain.mockRejectedValue(e);
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    const fin = await grabarElSorteo({ ...base, ...reloj() });
+    expect(fin).toEqual({ estado: "fallo", error: e });
+    expect(h.drawOnChain).toHaveBeenCalledTimes(1);
+    expect(h.readDraw.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("sin reserva posible, el tope es definitivo como siempre: un solo intento y sin esperas", async () => {
+    h.sortearPorElServicio.mockResolvedValue({ estado: "camino-de-hoy" });
+    h.reserva.mockReturnValue(false);
+    const e = cupo();
+    h.drawOnChain.mockRejectedValue(e);
+    const alReintentar = vi.fn();
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    expect(await grabarElSorteo({ ...base, ...reloj(), alReintentar })).toEqual({ estado: "fallo", error: e });
+    expect(h.drawOnChain).toHaveBeenCalledTimes(1);
+    expect(alReintentar).not.toHaveBeenCalled();
+  });
+
+  it("con una reserva posible, otro error sigue su camino de siempre: se reintenta con la firma de siempre", async () => {
+    h.sortearPorElServicio.mockResolvedValue({ estado: "camino-de-hoy" });
+    h.reserva.mockReturnValue(true);
+    h.drawOnChain.mockRejectedValueOnce(new Error("la red no contestó")).mockResolvedValue({ ...GANADORES, txHash: HASH });
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    expect(await grabarElSorteo({ ...base, ...reloj() })).toEqual({ estado: "guardado", txHash: HASH, yaEstaba: false });
+    expect(h.drawOnChain).toHaveBeenCalledTimes(2);
+  });
+
+  it("sin servicio, el tope de sorteos no se toca: un solo intento", async () => {
+    h.loToma.mockReturnValue(false);
+    h.reserva.mockReturnValue(true);
+    const e = cupo();
+    h.drawOnChain.mockRejectedValue(e);
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    expect(await grabarElSorteo({ ...base, ...reloj() })).toEqual({ estado: "fallo", error: e });
     expect(h.drawOnChain).toHaveBeenCalledTimes(1);
   });
 });

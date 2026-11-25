@@ -101,6 +101,7 @@ vi.mock("../stellar/alta-config", async (orig) => ({ ...(await orig<typeof impor
 vi.mock("./sorteo-del-servicio", () => ({
   loTomaElServicio: () => true,
   sortearPorElServicio: (...a: unknown[]) => h.servicio(...a),
+  reservaDelServicioViva: () => false,
 }));
 
 const pagina = readFileSync(join(process.cwd(), "index.html"), "utf8");
