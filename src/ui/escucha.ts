@@ -14,16 +14,21 @@ import {
   type CapaShow,
   type IdentidadDelJuego,
 } from "../music";
+import { reanudarSiHaceFalta } from "../sound";
 import { idiomaDeLaEscucha, nombreDeJuego, texto, type IdiomaEscucha } from "./escucha-textos";
 
 /**
  * La página de escucha: las candidatas de música por juego, armadas con el secuenciador de
  * `src/music.ts` (síntesis, sin samples), con su ruleta de votos manual y sin prender nada en el sitio:
- * ninguna música nueva suena en producción hasta que el dueño la escuche y la elija acá.
+ * ninguna música nueva suena en producción hasta que alguien la escuche y la elija acá.
  *
  * Está aparte del selector y de cualquier enlace del sitio: solo abre con `?escucha=1`, como la bandera
- * de `videoDescarga` en `src/flags.ts`. Por lo mismo no va en el build de producción: hay que sumarla a
- * `rollupOptions.input` de `vite.config.ts` cuando el dueño la pida en su máquina.
+ * de `videoDescarga` en `src/flags.ts`. Va en el build (`escucha.html` está en `rollupOptions.input` de
+ * `vite.config.ts`), sin enlaces desde ninguna página, fuera del mapa del sitio y con noindex, para abrirla en el
+ * celular, en la tablet y en el parlante del proyector.
+ *
+ * El enlace de prueba del adelgazado abre un show con `?musicagracia=1`. La bandera se lee una sola vez, al armar
+ * la sesión de música: una sesión armada con ella sigue con el adelgazado prendido hasta recargar la página.
  */
 
 /** Qué fase (o el show entero) se toca, con desde cuándo y cuánto dura, en segundos desde el inicio del show. */
@@ -39,7 +44,7 @@ export function tramoDeFase(fase: FaseDeEscucha): { desde: number; dura: number 
   return { desde: 0, dura: SEGUNDO_DEL_GOLPE + festejo };
 }
 
-/** La bandera de la página: sin `?escucha=1` el dueño ve solo la nota de que está apagada. */
+/** La bandera de la página: sin `?escucha=1` se ve solo la nota de que está apagada. */
 export function escuchaPrendida(busqueda: string = typeof location === "undefined" ? "" : location.search): boolean {
   return new URLSearchParams(busqueda).get("escucha") === "1";
 }
@@ -120,19 +125,36 @@ let suenaAhora: AudioBufferSourceNode | null = null;
 
 let contextoDeEscucha: AudioContext | null = null;
 
+/**
+ * El contexto de audio de la página, creado y reanudado en el mismo toque. En iPhone y Safari un contexto que nace
+ * después de un render asíncrono nace suspendido (el gesto ya pasó) y la pieza no suena: por eso se pide desde el
+ * manejador del clic, antes de esperar nada, y `hacerSonar` reutiliza el mismo. Devuelve null si el navegador no
+ * sabe de audio.
+ */
+export function prepararContextoDeEscucha(): AudioContext | null {
+  try {
+    const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return null;
+    if (!contextoDeEscucha) contextoDeEscucha = new Ctor();
+    reanudarSiHaceFalta(contextoDeEscucha);
+    return contextoDeEscucha;
+  } catch {
+    return null;
+  }
+}
+
 /** Hace sonar un buffer ya renderizado, parando el anterior: una pieza a la vez, como en el parlante del stand. */
 export function hacerSonar(buffer: AudioBuffer): boolean {
   try {
-    const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return false;
-    if (!contextoDeEscucha) contextoDeEscucha = new Ctor();
+    const ctx = prepararContextoDeEscucha();
+    if (!ctx) return false;
     if (suenaAhora) {
       suenaAhora.stop();
       suenaAhora = null;
     }
-    const src = contextoDeEscucha.createBufferSource();
+    const src = ctx.createBufferSource();
     src.buffer = buffer;
-    src.connect(contextoDeEscucha.destination);
+    src.connect(ctx.destination);
     src.start();
     suenaAhora = src;
     return true;
@@ -269,6 +291,8 @@ export function montarEscucha(doc: Document): void {
     reproducir: (fase, juego) => {
       const id = IDENTIDADES[juego];
       if (!id) return;
+      // El contexto nace acá, dentro del toque: después del render ya no hay gesto que lo deje sonar.
+      prepararContextoDeEscucha();
       void renderizarFase(fase, id).then((buffer) => {
         if (buffer) hacerSonar(buffer);
       });

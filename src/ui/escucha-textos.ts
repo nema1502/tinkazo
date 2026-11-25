@@ -1,6 +1,6 @@
 /**
  * Lo que dice la página de escucha (`escucha.html`), en su propio diccionario y no en el de
- * `src/i18n.ts`: esa página es la mesa de trabajo del dueño para elegir la música juego por juego,
+ * `src/i18n.ts`: esa página es la mesa de trabajo para elegir la música juego por juego,
  * no parte del sitio, y el diccionario global es lo más pesado que baja la herramienta (`vite.config.ts`).
  * Paridad es/en, probada en `escucha-textos.test.ts`.
  */
@@ -79,7 +79,7 @@ export const idiomaDeLaEscucha = (search: string = typeof location === "undefine
 };
 
 /**
- * El nombre de cada juego, en el idioma del dueño. Los ids son los del show
+ * El nombre de cada juego, en el idioma de quien elige. Los ids son los del show
  * (`Game`, en `src/state.ts`); su llave u orden lo pone `IDENTIDADES` en music.ts.
  */
 export const NOMBRES_ESCUCHA: Readonly<Record<string, { es: string; en: string }>> = {

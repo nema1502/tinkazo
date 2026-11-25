@@ -6,7 +6,7 @@ import { IDENTIDADES } from "../music";
 
 /**
  * Los textos de la página de escucha, en su propio diccionario (no en el global `src/i18n.ts`, que es lo más
- * pesado que baja la herramienta) y con paridad es/en: si falta una clave en inglés, el dueño que elige la
+ * pesado que baja la herramienta) y con paridad es/en: si falta una clave en inglés, quien elige la
  * música desde otro idioma ve un hueco donde debería leer qué está escuchando.
  */
 

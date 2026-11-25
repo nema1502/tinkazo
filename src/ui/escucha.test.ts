@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   armarEscucha,
   escuchaPrendida,
@@ -229,5 +229,49 @@ describe("el audio de la página", () => {
     const buffer = await renderizarFase("espera", IDENTIDADES.race!);
     expect(buffer).toBeNull();
     expect(hacerSonar({} as AudioBuffer)).toBe(false);
+  });
+});
+
+describe("el contexto de audio nace en el toque, no después del render", () => {
+  /** Un contexto que nace suspendido, como en iPhone y Safari cuando el gesto del toque ya pasó. */
+  class ContextoSuspendido {
+    static creados = 0;
+    state = "suspended";
+    resume = vi.fn(() => {
+      this.state = "running";
+      return Promise.resolve();
+    });
+    destination = {};
+    constructor() {
+      ContextoSuspendido.creados += 1;
+    }
+  }
+
+  afterEach(() => {
+    delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+    delete (window as unknown as { OfflineAudioContext?: unknown }).OfflineAudioContext;
+    ContextoSuspendido.creados = 0;
+  });
+
+  it("al tocar una capa, el contexto se crea y se reanuda en el mismo toque, antes de que termine el render", async () => {
+    (window as unknown as { AudioContext: unknown }).AudioContext = ContextoSuspendido;
+    const { prepararContextoDeEscucha } = await import("./escucha");
+    window.history.replaceState(null, "", "?escucha=1");
+    const doc = pagina();
+    montarEscucha(doc);
+    doc.querySelector('.tarjeta[data-juego="race"] button[data-fase="espera"]')?.dispatchEvent(new Event("click", { bubbles: true }));
+    // Sin esperar nada: el render es asíncrono y el gesto del toque ya habría pasado.
+    expect(ContextoSuspendido.creados).toBe(1);
+    const ctx = prepararContextoDeEscucha() as unknown as ContextoSuspendido;
+    expect(ctx.resume).toHaveBeenCalledTimes(1);
+    expect(ctx.state).toBe("running");
+    // Un segundo toque reutiliza el mismo contexto.
+    expect(ContextoSuspendido.creados).toBe(1);
+  });
+
+  it("sin AudioContext en el navegador no hay contexto y no se rompe nada", async () => {
+    const { prepararContextoDeEscucha } = await import("./escucha");
+    delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+    expect(prepararContextoDeEscucha()).toBeNull();
   });
 });
