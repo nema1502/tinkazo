@@ -51,7 +51,7 @@ import { iniciarLogo } from "./ui/logo-ui";
 import { iniciarLogoEnElEstadio } from "./ui/logo-sorteo";
 import { iniciarVer3D } from "./ui/ver3d";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
-import { campanasActivo, mostrarEnlacesDeCampana } from "./campana/bandera";
+import { campanasActivo } from "./campana/bandera";
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
 const INGRESAR = MARCA_INGRESAR;
 
@@ -643,7 +643,6 @@ if (location.hash.startsWith("#participante=")) {
 // Las campañas de empresas (detrás de VITE_CAMPANAS): la entrada de quien ganó y la pestaña que deja la ventana de Google.
 if (campanasActivo()) {
   // Los enlaces a armar la campaña de una empresa los muestra o esconde el atributo data-campanas de html (index.html y styles.css) desde
-  // el primer pintado. Esto queda para las páginas que traen enlaces con hidden y no ese atributo.
-  mostrarEnlacesDeCampana(document);
+  // el primer pintado: ningún guion los destapa.
   void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);
 }

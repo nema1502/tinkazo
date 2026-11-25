@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
-import { campanasActivo, mostrarEnlacesDeCampana } from "./campana/bandera";
+import { campanasActivo } from "./campana/bandera";
 import { TEXTOS_SALA_CAMPANA } from "./campana/textos-sala";
 import { T, t } from "./i18n";
 import { pintarCancelarEnPortada } from "./ui/cancelar-en-portada";
@@ -74,9 +74,10 @@ describe("la puerta de las empresas respeta las campañas abiertas", () => {
     expect(empresa().hasAttribute("data-campana-enlace")).toBe(true);
     expect(empresa().hasAttribute("hidden")).toBe(false);
     expect(document.querySelectorAll("[data-campana-enlace][hidden]")).toHaveLength(0);
-    // El guion de siempre queda para las páginas que no traen la bandera en html y no cambia lo que ya se ve.
-    mostrarEnlacesDeCampana(document, true);
+    // Ningún guion los destapa: lo decide solo el atributo data-campanas de html y la hoja de estilos.
     expect(empresa().hidden).toBe(false);
+    expect(readFileSync("src/campana/bandera.ts", "utf8")).not.toContain("mostrarEnlacesDeCampana");
+    expect(readFileSync("src/main.ts", "utf8")).not.toContain("mostrarEnlacesDeCampana");
   });
 
   it("la tercera puerta lleva a armar la campaña", () => {
@@ -432,19 +433,16 @@ describe("la portada en el celular y en la laptop", () => {
     expect(css).toMatch(/@media \(max-width: 359px\) \{ \.cp-nombres span \{ display: none; \} \}/);
   });
 
-  it("la imagen del hero sigue el tema elegido con el mismo par claro y oscuro de las puertas", () => {
+  it("la imagen del hero es una sola, como siempre: el tema forzado lo resuelve tema-forzado.ts", () => {
     const hero = document.querySelector(".hero-shot")!;
-    const alts = [...hero.querySelectorAll<HTMLImageElement>("img.hero-alt")];
-    expect(alts.map((i) => i.getAttribute("src"))).toEqual(["/juegos/race.webp", "/juegos/race-light.webp"]);
-    for (const i of alts) {
-      expect(i.getAttribute("loading")).toBe("lazy");
-      expect(i.getAttribute("width")).toBe("900");
-      expect(i.getAttribute("height")).toBe("506");
-    }
-    // La primera imagen no se difiere y sigue siendo la que se pide en la primera pantalla.
+    // Una sola imagen, la del par de picture. Antes sumaba dos imágenes diferidas que escondían a la primera: con un tema
+    // distinto al del sistema se bajaban dos y la tapa quedaba en blanco hasta que llegaba la segunda.
+    expect(hero.querySelectorAll("img")).toHaveLength(1);
     expect(hero.querySelector("picture img")?.hasAttribute("loading")).toBe(false);
-    expect(css).toMatch(/:root\[data-theme="dark"\] \.hero-shot picture \{ display: none; \}/);
-    expect(css).toMatch(/:root\[data-theme="light"\] \.hero-shot picture \{ display: none; \}/);
+    expect(hero.querySelector("picture source")?.getAttribute("srcset")).toBe("/juegos/race-light.webp");
+    expect(html).not.toContain("hero-alt");
+    expect(css).not.toContain("hero-alt");
+    expect(css).not.toMatch(/.hero-shot picture { display: none; }/);
   });
 
   it("el enlace de la campaña en Sortear se lee morado como los demás enlaces del panel", () => {
