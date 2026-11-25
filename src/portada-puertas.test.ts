@@ -144,3 +144,47 @@ describe("los textos de las puertas, en los dos idiomas", () => {
     }
   });
 });
+
+describe("los pasos 01 a 03 de la portada", () => {
+  it("cada uno trae un dibujo o una captura, un título y una línea", () => {
+    const pasos = [...document.querySelectorAll<HTMLElement>(".steps > article")];
+    expect(pasos).toHaveLength(3);
+    for (const p of pasos) {
+      const media = p.querySelector(".paso-media");
+      expect(media, p.textContent ?? "").not.toBeNull();
+      // Lo decorativo no se lee: el título y la línea ya dicen el paso.
+      expect(media?.getAttribute("aria-hidden")).toBe("true");
+      expect(media?.querySelector("svg, img"), p.textContent ?? "").not.toBeNull();
+      expect(p.querySelectorAll("h3")).toHaveLength(1);
+    }
+  });
+
+  it("las capturas se cargan diferidas con su tamaño, y el sello usa la llama del símbolo de la página", () => {
+    for (const img of document.querySelectorAll<HTMLImageElement>(".steps img")) {
+      expect(img.getAttribute("loading")).toBe("lazy");
+      expect(img.getAttribute("width")).toMatch(/^\d+$/);
+      expect(img.getAttribute("height")).toMatch(/^\d+$/);
+    }
+    expect(document.querySelector(".paso-sello use")?.getAttribute("href")).toBe("#llama");
+    expect(document.getElementById("llama")).not.toBeNull();
+  });
+
+  it("no usa los stickers de la colección", () => {
+    expect(html.slice(html.indexOf('class="steps'), html.indexOf('id="juegos"'))).not.toContain("marca/coleccion");
+  });
+
+  it("la línea de cada paso es corta y el detalle del primero va plegado, con su texto en los dos idiomas", () => {
+    for (const k of ["s1c", "s2b", "s3b"] as const) {
+      expect((T.es[k] as string).length, k).toBeLessThanOrEqual(60);
+      expect((T.en[k] as string).length, k).toBeLessThanOrEqual(60);
+    }
+    const detalle = document.querySelector<HTMLDetailsElement>(".steps details.paso-mas");
+    expect(detalle).not.toBeNull();
+    expect(detalle?.open).toBe(false);
+    expect(detalle?.querySelector('[data-i="s1b"]')).not.toBeNull();
+    for (const k of ["s1c", "pasoMas"]) {
+      expect(typeof T.es[k]).toBe("string");
+      expect(typeof T.en[k]).toBe("string");
+    }
+  });
+});
