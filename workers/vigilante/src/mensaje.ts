@@ -243,7 +243,9 @@ const CATALOGO: Record<string, Entrada> = {
     asunto: () => "Al vigilante le falta la clave del portero",
     gravedad: () => 88,
     frase: () => "El vigilante no puede entrar al portero: no tiene la clave o el portero ya no la acepta. Mientras tanto no mira nada.",
-    hacer: () => "Si se cargó la clave de solo lectura en el vigilante antes que en el portero, borrá PORTERO_TOKEN_LECTURA del vigilante (wrangler secret delete PORTERO_TOKEN_LECTURA) y vuelve a usar la de operar. Si no, cargá de nuevo la clave de operar: wrangler secret put PORTERO_ADMIN_TOKEN (pasos en el README del vigilante y en la hoja de operación, en qué orden se carga).",
+    hacer: () =>
+      "Si cargaste la clave de solo lectura en el vigilante antes que en el portero, borrala con wrangler secret delete PORTERO_TOKEN_LECTURA. Así el vigilante usa de nuevo la de operar.\n" +
+      "Si no, cargá PORTERO_ADMIN_TOKEN otra vez con wrangler secret put PORTERO_ADMIN_TOKEN. El orden de carga está en el README del vigilante y en la hoja de operación.",
   },
 };
 
@@ -346,7 +348,8 @@ function bloqueDe(clave: string, reserva: string | undefined, c: Contexto, numer
   const frase = entrada ? entrada.frase(clave, e) : reserva || `Hay un problema que el vigilante no sabe contar: ${clave}.`;
   const hacer = entrada ? entrada.hacer(clave, c) : "Mirá el estado a mano (hoja de operación, docs/operacion.md).";
   const cabeza = numeroDeLista === null ? frase : `${numeroDeLista}. ${frase}`;
-  return [cabeza, `${numeroDeLista === null ? "" : "   "}Qué hacer: ${hacer}`];
+  const sangria = numeroDeLista === null ? "" : "   ";
+  return [cabeza, `${sangria}Qué hacer: ${hacer.split("\n").join(`\n${sangria}`)}`];
 }
 
 /** Los problemas, del más grave al menos, sin perder a cuál texto de reserva corresponde cada clave. */
