@@ -28,6 +28,11 @@ describe("la red de la prueba", () => {
     expect(RED_DE_PRUEBA.desplegador).toMatch(/^G[A-Z2-7]{55}$/);
   });
 
+  it("no hay ningún índice ajeno: la cuenta se busca en la red", () => {
+    expect(Object.keys(RED_DE_PRUEBA)).not.toContain("indice");
+    expect(JSON.stringify(RED_DE_PRUEBA).toLowerCase()).not.toMatch(/mercury|indexer/);
+  });
+
   it("ningún archivo de la prueba nombra la red principal", () => {
     const carpeta = new URL("./", import.meta.url);
     const nombres = ["red.ts", "lista.ts", "ronda.ts"];

@@ -1,7 +1,7 @@
 import { Contract } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
 import { RED_DE_PRUEBA } from "../../src/prueba-llave/red";
-import { atrasoDelIndice, claveDeCodigo, claveDeInstancia, controlPrevio, ledgerDelIndice, RED } from "./previo-llave.mjs";
+import { claveDeCodigo, claveDeInstancia, controlPrevio, RED } from "./previo-llave.mjs";
 
 const respuesta = (cuerpo, status = 200) => new Response(JSON.stringify(cuerpo), { status });
 
@@ -13,7 +13,6 @@ function redFalsa(cambios = {}) {
     entradas: { result: { entries: [{ xdr: "x" }] } },
     horizon: { signers: [{ key: RED.desplegador, weight: 1 }], thresholds: { low_threshold: 0, med_threshold: 0, high_threshold: 0 } },
     friendbot: { status: 400 },
-    indice: { indexed_through_ledger: 4_999_990 },
     drand: { round: 123 },
   };
   const c = { ...bien, ...cambios };
@@ -27,7 +26,6 @@ function redFalsa(cambios = {}) {
     }
     if (u.startsWith(RED.horizon)) return c.horizon === 404 ? respuesta({}, 404) : respuesta(c.horizon);
     if (u.startsWith(RED.friendbot)) return c.friendbot instanceof Error ? Promise.reject(c.friendbot) : respuesta({}, c.friendbot.status);
-    if (u.startsWith(RED.indice)) return c.indice instanceof Error ? Promise.reject(c.indice) : respuesta(c.indice);
     if (u.includes("drand")) return c.drand instanceof Error ? Promise.reject(c.drand) : respuesta(c.drand);
     return respuesta({}, 404);
   };
@@ -36,7 +34,7 @@ function redFalsa(cambios = {}) {
 
 describe("las direcciones del control previo", () => {
   it("son las de la prueba", () => {
-    for (const k of ["rpc", "horizon", "friendbot", "indice", "contrato", "codigoCuenta", "verificador", "desplegador"]) {
+    for (const k of ["rpc", "horizon", "friendbot", "contrato", "codigoCuenta", "verificador", "desplegador"]) {
       expect(RED[k], k).toBe(RED_DE_PRUEBA[k]);
     }
   });
@@ -55,21 +53,12 @@ describe("las direcciones del control previo", () => {
   });
 });
 
-describe("el índice", () => {
-  it("se lee el ledger más alto que nombra", () => {
-    expect(ledgerDelIndice({ indexed_through_ledger: 10, otro: 99 })).toBe(10);
-    expect(ledgerDelIndice({ a: { ultimoLedger: "20" } })).toBe(20);
-    expect(ledgerDelIndice({ nada: 1 })).toBeNull();
-    expect(ledgerDelIndice(null)).toBeNull();
-  });
-});
-
 describe("el control previo", () => {
-  it("con todo en su lugar sale con 0 y mide el atraso del índice", async () => {
+  it("con todo en su lugar sale con 0", async () => {
     const r = await controlPrevio({ fetchFn: redFalsa().fetchFn });
     expect(r.salida).toBe(0);
     expect(r.motivo).toBeNull();
-    expect(r.datos).toMatchObject({ codigo: true, verificador: true, contrato: true, desplegadorIntacto: true, atrasoDelIndice: 10, friendbot: 400, drand: true });
+    expect(r.datos).toMatchObject({ codigo: true, verificador: true, contrato: true, desplegadorIntacto: true, friendbot: 400, drand: true });
   });
 
   it("si falta el código, el verificador o el contrato, la red de prueba cambió", async () => {
@@ -103,16 +92,11 @@ describe("el control previo", () => {
     }
   });
 
-  it("si el índice no contesta no frena nada: queda sin medir", async () => {
-    const r = await controlPrevio({ fetchFn: redFalsa({ indice: new Error("caído") }).fetchFn });
-    expect(r.salida).toBe(0);
-    expect(r.datos.atrasoDelIndice).toBeNull();
-  });
-
-  it("el atraso del índice se puede volver a medir solo", async () => {
-    expect(await atrasoDelIndice(redFalsa().fetchFn)).toBe(10);
-    expect(await atrasoDelIndice(redFalsa({ indice: new Error("caído") }).fetchFn)).toBeNull();
-    expect(await atrasoDelIndice(redFalsa({ ledger: new Error("caído") }).fetchFn)).toBeNull();
+  it("no mira ningún índice ajeno: ningún pedido va a uno", async () => {
+    const mundo = redFalsa();
+    const r = await controlPrevio({ fetchFn: mundo.fetchFn });
+    expect(r.datos).not.toHaveProperty("atrasoDelIndice");
+    expect(mundo.pedidos.filter((u) => /mercury|indexer/i.test(u))).toEqual([]);
   });
 
   it("nunca sale con 1, que es el de la prueba fallida", async () => {

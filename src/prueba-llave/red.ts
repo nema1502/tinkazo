@@ -9,7 +9,6 @@ export const RED_DE_PRUEBA = {
   rpc: "https://soroban-testnet.stellar.org",
   horizon: "https://horizon-testnet.stellar.org",
   friendbot: "https://friendbot.stellar.org",
-  indice: "https://testnet.mercurydata.app/rest/smart-account-indexer",
   contrato: "CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A",
   codigoCuenta: "c514d35ea67eaea9bfc1fb3327854c0c06111bc1ddebd4fe217c504c1004b9e1",
   verificador: "CC7EKIHQP3TN4CARQDND6CEOY2UXLWWC2X5GHTD5NLAT7BG5GPZIOM3F",

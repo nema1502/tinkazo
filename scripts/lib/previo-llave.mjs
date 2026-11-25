@@ -15,7 +15,6 @@ export const RED = {
   rpc: "https://soroban-testnet.stellar.org",
   horizon: "https://horizon-testnet.stellar.org",
   friendbot: "https://friendbot.stellar.org",
-  indice: "https://testnet.mercurydata.app/rest/smart-account-indexer",
   contrato: "CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A",
   codigoCuenta: "c514d35ea67eaea9bfc1fb3327854c0c06111bc1ddebd4fe217c504c1004b9e1",
   verificador: "CC7EKIHQP3TN4CARQDND6CEOY2UXLWWC2X5GHTD5NLAT7BG5GPZIOM3F",
@@ -52,30 +51,6 @@ async function rpc(fetchFn, metodo, params) {
   return r.result;
 }
 
-/** El número de ledger más alto que nombra el JSON del índice, o `null`. */
-export function ledgerDelIndice(stats) {
-  if (!stats || typeof stats !== "object") return null;
-  const candidatos = [];
-  const recorrer = (x, nombre) => {
-    if (typeof x === "number" && /ledger/i.test(nombre)) candidatos.push(x);
-    else if (typeof x === "string" && /ledger/i.test(nombre) && /^\d+$/.test(x)) candidatos.push(Number(x));
-    else if (x && typeof x === "object") for (const [k, v] of Object.entries(x)) recorrer(v, k);
-  };
-  recorrer(stats, "");
-  return candidatos.length ? Math.max(...candidatos) : null;
-}
-
-/** Cuántos ledgers va atrasado el índice respecto de la red ahora mismo, o `null` si no se pudo medir. */
-export async function atrasoDelIndice(fetchFn = fetch) {
-  try {
-    const ledgerActual = Number((await rpc(fetchFn, "getLatestLedger", {})).sequence);
-    const indexado = ledgerDelIndice(await json(fetchFn, `${RED.indice}/api/stats`, {}));
-    return indexado !== null && Number.isFinite(ledgerActual) ? Math.max(0, ledgerActual - indexado) : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * @param {{ fetchFn?: typeof fetch }} [o]
  * @returns {Promise<{ salida: 0 | 2, motivo: string | null, datos: Record<string, unknown>, fallas: string[] }>}
@@ -84,11 +59,9 @@ export async function controlPrevio(o = {}) {
   const fetchFn = o.fetchFn ?? fetch;
   const cambio = [];
   const sinMedir = [];
-  const datos = { codigo: false, verificador: false, contrato: false, desplegadorIntacto: false, atrasoDelIndice: null, friendbot: null, drand: false };
-  let ledgerActual = null;
-
+  const datos = { codigo: false, verificador: false, contrato: false, desplegadorIntacto: false, friendbot: null, drand: false };
   try {
-    ledgerActual = Number((await rpc(fetchFn, "getLatestLedger", {})).sequence);
+    await rpc(fetchFn, "getLatestLedger", {});
   } catch (e) {
     sinMedir.push(`la red de prueba no contesta: ${e.message}`);
   }
@@ -127,15 +100,6 @@ export async function controlPrevio(o = {}) {
     if (res.status >= 500) sinMedir.push(`el grifo contestó ${res.status}`);
   } catch (e) {
     sinMedir.push(`el grifo no contesta: ${e.message}`);
-  }
-
-  try {
-    const stats = await json(fetchFn, `${RED.indice}/api/stats`, {});
-    const indexado = ledgerDelIndice(stats);
-    datos.atrasoDelIndice = indexado !== null && ledgerActual !== null ? Math.max(0, ledgerActual - indexado) : null;
-  } catch {
-    // El índice solo se mide: si no contesta, el recorrido lo dice en el paso de otro aparato.
-    datos.atrasoDelIndice = null;
   }
 
   try {
