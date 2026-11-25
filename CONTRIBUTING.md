@@ -67,19 +67,21 @@ Según lo que tocaste:
 
 ## La revisión automática
 
-Cada pedido corre la integración continua. Para unir a `main` se exige:
+Cada pedido corre la integración continua. Para unir a `main` se exigen:
 
 - La comprobación `Sitio (Vite + TypeScript)`, que resume las pruebas, los tipos, la construcción y las comprobaciones de las páginas.
 - La comprobación `Contratos Soroban`.
-- La aprobación de la dirección.
+- Que tu rama esté al día con `main`.
 
 Si una comprobación falla, el pedido no se une. Mirá el registro, arreglá y volvé a subir. Si la falla parece ajena a tu cambio, decilo en el pedido.
 
 Los pedidos desde una copia propia del repositorio esperan que la dirección apruebe cada corrida de la revisión automática antes de empezar. Es normal.
 
-## Cómo se une
+## Cómo se revisa y se une
 
-Quien dirige el proyecto une los pedidos con rebase o con squash, nunca con un commit de unión, para que la historia de `main` quede lineal. A veces junta varios en un paquete para integrarlos juntos. En ese caso el issue lleva la etiqueta `en integración` y nadie más lo toma.
+La dirección revisa cada pedido y lo une con su permiso de administración, con rebase o con squash y nunca con un commit de unión, para que la historia de `main` quede lineal. Lo que frena la unión son las comprobaciones de arriba.
+
+Si hace falta arreglar algo de tu pedido, la dirección lo hace en commits aparte sobre tu rama. A veces junta varios pedidos en un paquete para integrarlos juntos, y conserva la autoría de cada uno. En ese caso el issue lleva la etiqueta `en integración` y nadie más lo toma.
 
 ## Qué no se sube nunca
 
