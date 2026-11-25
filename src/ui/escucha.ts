@@ -29,11 +29,11 @@ import { idiomaDeLaEscucha, nombreDeJuego, texto, type IdiomaEscucha } from "./e
 export type FaseDeEscucha = CapaShow | "todo";
 
 export function tramoDeFase(fase: FaseDeEscucha): { desde: number; dura: number } {
-  const { espera, tension, ganador, festejo } = MOVIMIENTO_DEL_SHOW;
+  const { espera, tension, remate, festejo } = MOVIMIENTO_DEL_SHOW;
   if (fase === "espera") return { desde: 0, dura: espera };
   if (fase === "tension") return { desde: espera, dura: tension };
   // El momento del ganador termina justo en el golpe: el remate entra con él en la pieza completa.
-  if (fase === "ganador") return { desde: espera + tension, dura: ganador };
+  if (fase === "remate") return { desde: espera + tension, dura: remate };
   if (fase === "festejo") return { desde: SEGUNDO_DEL_GOLPE, dura: festejo };
   return { desde: 0, dura: SEGUNDO_DEL_GOLPE + festejo };
 }
@@ -199,7 +199,7 @@ export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
     const capaTexto: Record<Exclude<FaseDeEscucha, "todo">, Parameters<typeof texto>[1]> = {
       espera: "capaEspera",
       tension: "capaTension",
-      ganador: "capaGanador",
+      remate: "capaGanador",
       festejo: "capaFestejo",
     };
     for (const fase of [...CAPAS_SHOW, "todo"] as FaseDeEscucha[]) {

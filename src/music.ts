@@ -445,7 +445,7 @@ export function musicHold(on: boolean): void {
 }
 
 /**
- * El silencio de antes del ganador: la música se corta en seco un momento
+ * El silencio de antes del remate: la música se corta en seco un momento
  * antes del revelado, y el remate la vuelve a abrir. "Un cuarto de segundo sin
  * nada es el efecto más barato que existe" (docs/juegos.md), y lo que más
  * mueve en la música de baile es justamente eso: vaciar y volver con todo
@@ -463,7 +463,7 @@ export function musicTempo(mul: number): void {
 
 /**
  * Lo que dice el relator, con su tensión. Un salto grande es una sorpresa: la
- * música se calla un tiempo. Tensión 1 es el ganador: remate.
+ * música se calla un tiempo. Tensión 1 es el remate: remate.
  */
 export function musicCue(heat: number): void {
   const s = cur;
@@ -874,19 +874,19 @@ export type Banda = Session;
  * Las cuatro capas del show (S2): la espera antes de la ronda, la tensión que crece, el momento del ganador y el
  * festejo. El show prende las capas con la tensión que le dice el relator (`musicCue`); acá solo están los nombres.
  */
-export type CapaShow = "espera" | "tension" | "ganador" | "festejo";
+export type CapaShow = "espera" | "tension" | "remate" | "festejo";
 
-export const CAPAS_SHOW: readonly CapaShow[] = ["espera", "tension", "ganador", "festejo"];
+export const CAPAS_SHOW: readonly CapaShow[] = ["espera", "tension", "remate", "festejo"];
 
 /**
  * Cuánto dura cada capa en la pieza que se escucha para elegir (T1). La espera y la tensión son la forma entera
  * que pide S3: un comienzo, un desarrollo y un final, sin delatar nunca el resultado — la capa del ganador entra
  * solo cuando el show lo dice (`musicCue` con tensión 1), nunca antes, pase lo que pase en la animación.
  */
-export const MOVIMIENTO_DEL_SHOW: Readonly<Record<CapaShow, number>> = { espera: 8, tension: 14, ganador: 6, festejo: 4 } as const;
+export const MOVIMIENTO_DEL_SHOW: Readonly<Record<CapaShow, number>> = { espera: 8, tension: 14, remate: 6, festejo: 4 } as const;
 
-/** El golpe del ganador: al terminar la espera, la tensión y el ganador. */
-export const SEGUNDO_DEL_GOLPE = MOVIMIENTO_DEL_SHOW.espera + MOVIMIENTO_DEL_SHOW.tension + MOVIMIENTO_DEL_SHOW.ganador;
+/** El golpe del remate: al terminar la espera, la tensión y el ganador. */
+export const SEGUNDO_DEL_GOLPE = MOVIMIENTO_DEL_SHOW.espera + MOVIMIENTO_DEL_SHOW.tension + MOVIMIENTO_DEL_SHOW.remate;
 
 /** Los últimos tres segundos del ganador son solo el bombo (`musicFinal`, `soloBombo`): el show los marca. */
 export const HORA_DEL_SOLO_BOMBO = SEGUNDO_DEL_GOLPE - 3;
@@ -1289,7 +1289,7 @@ function siku(s: Session, t: number, semis: number, len: number, pan: number, v:
 }
 
 /**
- * El remate del ganador: bombo, platillo, el charango en trémolo sobre la
+ * El remate del remate: bombo, platillo, el charango en trémolo sobre la
  * menor y la zampoña sosteniendo la tónica arriba. Después, silencio: el cartel
  * y la fanfarria son del ganador.
  */
