@@ -53,7 +53,7 @@ describe("los tramos de cada fase del show", () => {
   it("cada capa dura lo que dice la forma del show, y se encadenan hasta el golpe", () => {
     expect(tramoDeFase("espera")).toEqual({ desde: 0, dura: MOVIMIENTO_DEL_SHOW.espera });
     expect(tramoDeFase("tension")).toEqual({ desde: MOVIMIENTO_DEL_SHOW.espera, dura: MOVIMIENTO_DEL_SHOW.tension });
-    expect(tramoDeFase("ganador")).toEqual({ desde: MOVIMIENTO_DEL_SHOW.espera + MOVIMIENTO_DEL_SHOW.tension, dura: MOVIMIENTO_DEL_SHOW.ganador });
+    expect(tramoDeFase("remate")).toEqual({ desde: MOVIMIENTO_DEL_SHOW.espera + MOVIMIENTO_DEL_SHOW.tension, dura: MOVIMIENTO_DEL_SHOW.remate });
     expect(tramoDeFase("festejo")).toEqual({ desde: SEGUNDO_DEL_GOLPE, dura: MOVIMIENTO_DEL_SHOW.festejo });
     expect(tramoDeFase("todo").dura).toBe(SEGUNDO_DEL_GOLPE + MOVIMIENTO_DEL_SHOW.festejo);
     expect(HORA_DEL_SOLO_BOMBO).toBe(SEGUNDO_DEL_GOLPE - 3);
@@ -94,8 +94,8 @@ describe("la página armada", () => {
     const doc = pagina();
     const pedidos: [string, string][] = [];
     armarEscucha(doc, opciones(true, (fase, juego) => pedidos.push([fase, juego])));
-    doc.querySelector('.tarjeta[data-juego="race"] button[data-fase="ganador"]')?.dispatchEvent(new Event("click", { bubbles: true }));
-    expect(pedidos).toEqual([["ganador", "race"]]);
+    doc.querySelector('.tarjeta[data-juego="race"] button[data-fase="remate"]')?.dispatchEvent(new Event("click", { bubbles: true }));
+    expect(pedidos).toEqual([["remate", "race"]]);
   });
 
   it("la ruleta de votos muestra la cuenta que ya está anotada", () => {

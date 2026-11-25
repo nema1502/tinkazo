@@ -78,12 +78,12 @@ describe("la identidad musical de cada juego, en datos", () => {
 
 describe("la curva del show: espera, tensión, ganador, festejo", () => {
   it("las cuatro capas del show, cada una con sus segundos", () => {
-    expect(CAPAS_SHOW).toEqual(["espera", "tension", "ganador", "festejo"]);
+    expect(CAPAS_SHOW).toEqual(["espera", "tension", "remate", "festejo"]);
     expect(MOVIMIENTO_DEL_SHOW.espera).toBeGreaterThan(0);
     expect(MOVIMIENTO_DEL_SHOW.tension).toBeGreaterThan(MOVIMIENTO_DEL_SHOW.espera);
-    expect(MOVIMIENTO_DEL_SHOW.ganador).toBeGreaterThan(0);
+    expect(MOVIMIENTO_DEL_SHOW.remate).toBeGreaterThan(0);
     expect(MOVIMIENTO_DEL_SHOW.festejo).toBeGreaterThan(0);
-    expect(SEGUNDO_DEL_GOLPE).toBe(MOVIMIENTO_DEL_SHOW.espera + MOVIMIENTO_DEL_SHOW.tension + MOVIMIENTO_DEL_SHOW.ganador);
+    expect(SEGUNDO_DEL_GOLPE).toBe(MOVIMIENTO_DEL_SHOW.espera + MOVIMIENTO_DEL_SHOW.tension + MOVIMIENTO_DEL_SHOW.remate);
   });
 
   it("la tensión crece sin delatar el resultado, y después del golpe la música deja lugar al remate", () => {
