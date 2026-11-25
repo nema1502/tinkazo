@@ -94,9 +94,11 @@ describe("el alta de campaña y el proveedor", () => {
 
   it("cada sesión rechazada se cuenta con su ficha, y las que se rechazan antes de llamar no pasan por rechazo", () => {
     // La sesión que el proveedor rechaza, la que no es de Google y la que no tiene billetera: las tres costaron llamadas.
-    expect(ruta.match(/\.rechazo\(ip, token\)/g)).toHaveLength(3);
+    expect(ruta.match(/\.rechazo\(ip, token(, false)?\)/g)).toHaveLength(3);
+    // Solo la que espera su cuenta cuenta a la ficha y no a la conexión: esa sesión el proveedor ya la dio por buena.
+    expect(ruta.match(/\.rechazo\(ip, token, false\)/g)).toHaveLength(1);
     const sinBilletera = ruta.indexOf('falla({ motivo: "sin-billetera" }, h)');
-    expect(ruta.lastIndexOf(".rechazo(ip, token)", sinBilletera)).toBeGreaterThan(ruta.indexOf("billetera.cuenta === null"));
+    expect(ruta.lastIndexOf(".rechazo(ip, token, false)", sinBilletera)).toBeGreaterThan(ruta.indexOf("billetera.cuenta === null"));
     expect(ruta.indexOf(".prealta(")).toBeLessThan(ruta.indexOf(".verificar("));
     expect(ruta).toContain(".prealta(ip, p, exigirPase, token, llave, d)");
     expect(ruta).toContain(".yaEsta(sesion.usuario, llave, ip, token, sesion.vence, d)");

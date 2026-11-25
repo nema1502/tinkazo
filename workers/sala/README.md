@@ -192,14 +192,16 @@ este orden:
 6. Si la persona ya estaba, reconoce su nueva llave y contesta `200 {"cuenta","ya":true}` sin duplicarla. Cada persona
    tiene su propio tope de 6 reingresos por hora: pasado, contesta `429 {"error":"cupo-conexion"}` con `Retry-After` y no toca nada.
 7. Si la sesión no trae cuenta, la consulta al proveedor; una falla da `502 pollar` y la ausencia da `409 sin-billetera`, que
-   cuenta como un rechazo de esa ficha (costó dos llamadas): la misma sesión sin billetera se consulta como mucho 5 veces en
-   diez minutos. El celular no tiene que reintentar más que eso con la misma sesión.
+   cuenta como un rechazo de esa ficha (costó dos llamadas) y no como un rechazo de la conexión: la misma sesión sin billetera
+   se consulta como mucho 5 veces en diez minutos. El celular no tiene que reintentar más que eso con la misma sesión.
 8. Vuelve a comprobar fase y pase, y anota en un bloque sin esperas. Un alta nueva contesta `201 {"cuenta"}`.
 
 Hay una persona por cuenta y una cuenta por persona. Se guardan la huella HMAC-SHA256 del id del proveedor con una sal de la
 sala y la huella SHA-256 de la llave del celular. El token, el id, el nombre y el correo no se guardan, no se escriben en la
 consola y no vuelven en las respuestas. Las altas nuevas tienen un tope de 300 por minuto en la sala. Por conexión y cada diez
-minutos, los topes son 400 personas nuevas, 800 envíos verificados y 300 sesiones rechazadas por el proveedor. Una ficha (la
+minutos, los topes son 800 envíos verificados y 300 sesiones rechazadas por el proveedor. Las que esperan su cuenta
+(`409 sin-billetera`) no cuentan para la conexión: la sesión es buena, solo falta su cuenta, y con cuentas nuevas detrás de la
+misma wifi llenarían ese tope sin ningún abuso. Esas sí cuentan para su ficha. Una ficha (la
 sesión, guardada solo como huella con sal) suma una sola vez a ese tope de la conexión, y por sí sola puede ser rechazada
 5 veces en diez minutos: la sexta ni llega al proveedor. Así una persona que repite una ficha mala no deja afuera a las demás.
 Quien salió con su motivo y repite su alta tampoco suma a los envíos de la conexión. Una sala admite 300 personas.

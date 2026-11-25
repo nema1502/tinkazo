@@ -851,14 +851,15 @@ export class Sala extends DurableObject<Env> {
 
   /**
    * Una sesión que el proveedor rechazó. La ficha siempre cuenta; la conexión, solo la primera vez que se ve esa ficha
-   * (repetirla no cuesta otra llamada), así una persona no deja afuera a las demás. Los rechazos de antes de llamar
-   * (forma, pase, fase) no pasan por acá.
+   * (repetirla no cuesta otra llamada), así una persona no deja afuera a las demás. Con `contarConexion` en falso (la
+   * sesión buena que todavía espera su cuenta) cuenta solo la ficha. Los rechazos de antes de llamar (forma, pase, fase)
+   * no pasan por acá.
    */
-  async rechazo(ip: string, token: string): Promise<Resultado> {
+  async rechazo(ip: string, token: string, contarConexion = true): Promise<Resultado> {
     if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
     const grupo = await grupoDeConexion(this.sql, ip);
     const ficha = await huellaDeFicha(this.sql, token);
-    contarRechazo(this.sql, grupo, ficha, Date.now());
+    contarRechazo(this.sql, grupo, ficha, Date.now(), contarConexion);
     return { ok: true };
   }
 
@@ -2027,7 +2028,9 @@ export default {
           if (!billetera.ok) return falla({ motivo: "pollar" }, h);
           if (billetera.cuenta === null) {
             // Costó dos llamadas al proveedor: cuenta como un rechazo de esa ficha, así repetirla no lo llama sin límite.
-            await sala.rechazo(ip, token);
+            // La sesión es buena y solo espera su cuenta: no suma al tope de la conexión, que llenarían solas las
+            // personas con cuenta nueva detrás de la misma wifi.
+            await sala.rechazo(ip, token, false);
             return falla({ motivo: "sin-billetera" }, h);
           }
           cuenta = billetera.cuenta;
