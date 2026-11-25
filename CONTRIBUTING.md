@@ -31,9 +31,9 @@ La lista completa de carpetas y archivos de cada zona está en el issue 277.
 
 ## Commits
 
-- En español, con tildes, y con una primera línea de 72 caracteres o menos que dice qué cambia desde quien usa lo que se arregla o se agrega. Por ejemplo: `La sala deja de gastar el tope de la conexión con quienes esperan su cuenta`.
+- En español, con tildes, y con una primera línea de 72 caracteres o menos que dice qué cambia desde quien usa lo que se arregla o se agrega. Por ejemplo: `La sala deja de gastar el tope de conexión con quienes esperan`.
 - Un commit por idea. Si un arreglo toca algo que el issue no pide, va en su propio commit.
-- Cada commit lleva tu autoría. Si la dirección integra tu trabajo con otros, la conserva y pone sus arreglos en commits aparte.
+- Cada commit lleva tu autoría. Si la dirección necesita arreglar algo de tu pedido antes de unirlo, lo hace en commits aparte y no reescribe los tuyos.
 - Los mensajes no llevan líneas de coautoría ni de atribución.
 
 ## El pedido
@@ -75,11 +75,11 @@ Cada pedido corre la integración continua. Para unir a `main` se exige:
 
 Si una comprobación falla, el pedido no se une. Mirá el registro, arreglá y volvé a subir. Si la falla parece ajena a tu cambio, decilo en el pedido.
 
-La primera vez que alguien de afuera del equipo abre un pedido desde una copia propia del repositorio, GitHub pide aprobar la corrida antes de empezar. Es normal.
+Los pedidos desde una copia propia del repositorio esperan que la dirección apruebe cada corrida de la revisión automática antes de empezar. Es normal.
 
 ## Cómo se une
 
-Quien dirige el proyecto une los pedidos, con rebase. A veces junta varios en un paquete para integrarlos juntos. En ese caso el issue lleva la etiqueta `en integración` y nadie más lo toma.
+Quien dirige el proyecto une los pedidos. El método (merge o squash) lo decide según el pedido. A veces junta varios en un paquete para integrarlos juntos. En ese caso el issue lleva la etiqueta `en integración` y nadie más lo toma.
 
 ## Qué no se sube nunca
 
@@ -87,7 +87,7 @@ El repositorio es público. Nunca van:
 
 - Archivos `.env` ni sus variantes (se permite `.env.example`), la carpeta `.vercel/` ni la carpeta `.stellar/`, que guarda las identidades de la línea de comandos con sus semillas.
 - Llaves privadas, semillas, tokens ni contraseñas.
-- Exportaciones de invitados (los CSV de un evento u otros), listas reales de personas ni capturas que muestren nombres o correos reales.
+- Exportaciones de invitados (los CSV de un evento u otros), listas reales de personas, enlaces de comprobantes de sorteos con personas reales (llevan la lista) ni capturas que muestren nombres o correos reales.
 - Nombres de personas en documentos o en código. Para un ejemplo, usá nombres inventados.
 
 Si subiste un secreto por error, avisá enseguida a la dirección. Borrarlo en otro commit no alcanza: el valor hay que cambiarlo.
