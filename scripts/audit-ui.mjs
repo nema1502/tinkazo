@@ -32,7 +32,7 @@
  *
  * Uso:
  *   node scripts/audit-ui.mjs [--base http://localhost:4173] [--out DIR]
- *                             [--pantalla laptop-100] [--sin-juegos]
+ *                             [--pantalla laptop-100|cabecera] [--sin-juegos]
  *
  *   CDP_PORT=<puerto> si otra auditoría tiene el Chrome por defecto.
  */
@@ -47,6 +47,7 @@ import { ABRIR_OTRAS_FORMAS_JS, HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR
 import { CUENTA_FALSA, freighterFalsa } from "./lib/freighter-falsa.mjs";
 import { UMBRALES, sondaTexto } from "./lib/texto-minimo.mjs";
 import { esLaLinea, frasesDeLaLinea } from "./lib/linea-sellar.mjs";
+import { ANCHOS_CABECERA, SONDA_FILA_CABECERA, evaluarFilaCabecera } from "./lib/cabecera-fila.mjs";
 
 // La línea bajo Entrar para sellar tranquiliza a quien organiza. Se compara la frase COMPLETA, en español y en inglés, leída del
 // diccionario (src/i18n.ts): así el auditor sigue al texto cuando se retoca y no deja pasar otra frase que empiece igual.
@@ -1112,6 +1113,29 @@ async function run() {
           check(`proyector ${w}x${h}: sin excepciones`, e.exceptions.length === 0, e.exceptions.slice(0, 2).join(" | "));
         } finally {
           await e.send("Page.close").catch(() => undefined);
+        }
+      }
+    }
+    // La cabecera de escritorio en una sola fila, en el modo Oficial (la marca más ancha) y con las campañas abiertas, a 1101 y a
+    // 1280 px. Con cinco entradas en la fila, el grupo de la derecha (idioma, marca y cuenta) cayó a una segunda fila y nada
+    // lo avisó. La evaluación vive en `lib/cabecera-fila.mjs`, con su prueba.
+    if (!soloPantalla || soloPantalla === "cabecera") {
+      for (const tema of ["dark", "light"]) {
+        for (const ancho of ANCHOS_CABECERA) {
+          const c = await browser.open("about:blank");
+          try {
+            await c.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: 800, deviceScaleFactor: 1, mobile: false, screenWidth: ancho, screenHeight: 800 });
+            await sinSesionGuardada(c);
+            await c.send("Page.navigate", { url: `${base}/?theme=${tema}&red=oficial` });
+            await c.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded' && !!document.querySelector('header .header-lado') && !!document.querySelector('#wallet-box .cuenta-chip')", 20000);
+            await sleep(400);
+            const medida = JSON.parse(await c.eval(SONDA_FILA_CABECERA));
+            const r = evaluarFilaCabecera(medida);
+            check(`cabecera ${ancho} px ${tema} en modo Oficial: el grupo de la derecha queda en la fila del logo`, r.ok, r.detalle);
+            await c.screenshot(join(outDir, `ui-cabecera-${ancho}-${tema}.png`));
+          } finally {
+            await c.send("Page.close").catch(() => undefined);
+          }
         }
       }
     }
