@@ -105,6 +105,8 @@ Con `VITE_SORTEO_SERVIDOR=1` (y `VITE_ALTA=1`) el sitio le pide al servicio que 
 3. Recién ahí prender `SORTEO_SERVIDOR`, al empezar el día y sin sorteos a la vista, y mirar `estado` al empezar y al terminar.
 4. Al final los créditos por sorteo.
 
+**Lo que el sitio no puede evitar.** El servicio de esta versión no cancela un pedido que el sitio abandonó ni distingue un error de su RPC antes de mandar de uno después, y un repetido puede ser el de un envío cortado que nunca llegó (se recuerda hasta unos 14 minutos). Por eso, en dos casos raros el sorteo sale por los dos caminos: una cola del servicio más larga que unos 28 segundos, y un repetido de un envío cortado. El contrato acepta uno solo, el otro falla con `AlreadyDrawn` y cuesta una comisión y una cofirma, y el resultado es el mismo. Para después, del lado del servicio: contestar apenas el envío queda en la cola, y distinguir en la respuesta si el error fue antes o después de mandar.
+
 Lo esperado después de prender: unas pocas firmas sin explicar por día, las de las vueltas al camino de siempre. Si llegan a más de 10 en 24 horas y la causa es esta, no es un ataque: la vigilancia diaria falla con el aviso de siempre y nadie la silencia por código. Quien opera la compara con los sorteos que el servicio mandó (la bitácora trae `sorteo-servidor`) y con los que se hicieron ese día, y la deja fallar hasta que baje. Si sube sin explicación, se apaga el servicio con `SORTEO_SERVIDOR` en `"0"` y se mira de nuevo. Separar los dos casos en el portero queda para después: contar como explicado el sorteo que firma una cuenta del libro cuando no lo mandó la sorteadora.
 
 ## La venta de paquetes y la carga con QR: variables y rutas
