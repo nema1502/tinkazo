@@ -60,10 +60,11 @@
  *                                           sala busca su fila por la llave. En una campaña de cuentas es un 400 forma, como siempre
  *
  * Las campañas de personas (anotarse sin billetera) nacen apagadas: hacen falta la variable DIFERIDA en "1" y un GOOGLE_CLIENT_ID.
- * Sin ellas, crear una campaña con "identidad": "persona" da 503 {"error":"personas-apagadas"} y el alta y la consulta propia de una
- * ya creada dan lo mismo. La lista que se sella lleva una línea de persona por fila donde una campaña de cuentas lleva una cuenta, y
- * quitar, cerrar, sellar y el resultado andan igual. El aviso por correo a quien gana no se manda en esas campañas: la línea no dice
- * a quién escribir y la sala no guarda ningún dato que lo diga.
+ * Sin ellas, crear una campaña con "identidad": "persona" da 503 {"error":"personas-apagadas"} y el alta de una ya creada da lo
+ * mismo. Todo lo demás de una campaña en curso sigue andando, para poder terminarla: la consulta propia del celular, quitar,
+ * cerrar, sellar, guardar el resultado y avisar. La lista que se sella lleva una línea de persona por fila donde una campaña de
+ * cuentas lleva una cuenta, y quitar, cerrar, sellar y el resultado andan igual. El aviso por correo a quien gana no se manda en
+ * esas campañas: la línea no dice a quién escribir y la sala no guarda ningún dato que lo diga.
  *
  * Un Durable Object por sala, con SQLite: guarda los nombres CIFRADOS (la clave
  * viaja en el fragmento del QR y nunca llega acá), sus huellas HMAC para no
@@ -1097,8 +1098,9 @@ export class Sala extends DurableObject<Env> {
    * dice más que lo que dice hoy con una cuenta y su llave: quien no tiene la llave de una fila no ve nada de esa fila.
    */
   async estadoDePersona(llave: string): Promise<Resultado<EstadoDeCelular>> {
-    const no = this.sinPersonas();
-    if (no) return no;
+    // Sin mirar los interruptores: apagarlos frena crear campañas de personas y anotar, pero quien ya está anotada sigue viendo
+    // cómo va lo suyo, y si ganó.
+    if (!this.dato("huella") || !this.esCampana() || !this.esDePersonas()) return { ok: false, motivo: "forma" };
     const huella = await huellaDeLlave(llave);
     return { ok: true, ...estadoDeCelularPorLlave(this.sql, huella) };
   }
