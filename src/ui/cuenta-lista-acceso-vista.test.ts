@@ -468,6 +468,23 @@ describe("el regalo de quien entra con su cuenta", () => {
     expect(vista.cajas.find((c) => c.parte === "activar")?.error).toEqual([{ clave: "clErrFallo" }]);
   });
 
+  // Con el regalo, el texto sale de la falla: no es lo mismo que tarde, que no haya conexión o que el pedido no aparezca.
+  it.each([
+    ["tarda", "clErrTarda"],
+    ["red", "clErrRed"],
+    ["sin-pedido", "clErrSinPedido"],
+    ["fallo", "clErrFallo"],
+  ] as const)("con el regalo, una falla %s dice %s y el botón sigue siendo «Probar de nuevo»", (falla, clave) => {
+    const vista = v({}, { estado: "con", por: null, delRegalo: true, canjeado: 3, fallaTrasCanje: true, fallaDeLaCadena: falla });
+    expect(vista.cajas.find((c) => c.parte === "activar")?.error).toEqual([{ clave }]);
+    expect(vista.principal).toMatchObject({ accion: "seguir-cupon", clave: "clProbarDeNuevo" });
+  });
+
+  it("después de un cupón, la falla no cambia el texto: el cupón quedó guardado", () => {
+    const vista = v({}, { estado: "con", por: "cupon", canjeado: 3, fallaTrasCanje: true, fallaDeLaCadena: "tarda" });
+    expect(vista.cajas.find((c) => c.parte === "activar")?.error).toEqual([{ clave: "altaCuponGuardado" }]);
+  });
+
   it("después de un cupón, una falla sigue diciendo que el cupón quedó guardado", () => {
     const vista = v({}, { estado: "con", por: "cupon", canjeado: 3, fallaTrasCanje: true });
     expect(vista.cajas.find((c) => c.parte === "activar")?.error).toEqual([{ clave: "altaCuponGuardado" }]);

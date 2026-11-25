@@ -40,6 +40,9 @@ export type { PanelDePago } from "./pago-vista";
  */
 export type ModoDelAcceso = "libre" | "cerrado" | "servidor";
 
+/** Las fallas de lo que sigue al canje o al regalo que tienen su propio texto. */
+export type FallaDeLaCadena = "tarda" | "red" | "sin-pedido" | "fallo";
+
 /** Lo que el paso sabe del acceso al modo Oficial y del cupón. Sin esto, `libre`: el paso de siempre. */
 export interface AccesoEnLaVista {
   modo: ModoDelAcceso;
@@ -73,6 +76,11 @@ export interface AccesoEnLaVista {
   cadena: boolean;
   /** Algo de lo que sigue al canje no salió: el cupón quedó en la cuenta y se puede seguir sin volver a canjearlo. */
   fallaTrasCanje: boolean;
+  /**
+   * Por qué no salió lo que sigue: con el regalo, el texto es el de esa falla (tarda, no hay conexión, el pedido no aparece
+   * o no se pudo). Sin esto, `fallo`. Con un cupón no cambia nada: ahí el texto dice que el cupón quedó guardado.
+   */
+  fallaDeLaCadena?: FallaDeLaCadena;
   /** La compra del primer paquete, solo con la compra prendida en el build. Sin esto, ninguna fila del pago. */
   pago?: PagoEnLaVista;
   /**
@@ -542,6 +550,14 @@ const TEXTO_DE_LA_FALLA: Record<Falla, string[]> = {
   "prot-red": ["clErrRed"],
 };
 
+/** El texto de lo que sigue al regalo cuando no salió, según por qué. Son los textos de siempre de las fallas de la cuenta. */
+const TEXTO_DE_LA_CADENA: Readonly<Record<FallaDeLaCadena, string>> = {
+  tarda: "clErrTarda",
+  red: "clErrRed",
+  "sin-pedido": "clErrSinPedido",
+  fallo: "clErrFallo",
+};
+
 const textos = (claves: string[]): Texto[] => claves.map((clave) => ({ clave }));
 
 interface Armado {
@@ -642,8 +658,8 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
   }
   // Algo después del canje no salió: el cupón quedó en la cuenta, y «Probar de nuevo» sigue desde ahí.
   if (a.fallaTrasCanje) {
-    // Con el regalo no hay cupón que nombrar: lo que no salió es activar la cuenta.
-    const clave = a.delRegalo ? "clErrFallo" : "altaCuponGuardado";
+    // Con el regalo no hay cupón que nombrar: lo que no salió es activar la cuenta, y el texto dice por qué.
+    const clave = a.delRegalo ? TEXTO_DE_LA_CADENA[a.fallaDeLaCadena ?? "fallo"] : "altaCuponGuardado";
     return { caja: { ...base, estado: "no-salio", error: textos([clave]) }, principal: boton("seguir-cupon", "clProbarDeNuevo") };
   }
   // Lo que sigue al canje: esperar el pedido, activar y volver a preguntar.
