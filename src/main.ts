@@ -228,7 +228,7 @@ bindParticipants();
 montarPremios();
 montarAvisoDePlata();
 montarGanadores();
-// «Orden de turnos»: a la vista con la bandera VITE_MODOS, prendida por defecto desde el 17 de noviembre de 2026, o con ?modo=turnos (src/modos/bandera.ts).
+// «Orden de turnos»: a la vista con la bandera VITE_MODOS, prendida por defecto desde el cambio 7e414660, o con ?modo=turnos (src/modos/bandera.ts).
 montarTurnos();
 // Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad. La salida dejó
 // la página arriba (`scrollRestoration` en manual): desde acá, recargar vuelve a donde se estaba, como siempre.
@@ -249,7 +249,7 @@ initEnsayo();
 initStandSala();
 // Los juegos interactivos (botón de la portada: src/sala/organizador.ts).
 initOrganizadorInteractivo();
-// Los equipos con cupón (bandera VITE_EQUIPOS, prendida por defecto desde el 17 de noviembre de 2026): sin la bandera no se agrega nada.
+// Los equipos con cupón (bandera VITE_EQUIPOS, prendida por defecto desde el cambio 7e414660): sin la bandera no se agrega nada.
 if (equiposActivo()) {
   reponerEtiquetas();
   void import("./ui/equipos-sala").then((m) => m.initEquiposSala());

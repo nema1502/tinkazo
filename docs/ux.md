@@ -350,7 +350,7 @@ Pedido: "letras chiquitas, horribles, ilegibles; el juego no se lee, se juega". 
 
 ## Ganadores y premios pagados (6 de noviembre de 2026)
 
-Con la bandera `VITE_PAGOS` prendida (lo está en producción desde mediados de noviembre de 2026, ver [premios.md](premios.md) y la tabla de banderas de [operacion.md](operacion.md)), debajo de "Siguiente premio" aparece el panel de ganadores: una fila por ganador con su puesto, su nombre o su cuenta acortada y el estado de su premio a la derecha (Pagado, Pendiente, Vencido, Sin confirmar, Sin consulta o "Lo entrega quien organiza"). Reglas:
+Con la bandera `VITE_PAGOS` prendida (lo está en producción, leído el 25 de noviembre de 2026: ver [premios.md](premios.md) y la tabla de banderas de [operacion.md](operacion.md)), debajo de "Siguiente premio" aparece el panel de ganadores: una fila por ganador con su puesto, su nombre o su cuenta acortada y el estado de su premio a la derecha (Pagado, Pendiente, Vencido, Sin confirmar, Sin consulta o "Lo entrega quien organiza"). Reglas:
 
 - **No compite con la acción principal.** "Siguiente premio" o "Compartir el resultado" siguen siendo lo único magenta de la pantalla. "Pagar premio", "Actualizar", "Ver los N ganadores" y "Firmar y pagar" son secundarios (`ghost`). El panel va debajo, nunca entre el ganador y la acción principal.
 - **Una consulta al abrir y un botón "Actualizar"**, sin reintentos. El estado lo dice con palabras, no solo con el color.
