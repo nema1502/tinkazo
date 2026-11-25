@@ -44,11 +44,18 @@ export const RETRASO_DE_LA_LECTURA_MS = 1_500;
 export const ESPERA_DE_LA_PRIMERA_MS = 3_000;
 /**
  * Cuánto como máximo se demora, al azar, la comprobación del sello. 150 o 300 celulares reciben el resultado a la vez y cada
- * uno baja por primera vez el SDK de Stellar (del orden de 150 kB comprimidos) para leer el sello: repartidos en 45 segundos son
- * unos 8 Mbps en total y no compiten con el festejo, el sondeo de la sala ni lo que hace quien organiza. La línea puede tardar:
- * no es lo que la persona espera ver.
+ * uno que comprueba (`FRACCION_QUE_COMPRUEBA`) baja por primera vez el SDK de Stellar (del orden de 150 kB comprimidos) para leer
+ * el sello: unas 75 bajadas repartidas en 45 segundos son unos 2 Mbps en total y no compiten con el festejo, el sondeo de la sala
+ * ni lo que hace quien organiza. La línea puede tardar: no es lo que la persona espera ver.
  */
 export const RETRASO_DE_LA_COMPROBACION_MS = 45_000;
+/**
+ * A cuántos celulares les toca comprobar el sello: uno de cada cuatro, al azar. El navegador casi nunca dice que la conexión es
+ * mala (en Android da 4g aun con Wi-Fi y Safari no lo da), así que el filtro de conexión no baja las descargas del SDK de
+ * Stellar. Con 300 celulares detrás de la misma conexión, la comprobación pasa de unos 300 bajadas a unas 75. La línea no es
+ * lo que la persona espera ver: a quien no le toca no se le dice nada, igual que antes de existir esta comprobación.
+ */
+export const FRACCION_QUE_COMPRUEBA = 0.25;
 
 export type BaseDelCelular = Pick<
   DepsDelCelular,
@@ -143,6 +150,8 @@ export interface PiezasDelCelular {
   leerSello?: (red: NetworkName, hash: string) => Promise<LecturaDelHistorial>;
   /** Para esperar sin el reloj de verdad. */
   esperar?: (ms: number) => Promise<void>;
+  /** El número entre 0 y 1 con el que este celular decide si comprueba el sello (comprueba si es menor que `FRACCION_QUE_COMPRUEBA`). Sin esto, el azar de siempre. */
+  suerte?: () => number;
   /** Lo que el navegador dice de la conexión. Sin esto, el del navegador. */
   conexion?: () => ConexionDelNavegador | undefined;
 }
@@ -312,6 +321,9 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
     //  - Con el ahorro de datos prendido o una conexión que no es de las buenas no baja ni lee nada.
     //  - Lo que ya se comprobó (o no se pudo hace poco) y el aviso de demasiados pedidos se recuerdan en el celular
     //    (`sello-memoria.ts`): recargar, volver a abrir el enlace o tener dos pestañas no repite lecturas.
+    //  - Solo comprueba uno de cada cuatro celulares (`FRACCION_QUE_COMPRUEBA`): el navegador casi nunca dice que la conexión es
+    //    mala, y con cientos de celulares detrás del mismo Wi-Fi la bajada del SDK es lo que pesa. Quien ya lo había comprobado
+    //    sigue viendo su línea desde la memoria, sin leer nada.
     //  - Cada celular espera su turno al azar y la lectura se repite una vez si la red falla, con tope (`comprobar.ts`). Cada
     //    lectura es un solo pedido a la red (sin los reintentos de adentro) y no usa el lector que recuerda lo que falló: con
     //    cientos de celulares detrás de la misma conexión, los pedidos de más son lo que hace que la red empiece a limitar.
@@ -327,6 +339,8 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
       };
       const antes = yaSeSabe();
       if (antes !== undefined) return antes;
+      // Solo a una parte de los celulares les toca comprobar: a los demás no se les pide ni esperar, ni bajar el SDK, ni leer.
+      if (!((p.suerte ?? azar)() < FRACCION_QUE_COMPRUEBA)) return null;
       const dormir = p.esperar ?? esperar;
       await dormir(Math.round(azar() * RETRASO_DE_LA_COMPROBACION_MS));
       // Mientras esperaba su turno, otra pestaña pudo leer, o la red pudo pedir que se frene.

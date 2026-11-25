@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { campanaDeEjemplo } from "./ejemplo";
 import {
+  FRACCION_QUE_COMPRUEBA,
   RETRASO_DE_LA_COMPROBACION_MS,
   almacenEnMemoria,
   cargarConUnReintento,
@@ -86,6 +87,8 @@ function montar(
     memoria?: Storage;
     enLinea?: boolean;
     azar?: number;
+    /** El número al azar con el que este celular decide si comprueba el sello. Sin esto, 0: le toca comprobar. */
+    suerte?: number;
     tokens?: (string | null)[];
     sigue?: boolean;
     /** Cuánto espera el candado a que otra pestaña termine, en milisegundos del reloj falso. */
@@ -154,6 +157,7 @@ function montar(
     ...(o.conexion ? { conexion: o.conexion } : {}),
     bloquear,
     dep: { fetch: f, azar: () => o.azar ?? 0.5 },
+    suerte: () => o.suerte ?? 0,
     ...(o.entorno ? { entorno: o.entorno } : {}),
   };
   return { deps: depsConectadas(piezas), llamadas, memoria, google, ir, bloqueos };
@@ -685,6 +689,41 @@ describe("el resto de las dependencias", () => {
 
   it("el turno al azar reparte los celulares en una ventana de al menos 30 segundos, porque cada uno baja el SDK de Stellar", () => {
     expect(RETRASO_DE_LA_COMPROBACION_MS).toBeGreaterThanOrEqual(30_000);
+  });
+
+  it("solo comprueba una fracción de los celulares: el resto ni espera turno, ni baja el SDK, ni lee la red", async () => {
+    expect(FRACCION_QUE_COMPRUEBA).toBeGreaterThan(0);
+    expect(FRACCION_QUE_COMPRUEBA).toBeLessThanOrEqual(0.25);
+    const comprobante = await comprobanteDeDos();
+    for (const suerte of [FRACCION_QUE_COMPRUEBA, 0.5, 0.999]) {
+      const leerSello = vi.fn(async (): Promise<LecturaDelHistorial> => ({ ok: false, error: "red-caida" }));
+      const esperas: number[] = [];
+      const m = montar({}, { suerte, leerSello, esperar: async (ms) => void esperas.push(ms) });
+      expect(await m.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBeNull();
+      expect(leerSello).not.toHaveBeenCalled();
+      expect(esperas).toEqual([]);
+    }
+  });
+
+  it("al celular al que le toca comprobar, le toca con cualquier número por debajo de la fracción", async () => {
+    const { comprobante, bueno } = await conSelloBueno();
+    for (const suerte of [0, FRACCION_QUE_COMPRUEBA / 2, FRACCION_QUE_COMPRUEBA - 0.001]) {
+      const leerSello = vi.fn(async () => bueno);
+      const m = montar({}, { suerte, leerSello, esperar: async () => undefined });
+      expect(await m.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBe("esta");
+      expect(leerSello).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("al celular al que no le tocó pero ya había comprobado, le sigue saliendo la línea sin leer nada", async () => {
+    const { comprobante, bueno } = await conSelloBueno();
+    const memoria = almacenFalso();
+    const a = montar({}, { memoria, suerte: 0, leerSello: vi.fn(async () => bueno), esperar: async () => undefined });
+    expect(await a.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBe("esta");
+    const segunda = vi.fn(async () => bueno);
+    const b = montar({}, { memoria, suerte: 0.9, leerSello: segunda, esperar: async () => undefined });
+    expect(await b.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBe("esta");
+    expect(segunda).not.toHaveBeenCalled();
   });
 
   it("comprobar en una campaña con premios no lee nada: su sello suma lecturas al servicio que usa quien organiza", async () => {
