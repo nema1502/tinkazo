@@ -156,14 +156,27 @@ function medir(raiz: HTMLElement): void {
     return `arriba ${r.top.toFixed(1)} alto ${r.height.toFixed(1)} (scroll ${e.scrollHeight}, cliente ${e.clientHeight}) overflow ${c.overflow} alto-css ${c.height} max ${c.maxHeight} min ${c.minHeight} margen-abajo ${c.marginBottom} display ${c.display} fuente ${c.fontSize}/${c.lineHeight}`;
   };
   const padre = linea?.parentElement ?? null;
+  const quien = (x: number, y: number): string => {
+    const e = document.elementFromPoint(x, y);
+    if (!e) return "nada";
+    const c = getComputedStyle(e);
+    const r = e.getBoundingClientRect();
+    return `${e.tagName.toLowerCase()}#${e.id}.${e.className} arriba ${r.top.toFixed(0)} alto ${r.height.toFixed(0)} pos ${c.position} fondo ${c.backgroundColor} z ${c.zIndex}`;
+  };
+  const abajo = linea ? linea.getBoundingClientRect().bottom : 0;
+  const acciones = raiz.querySelector<HTMLElement>("#cpo-acciones");
   const salida = document.createElement("pre");
-  salida.style.cssText = "position:fixed;left:0;right:0;bottom:0;margin:0;padding:6px;font:10px/1.2 monospace;white-space:pre-wrap;background:#fff;color:#000;z-index:99";
+  salida.style.cssText = "position:fixed;left:0;right:0;top:0;margin:0;padding:6px;font:10px/1.2 monospace;white-space:pre-wrap;background:#fff;color:#000;z-index:99";
   salida.textContent = [
     `ancho ${innerWidth}`,
     `premio: ${cuadro(premio)}`,
     `linea: ${cuadro(linea)}`,
     `boton: ${cuadro(boton)}`,
     `panel: ${cuadro(padre)}`,
+    `quien en el ultimo renglon (x 40): ${quien(40, abajo - 9)}`,
+    `quien en el ultimo renglon (x 200): ${quien(200, abajo - 9)}`,
+    `quien en el medio (x 40): ${quien(40, abajo - 30)}`,
+    `acciones: ${cuadro(acciones)} pos ${acciones ? getComputedStyle(acciones).position : ""}`,
     `padre-display ${padre ? getComputedStyle(padre).display : ""} rows ${padre ? getComputedStyle(padre).gridTemplateRows : ""}`,
   ].join(String.fromCharCode(10));
   document.body.append(salida);
