@@ -188,7 +188,8 @@ describe("cada salida al camino de siempre deja marcado el sorteo, y solo ese", 
     expect(r).toEqual({ estado: "camino-de-hoy" });
     expect(loTomaElServicio(7n, false)).toBe(false);
     expect(loTomaElServicio(8n, false)).toBe(false);
-    expect(loTomaElServicio(8n, false, () => Date.now() + DISYUNTOR_MS + 1000)).toBe(true);
+    // El reloj simulado corrió unos segundos de más: se mira bien pasado el rato.
+    expect(loTomaElServicio(8n, false, () => Date.now() + DISYUNTOR_MS + 60_000)).toBe(true);
   });
 });
 
