@@ -107,10 +107,13 @@ export function vigilarCuentas(o: OrdenDeCuentas): { avisar: DesbordeDeCuentas[]
   const umbral = o.cupoEvento ?? o.base;
   const avisar: DesbordeDeCuentas[] = [];
   const yaEnEstaHora = o.recordado.hora === bin.hora;
-  if (bin.nuevas > umbral && !(yaEnEstaHora && o.recordado.motivos.includes("cuentas-nuevas"))) {
+  // Una página llena (`completo: false`) es un piso: la lista de movimientos se corta en `MAX_MOVIMIENTOS`, y con un
+  // umbral de ese mismo tamaño no se lo podría pasar nunca. Ahí llegar al umbral ya cuenta.
+  const pasa = (n: number): boolean => (cuentas.completo ? n > umbral : n >= umbral);
+  if (pasa(bin.nuevas) && !(yaEnEstaHora && o.recordado.motivos.includes("cuentas-nuevas"))) {
     avisar.push({ motivo: "cuentas-nuevas", hubo: bin.nuevas, umbral, hora: bin.hora });
   }
-  if (bin.activaciones > umbral && !(yaEnEstaHora && o.recordado.motivos.includes("activaciones"))) {
+  if (pasa(bin.activaciones) && !(yaEnEstaHora && o.recordado.motivos.includes("activaciones"))) {
     avisar.push({ motivo: "activaciones", hubo: bin.activaciones, umbral, hora: bin.hora });
   }
   return { avisar, conDatos: true, completo: cuentas.completo, hora: bin.hora };
