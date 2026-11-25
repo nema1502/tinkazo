@@ -2154,6 +2154,7 @@
   @media (max-width: 700px) and (max-height: 740px) {
     .hero-portada { padding-top: 14px; }
     .hero-portada { gap: 12px; }
+    .hero-portada .hero-copy { gap: 12px; }
     .hero-portada h1 { font-size: clamp(30px, 8.4vw, 38px); }
     .hero-portada .lead { font-size: var(--letra-sec); line-height: 1.45; }
   }

@@ -340,6 +340,12 @@ describe("la portada en el celular y en la laptop", () => {
     expect(css).not.toContain("[data-cancelar-entrada]");
   });
 
+  it("en un celular bajo el espacio entre título, línea y botón baja a 12 px como en la rama principal, y la grilla también", () => {
+    const baja = bloque(/@media \(max-width: 700px\) and \(max-height: 740px\) \{/);
+    expect(baja).toMatch(/\.hero-portada \.hero-copy \{ gap: 12px; \}/);
+    expect(baja).toMatch(/\.hero-portada \{ gap: 12px; \}/);
+  });
+
   it("la imagen del hero va arriba del título solo en celulares angostos y altos, y después de las puertas en los demás", () => {
     const base = bloque(/@media \(max-width: 700px\) \{\s*\.hero-portada \{ grid-template-columns: 1fr;/);
     expect(base).toMatch(/\.hero-portada \.hero-shot \{[^}]*order: 2/);
