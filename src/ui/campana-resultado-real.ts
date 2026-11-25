@@ -161,11 +161,7 @@ export function depsDelResultadoReales(): DepsDelResultado {
     ponerSellada: (s, sorteo, plazo) => ponerSellada(s, sorteo, {}, plazo),
     estado: (s) => estadoConToken(s),
     guardarResultado: (s, sorteo, comprobante) => guardarResultadoEnSala(s, sorteo, comprobante),
-    // Una lista de ganadoras mezclada se trata como una lectura que falló. El paso del resultado la manda a su propio aviso más adelante.
-    resultado: async (s) => {
-      const leido = await resultadoDeSala(s);
-      return leido === "mezclada" ? "red" : leido;
-    },
+    resultado: (s) => resultadoDeSala(s),
     avisar: (s, cuenta) => avisarEnSala(s, cuenta),
     // Un juego en marcha o la pantalla grande abierta no se cortan: solo se muestra la línea.
     sePuedeSoltar: () => app.frozen !== null && app.drawn === null && !sorteoEnMarcha(app.frozen) && !document.fullscreenElement,

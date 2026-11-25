@@ -384,9 +384,21 @@ async function leerVuelta(s: Sala, desde: number, dep: DependenciasOrg): Promise
  *
  * La lista tiene que ser de una sola forma: toda de cuentas o toda de líneas de persona. Una fila que no es ni una ni otra,
  * sin ninguna línea de persona, es lo de siempre: `null` en cuanto se lee, sin pedir más. Una lista con líneas de persona
- * junto a otra cosa no se sortea y reintentar no la cambia: `"mezclada"`, y solo si la lectura fue estable de punta a punta.
+ * junto a otra cosa no se sortea y reintentar no la cambia. Quien lo sabe tratar pide `{ distinguirMezclada: true }` y recibe
+ * `"mezclada"`, y solo si la lectura fue estable de punta a punta. Sin pedirlo, la mezcla es `null`, como cualquier lectura
+ * que no sirve: así quien llama sin saber de personas sigue haciendo lo mismo que antes.
  */
-export async function leerTodasLasAnotadas(s: Sala, dep: DependenciasOrg = {}): Promise<EquipoDeSala[] | "mezclada" | null> {
+export function leerTodasLasAnotadas(s: Sala, dep?: DependenciasOrg): Promise<EquipoDeSala[] | null>;
+export function leerTodasLasAnotadas(
+  s: Sala,
+  dep: DependenciasOrg,
+  como: { distinguirMezclada: true },
+): Promise<EquipoDeSala[] | "mezclada" | null>;
+export async function leerTodasLasAnotadas(
+  s: Sala,
+  dep: DependenciasOrg = {},
+  como: { distinguirMezclada?: boolean } = {},
+): Promise<EquipoDeSala[] | "mezclada" | null> {
   const antes = await estadoConToken(s, dep);
   if (typeof antes === "string" || antes.fase !== "cerrada") return null;
   const leidas: EquipoDeSala[] = [];
@@ -408,7 +420,8 @@ export async function leerTodasLasAnotadas(s: Sala, dep: DependenciasOrg = {}): 
   if (leidas.length !== despues.total || new Set(leidas.map((f) => f.n)).size !== leidas.length) return null;
   const ultima = await leerVuelta(s, desde, dep);
   if (ultima === null || ultima.length !== 0) return null;
-  return formaDeLista(leidas.map((f) => f.cuenta)) === "mezclada" ? "mezclada" : leidas;
+  if (formaDeLista(leidas.map((f) => f.cuenta)) === "mezclada") return como.distinguirMezclada === true ? "mezclada" : null;
+  return leidas;
 }
 
 /** Lo que la sala contesta a un aviso de sellada: su motivo, o `red` si no hubo respuesta que se entienda. */
@@ -490,12 +503,20 @@ export interface ResultadoDeSala {
 
 /**
  * Lee el resultado que la sala guardó, sin token. En este pedido `sin-resultado` es un 404. Las ganadoras son todas cuentas o
- * todas líneas de persona. Una fila que no es de ninguna de las dos, sin líneas de persona, es `red`, como siempre, y una
- * mezcla es `mezclada`: reintentar no la cambia.
+ * todas líneas de persona. Una fila que no es de ninguna de las dos, sin líneas de persona, es `red`, como siempre. Una mezcla
+ * tampoco se sortea y reintentar no la cambia: quien lo sabe tratar pide `{ distinguirMezclada: true }` y recibe `"mezclada"`.
+ * Sin pedirlo, la mezcla es `red`, como cualquier resultado que no sirve.
  */
+export function resultadoDeSala(s: Sala, dep?: DependenciasOrg): Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red">;
+export function resultadoDeSala(
+  s: Sala,
+  dep: DependenciasOrg,
+  como: { distinguirMezclada: true },
+): Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red" | "mezclada">;
 export async function resultadoDeSala(
   s: Sala,
   dep: DependenciasOrg = {},
+  como: { distinguirMezclada?: boolean } = {},
 ): Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red" | "mezclada"> {
   const r = await llamar(dep, rutaDe(s, "/campana/resultado"), {});
   if (!r) return "red";
@@ -510,7 +531,7 @@ export async function resultadoDeSala(
   }
   const forma = formaDeLista(ganadoras);
   if (forma === "rara") return "red";
-  if (forma === "mezclada") return "mezclada";
+  if (forma === "mezclada") return como.distinguirMezclada === true ? "mezclada" : "red";
   return { sorteo: x.sorteo, ganadoras, comprobante: x.comprobante };
 }
 

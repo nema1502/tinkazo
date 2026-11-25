@@ -7,8 +7,8 @@ import { depsDelResultadoReales } from "./campana-resultado-real";
 
 /**
  * Lo que los pasos de pasar la lista y de mostrar el resultado hacen, hasta que tengan su propio aviso, con una lista que la
- * sala devuelve mezclada: lo que hacen con la falla que más se le parece. La lista no se lee y el resultado no se lee, como
- * antes de que existieran las campañas de personas. No se reintenta más que lo de siempre ni se ve un aviso nuevo.
+ * sala devuelve mezclada: no piden que se distinga, así que es la falla que más se le parece. La lista no se lee y el
+ * resultado no se lee, como antes de que existieran las campañas de personas. No se ve ningún aviso nuevo.
  */
 
 const SALA: SalaDeCampana = {

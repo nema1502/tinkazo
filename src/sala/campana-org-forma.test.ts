@@ -48,6 +48,9 @@ const lecturaDe = (filas: Record<string, unknown>[]): Response[] => [
   json([]),
 ];
 
+/** Lo que pide quien sabe qué hacer con una lista mezclada. */
+const DISTINGUIR = { distinguirMezclada: true } as const;
+
 const DOS_PERSONAS = [lineaDePrueba(1), lineaDePrueba(2)];
 const SIN_FINAL_DE_CONTROL = `G${"B".repeat(55)}`;
 
@@ -66,13 +69,13 @@ describe("leerTodasLasAnotadas con la forma de la lista", () => {
 
   it("una línea de persona entre cuentas da mezclada, y solo al final de una lectura estable", async () => {
     const m = conFetch(lecturaDe([fila(1, cuentaDePrueba(1)), fila(2, lineaDePrueba(1)), fila(3, cuentaDePrueba(3))]));
-    expect(await leerTodasLasAnotadas(SALA, { fetch: m.fetch })).toBe("mezclada");
+    expect(await leerTodasLasAnotadas(SALA, { fetch: m.fetch }, DISTINGUIR)).toBe("mezclada");
     expect(m.llamadas.map((l) => l.ruta)).toEqual(["/campana/estado", "/equipos?desde=0", "/equipos?desde=3", "/campana/estado", "/equipos?desde=3"]);
   });
 
   it("una línea de persona junto a una fila que no es nada también da mezclada", async () => {
     const m = conFetch(lecturaDe([fila(1, lineaDePrueba(1)), fila(2, "hola")]));
-    expect(await leerTodasLasAnotadas(SALA, { fetch: m.fetch })).toBe("mezclada");
+    expect(await leerTodasLasAnotadas(SALA, { fetch: m.fetch }, DISTINGUIR)).toBe("mezclada");
   });
 
   it("una mezcla repartida en dos vueltas también da mezclada", async () => {
@@ -84,12 +87,26 @@ describe("leerTodasLasAnotadas con la forma de la lista", () => {
       estadoDe(3),
       json([]),
     ]);
-    expect(await leerTodasLasAnotadas(SALA, { fetch: m.fetch })).toBe("mezclada");
+    expect(await leerTodasLasAnotadas(SALA, { fetch: m.fetch }, DISTINGUIR)).toBe("mezclada");
   });
 
   it("una mezcla que se movió mientras se leía no se declara: da null, para volver a leer", async () => {
     const m = conFetch([estadoDe(2), json([fila(1, cuentaDePrueba(1)), fila(2, lineaDePrueba(1))]), json([]), estadoDe(3), json([])]);
+    expect(await leerTodasLasAnotadas(SALA, { fetch: m.fetch }, DISTINGUIR)).toBeNull();
+  });
+
+  it("sin pedir que se distinga, una lista mezclada es una lectura que falló: null, como antes de las personas", async () => {
+    const m = conFetch(lecturaDe([fila(1, cuentaDePrueba(1)), fila(2, lineaDePrueba(1))]));
     expect(await leerTodasLasAnotadas(SALA, { fetch: m.fetch })).toBeNull();
+    expect(m.llamadas.map((l) => l.ruta)).toEqual(["/campana/estado", "/equipos?desde=0", "/equipos?desde=2", "/campana/estado", "/equipos?desde=2"]);
+  });
+
+  it("pidiendo que se distinga, las listas de una sola forma se leen igual", async () => {
+    const m = conFetch(lecturaDe(DOS_PERSONAS.map((l, i) => fila(i + 1, l))));
+    const r = await leerTodasLasAnotadas(SALA, { fetch: m.fetch }, DISTINGUIR);
+    expect((r as { cuenta: string }[]).map((f) => f.cuenta)).toEqual(DOS_PERSONAS);
+    const rara = conFetch([estadoDe(2), json([fila(1, SIN_FINAL_DE_CONTROL), fila(2, cuentaDePrueba(2))])]);
+    expect(await leerTodasLasAnotadas(SALA, { fetch: rara.fetch }, DISTINGUIR)).toBeNull();
   });
 
   it("una cuenta mal formada sin líneas de persona sigue sin leerse, y no pide nada más que la primera vuelta", async () => {
@@ -136,20 +153,25 @@ describe("resultadoDeSala con la forma de las ganadoras", () => {
   });
 
   it("una mezcla de cuentas y líneas de persona da mezclada", async () => {
-    expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([cuentaDePrueba(1), lineaDePrueba(1)])]).fetch })).toBe("mezclada");
-    expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([lineaDePrueba(1), cuentaDePrueba(1)])]).fetch })).toBe("mezclada");
-    expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([lineaDePrueba(1), "hola"])]).fetch })).toBe("mezclada");
+    expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([cuentaDePrueba(1), lineaDePrueba(1)])]).fetch }, DISTINGUIR)).toBe("mezclada");
+    expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([lineaDePrueba(1), cuentaDePrueba(1)])]).fetch }, DISTINGUIR)).toBe("mezclada");
+    expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([lineaDePrueba(1), "hola"])]).fetch }, DISTINGUIR)).toBe("mezclada");
+  });
+
+  it("sin pedir que se distinga, una mezcla es red, como cualquier resultado que no sirve", async () => {
+    expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([cuentaDePrueba(1), lineaDePrueba(1)])]).fetch })).toBe("red");
+    expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([lineaDePrueba(1), "hola"])]).fetch })).toBe("red");
   });
 
   it("una cuenta mal formada, o algo que no es texto, sin líneas de persona, sigue dando red", async () => {
     for (const mala of [SIN_FINAL_DE_CONTROL, "GBBB", 7, null]) {
-      const m = conFetch([cuerpo([cuentaDePrueba(1), mala])]);
-      expect(await resultadoDeSala(SALA, { fetch: m.fetch }), String(mala)).toBe("red");
+      expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([cuentaDePrueba(1), mala])]).fetch }), String(mala)).toBe("red");
+      expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([cuentaDePrueba(1), mala])]).fetch }, DISTINGUIR), String(mala)).toBe("red");
     }
   });
 
   it("algo que no es texto junto a una línea de persona es red: no se entiende ni como mezcla", async () => {
-    expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([lineaDePrueba(1), 7])]).fetch })).toBe("red");
+    expect(await resultadoDeSala(SALA, { fetch: conFetch([cuerpo([lineaDePrueba(1), 7])]).fetch }, DISTINGUIR)).toBe("red");
   });
 
   it("el resultado de cuentas y la lista vacía no cambian", async () => {
