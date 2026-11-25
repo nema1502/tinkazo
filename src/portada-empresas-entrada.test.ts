@@ -76,21 +76,21 @@ describe("Empresas en la fila de la cabecera del celular", () => {
     expect(css).not.toMatch(/\.topnav (?:> a|\.mas|a\.nav)[^{]*\{[^}]*\border: \d/);
   });
 
-  it("la guía de UX cuenta los cortes de verdad: 400 px para la fila, 859 y 820 px para los renglones de las puertas", () => {
+  it("la guía de UX cuenta los cortes de verdad: 412 px para la fila, 859 y 820 px para los renglones de las puertas", () => {
     const ux = readFileSync("docs/ux.md", "utf8");
-    expect(ux).toContain("de 400 a 760 px");
+    expect(ux).toContain("de 412 a 760 px");
     expect(ux).not.toMatch(/375 a 760 px/);
     expect(ux).toContain("Hasta 859 px de ancho, y desde 860 px solo en una pantalla de 820 px de alto o menos");
     expect(ux).not.toContain("menos de 820 px de alto");
     expect(css).toMatch(/@media \(max-width: 859px\), \(min-width: 860px\) and \(max-height: 820px\) \{/);
   });
 
-  it("de 400 a 760 px se ve en la fila y sale de Más, y por debajo de 400 px sigue dentro de Más", () => {
+  it("de 412 a 760 px se ve en la fila y sale de Más, y por debajo de 412 px sigue dentro de Más", () => {
     expect(css).toMatch(/\.topnav a\.nav-empresas-cel \{ display: none; \}/);
-    const bloque = css.match(/@media \(min-width: 400px\) and \(max-width: 760px\) \{([^}]*\{[^}]*\}[^}]*\{[^}]*\})\s*\}/)?.[1] ?? "";
+    const bloque = css.match(/@media \(min-width: 412px\) and \(max-width: 760px\) \{([^}]*\{[^}]*\}[^}]*\{[^}]*\})\s*\}/)?.[1] ?? "";
     expect(bloque).toMatch(/\.topnav a\.nav-empresas-cel \{ display: inline-flex; \}/);
     expect(bloque).toMatch(/\.topnav \.mas-lista a\[data-campana-enlace\] \{ display: none; \}/);
-    // El enlace de adentro de Más solo se esconde en ese tramo: por debajo de 400 px se ve y desde 761 px la lista no es un menú.
+    // El enlace de adentro de Más solo se esconde en ese tramo: por debajo de 412 px se ve y desde 761 px la lista no es un menú.
     expect(css.match(/\.topnav \.mas-lista a\[data-campana-enlace\] \{ display: none; \}/g)?.length).toBe(1);
     expect(css).not.toMatch(/min-width: 375px\) and \(max-width: 760px/);
   });
