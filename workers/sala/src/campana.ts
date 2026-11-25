@@ -629,7 +629,18 @@ export function topeDeConexion(sql: Ejecutar, grupo: string, ahora: number): Top
 }
 
 /**
- * Lo que se mira antes de verificar la sesión: la fase, el pase ya comprobado y los topes de rechazos. Ninguno de estos
+ * Entre las horas de la campaña: la fase puede seguir «abierta» después de la hora de cierre (nadie la cambió, o la
+ * pantalla se quedó sin quien la maneje). Pasada la hora, las altas nuevas no entran; quien ya estaba anotada sí reingresa.
+ */
+function fueraDeHora(sql: Ejecutar, ahora: number): boolean {
+  const cierra = Number(sql<{ v: string }>("SELECT v FROM sala WHERE k = 'cierra'")[0]?.v ?? 0);
+  return Number.isSafeInteger(cierra) && cierra > 0 && ahora >= cierra;
+}
+
+/**
+ * Lo que se mira antes de verificar la sesión: la fase, el pase ya comprobado y los topes de rechazos. La hora de cierre
+ * no se mira acá: pasada la hora quien ya estaba anotada puede reingresar desde otro celular, y eso solo se sabe después de
+ * verificar la sesión. La hora cierra las altas nuevas más adelante (`anotarPersona`). Ninguno de estos
  * rechazos gasta el tope de la conexión: no cuestan una llamada al proveedor. El de la ficha corta a quien repite una
  * ficha mala sin llamar a nadie. El de la conexión se saltea si la ficha es de una sesión que ya se verificó hace poco
  * (`reconocida`): esa no va a llamar al proveedor.
@@ -640,10 +651,6 @@ export function antesDeVerificar(
 ): { ok: true } | { ok: false; motivo: "cerrada" | "pase" } | { ok: false; motivo: "rechazos"; esperaS: number } {
   const fase = sql<{ v: string }>("SELECT v FROM sala WHERE k = 'fase'")[0]?.v;
   if (fase !== "abierta") return { ok: false, motivo: "cerrada" };
-  // Entre las horas de la campaña: la fase puede seguir «abierta» después de la hora de cierre (nadie la cambió, o la
-  // pantalla se quedó sin quien la maneje). Pasada la hora de cierre, el alta no entra y no pregunta nada a nadie.
-  const cierra = Number(sql<{ v: string }>("SELECT v FROM sala WHERE k = 'cierra'")[0]?.v ?? 0);
-  if (Number.isSafeInteger(cierra) && cierra > 0 && a.ahora >= cierra) return { ok: false, motivo: "cerrada" };
   if (!a.paseVale) return { ok: false, motivo: "pase" };
   const ventana = Math.floor(a.ahora / VENTANA_CAMPANA_MS);
   sql("DELETE FROM campana_rechazos_ficha WHERE ventana < ?", ventana);
@@ -739,11 +746,14 @@ export function prealtaDeCampana(
   const antes = antesDeVerificar(sql, { ...a, reconocida: persona !== null });
   if (!antes.ok) return antes;
   if (persona === null) return { ok: true, cuenta: null };
+  const tarde = fueraDeHora(sql, a.ahora);
   if (sql("SELECT persona FROM campana_quitadas WHERE persona = ? LIMIT 1", persona)[0]) {
-    return { ok: false, motivo: "quitada" };
+    return { ok: false, motivo: tarde ? "cerrada" : "quitada" };
   }
   const anterior = siYaEsta(sql, { persona, llave: a.llave, grupo: a.grupo, ahora: a.ahora, ...(a.d !== undefined ? { d: a.d } : {}) });
   if (anterior === null) {
+    // Pasada la hora, quien ya no está en la lista es una alta nueva: no entra y no hace falta llamar al proveedor.
+    if (tarde) return { ok: false, motivo: "cerrada" };
     // La persona ya no está y no salió con motivo: hay que llamar al proveedor, así que vale el tope de la conexión.
     const tope = topeDeConexion(sql, a.grupo, a.ahora);
     return tope.ok ? { ok: true, cuenta: null } : tope;
@@ -895,14 +905,12 @@ export function anotarPersona(
 ): ResultadoDeAltaDePersona {
   const ritmo = ritmoDeCampana(sql, alta.grupo, alta.ahora);
   const fase = sql<{ v: string }>("SELECT v FROM sala WHERE k = 'fase'")[0]?.v;
-  // Se repite la hora de cierre acá, después de todas las esperas: lo que se comprueba antes puede ser viejo cuando el
+  // La hora de cierre se mira acá, después de todas las esperas: lo que se comprueba antes puede ser viejo cuando el
   // pedido vuelve de la red. Fuera de hora la respuesta es «cerrada», como con la fase, y el envío de la conexión se
-  // cuenta igual: también costó una llamada al proveedor.
-  const cierra = Number(sql<{ v: string }>("SELECT v FROM sala WHERE k = 'cierra'")[0]?.v ?? 0);
-  if (
-    fase !== "abierta" ||
-    (Number.isSafeInteger(cierra) && cierra > 0 && alta.ahora >= cierra)
-  ) {
+  // cuenta igual: también costó una llamada al proveedor. La hora cierra solo las altas nuevas: quien ya estaba anotada
+  // reingresa (`reanotar`) aunque la hora haya pasado. La fase cerrada a mano cierra a todas.
+  const tarde = fueraDeHora(sql, alta.ahora);
+  if (fase !== "abierta") {
     contarEnvio(sql, alta.grupo, ritmo.ventana, false);
     return { ok: false, motivo: "cerrada" };
   }
@@ -912,6 +920,10 @@ export function anotarPersona(
     alta.cuenta,
   )[0];
   if (quitada) {
+    if (tarde) {
+      contarEnvio(sql, alta.grupo, ritmo.ventana, false);
+      return { ok: false, motivo: "cerrada" };
+    }
     // No suma a los envíos de la conexión: quien ya salió repitiendo su alta no puede agotarlos y dejar afuera a las demás.
     return { ok: false, motivo: "quitada" };
   }
@@ -920,6 +932,10 @@ export function anotarPersona(
   if (existente?.ok === false) return { ok: false, motivo: "cupo-conexion", esperaS: existente.esperaS };
   if (existente) {
     return { ok: true, cuenta: existente.cuenta, n: existente.n, v: existente.v, ya: true, ...(existente.nombre ? { nombre: existente.nombre } : {}) };
+  }
+  if (tarde) {
+    contarEnvio(sql, alta.grupo, ritmo.ventana, false);
+    return { ok: false, motivo: "cerrada" };
   }
   if (sql("SELECT cuenta FROM equipos WHERE cuenta = ?", alta.cuenta)[0]) {
     contarEnvio(sql, alta.grupo, ritmo.ventana, false);
