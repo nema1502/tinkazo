@@ -37,8 +37,9 @@ import {
 } from "./campana-sala-mundo";
 
 const CUENTA = cuentaDePrueba(5);
-const es = TEXTOS_SALA_CAMPANA.es;
-const en = TEXTOS_SALA_CAMPANA.en;
+/** El texto de la clave en ese idioma con sus huecos llenos. */
+const dice = (idioma: "es" | "en", clave: string, huecos: Record<string, string>): string =>
+  Object.entries(huecos).reduce((t, [hueco, valor]) => t.replace(`{${hueco}}`, valor), TEXTOS_SALA_CAMPANA[idioma][clave] ?? "");
 /** Los premios del archivo de ejemplo suman 40 dólares. */
 const PREMIO = "40,00";
 
@@ -84,7 +85,7 @@ describe("la línea del premio en la vista previa", () => {
   it("con el saldo que cubre el premio dice que está en la cuenta", async () => {
     const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
     const p = await previa(m);
-    expect(linea(p)).toBe(es.cpoDepAlcanza.replace("{premios}", PREMIO));
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
     expect(leer).toHaveBeenCalledTimes(1);
     expect(leer).toHaveBeenCalledWith(CUENTA);
   });
@@ -92,20 +93,20 @@ describe("la línea del premio en la vista previa", () => {
   it("con menos saldo dice cuánto falta", async () => {
     const { m } = armar({ tipo: "saldo", saldo: "25.0000000" });
     const p = await previa(m);
-    expect(linea(p)).toBe(es.cpoDepFalta.replace("{falta}", "15,00"));
+    expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: "15,00" }));
   });
 
   it("con una cuenta sin dólares digitales dice que falta todo el premio", async () => {
     const { m } = armar({ tipo: "sin-linea" });
     const p = await previa(m);
-    expect(linea(p)).toBe(es.cpoDepFalta.replace("{falta}", PREMIO));
+    expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: PREMIO }));
   });
 
   it("en inglés dice lo mismo con sus palabras", async () => {
     const { m } = armar({ tipo: "saldo", saldo: "25.0000000" });
     m.idioma = "en";
     const p = await previa(m);
-    expect(linea(p)).toBe(en.cpoDepFalta.replace("{falta}", "15.00"));
+    expect(linea(p)).toBe(dice("en", "cpoDepFalta", { falta: "15.00" }));
   });
 
   it("con la lectura fallida no afirma nada: ni que está ni que falta", async () => {
@@ -169,7 +170,7 @@ describe("la línea del premio en la vista previa", () => {
     const { m, leer } = armar({ tipo: "saldo", saldo });
     leer.mockImplementation(async () => ({ tipo: "saldo", saldo }));
     const p = await previa(m);
-    expect(linea(p)).toBe(es.cpoDepFalta.replace("{falta}", "15,00"));
+    expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: "15,00" }));
 
     document.dispatchEvent(new Event("visibilitychange"));
     await suelta(4);
@@ -180,7 +181,7 @@ describe("la línea del premio en la vista previa", () => {
     document.dispatchEvent(new Event("visibilitychange"));
     await suelta(6);
     expect(leer).toHaveBeenCalledTimes(2);
-    expect($(p, "#cpo-deposito").textContent).toBe(es.cpoDepAlcanza.replace("{premios}", PREMIO));
+    expect($(p, "#cpo-deposito").textContent).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
   });
 });
 
@@ -288,9 +289,9 @@ describe("las lecturas que se cruzan o fallan", () => {
 
 describe("los textos de la línea del premio", () => {
   it("están en los dos idiomas con los mismos huecos", () => {
-    expect(es.cpoDepAlcanza).toContain("{premios}");
-    expect(en.cpoDepAlcanza).toContain("{premios}");
-    expect(es.cpoDepFalta).toContain("{falta}");
-    expect(en.cpoDepFalta).toContain("{falta}");
+    for (const idioma of ["es", "en"] as const) {
+      expect(TEXTOS_SALA_CAMPANA[idioma].cpoDepAlcanza).toContain("{premios}");
+      expect(TEXTOS_SALA_CAMPANA[idioma].cpoDepFalta).toContain("{falta}");
+    }
   });
 });
