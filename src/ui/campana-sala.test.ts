@@ -833,7 +833,7 @@ describe("cerrar la lista", () => {
     await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
     // La consecuencia dicha en simple, sin susto: la lista queda guardada.
     expect(texto(p, "#cpo-linea")).toBe("Nadie más va a poder anotarse.");
-    expect(texto(p, "#cpo-pie")).toBe("La lista queda guardada hasta el 22 de noviembre.");
+    expect(texto(p, "#cpo-pie")).toBe("La lista queda guardada hasta el 22 de noviembre a las 14:00.");
     expect(texto(p, "#cpo-pie")).not.toContain("borra");
     boton(p, "Volver a abrir la lista").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
@@ -1313,6 +1313,16 @@ describe("lo demás del panel", () => {
     expect(document.querySelector(".campana-grande")?.outerHTML).not.toContain(TOKEN);
     expect(m.almacen.getItem(CLAVE_ORG)).toContain(TOKEN);
     for (const c of consola) expect(c).not.toHaveBeenCalled();
+  });
+
+  it("en la vista de elegir el archivo, la línea dice qué hacer, en los dos idiomas", () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    expect(vistaDe(p)).toBe("elegir");
+    expect(texto(p, "#cpo-linea")).toBe("Elegí el archivo de tu campaña.");
+    m.idioma = "en";
+    p.pintar();
+    expect(texto(p, "#cpo-linea")).toBe("Choose your campaign file.");
   });
 
   it("cambiar el idioma repinta el panel", async () => {

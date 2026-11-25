@@ -8,7 +8,7 @@
 export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<string, string> } = {
   es: {
     cpoTitulo: "Campaña de una empresa",
-    cpoElegirLinea: "Tu campaña lista para que la gente se anote.",
+    cpoElegirLinea: "Elegí el archivo de tu campaña.",
     cpoElegir: "Elegir el archivo",
     cpoArmala: "¿Todavía no tenés tu campaña? Armala.",
     cpoNoEsCampana: "Este archivo no es una campaña.",
@@ -55,7 +55,7 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoMostrar: "Mostrar",
     cpoParaRevisarNota: "Un nombre tapado: mostralo o quitalo.",
     cpoPersona: "Persona {n}",
-    cpoSeBorra: "La lista queda guardada hasta el {fecha}.",
+    cpoSeBorra: "La lista queda guardada hasta el {fecha} a las {hora}.",
     cpoPorQue: "¿Por qué sale?",
     cpoRepetida: "Cuenta repetida",
     cpoNoEstaEnElEvento: "No está en el evento",
@@ -226,7 +226,7 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
   },
   en: {
     cpoTitulo: "Company campaign",
-    cpoElegirLinea: "Your campaign, ready for people to join.",
+    cpoElegirLinea: "Choose your campaign file.",
     cpoElegir: "Choose the file",
     cpoArmala: "Don't have your campaign yet? Build it.",
     cpoNoEsCampana: "This file isn't a campaign.",
@@ -273,7 +273,7 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoMostrar: "Show",
     cpoParaRevisarNota: "A hidden name: show it or remove it.",
     cpoPersona: "Person {n}",
-    cpoSeBorra: "The list stays saved until {fecha}.",
+    cpoSeBorra: "The list stays saved until {fecha} at {hora}.",
     cpoPorQue: "Why are they leaving?",
     cpoRepetida: "Duplicate account",
     cpoNoEstaEnElEvento: "Not at the event",
