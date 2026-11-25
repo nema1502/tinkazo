@@ -10,6 +10,7 @@ import {
   SEMILLA_DE_LA_ESCUCHA,
   nivelDelShow,
   perfilDeIdentidad,
+  IDENTIDADES_DEL_SELECTOR,
   type IdentidadDelJuego,
 } from "./music";
 import { ACORDES, type AcordeId } from "./sonidos/carrera";
@@ -30,6 +31,16 @@ function juegosDelState(): string[] {
   return union;
 }
 
+/**
+ * Los juegos que hoy se pueden elegir en el selector, en el orden del selector: los botones `g-<id>` de `index.html`
+ * que no están ocultos. Los dos que salieron (De pie y El Trueque) llevan `hidden` y no cuentan.
+ */
+function juegosDelSelector(): string[] {
+  const html = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
+  const bloque = html.slice(html.indexOf('id="gamepick"'), html.indexOf('id="wheel-cap"'));
+  return [...bloque.matchAll(/<button id="g-([a-z]+)"([^>]*)>/g)].filter((m) => !/\bhidden\b/.test(m[2] ?? "")).map((m) => m[1] as string);
+}
+
 /** Lo que se reconoce como ritmo de Bolivia: etiquetas de intención, solo texto, no síntesis. */
 const RITMOS = new Set(["huayño", "huayno", "caporal", "taquirari", "cueca", "chovena", "saya", "morenada", "kullawada"]);
 /** Los instrumentos con cuerpo: también solo etiquetas. */
@@ -38,8 +49,18 @@ const INSTRUMENTOS = new Set(["charango", "zampoña", "quena", "bombo", "guitarr
 const IDENTIDADES_EN_ORDEN = Object.values(IDENTIDADES);
 
 describe("la identidad musical de cada juego, en datos", () => {
+  it("los diez juegos del selector de hoy tienen su identidad, con sus ids reales, y van primero y en su orden", () => {
+    const selector = juegosDelSelector();
+    expect(selector).toHaveLength(10);
+    expect(selector).toEqual(expect.arrayContaining(["guajojo", "toborochi"]));
+    for (const juego of selector) expect(IDENTIDADES[juego], juego).toBeTruthy();
+    expect(IDENTIDADES_DEL_SELECTOR).toEqual(selector);
+    expect(Object.keys(IDENTIDADES).slice(0, 10)).toEqual(selector);
+  });
+
   it("cada juego del show tiene su identidad", () => {
-    expect(IDENTIDADES_EN_ORDEN).toHaveLength(17);
+    // Los diez del selector y los que salieron de él pero siguen abriendo con ?demo=.
+    expect(IDENTIDADES_EN_ORDEN).toHaveLength(19);
     for (const juego of juegosDelState()) expect(IDENTIDADES[juego], juego).toBeTruthy();
   });
 

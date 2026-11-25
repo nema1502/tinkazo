@@ -12,7 +12,7 @@ import {
   type Votos,
 } from "./escucha";
 import { TEXTOS_ESCUCHA } from "./escucha-textos";
-import { CAPAS_SHOW, IDENTIDADES, MOVIMIENTO_DEL_SHOW, SEGUNDO_DEL_GOLPE, HORA_DEL_SOLO_BOMBO } from "../music";
+import { CAPAS_SHOW, IDENTIDADES, IDENTIDADES_DEL_SELECTOR, MOVIMIENTO_DEL_SHOW, SEGUNDO_DEL_GOLPE, HORA_DEL_SOLO_BOMBO } from "../music";
 
 /**
  * La página de escucha sin audio: la bandera ``?escucha=1``, las tarjetas por juego con sus capas,
@@ -88,6 +88,18 @@ describe("la página armada", () => {
     expect(tarjetas[0]!.textContent).toContain("100 / 112 / 124");
     expect(doc.body.textContent).toContain("huayño");
     expect(doc.body.textContent).toContain("charango");
+  });
+
+  it("los diez juegos del selector van primero y los que salieron quedan aparte, con su título", () => {
+    const doc = pagina();
+    armarEscucha(doc, opciones(true, () => undefined));
+    const grupo = doc.querySelector(".grupo");
+    expect(grupo?.textContent).toBe(es.fueraDelSelector);
+    const orden = [...doc.querySelectorAll("#escucha > *")].map((el) => (el.classList.contains("tarjeta") ? (el.getAttribute("data-juego") as string) : el.className));
+    const donde = orden.indexOf("grupo");
+    expect(orden.slice(donde - IDENTIDADES_DEL_SELECTOR.length, donde)).toEqual([...IDENTIDADES_DEL_SELECTOR]);
+    expect(orden.slice(0, donde)).not.toContain("stellar");
+    expect(orden.slice(donde + 1)).toContain("stellar");
   });
 
   it("el botón de cada capa pide tocar esa fase de ese juego", () => {
