@@ -427,6 +427,8 @@ export default defineConfig({
         confirmar: resolve(__dirname, "confirmar.html"),
         c: resolve(__dirname, "c.html"),
         terminos: resolve(__dirname, "terminos.html"),
+        // Página de prueba para mirar el panel con datos de mentira: solo en una rama descartable, no se une a nada.
+        "mirar-panel": resolve(__dirname, "mirar-panel.html"),
       },
     },
   },
