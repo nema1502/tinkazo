@@ -64,3 +64,35 @@ describe("sound.ts usa la reanudación en los dos caminos", () => {
     expect(src).toMatch(/estado === "suspended" \|\| estado === "interrupted"/);
   });
 });
+
+describe("la pestaña que vuelve a la vista, en ejecución", () => {
+  const w = window as unknown as { AudioContext?: unknown };
+
+  it("un contexto interrumpido o suspendido se reanuda al volver, y escondida no se toca", async () => {
+    const ctx = new ContextoFalso();
+    const ctorViejo = w.AudioContext;
+    w.AudioContext = function () {
+      return ctx;
+    } as unknown;
+    let visibilidad = "hidden";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibilidad });
+    try {
+      const { audio } = await import("./sound");
+      expect(audio()).toBe(ctx as unknown as AudioContext);
+      // Con la pestaña escondida el navegador corta el contexto y no hay nada que reanudar a escondidas.
+      ctx.state = "interrupted";
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(ctx.state).toBe("interrupted");
+      // Al volver a la vista, se reanuda.
+      visibilidad = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(ctx.state).toBe("running");
+      ctx.state = "suspended";
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(ctx.state).toBe("running");
+    } finally {
+      w.AudioContext = ctorViejo;
+      delete (document as unknown as { visibilityState?: string }).visibilityState;
+    }
+  });
+});
