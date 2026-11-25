@@ -234,7 +234,8 @@ describe("cada puerta dice lo que hace su botón, en los dos idiomas", () => {
   it("la tarjeta de ejemplo no cuenta personas: dice que participar es gratis", () => {
     expect(T.es.peGente).toBe("Participar es gratis");
     expect(T.en.peGente).toBe("Joining is free");
-    expect(T.en.pePremioM).not.toMatch(/digital dollars/i);
+    // El premio dice lo mismo que en español: dólares digitales (lo cuida la prueba de la tarjeta en los dos idiomas).
+    expect(T.en.pePremioM).toMatch(/digital dollars/i);
   });
 });
 
