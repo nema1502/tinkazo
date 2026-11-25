@@ -41,7 +41,6 @@ const patrocinador = Keypair.random();
 // Una cuenta nueva por prueba: un voto que quedó colgado en una prueba no es el de la siguiente.
 let P = Keypair.random().publicKey();
 const Q = Keypair.random().publicKey();
-const Q = Keypair.random().publicKey();
 const SUB = "sub-org-de-ana";
 
 function buena(cuenta: string = P): Transaction {
