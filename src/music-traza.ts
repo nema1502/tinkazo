@@ -25,13 +25,15 @@ function resumen(v: unknown, ids: WeakMap<object, string>): string {
 
 export interface ContextoDeMentira {
   ctx: AudioContext;
+  /** El estado del contexto (`running`, `suspended`, `interrupted`): lo cambia el navegador y lo cambia `resume`. */
+  estado(nuevo?: string): string;
   /** Todo lo programado, en orden. */
   eventos: string[];
   /** La hora del audio, en segundos. */
   poner(segundos: number): void;
 }
 
-export function contextoDeMentira(): ContextoDeMentira {
+export function contextoDeMentira(estadoInicial = "running"): ContextoDeMentira {
   const eventos: string[] = [];
   const ids = new WeakMap<object, string>();
   let cuantos = 0;
@@ -101,8 +103,11 @@ export function contextoDeMentira(): ContextoDeMentira {
       return ahora;
     },
     sampleRate: 44100,
-    state: "running",
-    resume: (): Promise<void> => Promise.resolve(),
+    state: estadoInicial,
+    resume: (): Promise<void> => {
+      base.state = "running";
+      return Promise.resolve();
+    },
     suspend: (): Promise<void> => Promise.resolve(),
     close: (): Promise<void> => Promise.resolve(),
     createBuffer: buffer,
@@ -119,6 +124,10 @@ export function contextoDeMentira(): ContextoDeMentira {
 
   return {
     ctx: ctxProxy,
+    estado: (nuevo?: string): string => {
+      if (nuevo !== undefined) base.state = nuevo;
+      return base.state as string;
+    },
     eventos,
     poner: (s: number): void => {
       ahora = s;
@@ -139,6 +148,8 @@ export interface PasoDelGuion {
   ms: number;
   /** La pestaña está escondida en este tick. */
   escondida?: boolean;
+  /** El navegador dejó el contexto en este estado justo antes del tick y la pestaña avisó que volvió a la vista. */
+  alVolver?: "suspended" | "interrupted";
   /** Lo que el juego le pide a la música justo antes de este tick. */
   antes?: (m: typeof import("./music")) => void;
 }
@@ -203,24 +214,37 @@ export interface TrazaDelShow {
   porTick: { ahora: number; escondida: boolean; desde: number; hasta: number }[];
 }
 
+/** Un show dentro de una corrida: su semilla, su guion y si termina parando la música (saltar el show es no llegar al final). */
+export interface ShowSeguido {
+  semilla: number;
+  guion: PasoDelGuion[];
+  /** `false`: la música sigue sonando cuando termina el guion, y la corta el show que viene. Por omisión se para. */
+  parar?: boolean;
+}
+
+export interface OpcionesDeTraza {
+  /** Corre después de cargar los módulos y antes de arrancar (para prender un interruptor, por ejemplo). */
+  antes?: () => Promise<void> | void;
+  /** El estado con el que nace el contexto de audio. */
+  estadoInicial?: string;
+  /** La dirección de la página (`?instant=1`, por ejemplo). */
+  busqueda?: string;
+}
+
 /**
- * Corre un show entero de un juego con el reloj falso y la misma semilla, tal como lo hace el sitio: avisa el juego,
- * arranca la música y le da cada tick del guion. Cada corrida arma módulos nuevos, así que una no contamina a la otra.
- * `antes` corre después de cargar los módulos y antes de arrancar (para prender un interruptor, por ejemplo).
+ * Corre uno o varios shows seguidos de un juego con el reloj falso, tal como lo hace el sitio: avisa el juego, arranca
+ * la música y le da cada tick del guion. Los shows seguidos comparten módulos y contexto, como los premios de un mismo
+ * sorteo. Cada corrida arma módulos nuevos, así que una no contamina a la otra.
  */
-export async function trazaDelShow(
-  juego: string,
-  semilla: number,
-  guion: PasoDelGuion[] = guionDelShow(),
-  antes?: () => Promise<void> | void,
-): Promise<TrazaDelShow> {
+export async function trazaDeShows(juego: string, shows: ShowSeguido[], opciones: OpcionesDeTraza = {}): Promise<TrazaDelShow> {
   vi.resetModules();
-  const c = contextoDeMentira();
+  const c = contextoDeMentira(opciones.estadoInicial);
   const reloj = { ms: 100000 };
   let tick: (() => void) | null = null;
   let escondida = false;
   const w = window as unknown as { AudioContext?: unknown };
   const ctorViejo = w.AudioContext;
+  const direccionVieja = window.location.href;
   w.AudioContext = constructoraDe(c);
   vi.spyOn(performance, "now").mockImplementation(() => reloj.ms);
   vi.spyOn(window, "setInterval").mockImplementation(((fn: () => void) => {
@@ -229,30 +253,49 @@ export async function trazaDelShow(
   }) as unknown as typeof window.setInterval);
   vi.spyOn(window, "clearInterval").mockImplementation(() => undefined);
   Object.defineProperty(document, "hidden", { configurable: true, get: () => escondida });
+  if (opciones.busqueda) window.history.replaceState(null, "", opciones.busqueda);
   const porTick: TrazaDelShow["porTick"] = [];
   try {
     const sound = await import("./sound");
     const m = await import("./music");
-    if (antes) await antes();
+    if (opciones.antes) await opciones.antes();
     c.poner(reloj.ms / 1000);
     sound.sonidoDelJuego(juego as never);
-    m.startMusic(semilla, juego === "chovena" ? "chovena" : "andino");
-    for (const paso of guion) {
-      reloj.ms += paso.ms;
-      c.poner(reloj.ms / 1000);
-      escondida = !!paso.escondida;
-      paso.antes?.(m);
-      const desde = c.eventos.length;
-      (tick as (() => void) | null)?.();
-      porTick.push({ ahora: reloj.ms / 1000, escondida, desde, hasta: c.eventos.length });
+    for (const show of shows) {
+      m.startMusic(show.semilla, juego === "chovena" ? "chovena" : "andino");
+      for (const paso of show.guion) {
+        reloj.ms += paso.ms;
+        c.poner(reloj.ms / 1000);
+        escondida = !!paso.escondida;
+        if (paso.alVolver) {
+          c.estado(paso.alVolver);
+          document.dispatchEvent(new Event("visibilitychange"));
+        }
+        paso.antes?.(m);
+        const desde = c.eventos.length;
+        (tick as (() => void) | null)?.();
+        porTick.push({ ahora: reloj.ms / 1000, escondida, desde, hasta: c.eventos.length });
+      }
+      if (show.parar !== false) m.stopMusic();
     }
-    m.stopMusic();
+    if (shows.length > 0 && shows[shows.length - 1]?.parar === false) m.stopMusic();
   } finally {
     vi.restoreAllMocks();
     w.AudioContext = ctorViejo;
+    window.history.replaceState(null, "", direccionVieja);
     delete (document as unknown as { hidden?: boolean }).hidden;
   }
   return { porTick, eventos: c.eventos, notas: c.eventos.filter((e) => / start /.test(e) && !/\.\w+ start/.test(e)).length };
+}
+
+/** Un show de un juego de principio a fin: lo que hace `trazaDelShow` con el guion de siempre. */
+export async function trazaDelShow(
+  juego: string,
+  semilla: number,
+  guion: PasoDelGuion[] = guionDelShow(),
+  antes?: () => Promise<void> | void,
+): Promise<TrazaDelShow> {
+  return trazaDeShows(juego, [{ semilla, guion }], { antes });
 }
 
 /** Los diez juegos del selector, con los ids con que abren (`id` de cada botón `g-<id>` en `index.html`). */
@@ -260,3 +303,75 @@ export const JUEGOS_DEL_SELECTOR = ["race", "chovena", "trompo", "pinata", "orur
 
 /** Una semilla distinta por juego, siempre la misma. */
 export const semillaDelJuego = (juego: string): number => 0x1234abcd + 977 * JUEGOS_DEL_SELECTOR.indexOf(juego as (typeof JUEGOS_DEL_SELECTOR)[number]);
+
+/* ------------------------------------------------------------------ los escenarios de la vida real */
+
+/** Un show corto: lo bastante para pasar por la tensión, el golpe y el festejo. */
+function guionCorto(): PasoDelGuion[] {
+  const pasos: PasoDelGuion[] = [];
+  const a = (ms: number, extra: Partial<PasoDelGuion> = {}): void => void pasos.push({ ms, ...extra });
+  const tiempo = (cuantos: number, ms = 40): void => {
+    for (let i = 0; i < cuantos; i++) a(ms);
+  };
+  tiempo(40);
+  a(40, { antes: (m) => m.musicCue(0.4) });
+  tiempo(6, 320);
+  tiempo(30);
+  a(40, { antes: (m) => m.musicCue(0.9) });
+  tiempo(20);
+  a(40, { antes: (m) => m.musicCue(1) });
+  tiempo(20);
+  a(40, { antes: (m) => m.musicFinal() });
+  tiempo(20);
+  return pasos;
+}
+
+/** Los casos que el guion de un solo show no ve: cómo llega y cómo se corta la música en el sitio de verdad. */
+export const ESCENARIOS_DE_LA_MUSICA = ["dos-premios", "arranque-escondido", "saltar-el-show", "contexto-suspendido", "volver-interrumpido", "con-instant"] as const;
+export type EscenarioDeLaMusica = (typeof ESCENARIOS_DE_LA_MUSICA)[number];
+
+/** Un escenario con un juego: la semilla sale del juego y el escenario, siempre la misma. */
+export async function trazaDelEscenario(escenario: EscenarioDeLaMusica, juego: string): Promise<TrazaDelShow> {
+  const semilla = semillaDelJuego(juego) + 31 * ESCENARIOS_DE_LA_MUSICA.indexOf(escenario);
+  switch (escenario) {
+    case "dos-premios":
+      // Tres premios seguidos de un mismo sorteo: dos con la misma semilla y uno con otra, sin recargar la página.
+      return trazaDeShows(juego, [
+        { semilla, guion: guionCorto() },
+        { semilla, guion: guionCorto() },
+        { semilla: semilla + 1, guion: guionCorto() },
+      ]);
+    case "arranque-escondido":
+      // La música arranca con la pestaña escondida (los temporizadores a uno por segundo) y la persona vuelve después.
+      return trazaDeShows(juego, [
+        { semilla, guion: [...[1000, 1000, 1000, 1000, 1000].map((ms): PasoDelGuion => ({ ms, escondida: true })), { ms: 900, alVolver: "suspended" }, ...guionCorto()] },
+      ]);
+    case "saltar-el-show": {
+      // Se salta el show a la mitad: la música se corta en plena tensión y arranca otro show enseguida.
+      const mitad = guionCorto().slice(0, 75);
+      return trazaDeShows(juego, [
+        { semilla, guion: mitad },
+        { semilla: semilla + 1, guion: guionCorto() },
+      ]);
+    }
+    case "contexto-suspendido":
+      // El navegador entrega el contexto suspendido y la música tiene que hacerlo andar sola.
+      return trazaDeShows(juego, [{ semilla, guion: guionCorto() }], { estadoInicial: "suspended" });
+    case "volver-interrumpido":
+      // El teléfono corta el audio al esconder la página (una llamada) y la persona vuelve.
+      return trazaDeShows(juego, [
+        {
+          semilla,
+          guion: [
+            ...guionCorto().slice(0, 50),
+            ...[1000, 1000, 1000].map((ms): PasoDelGuion => ({ ms, escondida: true })),
+            { ms: 500, alVolver: "interrupted" },
+            ...guionCorto().slice(50),
+          ],
+        },
+      ]);
+    case "con-instant":
+      // La dirección trae ?instant=1: la música no lo lee, y suena igual.
+      return trazaDeShows(juego, [{ semilla, guion: guionCorto() }], { busqueda: "/?instant=1" });
+  }
+}
