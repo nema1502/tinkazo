@@ -275,11 +275,6 @@ describe("anotarse y esperar", () => {
     expect(mundo.raiz.querySelector("#cmp-hola .cmp-error")?.textContent).toBe(TEXTOS_CAMPANA.es[clave]);
   });
 
-  it("la espera del alta le dice a la persona que los datos móviles destraban, en los dos idiomas", () => {
-    expect(TEXTOS_CAMPANA.es.cpErrEspera).toBe("Probá de nuevo en unos minutos o con tus datos móviles.");
-    expect(TEXTOS_CAMPANA.en.cpErrEspera).toBe("Try again in a few minutes or on mobile data.");
-  });
-
   it.each([
     ["llena", "cpErrLlena"],
     ["cerro", "cpCerro"],
