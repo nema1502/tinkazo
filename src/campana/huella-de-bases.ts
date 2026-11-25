@@ -12,9 +12,10 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 /**
  * El texto canónico de un valor JSON: claves ordenadas (sin las que valen `undefined`), sin espacios
  * entre elementos, arreglos en su orden y números, booleanos, nulos y cadenas como los escribe JSON.
- * Lo que JSON no puede escribir lanza: la huella de lo que no es JSON no existe.
+ * Lo que JSON no puede escribir lanza (funciones, bigint, NaN e infinitos): la huella de lo que no es JSON no existe.
  */
 function canonico(x: unknown): string {
+  if (typeof x === "number" && !Number.isFinite(x)) throw new Error("huella: el valor no es JSON");
   if (x === null || typeof x === "boolean" || typeof x === "number" || typeof x === "string") {
     return JSON.stringify(x);
   }

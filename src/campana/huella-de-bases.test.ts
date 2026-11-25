@@ -43,4 +43,11 @@ describe("huellaDeBases", () => {
     expect(() => huellaDeBases({ a: () => 1 })).toThrow();
     expect(() => huellaDeBases({ a: 1n })).toThrow();
   });
+
+  it("los números que JSON escribe como null (NaN e infinitos) lanzan: no dan la huella de un null", () => {
+    expect(() => huellaDeBases({ a: NaN })).toThrow();
+    expect(() => huellaDeBases({ a: Infinity })).toThrow();
+    expect(() => huellaDeBases([-Infinity])).toThrow();
+    expect(huellaDeBases({ a: 0 })).not.toBe(huellaDeBases({ a: null }));
+  });
 });
