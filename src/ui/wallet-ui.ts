@@ -247,6 +247,28 @@ const sinFoco = (): boolean => !document.activeElement || document.activeElement
  * vuelve espera esto en lugar de irse a la herramienta a mirar "Retomando tu cuenta…" (`entrar`).
  */
 let retomaTerminada: Promise<void> = Promise.resolve();
+/**
+ * Cuánto esperan Entrar y el pedido de entrar a que termine la retoma: un segundo como mucho, como la sesión de la
+ * campaña con su espera corta del restauro. La retoma sigue por detrás (si llega, abre la cuenta sola), pero quien tocó
+ * Entrar sigue con su toque vivo: con una espera larga el navegador deja de ver el gesto y bloquea la ventana de Google.
+ */
+export const ESPERA_DE_ENTRAR_MS = 1_000;
+
+/** Espera a que termine la retoma, un segundo como mucho (`ESPERA_DE_ENTRAR_MS`). Sin retoma en camino, no espera. */
+async function esperarLaRetoma(): Promise<void> {
+  if (!retomando) return;
+  let reloj: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      retomaTerminada,
+      new Promise<void>((resolver) => {
+        reloj = setTimeout(resolver, ESPERA_DE_ENTRAR_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(reloj);
+  }
+}
 /** Se llegó con ganas de entrar pero sin un toque (el final de la demo o del ensayo): la ventana de Google no se abre sola. */
 let pidiendoEntrar = false;
 /** La cuenta se acaba de abrir: la cabecera aparece con un pulso corto. */
@@ -309,7 +331,8 @@ function marcarQueVaASortear(): void {
  * persona la cierra, la pantalla lo dice y se puede volver a intentar.
  *
  * Si la sesión guardada todavía está volviendo, se espera a que termine, con
- * cuenta o sin ella. Hasta el 26 de octubre de 2026 se mandaba a la persona a la
+ * cuenta o sin ella, pero un segundo como mucho (`ESPERA_DE_ENTRAR_MS`): el toque tiene que seguir vivo para que el
+ * navegador deje abrir la ventana de Google. Hasta el 26 de octubre de 2026 se mandaba a la persona a la
  * herramienta a mirar "Retomando tu cuenta…" hasta ocho segundos, y si la marca
  * era vieja caía en "Para sellar, entrá con tu cuenta" sin que Google se
  * hubiera abierto nunca: "Entrar con Google a veces lleva al sorteo sin pasar por Pollar".
@@ -318,8 +341,8 @@ export async function entrar(opciones: { soloGoogle?: boolean } = {}): Promise<v
   if (session || conectando) return;
   // Quien entra va a sortear: al terminar, la página abre la herramienta (main.ts).
   marcarQueVaASortear();
-  if (retomando) await retomaTerminada;
-  if (session) return;
+  await esperarLaRetoma();
+  if (session || conectando) return;
   if (!entraConGoogle()) {
     await openPicker();
     return;
@@ -371,13 +394,16 @@ export function pedirEntrar(): void {
     return;
   }
   void (async () => {
-    if (retomando) await retomaTerminada;
+    await esperarLaRetoma();
     if (session) return;
     pidiendoEntrar = true;
     // La cabecera también: sin repintarla, el chip seguía diciendo en qué otro modo está la cuenta.
     pintarCuenta();
     applyGate();
-    document.querySelector<HTMLElement>("#gate button")?.focus({ preventScroll: true });
+    const alBoton = (): void => document.querySelector<HTMLElement>("#gate button")?.focus({ preventScroll: true });
+    alBoton();
+    // La retoma todavía sigue: mientras tanto la puerta dice que retoma y no tiene botón. Cuando se suelta, el foco va a Entrar.
+    if (retomando) void retomaTerminada.then(() => (!session && pidiendoEntrar ? alBoton() : undefined));
   })();
 }
 
@@ -419,8 +445,10 @@ export function initWalletUI(): void {
     render();
     terminarDeRetomar();
   };
-  void Promise.allSettled(ventanaDeGoogle ? [] : [restorePollar(), restoreSession()]).then(fin);
-  // Por si algo queda colgado: el fusible es más largo que la ventana de la retoma (30 s) para no ofrecer Entrar con la sesión en camino.
+  // La retoma de Google suelta la cabecera sola cuando su primera mirada vence (8 s): sigue por detrás, con paciencia, y si
+  // la cuenta llega abre la sesión sin que nadie toque nada (`restorePollar`).
+  void Promise.allSettled(ventanaDeGoogle ? [] : [restorePollar(fin), restoreSession()]).then(fin);
+  // Por si algo queda colgado antes de la primera mirada: nunca más de 12 s diciendo que se retoma, como siempre.
   setTimeout(fin, FUSIBLE_DE_RETOMA_MS);
   // Llegó de Practicar en Prueba (modo-ui.ts): la marca se consume ahora, una sola vez, y al terminar de retomar entra con
   // la cuenta de prueba sin abrir la ventana. Si volvió una sesión guardada, entra con esa.
@@ -669,12 +697,15 @@ function anunciarEntrada(): void {
   notice(texto, false);
 }
 
-/** Al volver del redirect de Google, la sesión se retoma sola. */
-async function restorePollar(): Promise<void> {
+/**
+ * Al volver del redirect de Google, la sesión se retoma sola. `alTardar` suelta la cabecera cuando la primera mirada del
+ * proveedor vence sin respuesta: la retoma sigue con paciencia y, si la cuenta llega después, se abre sola.
+ */
+async function restorePollar(alTardar: () => void): Promise<void> {
   try {
     const { pollarConfigured, pollarWallet } = await import("../stellar/wallet-pollar");
     if (!pollarConfigured()) return;
-    const address = await pollarWallet.restore();
+    const address = await pollarWallet.restore({ cuandoTarda: alTardar });
     if (!address) {
       // Sin cuenta y sin la marca de Pollar (`restore` la olvida si la sesión ya no existe), la de "sesión de Google
       // guardada" tampoco vale: si quedaba, cada carga repetía "Retomando…" y las páginas de lectura decían "Mi cuenta".
@@ -682,8 +713,11 @@ async function restorePollar(): Promise<void> {
       return;
     }
     const { setActiveWallet } = await lite();
-    if (session) return;
+    // Una retoma que llega tarde no abre nada dos veces: si la persona ya entró de nuevo, o la ventana de Google está
+    // abierta, gana la entrada que ya está.
+    if (session || conectando) return;
     setActiveWallet(pollarWallet);
+    pidiendoEntrar = false;
     // Con la cuenta de vuelta, la marca de sesión de Google queda guardada, como al entrar: la cabecera de las páginas de
     // lectura la mira para no ofrecer Entrar. Sin cuenta no se guarda nada (el borrado de arriba sigue valiendo).
     saveSessionKind("google", network.name);

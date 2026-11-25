@@ -3,9 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FUSIBLE_DE_RETOMA_MS } from "../stellar/pollar-config";
 
 /**
- * La cabecera, en `wallet-ui.ts` de verdad, con una sesión guardada que tarda en volver: mientras la retoma sigue en
- * camino la puerta dice que retoma la cuenta y no ofrece Entrar. Antes el fusible cortaba a los 12 segundos y, con la
- * wifi lenta de un stand, la persona veía Entrar con su sesión todavía llegando.
+ * La cabecera, en `wallet-ui.ts` de verdad, con una sesión guardada que tarda en volver: el fusible la suelta a los 12
+ * segundos de siempre, aunque la retoma siga en camino, y la sesión que llega después se abre sola.
  */
 
 const DIR = "GDVZABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRS5ZLE";
@@ -86,15 +85,17 @@ async function abrir(): Promise<{ ui: typeof import("./wallet-ui"); t: (k: strin
 }
 
 describe("la cabecera mientras la sesión guardada vuelve", () => {
-  it("con una retoma de 25 segundos la puerta dice que retoma y no ofrece Entrar a los 13 segundos", async () => {
-    const { t } = await abrir();
-    await vi.advanceTimersByTimeAsync(13_000);
-    expect(puertaVisible()).toBe(true);
+  it("con una retoma de 25 segundos, a los 11 todavía retoma y a los 13 ofrece Entrar, como siempre", async () => {
+    const { ui, t } = await abrir();
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(ui.estadoDeLaCuenta().estado).toBe("retomando");
     expect(puerta()).toContain(t("gateRetomando"));
-    expect(puerta()).not.toContain(t("cuentaPideGoogle"));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(ui.estadoDeLaCuenta().estado).toBe("fuera");
+    expect(puerta()).not.toContain(t("gateRetomando"));
   });
 
-  it("cuando la sesión llega, queda adentro y la puerta se va", async () => {
+  it("cuando la sesión llega, aunque sea después del fusible, queda adentro y la puerta se va", async () => {
     const { ui } = await abrir();
     await vi.advanceTimersByTimeAsync(26_000);
     expect(ui.currentSession()?.address).toBe(DIR);
