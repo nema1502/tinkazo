@@ -651,7 +651,7 @@ describe("el resto de las dependencias", () => {
     const lecturas: LecturaDelHistorial[] = [{ ok: false, error: "red-caida" }, { ok: true, sello }];
     const leerSello = vi.fn(async () => lecturas.shift() as LecturaDelHistorial);
     const esperas: number[] = [];
-    const m = montar({ azar: 0.5, leerSello, esperar: async (ms) => void esperas.push(ms) });
+    const m = montar({}, { azar: 0.5, leerSello, esperar: async (ms) => void esperas.push(ms) });
     const dicho = await m.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: { sorteo: "7", ganadoras: [CUENTA], promo: null } });
     expect(dicho).toBe("esta");
     expect(leerSello).toHaveBeenCalledTimes(2);
@@ -662,7 +662,7 @@ describe("el resto de las dependencias", () => {
 
   it("comprobar con un comprobante ilegible no pide nada a la red", async () => {
     const leerSello = vi.fn(async (): Promise<LecturaDelHistorial> => ({ ok: false, error: "red-caida" }));
-    const m = montar({ leerSello, esperar: async () => undefined });
+    const m = montar({}, { leerSello, esperar: async () => undefined });
     const dicho = await m.deps.comprobar?.({ comprobante: "/verificar.html#no-es-nada", cuenta: CUENTA, campana: { sorteo: "7", ganadoras: [CUENTA], promo: null } });
     expect(dicho).toBeNull();
     expect(leerSello).not.toHaveBeenCalled();
