@@ -212,14 +212,16 @@ export async function resultadoDeCampana(
   servicio: string,
   sala: string,
   dep: Dependencias = {},
-): Promise<{ ganadoras: string[]; comprobante: string | null } | null | "red" | "terminada"> {
+): Promise<{ sorteo: string | null; ganadoras: string[]; comprobante: string | null } | null | "red" | "terminada"> {
   const r = await pedir(dep, direccionDe(servicio, sala, "/resultado"), { method: "GET" }, TOPE_PEDIDO_MS);
   if (!r) return "red";
   const c = r.cuerpo;
   if (r.estado === 404) return esObjeto(c) && c.error === "sin-resultado" ? null : "terminada";
   if (r.estado !== 200 || !esObjeto(c) || !Array.isArray(c.ganadoras) || !c.ganadoras.every(cuentaValida)) return "red";
   const comprobante = typeof c.comprobante === "string" && c.comprobante.startsWith("/verificar.html") ? c.comprobante : null;
-  return { ganadoras: [...c.ganadoras], comprobante };
+  // El número del sorteo que la sala guardó al sellar: con él el celular sabe de qué sorteo es el comprobante.
+  const sorteo = typeof c.sorteo === "string" && /^\d{1,20}$/u.test(c.sorteo) ? c.sorteo : null;
+  return { sorteo, ganadoras: [...c.ganadoras], comprobante };
 }
 
 type Familia = keyof typeof ESPERAS_MS;

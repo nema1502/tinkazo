@@ -422,17 +422,30 @@ describe("resultadoDeCampana", () => {
     expect(await resultadoDeCampana(SERVICIO, SALA, { fetch: fetchFalso([error(404, "no-existe")]).f })).toBe("terminada");
   });
 
-  it("devuelve las ganadoras y el comprobante", async () => {
+  it("devuelve el sorteo, las ganadoras y el comprobante", async () => {
     const cuerpo = { sorteo: "9", ganadoras: [CUENTA], comprobante: "/verificar.html?id=9" };
     expect(await resultadoDeCampana(SERVICIO, SALA, { fetch: fetchFalso([{ estado: 200, cuerpo }]).f })).toEqual({
+      sorteo: "9",
       ganadoras: [CUENTA],
       comprobante: "/verificar.html?id=9",
     });
   });
 
+  it("un sorteo que no es un número da sorteo null y el resto sigue igual", async () => {
+    for (const sorteo of ["nueve", "", 9, null, "1".repeat(21)]) {
+      const cuerpo = { sorteo, ganadoras: [CUENTA], comprobante: "/verificar.html?id=9" };
+      expect(await resultadoDeCampana(SERVICIO, SALA, { fetch: fetchFalso([{ estado: 200, cuerpo }]).f })).toEqual({
+        sorteo: null,
+        ganadoras: [CUENTA],
+        comprobante: "/verificar.html?id=9",
+      });
+    }
+  });
+
   it("un comprobante que no empieza con la página de verificar da null", async () => {
     const cuerpo = { ganadoras: [CUENTA], comprobante: "https://otro.example.org/x" };
     expect(await resultadoDeCampana(SERVICIO, SALA, { fetch: fetchFalso([{ estado: 200, cuerpo }]).f })).toEqual({
+      sorteo: null,
       ganadoras: [CUENTA],
       comprobante: null,
     });
