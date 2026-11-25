@@ -12,11 +12,11 @@ import type { Game } from "../state";
  * («1 de 3») y, cuando el juego elegido lo trae, su gancho visual: la captura
  * que el juego ya publica (`/juegos/selector/…`, la usan el selector de la
  * página y el panel de la espera). Para la Carrera de llamas esa captura es la
- * largada, con la fila de llamas lista para arrancar — el show entra en el
+ * largada, con la fila de llamas lista para arrancar. El show entra en el
  * juego sin tocar su escena ni su lógica, que viven en `src/games/` y no se
  * montan hasta que nace la ronda.
  *
- * La regla del cortado (S2 y S4, no se toca lo que de verdad importa): todo lo
+ * La regla de lo sellado: todo lo
  * que se ve acá sale de la lista sellada que entra por parámetro, con su orden
  * tal cual. Del resultado no sale nada, porque todavía no existe: la
  * presentación se arma mientras la cuenta corre, antes de que nazca la ronda.
@@ -83,7 +83,7 @@ function tarjeta(nombre: string, gancho: string | null, lugar: number, total: nu
  */
 export function presentarTeaser(caja: HTMLElement | null, juego: string, nombres: readonly string[]): void {
   if (!caja || nombres.length === 0) return;
-  // El gancho visual: si el juego elegido no expone captura, la presentación va sin imagen y igual presenta a cada uno (S1, donde exista el gancho).
+  // El gancho visual: si el juego elegido no expone captura, la presentación va sin imagen y igual presenta a cada uno.
   const gancho = ganchoVisual(juego);
   const resto = nombres.length - TOPE_TARJETAS;
   caja.innerHTML =
