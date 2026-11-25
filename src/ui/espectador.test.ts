@@ -1100,4 +1100,18 @@ describe("compartir el sorteo desde la vista en vivo", () => {
     await vi.waitFor(() => expect(dialogo()).toBeTruthy());
     expect(document.querySelectorAll("dialog").length).toBe(1);
   });
+
+  it("al cerrar el diálogo el foco vuelve al botón Compartir, el lugar exacto de donde salió", async () => {
+    await hastaElFin();
+    const boton = capa().querySelector<HTMLButtonElement>("[data-compartir]") as HTMLButtonElement;
+    boton.focus();
+    boton.click();
+    await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+    // Dentro del diálogo el foco anda por sus botones: la vista de atrás queda quieta.
+    dialogo().querySelector<HTMLButtonElement>("[data-cerrar]")?.focus();
+    dialogo().querySelector<HTMLButtonElement>("[data-cerrar]")?.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dialogo()).toBeFalsy();
+    expect(document.activeElement).toBe(boton);
+  });
 });

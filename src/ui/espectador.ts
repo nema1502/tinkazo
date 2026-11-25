@@ -182,6 +182,7 @@ async function compartirElSorteo(
   datos: DatosEspectador,
   d: NonNullable<(typeof app)["drawn"]>,
   cargar: () => Promise<typeof import("./compartir")>,
+  volverA: HTMLElement,
 ): Promise<void> {
   const enlace = await enlaceDelComprobante(datos, d);
   // Los nombres como los manda la sala: la línea sellada sin su marca cuando la lista se lee por persona, y el
@@ -210,6 +211,17 @@ async function compartirElSorteo(
     },
     getLang(),
   );
+  // Al cerrarse el diálogo, el foco vuelve al botón que lo abrió. El navegador ya lo hace con un diálogo modal, pero si
+  // no (un teclado que quedó en el diálogo que se retiró), la vista no pierde el lugar: sigue en Compartir.
+  const alCerrar = (e: Event): void => {
+    if (!(e.target instanceof HTMLDialogElement) || !e.target.classList.contains("cmp-dlg")) return;
+    document.removeEventListener("close", alCerrar, true);
+    queueMicrotask(() => {
+      const a = document.activeElement;
+      if (volverA.isConnected && (!a || a === document.body)) volverA.focus({ preventScroll: true });
+    });
+  };
+  document.addEventListener("close", alCerrar, true);
 }
 
 /**
@@ -396,7 +408,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
       preparando = true;
       compartir.setAttribute("aria-busy", "true");
       if (aviso) aviso.textContent = "";
-      compartirElSorteo(datos, app.drawn, op.cargarCompartir ?? (() => import("./compartir")))
+      compartirElSorteo(datos, app.drawn, op.cargarCompartir ?? (() => import("./compartir")), compartir)
         .catch(() => {
           // El archivo no bajó o el diálogo no pudo armarse: se dice y el botón queda listo para otro toque.
           if (aviso?.isConnected) aviso.textContent = t("espCompartirFallo");
