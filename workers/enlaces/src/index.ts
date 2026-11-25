@@ -32,7 +32,7 @@
  * cupos.
  */
 import { DurableObject } from "cloudflare:workers";
-import { type ConteoValido, type Fila, MAX_CUERPO, claveDeProps, claveDeRef, diaUtc, filaDe, grupoDeIp, rangoDeDias, validarConteo } from "./conteo";
+import { CONTEOS_POR_IP_POR_HORA, type ConteoValido, type Fila, MAX_CUERPO, claveDeProps, claveDeRef, diaUtc, filaDe, grupoDeIp, rangoDeDias, validarConteo } from "./conteo";
 import { type Decision, decidirReescritura, etiqueta } from "./reescribir";
 
 export interface Env {
@@ -237,8 +237,6 @@ export class Almacen extends DurableObject<Env> {
 
 /* ------------------------------------------------------------- el contador */
 
-/** Conteos por IP (en IPv6, por /64) y por hora. En memoria: la IP no se guarda, y si el objeto se duerme vuelven a cero. */
-const CONTEOS_POR_IP_POR_HORA = 1_000;
 /** Conteos por día en total. */
 const CONTEOS_POR_DIA = 20_000;
 /** Combinaciones distintas por día (evento, propiedades y sorteo): con el día lleno, solo suman las que ya existen. */
