@@ -21,6 +21,18 @@ describe("el auditor de interfaz acompaña a la línea de Entrar para sellar", (
     expect(frasesDeLaLinea(fuente)).toEqual([String(T.es.sellarSinCuenta), String(T.en.sellarSinCuenta)]);
   });
 
+  it("si la clave se reformatea y no se encuentra, falla con un mensaje claro en vez de dejar al auditor sin frases", async () => {
+    const { frasesDeLaLinea } = await ayuda();
+    // La clave partida en dos renglones: la lectura no la ve.
+    const partida = fuente.split("sellarSinCuenta: ").join("sellarSinCuenta:\n      ");
+    expect(partida).not.toBe(fuente);
+    expect(() => frasesDeLaLinea(partida)).toThrow(/sellarSinCuenta/);
+    expect(() => frasesDeLaLinea("")).toThrow(/sellarSinCuenta/);
+    // Con una sola frase tampoco: falta un idioma y el auditor miraría a ciegas el otro.
+    const una = fuente.slice(0, fuente.indexOf("sellarSinCuenta:", fuente.indexOf("sellarSinCuenta:") + 1));
+    expect(() => frasesDeLaLinea(una)).toThrow(/sellarSinCuenta/);
+  });
+
   it("compara la frase completa: una que solo empieza igual no pasa", async () => {
     const { frasesDeLaLinea, esLaLinea } = await ayuda();
     const frases = frasesDeLaLinea(fuente);
