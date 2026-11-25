@@ -369,6 +369,9 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     const antes = equipos.get(x.n);
     if (antes && antes.v > x.v) return;
     if (!antes) entradas.set(x.n, ++secuenciaDeEntrada);
+    // Si la fila cambió de cuenta (el mismo celular corrigió su equipo), lo que se sabía de la cuenta anterior no vale: se
+    // vuelve a preguntar. Una cuenta que no existe en la red tira abajo la tanda entera de cupones.
+    const activaAntes = antes && antes.cuenta === x.cuenta ? antes.activa : null;
     equipos.set(x.n, {
       n: x.n,
       cuenta: x.cuenta,
@@ -377,10 +380,10 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       guardado: esEstado(x.estado) ? x.estado : "solicitud",
       v: x.v,
       revisar: rev.revisar && !dejados.has(x.n),
-      activa: antes?.activa ?? null,
+      activa: activaAntes,
     });
     pintar();
-    if (!antes || antes.activa === null) void activasDe([x.cuenta]);
+    if (activaAntes === null) void activasDe([x.cuenta]);
   }
 
   function seQuito(n: number): void {

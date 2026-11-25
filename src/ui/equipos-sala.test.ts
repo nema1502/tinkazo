@@ -388,6 +388,52 @@ describe("con sorteo propio: el cupón solo va a quien ya sorteó", () => {
     expect(m.armadas).toEqual([[viva]]);
   });
 
+  it("un equipo que corrige su cuenta vuelve a preguntar si la nueva existe y no entra a la tanda si no existe", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "sorteo");
+    const viva = cuenta();
+    const vieja = cuenta();
+    const nueva = cuenta();
+    m.activas.set(nueva, false);
+    await equipoLlega(m, 1, viva, "Activa", "aceptado");
+    await equipoLlega(m, 2, vieja, "Corregida", "aceptado", 2);
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(2));
+    m.sortearon = new Set([viva, vieja, nueva]);
+    await p.revisar(true);
+    const fila = (): HTMLElement => filas(p).find((f) => f.dataset.n === "2") as HTMLElement;
+    expect(fila().textContent).not.toContain(t("eqInactiva"));
+    // El mismo celular corrige la cuenta: la fila es la misma y la cuenta nueva todavía no existe en la red.
+    await equipoLlega(m, 2, nueva, "Corregida", "aceptado", 3);
+    await vi.waitFor(() => expect(fila().textContent).toContain(t("eqInactiva")));
+    await p.revisar(true);
+    m.deps.aprobar = async () => {
+      m.pagos.push(pago(5, viva));
+      return { tipo: "enviado", hash: "H" };
+    };
+    await p.darCupones();
+    expect(m.armadas).toEqual([[viva]]);
+  });
+
+  it("un equipo que no cambia de cuenta conserva lo que ya se sabía de ella", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "sorteo");
+    const g = cuenta();
+    m.activas.set(g, false);
+    const preguntas: string[][] = [];
+    m.deps.activas = async (cs) => {
+      preguntas.push([...cs]);
+      return new Map(cs.map((c) => [c, m.activas.get(c) ?? true] as [string, boolean]));
+    };
+    await equipoLlega(m, 1, g, "Los Cóndores", "aceptado", 1);
+    await vi.waitFor(() => expect(filas(p)[0]?.textContent).toContain(t("eqInactiva")));
+    const antes = preguntas.length;
+    // Solo cambia el nombre: la cuenta es la misma y no hace falta volver a preguntar por ella.
+    await equipoLlega(m, 1, g, "Los Cóndores del Sur", "aceptado", 2);
+    await vi.waitFor(() => expect(filas(p)[0]?.textContent).toContain("Los Cóndores del Sur"));
+    expect(filas(p)[0]?.textContent).toContain(t("eqInactiva"));
+    expect(preguntas.length).toBe(antes);
+  });
+
   it("una cuenta mal escrita se deja afuera, se dice cuál es y los demás reciben su cupón", async () => {
     const m = mundo();
     const p = await abrirRegistro(m, "cupon");
