@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_CARACTERES_EQUIPO, MAX_CUERPO_EQUIPO } from "../../workers/sala/src/logica";
 import { anotarEquipoEnSala } from "./equipos";
 
 /**
@@ -29,6 +30,22 @@ describe("la corrección viaja en el cuerpo del alta", () => {
     let cuerpo = "";
     expect(await anotarEquipoEnSala("https://s.test", "AbCd1234", G2, "CIFRADO", "L".repeat(22), con(201, { n: 1, estado: "solicitud" }, (x) => (cuerpo = x)), G1)).toMatchObject({ ok: true });
     expect(JSON.parse(cuerpo)).toMatchObject({ cuenta: G2, correccion: G1 });
+  });
+});
+
+describe("el sitio y la sala se pueden desplegar en cualquier orden", () => {
+  it("sin corrección el cuerpo es exactamente el de siempre: la sala nueva atiende a la página de hoy", async () => {
+    let cuerpo = "";
+    await anotarEquipoEnSala("https://s.test", "AbCd1234", G1, "CIFRADO", "L".repeat(22), con(201, { n: 1, estado: "solicitud" }, (x) => (cuerpo = x)));
+    expect(Object.keys(JSON.parse(cuerpo)).sort()).toEqual(["cuenta", "d", "llave"]);
+  });
+
+  it("con corrección, el equipo más grande sigue entrando en el tope de la sala de hoy, que no conoce el campo nuevo", async () => {
+    let cuerpo = "";
+    const d = "A".repeat(MAX_CARACTERES_EQUIPO);
+    await anotarEquipoEnSala("https://s.test", "AbCd1234", G2, d, "L".repeat(64), con(201, { n: 1, estado: "solicitud" }, (x) => (cuerpo = x)), G1);
+    expect(Object.keys(JSON.parse(cuerpo)).sort()).toEqual(["correccion", "cuenta", "d", "llave"]);
+    expect(new TextEncoder().encode(cuerpo).length).toBeLessThanOrEqual(MAX_CUERPO_EQUIPO);
   });
 });
 
