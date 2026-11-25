@@ -16,7 +16,8 @@ import { fijoPorCampana } from "./ganadores";
  *
  * Aparece al salir del campo, cuando la persona terminó de escribir, y no mientras escribe: así no empuja Sellar la lista
  * debajo de su dedo. Si la ventana pierde el foco (cambio de pestaña o de aplicación) el navegador también avisa que el campo
- * se dejó, sin destino: eso no cuenta, y al volver se mira de nuevo. Si el foco se va a un botón o a un enlace no aparece, porque la persona ya está tocando otra cosa.
+ * se dejó, sin destino: eso no cuenta, y al volver se mira de nuevo. Si la persona toca un botón o un enlace no aparece, porque
+ * ya está tocando otra cosa. Con el teclado (Tab hacia un botón o un enlace) sí aparece: nadie lo está tocando.
  * Al cerrarlo el foco no vuelve a un campo de texto, que en un celular abriría el teclado. El enlace abre en otra pestaña
  * para no sacar a quien organiza de la lista que está armando.
  *
@@ -26,8 +27,15 @@ import { fijoPorCampana } from "./ganadores";
 /** Dónde queda que se cerró el aviso: vive en la pestaña, como el borrador. */
 const CLAVE_CERRADO = "tinkazo.aviso-plata-cerrado";
 
+/**
+ * La moneda de otro país (R$, MX$, COP$, ARS$): el signo pegado a unas letras que no son US ni USD. El aviso habla de dólares
+ * digitales y no es cierto para un premio en reales o en pesos, así que esas monedas no cuentan. Se les saca el signo antes de
+ * mirar el monto, y un monto en dólares escrito aparte sigue valiendo.
+ */
+const MONEDA_AJENA = /\b(?!(?:us|usd)\$)[a-z]{1,4}\$/gi;
+
 /** ¿Lo escrito parece un monto de dinero? */
-export const parecePremioEnPlata = (texto: string): boolean => montoDelPremio(texto) !== null;
+export const parecePremioEnPlata = (texto: string): boolean => montoDelPremio(texto.replace(MONEDA_AJENA, " ")) !== null;
 
 let montado = false;
 let activo = false;
@@ -66,11 +74,6 @@ export function actualizarAvisoDePlata(): void {
   el.hidden = !ver;
 }
 
-/** ¿El foco se va a algo que se toca (un botón o un enlace)? Entonces la persona ya no está escribiendo. */
-function vaAUnBoton(destino: EventTarget | null): boolean {
-  return destino instanceof HTMLElement && destino.matches("button, a[href], summary, [role='button']");
-}
-
 /**
  * Cuándo fue el último toque o clic sobre un botón o un enlace. Safari (en la Mac y en el iPhone) no da foco a un botón al
  * tocarlo: al salir del campo el destino llega vacío aunque la persona esté tocando Sellar la lista, y el aviso, al aparecer,
@@ -88,9 +91,13 @@ const tocabaUnBoton = (): boolean => performance.now() - ultimoToqueABoton < VEN
 /** ¿La ventana está a la vista y con el foco? Si no, el foco que se va del campo es el de la ventana y no el de la persona. */
 const ventanaActiva = (): boolean => document.visibilityState !== "hidden" && document.hasFocus();
 
-/** La persona salió de un campo del premio: recién ahora se mira lo escrito. */
-function alSalirDelCampo(e: FocusEvent): void {
-  if (!ventanaActiva() || vaAUnBoton(e.relatedTarget) || tocabaUnBoton()) return;
+/**
+ * La persona salió de un campo del premio: recién ahora se mira lo escrito. Si lo que recibe el foco es un botón o un enlace
+ * y nadie lo tocó, es el teclado (Tab): ahí el aviso aparece, porque el foco no se mueve de donde está y no hay un dedo que
+ * apoyar. Si lo tocó el mouse o el dedo, el toque ya quedó anotado y el aviso espera.
+ */
+function alSalirDelCampo(_e: FocusEvent): void {
+  if (!ventanaActiva() || tocabaUnBoton()) return;
   actualizarAvisoDePlata();
 }
 
