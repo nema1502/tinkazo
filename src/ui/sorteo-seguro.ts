@@ -35,6 +35,8 @@ export interface PasosDelSorteo<T> {
   /** Si con este error vale la pena volver a probar. */
   reintentable: (e: unknown) => boolean | Promise<boolean>;
   ahora?: () => number;
+  /** Lo que ya se esperó por otro camino antes de llegar acá: se descuenta del presupuesto, así la sala no espera más. */
+  yaGastadoMs?: number;
   dormir?: (ms: number) => Promise<void>;
   /** Antes de cada espera: el número del próximo intento, cuántos hay, y el error de recién. */
   alReintentar?: (proximo: number, total: number, e: unknown) => void;
@@ -45,6 +47,7 @@ export type FinDelSorteo<T> = { ok: true; valor: T; yaEstaba: boolean } | { ok: 
 export async function sortearConReintentos<T>(p: PasosDelSorteo<T>): Promise<FinDelSorteo<T>> {
   const ahora = p.ahora ?? Date.now;
   const dormir = p.dormir ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const presupuesto = PRESUPUESTO_DEL_SORTEO_MS - Math.max(0, p.yaGastadoMs ?? 0);
   const inicio = ahora();
   const total = ESPERAS_DEL_SORTEO_MS.length + 1;
   for (let i = 0; ; i++) {
@@ -56,7 +59,7 @@ export async function sortearConReintentos<T>(p: PasosDelSorteo<T>): Promise<Fin
       const ya = await p.yaEsta().catch(() => null);
       if (ya) return { ok: true, valor: ya, yaEstaba: true };
       const espera = ESPERAS_DEL_SORTEO_MS[i];
-      if (espera === undefined || ahora() - inicio + espera > PRESUPUESTO_DEL_SORTEO_MS || !(await p.reintentable(e))) {
+      if (espera === undefined || ahora() - inicio + espera > presupuesto || !(await p.reintentable(e))) {
         return { ok: false, error: e };
       }
       p.alReintentar?.(i + 2, total, e);
