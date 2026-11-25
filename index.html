@@ -78,9 +78,6 @@
            (main.ts y entrar() en wallet-ui.ts). El ensayo, al lado, no pide nada. -->
       <div class="hero-ctas">
         <a class="primary cta cta-entrar" href="#sortear" data-cta-entrar><span class="g-ico" aria-hidden="true"></span><span class="cta-t" data-i="ctaHero">Entrar y sortear gratis</span></a>
-        <button class="ghost" type="button" data-entrar-ensayo data-i="ctaEnsayo">Probar con un ejemplo</button>
-        <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con quienes pasan. No graba nada ni pide cuenta. -->
-        <button class="ghost" type="button" data-entrar-stand data-i="ctaStand">Tengo un stand</button>
       </div>
       <p class="hero-otras"><button class="enlace" type="button" data-otras-formas data-i="ctaOtras">Otras formas de entrar</button></p>
       <p class="hero-note"><a class="enlace" href="#confiar" data-i="ctaJusto">¿Cómo sé que es justo?</a></p>
@@ -95,6 +92,44 @@
       </picture>
       <span class="mascot" aria-hidden="true"><svg viewBox="-1 -3 24 28"><use href="#llama" fill="currentColor"/></svg></span>
     </a>
+    <!-- Las tres puertas: una tarjeta por lo que viene a hacer cada quien. La acción principal de la portada sigue siendo el
+         botón de arriba. La de las empresas se ve solo con las campañas abiertas (src/main.ts) y, sin ella, quedan dos. -->
+    <div class="puertas" id="puertas">
+      <article class="puerta puerta-lista">
+        <div class="puerta-media"><img class="pj-img pj-osc" src="/juegos/portada/wheel.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/wheel-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /></div>
+        <h2 class="puerta-t" data-i="ptListaT">Sortear con tu lista</h2>
+        <p class="puerta-b" data-i="ptListaB">Pegá los nombres y mirá quién gana en pantalla grande.</p>
+        <button class="ghost puerta-a" type="button" data-entrar-ensayo data-i="ctaEnsayo">Probar con un ejemplo</button>
+      </article>
+      <article class="puerta puerta-stand">
+        <div class="puerta-media"><img class="pj-img pj-osc" src="/juegos/portada/sapo.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/sapo-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /></div>
+        <h2 class="puerta-t" data-i="ptStandT">Jugar en un stand</h2>
+        <p class="puerta-b" data-i="ptStandB">La gente se suma con el celular y juega.</p>
+        <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con quienes pasan. No graba nada ni pide cuenta. -->
+        <button class="ghost puerta-a" type="button" data-entrar-stand data-i="ctaStand">Tengo un stand</button>
+      </article>
+      <article class="puerta puerta-empresa" data-campana-enlace hidden>
+        <div class="puerta-media">
+          <!-- Una tarjeta de campaña de ejemplo, hecha con HTML y CSS: la marca es inventada y dice que es un ejemplo. -->
+          <div class="cp-ejemplo">
+            <span class="cp-franja" aria-hidden="true"></span>
+            <div class="cp-cuerpo">
+              <div class="cp-marca">
+                <span class="cp-logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16"/><circle cx="9" cy="10" r="2"/><path d="M3 18l6-5 4 3 3-2 5 4"/></svg></span>
+                <span class="cp-nombres"><strong data-i="peMarca">Tu marca</strong><span data-i="peLugar">Tu evento</span></span>
+                <span class="cp-rotulo" data-i="peRotulo">Ejemplo</span>
+              </div>
+              <p class="cp-premio"><span data-i="pePremioN">3 premios de</span><strong data-i="pePremioM">40 dólares digitales</strong></p>
+              <p class="cp-estado"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-4 3-6 6.5-6s6.5 2 6.5 6"/><path d="M19 6v6M16 9h6"/></svg><span data-i="peEstado">Anotando</span></p>
+              <p class="cp-gente"><span class="cp-caras" aria-hidden="true"><i></i><i></i><i></i></span><span data-i="peGente">37 personas ya se anotaron</span></p>
+            </div>
+          </div>
+        </div>
+        <h2 class="puerta-t" data-i="ptEmpresaT">Soy una empresa</h2>
+        <p class="puerta-b" data-i="ptEmpresaB">Un premio en dólares digitales entre tu gente. Participar es gratis.</p>
+        <a class="ghost puerta-a" href="/crear-campana.html" data-i="ptEmpresaA">Armar una campaña</a>
+      </article>
+    </div>
   </section>
 
   <h2 class="sr-only portada-only" data-i="howTitle">¿Cómo funciona?</h2>

@@ -2098,7 +2098,8 @@
   .hero-shot .mascot svg { width: 104px; height: 90px; }
   @media (max-width: 700px) {
     .hero-portada { grid-template-columns: 1fr; gap: 26px; }
-    .hero-portada .hero-shot { display: block; }
+    /* La imagen del show va arriba, antes del título: lo que mejor explica qué es Tinkazo entra en la primera pantalla. */
+    .hero-portada .hero-shot { display: block; order: -1; }
   }
   /* En una laptop el botón de sortear tiene que verse sin bajar. Con 1366×768
      al 100%, a Chrome le quedan unos 625 píxeles de alto, y el título en cuatro
@@ -2118,6 +2119,67 @@
     .hero-portada .lead { font-size: var(--letra-sec); line-height: 1.45; }
   }
   .portada-juegos .pj-ver { font-size: 14px; }
+
+  /* Las tres puertas de la portada (25 de noviembre de 2026): una tarjeta por lo que viene a hacer cada quien, con su imagen,
+     un título, una línea y su acción. Van dentro del hero y ocupan el ancho entero. La de las empresas nace escondida y la
+     muestra main.ts con las campañas abiertas: sin ella quedan dos tarjetas que se reparten el ancho, sin hueco. */
+  .puertas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: stretch; margin-top: 8px; }
+  .puertas:has(> .puerta[hidden]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .puerta {
+    display: flex; flex-direction: column; gap: 8px; padding: 14px; background: var(--card); color: var(--ink);
+    border: var(--bw) solid var(--ink); box-shadow: var(--sh); min-width: 0;
+  }
+  .puerta[hidden] { display: none; }
+  .puerta-media { position: relative; flex: 1 0 auto; aspect-ratio: 16 / 9; border: 2px solid var(--ink); background: var(--field); overflow: hidden; margin-bottom: 4px; }
+  .puerta-media .pj-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .puerta-media .pj-osc { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .puerta-media .pj-osc { display: block; }
+    :root:not([data-theme="light"]) .puerta-media .pj-cla { display: none; }
+  }
+  :root[data-theme="dark"] .puerta-media .pj-osc { display: block; }
+  :root[data-theme="dark"] .puerta-media .pj-cla { display: none; }
+  .puerta-t { font-size: 22px; font-weight: 900; line-height: 1.15; letter-spacing: -0.01em; }
+  .puerta-b { color: var(--ink2); font-size: var(--letra-sec); }
+  /* La imagen se estira y absorbe el alto que sobra: con tres tarjetas de alto parejo, los botones quedan en la misma línea. */
+  .puerta .puerta-a { min-height: 48px; margin-top: 6px; display: inline-flex; align-items: center; justify-content: center; text-align: center; width: 100%; }
+
+  /* La tarjeta de campaña de ejemplo: la marca es inventada y dice que es un ejemplo. El estado va con ícono y texto, y la
+     cuenta de personas, sin nombres. Es lo que verá quien se anote, a pequeña escala. */
+  .puerta-empresa .puerta-media { aspect-ratio: auto; overflow: visible; border: 0; background: none; margin-bottom: 4px; }
+  .cp-ejemplo { display: flex; flex-direction: column; height: 100%; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+  .cp-franja { display: block; height: 12px; background: var(--orange); border-bottom: 2px solid var(--ink); flex: none; }
+  .cp-cuerpo { display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 12px 14px; flex: 1 1 auto; }
+  .cp-marca { display: flex; align-items: center; gap: 10px; }
+  .cp-logo {
+    flex: none; display: grid; place-items: center; width: 42px; height: 42px; color: var(--muted);
+    background: var(--field); border: 2px dashed var(--muted);
+  }
+  .cp-nombres { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; flex: 1 1 auto; }
+  .cp-nombres strong { font-size: 17px; font-weight: 900; }
+  .cp-nombres span { font-size: 14px; color: var(--ink2); }
+  .cp-rotulo { flex: none; align-self: flex-start; background: var(--purple); color: var(--on-purple); font-size: 14px; font-weight: 800; padding: 2px 8px; border: 2px solid var(--ink); }
+  .cp-premio { display: flex; flex-direction: column; line-height: 1.15; }
+  .cp-premio span { font-size: 14px; color: var(--ink2); font-weight: 700; }
+  .cp-premio strong { font-size: clamp(20px, 2.1vw, 24px); font-weight: 900; }
+  .cp-estado {
+    display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 16px; font-weight: 800;
+    background: var(--yellow); color: #191919; border: 2px solid var(--ink); padding: 4px 12px 4px 8px;
+  }
+  .cp-gente { display: flex; align-items: center; gap: 10px; font-size: 16px; color: var(--ink2); line-height: 1.25; }
+  .cp-caras { display: inline-flex; flex: none; }
+  .cp-caras i { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--ink); margin-left: -7px; background: var(--teal); }
+  .cp-caras i:first-child { margin-left: 0; background: var(--magenta); }
+  .cp-caras i:nth-child(2) { background: var(--yellow); }
+  @media (hover: hover) {
+    .puerta { transition: transform 0.12s ease, box-shadow 0.12s ease; }
+    .puerta:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 var(--ink); }
+  }
+  @media (prefers-reduced-motion: reduce) { .puerta, .puerta:hover { transition: none; transform: none; } }
+  /* En un celular o una tableta las tarjetas van una debajo de otra, sin pasar de un ancho cómodo. */
+  @media (max-width: 859px) {
+    .puertas, .puertas:has(> .puerta[hidden]) { grid-template-columns: minmax(0, 1fr); max-width: 520px; width: 100%; margin-inline: auto; }
+  }
 
   /* La demo se presenta: una franja arriba y una invitación al final. */
   .demo-banner { display: none; }
