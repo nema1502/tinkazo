@@ -48,22 +48,29 @@ export type PasoDelPuente =
  * ganadoras avisadas o cuando la sala ya fue borrada, que no tiene a quién mandarle nada.
  */
 export function avisosPendientes(p: PasoDelPuente, sorteoHecho: boolean): boolean {
-  return avisoQueFalta(p, sorteoHecho) !== null;
+  return avisoQueFalta(p, sorteoHecho ? "sorteada" : "sellada") !== null;
 }
 
-/** Qué se pierden los celulares si se deja la campaña ahora: el aviso de la lista sellada o su resultado. */
-export type AvisoQueFalta = "sello" | "resultado";
+/**
+ * Qué se pierden los celulares si se deja la campaña ahora: el aviso de la lista sellada, su resultado, o `"sin-sala"` cuando
+ * la sala ya no existe y no hay nada concreto que decirles.
+ */
+export type AvisoQueFalta = "sello" | "resultado" | "sin-sala";
 
-/** Pasos en los que el sello ya llegó a los celulares y lo que falta, con el sorteo sin hacer, es el resultado. */
-const DESPUES_DEL_SELLO: ReadonlySet<PasoDelPuente["paso"]> = new Set(["avisada", "sorteo-pendiente", "boton-resultado", "mandando", "guardar-sorteo"]);
+/** La vista del panel desde la que se deja la campaña. */
+export type VistaDelAviso = "cerrada" | "sellada" | "sorteada";
 
 /**
- * Lo que el panel todavía le debe a los celulares, o `null` si no les debe nada. Es la misma regla que `avisosPendientes`:
- * una sola decide si se pregunta antes de dejar la campaña y qué dice la pregunta.
+ * Lo que el panel todavía le debe a los celulares, o `null` si no les debe nada. Decide por la vista y no por el paso: con la
+ * lista cerrada todavía no se selló, y falta el aviso del sello. Con la lista sellada el sello ya llegó a la sala, y falta
+ * siempre el resultado. Con el sorteo hecho falta el resultado hasta que todas las ganadoras estén avisadas. Con la sala ya
+ * borrada no queda nadie a quien avisar: con el sorteo hecho no se pregunta, y antes de eso se pregunta pero sin decir qué falta.
+ * Es la regla que decide si se pregunta antes de dejar la campaña y qué dice la pregunta: no hay otra.
  */
-export function avisoQueFalta(p: PasoDelPuente, sorteoHecho: boolean): AvisoQueFalta | null {
-  if (!sorteoHecho) return DESPUES_DEL_SELLO.has(p.paso) ? "resultado" : "sello";
-  if (p.paso === "sala-borrada") return null;
+export function avisoQueFalta(p: PasoDelPuente, vista: VistaDelAviso): AvisoQueFalta | null {
+  if (p.paso === "sala-borrada") return vista === "sorteada" ? null : "sin-sala";
+  if (vista === "cerrada") return "sello";
+  if (vista === "sellada") return "resultado";
   if (p.paso === "resultado") return p.filas.some((f) => !f.avisada) ? "resultado" : null;
   return "resultado";
 }

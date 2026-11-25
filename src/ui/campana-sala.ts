@@ -2922,8 +2922,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // La pregunta de dejar la campaña dice qué pierden los celulares, con la misma regla que decide si se pregunta. Solo desde
     // la lista cerrada, sellada o sorteada: antes de eso no hay nada que avisarles.
     if (vista === "olvidar" && (vistaAntes === "cerrada" || vistaAntes === "sellada" || vistaAntes === "sorteada")) {
-      const falta = avisoQueFalta(pasoDelPuente(), vistaAntes === "sorteada");
-      if (falta) linea = tx(falta === "sello" ? "cpoOlvidarSello" : "cpoOlvidarResultado");
+      const falta = avisoQueFalta(pasoDelPuente(), vistaAntes);
+      if (falta === "sello") linea = tx("cpoOlvidarSello");
+      if (falta === "resultado") linea = tx("cpoOlvidarResultado");
     }
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? lineaDelPaso(pasoDelPuente()) : null;
     // Lo que la fila viva ya dice no se repite en la línea: la fila ocupa su lugar.
