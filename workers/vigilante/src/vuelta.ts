@@ -327,6 +327,7 @@ export async function vuelta(env: Entorno, dep: Dependencias): Promise<Resultado
     const decisionCuentas = vigilarCuentas({
       cuentas: bloqueDeCuentas,
       ...umbralDeCuentas(env),
+      ahoraMs: ahora.getTime(),
       recordado: { hora: m.cuentasAviso?.hora ?? null, motivos: m.cuentasAviso?.motivos ?? [] },
     });
     // Un bloque en null es que el portero no pudo contar (el proveedor de cuentas no contestó): el aviso quedaría mudo sin rastro.

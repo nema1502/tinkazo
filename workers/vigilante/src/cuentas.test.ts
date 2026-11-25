@@ -79,6 +79,35 @@ describe("vigilarCuentas: debajo del umbral no avisa y arriba avisa una vez por 
     expect(r.avisar.map((a) => a.motivo)).toEqual(["cuentas-nuevas"]);
   });
 
+  it("una oleada repartida entre dos horas de reloj se suma con la parte de la hora anterior que todavía cuenta", () => {
+    const base = { base: 200, cupoEvento: null as number | null, recordado: sinAviso };
+    const dosHoras = (anterior: number, actual: number) => ({ porHora: [{ hora: iso(T0), nuevas: anterior, activaciones: 0 }, { hora: iso(T0 + HORA), nuevas: actual, activaciones: 0 }], completo: true });
+    // 190 a las 9:50 y 190 a las 10:05: a las 10:06 son 380 en 16 minutos, y ninguna hora de reloj pasa de 200.
+    const r = vigilarCuentas({ cuentas: dosHoras(190, 190), ...base, ahoraMs: T0 + HORA + 6 * MINUTO });
+    expect(r.avisar).toEqual([{ motivo: "cuentas-nuevas", hubo: 190 + Math.round((190 * 54) / 60), umbral: 200, hora: iso(T0 + HORA) }]);
+    // La misma cifra, sin el reloj, mira solo la hora de reloj que empezó: lo de siempre.
+    expect(vigilarCuentas({ cuentas: dosHoras(190, 190), ...base }).avisar).toEqual([]);
+    // Un evento de 150 personas no alcanza el umbral en ninguna de las dos horas ni sumadas.
+    expect(vigilarCuentas({ cuentas: dosHoras(75, 75), ...base, ahoraMs: T0 + HORA + MINUTO }).avisar).toEqual([]);
+  });
+
+  it("lo de la hora anterior pesa cada vez menos: 150 a las 9:05 y 150 a las 10:55 no son una oleada", () => {
+    const base = { base: 200, cupoEvento: null as number | null, recordado: sinAviso };
+    const cuentas = { porHora: [{ hora: iso(T0), nuevas: 150, activaciones: 0 }, { hora: iso(T0 + HORA), nuevas: 150, activaciones: 0 }], completo: true };
+    expect(vigilarCuentas({ cuentas, ...base, ahoraMs: T0 + HORA + 55 * MINUTO }).avisar).toEqual([]);
+    expect(vigilarCuentas({ cuentas, ...base, ahoraMs: T0 + HORA + 5 * MINUTO }).avisar).toHaveLength(1);
+  });
+
+  it("solo se suma la hora que viene pegada: con un hueco, o con un reloj que no se entiende, vale la hora de reloj sola", () => {
+    const base = { base: 200, cupoEvento: null as number | null, recordado: sinAviso };
+    const conHueco = { porHora: [{ hora: iso(T0 - HORA), nuevas: 500, activaciones: 0 }, { hora: iso(T0 + HORA), nuevas: 10, activaciones: 0 }], completo: true };
+    expect(vigilarCuentas({ cuentas: conHueco, ...base, ahoraMs: T0 + HORA + MINUTO }).avisar).toEqual([]);
+    const pegadas = { porHora: [{ hora: iso(T0), nuevas: 500, activaciones: 0 }, { hora: iso(T0 + HORA), nuevas: 10, activaciones: 0 }], completo: true };
+    for (const ahoraMs of [Number.NaN, Number.POSITIVE_INFINITY]) expect(vigilarCuentas({ cuentas: pegadas, ...base, ahoraMs }).avisar, String(ahoraMs)).toEqual([]);
+    // Un reloj que va antes de la hora nueva cuenta toda la hora anterior, nunca más.
+    expect(vigilarCuentas({ cuentas: pegadas, ...base, ahoraMs: T0 }).avisar).toHaveLength(1);
+  });
+
   it("cada motivo se cuenta aparte: con las activaciones arriba y el aviso de activaciones prendido, avisa por ellas", () => {
     const r = vigilarCuentas({ cuentas: { porHora: [{ hora: iso(T0), nuevas: 1, activaciones: 75 }], completo: true }, ...umbrales, conActivaciones: true, recordado: sinAviso });
     expect(r.avisar).toEqual([{ motivo: "activaciones", hubo: 75, umbral: 60, hora: iso(T0) }]);
