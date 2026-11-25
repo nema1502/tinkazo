@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mostrarEnlacesDeCampana } from "../campana/bandera";
 import { T } from "../i18n";
 import { avisoDePlataVisible, montarAvisoDePlata, parecePremioEnPlata, reiniciarAvisoDePlata } from "./premio-plata";
 
@@ -17,6 +16,14 @@ const aviso = (): HTMLElement => document.getElementById("prize-plata") as HTMLE
 const escribir = (campo: HTMLInputElement, valor: string): void => {
   campo.value = valor;
   campo.dispatchEvent(new Event("input", { bubbles: true }));
+};
+/** La persona sale del campo: `hacia` es lo que recibe el foco, si algo lo recibe. */
+const salir = (campo: HTMLInputElement, hacia: HTMLElement | null = null): void => {
+  campo.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: hacia }));
+};
+const escribirYSalir = (campo: HTMLInputElement, valor: string): void => {
+  escribir(campo, valor);
+  salir(campo);
 };
 
 beforeEach(() => {
@@ -44,21 +51,45 @@ describe("el aviso debajo del campo del premio", () => {
   it("nace escondido y, con las campañas abiertas, aparece al escribir un monto", () => {
     montarAvisoDePlata(true);
     expect(aviso().hidden).toBe(true);
-    escribir(premio(), "Polera");
+    escribirYSalir(premio(), "Polera");
     expect(aviso().hidden).toBe(true);
-    escribir(premio(), "50 USD");
+    escribirYSalir(premio(), "50 USD");
     expect(aviso().hidden).toBe(false);
     expect(avisoDePlataVisible()).toBe(true);
     // Lleva a armar la campaña.
     expect(aviso().querySelector("a")?.getAttribute("href")).toBe("/crear-campana.html");
     // Y se va si se borra el monto.
-    escribir(premio(), "Termo");
+    escribirYSalir(premio(), "Termo");
     expect(aviso().hidden).toBe(true);
+  });
+
+  it("no aparece mientras se escribe: no empuja Sellar la lista. Aparece al salir del campo", () => {
+    montarAvisoDePlata(true);
+    escribir(premio(), "5");
+    escribir(premio(), "50");
+    escribir(premio(), "50 USD");
+    expect(aviso().hidden).toBe(true);
+    salir(premio());
+    expect(aviso().hidden).toBe(false);
+  });
+
+  it("si el foco va a un botón o a un enlace no aparece en ese momento: la persona ya está tocando otra cosa", () => {
+    montarAvisoDePlata(true);
+    const sellar = document.getElementById("btn-freeze") as HTMLButtonElement;
+    escribir(premio(), "50 USD");
+    salir(premio(), sellar);
+    expect(aviso().hidden).toBe(true);
+    // Pasa de un campo a otro de la misma lista: sigue siendo escribir, y el aviso espera.
+    const lugares = document.getElementById("prize-lugares") as HTMLElement;
+    lugares.hidden = false;
+    lugares.innerHTML = '<input data-lugar="2" type="text" />';
+    salir(premio(), lugares.querySelector("input"));
+    expect(aviso().hidden).toBe(false);
   });
 
   it("con las campañas cerradas no aparece nunca, ni escribiendo un monto", () => {
     montarAvisoDePlata(false);
-    escribir(premio(), "50 USD");
+    escribirYSalir(premio(), "50 USD");
     expect(aviso().hidden).toBe(true);
     expect(avisoDePlataVisible()).toBe(false);
   });
@@ -68,7 +99,7 @@ describe("el aviso debajo del campo del premio", () => {
     const lugares = document.getElementById("prize-lugares") as HTMLElement;
     lugares.hidden = false;
     lugares.innerHTML = '<input data-lugar="2" type="text" />';
-    escribir(lugares.querySelector("input") as HTMLInputElement, "20 dólares");
+    escribirYSalir(lugares.querySelector("input") as HTMLInputElement, "20 dólares");
     expect(aviso().hidden).toBe(false);
   });
 
@@ -76,30 +107,50 @@ describe("el aviso debajo del campo del premio", () => {
     montarAvisoDePlata(true);
     for (const modo of ["turnos", "amigo"]) {
       (document.getElementById("modo-botones") as HTMLElement).dataset.modo = modo;
-      escribir(premio(), "");
-      escribir(premio(), "50 USD");
+      escribirYSalir(premio(), "");
+      escribirYSalir(premio(), "50 USD");
       expect(aviso().hidden, modo).toBe(true);
     }
     (document.getElementById("modo-botones") as HTMLElement).dataset.modo = "sorteo";
-    escribir(premio(), "");
-    escribir(premio(), "50 USD");
+    escribirYSalir(premio(), "");
+    escribirYSalir(premio(), "50 USD");
     expect(aviso().hidden).toBe(false);
   });
 
   it("se cierra, no vuelve en la sesión y sigue cerrado al recargar la página", () => {
     montarAvisoDePlata(true);
-    escribir(premio(), "50 USD");
+    escribirYSalir(premio(), "50 USD");
     (document.getElementById("prize-plata-x") as HTMLButtonElement).click();
     expect(aviso().hidden).toBe(true);
-    escribir(premio(), "");
-    escribir(premio(), "100 USD");
+    escribirYSalir(premio(), "");
+    escribirYSalir(premio(), "100 USD");
     expect(aviso().hidden).toBe(true);
     // Otra carga de la página dentro de la misma pestaña.
     reiniciarAvisoDePlata();
     document.body.innerHTML = html.slice(html.indexOf("<body>") + 6, html.indexOf("</body>"));
     montarAvisoDePlata(true);
-    escribir(premio(), "50 USD");
+    escribirYSalir(premio(), "50 USD");
     expect(aviso().hidden).toBe(true);
+  });
+
+  it("al cerrarlo el foco no vuelve a un campo de texto: en un celular abriría el teclado", () => {
+    montarAvisoDePlata(true);
+    escribirYSalir(premio(), "50 USD");
+    const x = document.getElementById("prize-plata-x") as HTMLButtonElement;
+    x.focus();
+    x.click();
+    const activo = document.activeElement;
+    expect(activo instanceof HTMLInputElement || activo instanceof HTMLTextAreaElement).toBe(false);
+    expect(aviso().hidden).toBe(true);
+  });
+
+  it("el enlace a armar la campaña abre en otra pestaña y no saca a quien organiza de la lista que está armando", () => {
+    const enlaceDelAviso = aviso().querySelector("a");
+    expect(enlaceDelAviso?.getAttribute("target")).toBe("_blank");
+    expect(enlaceDelAviso?.getAttribute("rel")).toContain("noopener");
+    const discreto = document.querySelector(".premio-campana a");
+    expect(discreto?.getAttribute("target")).toBe("_blank");
+    expect(discreto?.getAttribute("rel")).toContain("noopener");
   });
 
   it("sin almacenamiento sigue funcionando: el cierre vale mientras dura la página", () => {
@@ -109,7 +160,7 @@ describe("el aviso debajo del campo del premio", () => {
     };
     try {
       montarAvisoDePlata(true);
-      escribir(premio(), "50 USD");
+      escribirYSalir(premio(), "50 USD");
       (document.getElementById("prize-plata-x") as HTMLButtonElement).click();
       expect(aviso().hidden).toBe(true);
     } finally {
@@ -121,7 +172,7 @@ describe("el aviso debajo del campo del premio", () => {
     montarAvisoDePlata(true);
     const sellar = document.getElementById("btn-freeze") as HTMLButtonElement;
     const antes = sellar.disabled;
-    escribir(premio(), "50 USD");
+    escribirYSalir(premio(), "50 USD");
     expect(aviso().hidden).toBe(false);
     expect(sellar.disabled).toBe(antes);
     expect(aviso().querySelector(".primary")).toBeNull();
@@ -134,13 +185,11 @@ describe("el aviso debajo del campo del premio", () => {
 describe("el enlace discreto a la campaña", () => {
   const enlace = (): HTMLElement => document.querySelector<HTMLElement>(".premio-campana") as HTMLElement;
 
-  it("está junto al campo, escondido hasta que las campañas estén abiertas", () => {
+  it("está junto al campo y marcado: con las campañas cerradas lo esconde la regla de la bandera", () => {
     expect(enlace().hasAttribute("data-campana-enlace")).toBe(true);
-    expect(enlace().hidden).toBe(true);
+    expect(enlace().hidden).toBe(false);
     expect(enlace().closest(".field")?.querySelector("#prize")).not.toBeNull();
     expect(enlace().querySelector("a")?.getAttribute("href")).toBe("/crear-campana.html");
-    mostrarEnlacesDeCampana(document, true);
-    expect(enlace().hidden).toBe(false);
   });
 
   it("es un enlace con forma de enlace, no un botón", () => {
