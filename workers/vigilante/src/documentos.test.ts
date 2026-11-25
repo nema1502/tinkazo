@@ -161,6 +161,7 @@ describe("la hoja de operación", () => {
       "respuesta-invalida",
       "sin-lectura",
       "vigilante-sin-clave",
+      "cuentas-sin-conteo",
     ];
     for (const clave of claves) {
       const asunto = asuntoDeClave(clave);

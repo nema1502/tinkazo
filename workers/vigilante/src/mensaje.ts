@@ -233,6 +233,12 @@ const CATALOGO: Record<string, Entrada> = {
     frase: () => "El portero no contestó en las últimas dos vueltas, unos 20 minutos. Nadie puede sellar con la cuenta de Google hasta que vuelva.",
     hacer: () => "Mirá el panel de Cloudflare: Workers, tinkazo-patrocinio-mainnet, y su registro. Si Cloudflare tiene una falla, esperá. Lo sellado no se pierde.",
   },
+  "cuentas-sin-conteo": {
+    asunto: () => "No se están contando las cuentas nuevas",
+    gravedad: () => 50,
+    frase: () => "El portero no pudo contar las cuentas nuevas en las últimas dos vueltas, unos 20 minutos. Mientras tanto, una ola de cuentas no avisaría.",
+    hacer: () => "Mirá el estado a mano y las cuentas nuevas en el panel de Pollar. Si hay un evento, vigilá las altas a mano hasta que vuelva el conteo.",
+  },
   "vigilante-sin-clave": {
     asunto: () => "Al vigilante le falta la clave del portero",
     gravedad: () => 88,
@@ -264,6 +270,7 @@ const ARREGLOS: Record<string, { corto: string; frase: string }> = {
   "no-es-mainnet": { corto: "portero equivocado", frase: "El vigilante vuelve a mirar el portero de producción." },
   "respuesta-invalida": { corto: "respuesta del portero", frase: "El portero volvió a contestar algo que se entiende." },
   "sin-lectura": { corto: "el portero vuelve a contestar", frase: "El portero volvió a contestar." },
+  "cuentas-sin-conteo": { corto: "conteo de cuentas", frase: "El portero volvió a contar las cuentas nuevas." },
   "vigilante-sin-clave": { corto: "clave del vigilante", frase: "El vigilante volvió a entrar al portero." },
 };
 

@@ -43,6 +43,7 @@ const CLAVES_DE_EJEMPLO = [
   "respuesta-invalida",
   "sin-lectura",
   "vigilante-sin-clave",
+  "cuentas-sin-conteo",
 ];
 
 const TODOS = (estado: unknown = estadoBien({ red: "testnet", creditos: 1500, margen: -500, altasPausadas: true, firmasSinExplicar: 300 })) => {
