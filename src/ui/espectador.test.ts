@@ -28,6 +28,9 @@ const h = vi.hoisted(() => ({
   // El corto que este celular recuerda de su entrada, y el traspaso de ese corto a la verificación.
   cortoGuardado: vi.fn((..._a: unknown[]): any => null),
   dejarCortoDelVivo: vi.fn((..._a: unknown[]): any => undefined),
+  // El comprobante que arma el celular: el de verdad, salvo en la prueba que lo hace esperar.
+  proofUrl: vi.fn((..._a: unknown[]): any => undefined),
+  proofUrlReal: (..._a: unknown[]): any => undefined,
 }));
 
 vi.mock("../sound", () => ({ beep: () => undefined, note: (n: number) => n }));
@@ -37,6 +40,11 @@ vi.mock("../protocol/quicknet", async (orig) => ({
   ...(await orig<typeof import("../protocol/quicknet")>()),
   fetchRound: (...a: unknown[]) => h.fetchRound(...a),
 }));
+vi.mock("../protocol/proof", async (orig) => {
+  const real = await orig<typeof import("../protocol/proof")>();
+  h.proofUrlReal = (...a: unknown[]) => (real.proofUrl as (...x: unknown[]) => Promise<string>)(...a);
+  return { ...real, proofUrl: (...a: unknown[]) => h.proofUrl(...a) };
+});
 vi.mock("../protocol/firma", () => ({ verifyRoundAsync: (...a: unknown[]) => h.verifyRoundAsync(...a) }));
 vi.mock("./draw", () => ({
   verDeNuevo: (...a: unknown[]) => h.verDeNuevo(...a),
@@ -146,7 +154,8 @@ const ESPERA_TARDE = (): number => RETRASO_TRAS_LO_GRABADO_MS + LECTURA_DE_LA_TA
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(roundTime(R) * 1000 - 30_000);
-  for (const f of [h.fetchRound, h.verifyRoundAsync, h.verDeNuevo, h.showDelEspectador, h.jugar, h.cancelar, h.cortoGuardado, h.dejarCortoDelVivo, irA]) f.mockReset();
+  for (const f of [h.fetchRound, h.verifyRoundAsync, h.verDeNuevo, h.showDelEspectador, h.jugar, h.cancelar, h.cortoGuardado, h.dejarCortoDelVivo, h.proofUrl, irA]) f.mockReset();
+  h.proofUrl.mockImplementation((...a: unknown[]) => h.proofUrlReal(...a));
   h.verifyRoundAsync.mockResolvedValue(h.verificar);
   h.fetchRound.mockResolvedValue({ round: R, signature: h.firma });
   h.showDelEspectador.mockImplementation(() => ({ jugar: h.jugar, cancelar: h.cancelar }));
@@ -1193,10 +1202,31 @@ describe("compartir el sorteo desde la vista en vivo", () => {
       expect(dialogo().querySelector(".cmp-priv")?.textContent).not.toContain(T.es.cmpPrivCorto);
     });
 
-    it("lo toma de la dirección con que entró, si la dirección trae la referencia", async () => {
+    it("con la referencia en la dirección, lo comparte si es el mismo que este celular recordó al abrir", async () => {
       history.replaceState(null, "", `/#espectador=abc.AbCdEfGh.${"a".repeat(22)}.2`);
+      h.cortoGuardado.mockReturnValue({ corto: CORTO, id: "AbCdEfGh", borrar: "" });
       await hastaElFin();
       expect(await compartirYLeer()).toContain(CORTO);
+    });
+
+    it("sin la referencia en la dirección, lo toma de lo que este celular recordó al abrir el corto", async () => {
+      history.replaceState(null, "", "/#espectador=abc");
+      h.cortoGuardado.mockReturnValue({ corto: CORTO, id: "AbCdEfGh", borrar: "" });
+      await hastaElFin();
+      const txt = await compartirYLeer();
+      expect(txt).toContain(CORTO);
+      expect(txt).not.toContain("verificar.html");
+      // Lo recordado se busca con los datos tal como llegaron en la dirección.
+      expect(String(h.cortoGuardado.mock.calls[0]?.[0])).toContain("#espectador=abc");
+    });
+
+    it("una dirección armada a mano, con una referencia que este celular no recuerda, comparte el largo del sorteo que se ve", async () => {
+      history.replaceState(null, "", `/#espectador=abc.ZyXwVuTs.${"b".repeat(22)}.2`);
+      h.cortoGuardado.mockReturnValue(null);
+      await hastaElFin();
+      const txt = await compartirYLeer();
+      expect(txt).toMatch(/https?:\/\/\S+\/verificar\.html#\S+/);
+      expect(txt).not.toContain("/c/");
     });
 
     it("si no lo conoce, comparte el enlace largo como siempre", async () => {
@@ -1208,31 +1238,47 @@ describe("compartir el sorteo desde la vista en vivo", () => {
     });
   });
 
-  describe("quien abre la vista mucho después de la ronda", () => {
+  describe("Ver el comprobante", () => {
     const CORTO = `${location.origin}/c/AbCdEfGh#${"a".repeat(22)}`;
     /** Con la vista abierta `despues` segundos después de nacer la ronda, hasta ver Lo que salió. */
-    const hastaElFinTarde = async (despues: number, op: OpcionesDeLaVista = {}): Promise<void> => {
+    const hastaElFinTarde = async (despues: number, op: OpcionesDeLaVista = {}, d: DatosEspectador = datos()): Promise<void> => {
       vi.setSystemTime(roundTime(R) * 1000 + despues * 1000);
-      abrir(datos(), op);
+      abrir(d, op);
       await vi.advanceTimersByTimeAsync(0);
       await vi.advanceTimersByTimeAsync(ESPERA_TARDE() + 1_000);
       (h.jugar.mock.calls[0]?.[0] as () => void)();
       await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000 + 10_000);
     };
     const comprobante = (): HTMLAnchorElement | null => capa().querySelector<HTMLAnchorElement>("a[data-comprobante]");
+    const ordenDeLosBotones = (): string[] =>
+      [...capa().querySelectorAll(".espectador-acc > *")].map((e) => (e.getAttribute("data-otra-vez") !== null ? "otra" : e.getAttribute("data-compartir") !== null ? "compartir" : e.getAttribute("data-comprobante") !== null ? "comprobante" : "propio"));
 
-    it("ve el comprobante, que lleva a verificar con la lista y el veredicto, y no la invitación al QR nuevo", async () => {
+    it("lo ve quien abre mucho después de la ronda: lleva a verificar con la lista y el veredicto", async () => {
       await hastaElFinTarde(601);
       await vi.waitFor(() => expect(comprobante()).toBeTruthy());
       const a = comprobante() as HTMLAnchorElement;
       expect(a.textContent).toBe(T.es.espVerComprobante);
-      expect(capa().textContent).not.toContain(T.es.espFinSiguiente);
       expect(a.getAttribute("href")).toMatch(/\/verificar\.html#\S+/);
       const hecho = await decodeProof("#" + new URL(a.href).hash.slice(1));
       expect(hecho).toMatchObject({ names: NOMBRES, round: R, prize: "Una polera", signature: h.firma, net: "testnet", contract: CONTRATO_PRUEBA, id: "42" });
       // El orden de los botones: ver de nuevo, compartir, el comprobante y hacer el propio.
-      const orden = [...capa().querySelectorAll(".espectador-acc > *")].map((e) => e.getAttribute("data-otra-vez") !== null ? "otra" : e.getAttribute("data-compartir") !== null ? "compartir" : e.getAttribute("data-comprobante") !== null ? "comprobante" : "propio");
-      expect(orden).toEqual(["otra", "compartir", "comprobante", "propio"]);
+      expect(ordenDeLosBotones()).toEqual(["otra", "compartir", "comprobante", "propio"]);
+    });
+
+    it("lo ve también quien abre enseguida, que es quien recibe el enlace en el grupo: el mensaje le dice que puede verificarlo", async () => {
+      await hastaElFinTarde(30);
+      await vi.waitFor(() => expect(comprobante()).toBeTruthy());
+      expect(ordenDeLosBotones()).toEqual(["otra", "compartir", "comprobante", "propio"]);
+    });
+
+    it("lo ve quien mira desde el principio, sin esperar ningún tiempo", async () => {
+      await hastaElFin();
+      await vi.waitFor(() => expect(comprobante()).toBeTruthy());
+    });
+
+    it("la invitación a escanear el QR del premio siguiente sigue donde estaba, abra cuando abra", async () => {
+      await hastaElFinTarde(601);
+      expect(capa().textContent).toContain(T.es.espFinSiguiente);
     });
 
     it("al tocarlo deja el corto con el que entró para la página de verificar", async () => {
@@ -1254,16 +1300,24 @@ describe("compartir el sorteo desde la vista en vivo", () => {
       expect(h.dejarCortoDelVivo).not.toHaveBeenCalled();
     });
 
-    it("antes de los diez minutos no hay comprobante y la sala sigue viendo la invitación de siempre", async () => {
-      await hastaElFinTarde(599);
-      expect(comprobante()).toBeNull();
-      expect(capa().textContent).toContain(T.es.espFinSiguiente);
+    it("en un orden de turnos sellado también se puede ver el comprobante, y no se pregunta por otro premio", async () => {
+      const leer = async () => registro({ grabado: true, meta: "Turnos de la tarde", numWinners: NOMBRES.length, winners: ganadores(NOMBRES, NOMBRES.length) });
+      await hastaElFinTarde(601, { leer }, datos({ z: "Turnos de la tarde", w: NOMBRES.length }));
+      await vi.waitFor(() => expect(comprobante()).toBeTruthy());
+      expect(capa().textContent).not.toContain(T.es.espFinSiguiente);
     });
 
-    it("quien mira desde el principio no ve el comprobante: no carga la verificación junto con todo el salón", async () => {
+    it("si la vista se cerró antes de que el comprobante estuviera listo, no queda ningún enlace suelto ni falla", async () => {
+      let soltar: () => void = () => undefined;
+      h.proofUrl.mockImplementationOnce(async (...a: unknown[]) => {
+        await new Promise<void>((r) => (soltar = r));
+        return h.proofUrlReal(...a);
+      });
       await hastaElFin();
-      expect(comprobante()).toBeNull();
-      expect(capa().textContent).toContain(T.es.espFinSiguiente);
+      capa().remove();
+      soltar();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector("a[data-comprobante]")).toBeNull();
     });
   });
 

@@ -80,9 +80,9 @@ export { datosDelEnlace, enlaceEspectador, type DatosEspectador } from "./espect
  * dice la regla, y arranca el show desde el principio.
  *
  * **Compartir lo que salió** lleva el enlace corto con el que entró este celular (`cortoDelEnlace`) o, si no lo conoce, el
- * enlace completo del comprobante: nada sale de este celular hacia el servicio de enlaces. Quien abre la vista 10 minutos
- * o más después de la ronda no está en la sala sino que recibió el enlace: ve Ver el comprobante, que lo lleva a la
- * verificación con la lista (`ABIERTO_DESPUES_S`).
+ * enlace completo del comprobante: nada sale de este celular hacia el servicio de enlaces. El corto abre esta vista y no
+ * el comprobante: por eso Lo que salió ofrece Ver el comprobante a todos, que lo lleva a la verificación con la lista. Es
+ * un enlace que arma este mismo celular: no pide nada a nadie hasta que se toca.
  *
  * Es solo para mirar: no hay sellar ni sortear, no toca la cadena más que para leer y no graba nada. No cuenta nada del
  * sorteo: la página suma una visita anónima, como cualquiera que entra al sitio (`analytics.ts`, sin la dirección
@@ -97,13 +97,6 @@ export { datosDelEnlace, enlaceEspectador, type DatosEspectador } from "./espect
 
 /** Lo que se espera a saber si el reloj del teléfono está corrido antes de dejar que la cuenta llegue a cero. */
 const ESPERA_DEL_RELOJ_MS = 4_000;
-
-/**
- * Con la vista abierta 10 minutos o más después de la ronda, quien mira no está en la sala sino que recibió el enlace:
- * ve el comprobante y no la invitación al QR nuevo. Antes, con todo el salón mirando, nadie carga la verificación junto
- * con los demás (todos leerían la red a la vez).
- */
-const ABIERTO_DESPUES_S = 600;
 
 /** Para las pruebas: el reloj, la cadena, el enlace y el número sin red, el azar de sus pausas y a dónde se va al salir. */
 export interface OpcionesDeLaVista {
@@ -274,10 +267,8 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
   }
   setLang(lang);
   const aLaPar = datos.h === 1;
-  // El corto con el que entró y si llegó tarde, una sola vez y antes de cualquier relectura: la hora de este celular alcanza,
-  // en una escala de diez minutos el desfase del reloj no pesa.
+  // El corto con el que entró, una sola vez y antes de cualquier relectura.
   const cortoPropio = op.corto !== undefined ? op.corto : cortoDelEnlace(location.hash);
-  const abiertoDespues = Date.now() / 1000 >= roundTime(datos.r) + ABIERTO_DESPUES_S;
   // Un orden de turnos no tiene premio ni quien gane: el celular lo dice como la sala (`espera.ts`), con lo que está sellado.
   const orden = isTurnOrder(datos.n.length, datos.w, datos.z ?? "");
   // El show sale con el mismo ritmo y el mismo juego que el de la sala, sin cambiar el ritmo guardado de este navegador.
@@ -416,7 +407,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
         nombres.map((n) => `<li><img src="${avatar(n, 56)}" alt="" />${esc(n)}</li>`).join("") +
         `</ol>` +
         // Un orden no tiene otro premio: no se pregunta por uno.
-        (orden || abiertoDespues ? "" : `<p class="espectador-sigue">${esc(t("espFinSiguiente"))}</p>`) +
+        (orden ? "" : `<p class="espectador-sigue">${esc(t("espFinSiguiente"))}</p>`) +
         `<div class="espectador-acc">` +
         `<button class="ghost" type="button" data-otra-vez>${esc(t("espVerDeNuevo"))}</button>` +
         `<a class="espectador-propio" href="/">${esc(t("espHacerElTuyo"))}</a>` +
@@ -454,10 +445,11 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
         });
     });
     sigue?.querySelector<HTMLElement>(".espectador-acc")?.insertBefore(compartir, sigue.querySelector(".espectador-propio"));
-    // Quien llegó tarde recibió el enlace: ve el comprobante, que arma este mismo celular y no publica nada. Se crea cuando
-    // está listo, así nunca hay un enlace vacío a la vista.
+    // El enlace que se comparte desde acá abre esta vista y no el comprobante: quien lo recibió llega al comprobante por
+    // este enlace, que arma este mismo celular y no publica nada. Se crea cuando está listo, así nunca hay un enlace vacío a
+    // la vista.
     const acc = sigue?.querySelector<HTMLElement>(".espectador-acc");
-    if (abiertoDespues && acc) {
+    if (acc) {
       void enlaceDelComprobante(datos, d)
         .then((u) => {
           // Sin comprobante (cayó a la ronda del faro), o la vista ya cambió de pantalla: no se muestra.
