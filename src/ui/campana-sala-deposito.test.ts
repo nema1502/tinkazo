@@ -761,3 +761,62 @@ describe("el armado real de la dependencia", () => {
     expect(f).not.toHaveBeenCalled();
   });
 });
+
+describe("el costo de la línea con el panel abierto un rato", () => {
+  /** Cuántas esperas activas tiene el panel en la vista previa sin la línea del premio. */
+  async function esperasSinLinea(): Promise<number> {
+    const m = mundo();
+    ponerRed(m, "mainnet");
+    m.cuenta = CUENTA;
+    await previa(m);
+    const n = m.esperasEn().length;
+    cerrarTodos();
+    document.body.innerHTML = "";
+    return n;
+  }
+
+  it("diez minutos con redibujos seguidos hacen pocas lecturas, un solo reloj y ninguna lectura escondida", async () => {
+    const base = await esperasSinLinea();
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = await previa(m);
+    let leidasAlEsconder = 0;
+    let leidasAlVolver = 0;
+    let masRelojes = 0;
+    for (let seg = 0; seg < 600; seg += 5) {
+      if (seg === 180) {
+        Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+        leidasAlEsconder = leer.mock.calls.length;
+      }
+      if (seg === 360) {
+        leidasAlVolver = leer.mock.calls.length;
+        Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+      }
+      await m.correr(5_000);
+      for (let i = 0; i < 20; i++) p.pintar();
+      masRelojes = Math.max(masRelojes, m.esperasEn().length - base);
+    }
+    // Ninguna lectura mientras la pestaña estuvo escondida.
+    expect(leidasAlVolver).toBe(leidasAlEsconder);
+    expect(leer.mock.calls.length).toBeLessThanOrEqual(13);
+    expect(leer.mock.calls.length).toBeGreaterThanOrEqual(5);
+    expect(masRelojes).toBeLessThanOrEqual(1);
+    // Al salir de la vista no queda ningún reloj ni se vuelve a leer.
+    p.detener();
+    const alSalir = leer.mock.calls.length;
+    expect(m.esperasEn()).toHaveLength(0);
+    await m.correr(600_000);
+    expect(leer.mock.calls.length).toBe(alSalir);
+  });
+
+  it("al perder la cuenta el reloj de la línea se apaga", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = await previa(m);
+    const antes = m.esperasEn().length;
+    m.cuenta = null;
+    p.pintar();
+    expect(m.esperasEn().length).toBe(antes - 1);
+    await m.correr(600_000);
+    expect(leer).toHaveBeenCalledTimes(1);
+  });
+});
