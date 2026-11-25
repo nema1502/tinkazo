@@ -25,6 +25,9 @@ const h = vi.hoisted(() => ({
   enlaceParaElQr: vi.fn((..._a: unknown[]): any => Promise.resolve({ ahora: "", despues: Promise.resolve(null) })),
   anotarseEnSala: vi.fn((..._a: unknown[]): any => Promise.resolve({ ok: true, n: 1 })),
   seguirVivo: vi.fn((..._a: unknown[]): any => ({ parar: () => undefined })),
+  // El corto que este celular recuerda de su entrada, y el traspaso de ese corto a la verificación.
+  cortoGuardado: vi.fn((..._a: unknown[]): any => null),
+  dejarCortoDelVivo: vi.fn((..._a: unknown[]): any => undefined),
 }));
 
 vi.mock("../sound", () => ({ beep: () => undefined, note: (n: number) => n }));
@@ -50,6 +53,8 @@ vi.mock("../enlace-corto", () => ({
   ponerLogoDeRuta: () => undefined,
   rutaDe: (enlace: string) => enlace,
   releerCorto: (...a: unknown[]) => Promise.resolve(null),
+  cortoGuardado: (...a: unknown[]) => h.cortoGuardado(...a),
+  dejarCortoDelVivo: (...a: unknown[]) => h.dejarCortoDelVivo(...a),
 }));
 vi.mock("../sala/cliente", () => ({ servicioDeSala: () => "http://sala.test" }));
 // El diálogo de compartir (`compartir.ts`) pinta la foto: en la prueba, un PNG que no toca el canvas.
@@ -139,7 +144,7 @@ const ESPERA_TARDE = (): number => RETRASO_TRAS_LO_GRABADO_MS + LECTURA_DE_LA_TA
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(roundTime(R) * 1000 - 30_000);
-  for (const f of [h.fetchRound, h.verifyRoundAsync, h.verDeNuevo, h.showDelEspectador, h.jugar, h.cancelar, irA]) f.mockReset();
+  for (const f of [h.fetchRound, h.verifyRoundAsync, h.verDeNuevo, h.showDelEspectador, h.jugar, h.cancelar, h.cortoGuardado, h.dejarCortoDelVivo, irA]) f.mockReset();
   h.verifyRoundAsync.mockResolvedValue(h.verificar);
   h.fetchRound.mockResolvedValue({ round: R, signature: h.firma });
   h.showDelEspectador.mockImplementation(() => ({ jugar: h.jugar, cancelar: h.cancelar }));
@@ -1161,6 +1166,103 @@ describe("compartir el sorteo desde la vista en vivo", () => {
     expect(txt).toMatch(/https?:\/\/\S+\/verificar\.html#\S+/);
     // Y el aviso de privacidad no promete una copia que no existe.
     expect(dialogo().querySelector(".cmp-priv")?.textContent).not.toContain(T.es.cmpPrivCorto);
+  });
+
+  describe("el corto con el que entró este celular", () => {
+    const CORTO = `${location.origin}/c/AbCdEfGh#${"a".repeat(22)}`;
+    const compartirYLeer = async (): Promise<string> => {
+      capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+      await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+      await vi.waitFor(() => expect(dialogo().querySelector<HTMLTextAreaElement>(".cmp-txt")?.value).toBeTruthy());
+      return dialogo().querySelector<HTMLTextAreaElement>(".cmp-txt")?.value ?? "";
+    };
+    afterEach(() => history.replaceState(null, "", "/"));
+
+    it("lo comparte en lugar del enlace largo, y este celular no publica nada", async () => {
+      const red = vi.fn();
+      vi.stubGlobal("fetch", red);
+      await hastaElFin({ corto: CORTO });
+      const txt = await compartirYLeer();
+      expect(txt).toContain(CORTO);
+      expect(txt).not.toContain("verificar.html");
+      expect(h.acortar).not.toHaveBeenCalled();
+      expect(red).not.toHaveBeenCalled();
+      // La nota de privacidad tampoco promete una copia que este celular no creó.
+      expect(dialogo().querySelector(".cmp-priv")?.textContent).not.toContain(T.es.cmpPrivCorto);
+    });
+
+    it("lo toma de la dirección con que entró, si la dirección trae la referencia", async () => {
+      history.replaceState(null, "", `/#espectador=abc.AbCdEfGh.${"a".repeat(22)}.2`);
+      await hastaElFin();
+      expect(await compartirYLeer()).toContain(CORTO);
+    });
+
+    it("si no lo conoce, comparte el enlace largo como siempre", async () => {
+      h.cortoGuardado.mockReturnValue(null);
+      await hastaElFin({ corto: null });
+      const txt = await compartirYLeer();
+      expect(txt).toMatch(/https?:\/\/\S+\/verificar\.html#\S+/);
+      expect(txt).not.toContain("/c/");
+    });
+  });
+
+  describe("quien abre la vista mucho después de la ronda", () => {
+    const CORTO = `${location.origin}/c/AbCdEfGh#${"a".repeat(22)}`;
+    /** Con la vista abierta `despues` segundos después de nacer la ronda, hasta ver Lo que salió. */
+    const hastaElFinTarde = async (despues: number, op: OpcionesDeLaVista = {}): Promise<void> => {
+      vi.setSystemTime(roundTime(R) * 1000 + despues * 1000);
+      abrir(datos(), op);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(RETRASO_TRAS_LO_GRABADO_MS + 100);
+      (h.jugar.mock.calls[0]?.[0] as () => void)();
+      await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000 + 10_000);
+    };
+    const comprobante = (): HTMLAnchorElement | null => capa().querySelector<HTMLAnchorElement>("a[data-comprobante]");
+
+    it("ve el comprobante, que lleva a verificar con la lista y el veredicto, y no la invitación al QR nuevo", async () => {
+      await hastaElFinTarde(601);
+      await vi.waitFor(() => expect(comprobante()).toBeTruthy());
+      const a = comprobante() as HTMLAnchorElement;
+      expect(a.textContent).toBe(T.es.espVerComprobante);
+      expect(capa().textContent).not.toContain(T.es.espFinSiguiente);
+      expect(a.getAttribute("href")).toMatch(/\/verificar\.html#\S+/);
+      const hecho = await decodeProof("#" + new URL(a.href).hash.slice(1));
+      expect(hecho).toMatchObject({ names: NOMBRES, round: R, prize: "Una polera", signature: h.firma, net: "testnet", contract: CONTRATO_PRUEBA, id: "42" });
+      // El orden de los botones: ver de nuevo, compartir, el comprobante y hacer el propio.
+      const orden = [...capa().querySelectorAll(".espectador-acc > *")].map((e) => e.getAttribute("data-otra-vez") !== null ? "otra" : e.getAttribute("data-compartir") !== null ? "compartir" : e.getAttribute("data-comprobante") !== null ? "comprobante" : "propio");
+      expect(orden).toEqual(["otra", "compartir", "comprobante", "propio"]);
+    });
+
+    it("al tocarlo deja el corto con el que entró para la página de verificar", async () => {
+      await hastaElFinTarde(601, { corto: CORTO });
+      await vi.waitFor(() => expect(comprobante()).toBeTruthy());
+      const a = comprobante() as HTMLAnchorElement;
+      // La navegación de jsdom no existe: lo que se mira es lo que se deja antes de irse.
+      document.addEventListener("click", (e) => e.preventDefault(), { once: true });
+      a.click();
+      const v = new URL(a.href);
+      expect(h.dejarCortoDelVivo).toHaveBeenCalledWith(v.pathname + v.hash, CORTO);
+    });
+
+    it("sin corto conocido, tocarlo no deja nada", async () => {
+      await hastaElFinTarde(601, { corto: null });
+      await vi.waitFor(() => expect(comprobante()).toBeTruthy());
+      document.addEventListener("click", (e) => e.preventDefault(), { once: true });
+      comprobante()?.click();
+      expect(h.dejarCortoDelVivo).not.toHaveBeenCalled();
+    });
+
+    it("antes de los diez minutos no hay comprobante y la sala sigue viendo la invitación de siempre", async () => {
+      await hastaElFinTarde(599);
+      expect(comprobante()).toBeNull();
+      expect(capa().textContent).toContain(T.es.espFinSiguiente);
+    });
+
+    it("quien mira desde el principio no ve el comprobante: no carga la verificación junto con todo el salón", async () => {
+      await hastaElFin();
+      expect(comprobante()).toBeNull();
+      expect(capa().textContent).toContain(T.es.espFinSiguiente);
+    });
   });
 
   describe("quién va en el mensaje según de quién son las etiquetas", () => {
