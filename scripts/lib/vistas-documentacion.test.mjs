@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,5 +98,64 @@ describe("el ejemplo del comentario del flujo de auditores", () => {
     expect(comando).toContain("-f entorno=VITE_CAMPANAS=1");
     expect(comando).toContain("-f vistas='[");
     expect(comando).not.toContain(" #");
+  });
+});
+
+describe("la documentación del modo de capturas", () => {
+  const flujo = leer(".github", "workflows", "auditores.yml");
+  const arquitectura = leer("docs", "architecture.md");
+  const decision = arquitectura.split("\n").find((r) => r.startsWith("| D-12 |")) ?? "";
+
+  it("la decisión de la revisión repartida cuenta el modo de capturas: los tres datos, el artefacto y la advertencia", () => {
+    expect(decision).toContain("capturar-vistas.mjs");
+    for (const dato of ["`vistas`", "`rama`", "`entorno`"]) expect(decision).toContain(dato);
+    expect(decision).toContain("capturas-vistas");
+    expect(decision).toMatch(/un día/);
+    expect(decision).toMatch(/personas reales/);
+    expect(decision).toMatch(/caché de pnpm/);
+  });
+
+  /** Los renglones de comando de un comentario: sin la marca de comentario y con la barra de continuación. */
+  function comandosDeComentario(texto, desde, marca) {
+    const renglones = texto.split("\n");
+    const i = renglones.findIndex((r) => r.includes(desde));
+    expect(i, desde).toBeGreaterThanOrEqual(0);
+    const salida = [];
+    for (let j = i + 1; j < renglones.length; j++) {
+      const r = renglones[j];
+      if (!r.startsWith(marca)) break;
+      const sin = r.slice(marca.length);
+      if (!sin.startsWith("   ")) break;
+      salida.push(sin.slice(3));
+    }
+    return salida.join("\n");
+  }
+
+  const hayBash = spawnSync("bash", ["-c", "echo ok"], { encoding: "utf8" }).stdout?.trim() === "ok";
+  const sintaxis = (comandos) => spawnSync("bash", ["-n"], { input: comandos, encoding: "utf8" });
+
+  it.skipIf(!hayBash)("el uso del guion se puede copiar en una terminal de bash y empieza por construir el sitio", () => {
+    const comandos = comandosDeComentario(leer("scripts", "capturar-vistas.mjs"), " * Uso:", " *");
+    expect(comandos).toMatch(/^pnpm build$/m);
+    expect(comandos.indexOf("pnpm build")).toBeLessThan(comandos.indexOf("pnpm preview"));
+    const r = sintaxis(comandos);
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
+  });
+
+  it.skipIf(!hayBash)("el ejemplo del flujo se puede copiar en una terminal de bash", () => {
+    const comandos = comandosDeComentario(flujo, "que muestra `gh run list`):", "#");
+    expect(comandos).toContain("gh workflow run auditores.yml");
+    expect(comandos).toContain("gh run download");
+    expect(comandos).not.toMatch(/[<>]/);
+    const r = sintaxis(comandos);
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
+  });
+
+  it("la cabecera del guion avisa, bien arriba, que no se capturan datos de personas reales", () => {
+    const arriba = leer("scripts", "capturar-vistas.mjs").split("\n").slice(0, 12).join("\n");
+    expect(arriba).toMatch(/nunca/i);
+    expect(arriba).toMatch(/personas reales/);
   });
 });
