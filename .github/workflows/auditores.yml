@@ -41,7 +41,9 @@
 #     `VITE_CAMPANAS=1`. Solo nombres que empiezan con VITE_ y valores de letras, números y _ . : / -
 # El guion que saca las fotos es el de la rama desde donde se lanzó la corrida (la herramienta), y el
 # sitio que se fotografía es el de `rama`: dos copias del repositorio en la máquina. Ejemplo:
-#   gh workflow run auditores.yml --ref <rama-con-la-herramienta> -f rama=main #     -f entorno=VITE_CAMPANAS=1 -f vistas='[{"nombre":"portada","ruta":"/","ancho":1440,"alto":900,"tema":"light"}]'
+#   gh workflow run auditores.yml --ref <rama-con-la-herramienta> \
+#     -f rama=main -f entorno=VITE_CAMPANAS=1 \
+#     -f vistas='[{"nombre":"portada","ruta":"/","ancho":1440,"alto":900,"tema":"light"}]'
 #   gh run download <id> -n capturas-vistas -D capturas
 # Los datos de entrada nunca se escriben dentro de un comando: llegan por variables de entorno y se
 # validan antes de construir nada. No usa ningún secreto y los permisos son de solo lectura.

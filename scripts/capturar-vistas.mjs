@@ -56,9 +56,15 @@
  *     {"nombre":"sortear-150","ruta":"/?red=prueba#sortear","ancho":1280,"alto":900,"tema":"light",
  *      "pasos":[{"accion":"nombres","selector":"#ta","cantidad":150},{"accion":"esperar","selector":"#lista-cuenta"}]}
  *
- *   La espera de un sorteo de demostración, con la cuenta en marcha (hay 30 s de espera, la foto sale a los 4):
- *     {"nombre":"espera-demo","ruta":"/?demo=wheel&lead=30","ancho":1280,"alto":900,"tema":"dark",
- *      "esperar":"#wait-box","pausaMs":4000,"pasos":[{"accion":"desplazar","selector":"#wait-box"}]}
+ *   La espera en grande de un sorteo de demostración, con la cuenta en marcha (hay 45 s de espera y la
+ *   foto sale a los 4 de abrirla). La capa de la espera solo se abre tocando su botón, y ese botón no
+ *   hace nada hasta que el sello termina: por eso es clicHasta y no clic.
+ *     {"nombre":"espera-demo","ruta":"/?demo=wheel&lead=45","ancho":1280,"alto":900,"tema":"dark","pausaMs":4000,
+ *      "pasos":[{"accion":"esperar","selector":"#btn-espera"},{"accion":"clicHasta","selector":"#btn-espera","hasta":".espera-reloj"}]}
+ *
+ *   Lo mismo con 150 personas (?n= acepta de 2 a 2000):
+ *     {"nombre":"espera-demo-150","ruta":"/?demo=wheel&lead=45&n=150","ancho":1280,"alto":900,"tema":"dark","pausaMs":4000,
+ *      "pasos":[{"accion":"esperar","selector":"#btn-espera"},{"accion":"clicHasta","selector":"#btn-espera","hasta":".espera-reloj"}]}
  *
  *   El resultado de una demostración (sin animaciones, la ronda llega a los 3 s):
  *     {"nombre":"resultado-demo","ruta":"/?demo=wheel&instant=1&lead=3","ancho":1280,"alto":900,"tema":"light",
@@ -67,9 +73,12 @@
  *   Una página de lectura entera, en inglés y celular:
  *     {"nombre":"seguridad-en-390","ruta":"/seguridad.html","ancho":390,"alto":844,"idioma":"en","paginaEntera":true,"esperar":"main"}
  *
- * La espera con 150 nombres no se arma solo con pasos: la demostración usa siempre su lista
- * de ejemplo, el ensayo trae una fija y sellar una lista propia pide una cuenta. Para ver el
- * show con muchos nombres sirve la escena fija: "/?pose=wheel&n=150".
+ * Una lista propia con muchos nombres no llega a la espera con pasos: sellarla pide una cuenta.
+ * Para ver la espera o el show con muchas personas sirve la demostración con ?n=, como arriba, o la
+ * escena fija: "/?pose=wheel&n=150".
+ *
+ * Para ver una vista que falle a propósito (espera 30 s el selector y deja prueba-con-error-FALLO.png):
+ *     {"nombre":"prueba-con-error","ruta":"/","pausaMs":0,"esperar":"#no-existe"}
  */
 import { mkdirSync, readFileSync, appendFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
