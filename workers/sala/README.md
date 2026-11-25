@@ -302,6 +302,13 @@ La sala guarda el modo en la clave `identidad` de la sala, solo en esas campaña
   rechazo (`google-rechazado`), nunca el token.
 - **El correo a quien gana no se manda** en estas campañas, y el estado público lo dice con `"correo": false`. La línea no dice a
   quién escribir y la sala no guarda ningún dato que lo diga. Avisar por correo, y el reclamo del premio, son de otra etapa.
+- **Límite de este modo, a resolver antes de prenderlo en un evento con premios.** Quien gana y cierra la página no recibe ningún
+  aviso: se entera solo si su celular sigue abierto y consulta con su llave, o si quien organiza lo ve en su pantalla. Además la
+  línea sale de la sal de la sala, y esa sal se borra con ella a las 24 horas de crearla: pasado ese plazo nada permite volver de
+  una línea ganadora a una persona. Avisar a quien ya cerró la página exige guardar un dato que lleve de vuelta a la persona,
+  aunque sea cifrado y hasta el fin del reclamo, y eso choca con la regla de no guardar nada que la identifique. Reclamar el premio
+  exige además que la sala siga viva mientras dure el reclamo. Esta etapa no hace ninguna de las dos cosas a propósito. Mientras no
+  se decida cómo se entera quien gana, `DIFERIDA` queda en `"0"` en los eventos con premios.
 - **El interruptor apagado en medio de un evento** no toca lo que ya está anotado: la sala sigue mostrando el estado, el panel de
   quien organiza sigue cerrando, sellando y guardando el resultado. Solo dejan de andar el alta y la consulta propia.
 
