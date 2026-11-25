@@ -38,8 +38,8 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
     // El gancho es del juego elegido: la captura de la largada de la carrera, la misma que ya publica el selector.
     expect(c.querySelector<HTMLElement>(".espera-teaser")?.dataset.juego).toBe("race");
     for (const [i, t] of tarjetas(c).entries()) {
-      // Una sola imagen por tarjeta, la del tema (sin tema forzado ni matchMedia, el oscuro de siempre).
-      expect([...t.querySelectorAll("img")].map((img) => img.getAttribute("src"))).toEqual([`/juegos/selector/race.webp`]);
+      // Una sola imagen por tarjeta, la del tema (sin tema forzado ni sistema oscuro, la clara).
+      expect([...t.querySelectorAll("img")].map((img) => img.getAttribute("src"))).toEqual([`/juegos/selector/race-light.webp`]);
       // El lugar de cada uno en la lista sellada, para que la sala lo lea ("1 de 3").
       expect(t.textContent).toContain(`${i + 1} de 3`);
     }
