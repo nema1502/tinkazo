@@ -1077,6 +1077,22 @@
     font-weight: 800; font-size: clamp(14px, 1.7vw, 24px); white-space: nowrap;
   }
   .espera-pie { font-size: clamp(14px, 1.5vw, 18px); color: var(--muted); max-width: 60ch; }
+  /* La presentación de la lista sellada durante la cuenta (games-teaser.ts): una tarjeta por persona, solo si entran todas
+     (hasta 6 y, hasta 480 px de ancho, 2). La cantidad, no un recorte, cuida el alto: ninguna regla de acá corta, así que
+     ninguna tarjeta queda a medias. Sin presentación la caja queda vacía y no ocupa lugar. */
+  .espera-teaser-caja { max-width: 100%; }
+  .espera-teaser-caja:empty { display: none; }
+  .espera-teaser {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; margin: 4px 0 2px;
+  }
+  .espera-teaser-t { width: 100%; text-align: center; margin: 0; font-weight: 700; font-size: clamp(16px, 1.7vw, 22px); }
+  .espera-teaser-tarjeta {
+    display: inline-flex; align-items: center; gap: 7px; padding: 3px 14px 3px 4px;
+    border: 2px solid var(--ink); border-radius: 999px; background: var(--card); max-width: 100%;
+    font-size: clamp(14px, 1.4vw, 18px);
+  }
+  .espera-teaser-tarjeta .sel-img { display: block; width: 76px; height: 43px; object-fit: cover; border-radius: 6px; background: var(--field); flex-shrink: 0; }
+  .espera-teaser-tarjeta b { overflow-wrap: anywhere; }
   .espera-nadie { font-size: clamp(14px, 1.7vw, 22px); font-weight: 800; color: var(--ink); max-width: 46ch; text-wrap: balance; }
   .espera-ensayo {
     font-size: clamp(14px, 1.6vw, 22px); font-weight: 900; letter-spacing: 0.08em; max-width: 100%;
@@ -1127,6 +1143,8 @@
   .espectador-sigue { font-size: clamp(16px, 1.8vw, 22px); font-weight: 700; color: var(--ink2); max-width: 36ch; text-wrap: balance; margin-top: 6px; }
   .espectador-acc { display: flex; flex-wrap: wrap; gap: 10px 18px; justify-content: center; align-items: center; margin-top: 6px; }
   .espectador-acc button { min-height: 48px; font-size: 16px; }
+  .espectador-aviso { font-size: 16px; font-weight: 700; color: var(--ink2); max-width: 36ch; text-wrap: balance; margin-top: 8px; }
+  .espectador-aviso:empty { display: none; }
   .espectador-propio { display: inline-flex; align-items: center; min-height: 44px; font-size: 16px; font-weight: 700; color: var(--ink); }
   /* La vista de espectador: la misma espera, con el rótulo que dice que nadie la maneja desde acá. */
   .espectador .sticker { background: var(--teal); }
@@ -3269,6 +3287,14 @@
   @media (max-height: 560px) and (max-width: 999px) {
     .espera-juego.en-barra .espera-juego-n { display: none; }
   }
+  /* La presentación de la lista sellada se esconde en una pantalla baja (un celular acostado, un zoom de 200 %): el reloj y
+     los nombres primero. Va en su propio bloque, después del de la barra: las pruebas de la barra miran el de arriba. */
+  @media (max-height: 560px) {
+    .espera-teaser-caja { display: none; }
+  }
+  /* La capa también la esconde cuando con ella el reloj y las tres cintas no entran al tamaño completo (`ajustar`, espera.ts):
+     ahí lo que se lee desde el fondo de la sala va primero. */
+  .espera[data-sin-teaser] .espera-teaser-caja { display: none; }
   /* En un celular la barra de arriba (calcomanía, Prueba y Volver) va en el flujo y no fija. Fija, la capa le reservaba
      72 px de relleno, pensados para una calcomanía de un renglón: con tres (Todavía nadie sabe quién gana, a 390 px) la
      calcomanía llegaba más abajo y tapaba la cuenta, y a 320 px el título. En el flujo su alto empuja a todo lo demás, y

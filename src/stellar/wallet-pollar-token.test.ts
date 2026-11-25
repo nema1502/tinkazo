@@ -15,7 +15,7 @@ vi.mock("@pollar/core", async (orig) => {
   return { ...real, PollarClient: clienteFalso(h) };
 });
 
-const { pollarWallet, TOPE_TOKEN_MS } = await import("./wallet-pollar");
+const { pollarWallet, TOPE_TOKEN_MS, VENTANA_TOKEN_MS } = await import("./wallet-pollar");
 
 const P = "GDVZABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRS5ZLE";
 const TOKEN = "eyJ0b2tlbi1kZS1wcnVlYmEtbm8tZXMtcmVhbA.parte-dos.parte-tres";
@@ -65,28 +65,52 @@ describe("el token de la sesión", () => {
     await expect(p).resolves.toBe(TOKEN);
   });
 
-  it("si no se verifica en 8 segundos, no hay token (y no queda escuchando)", async () => {
+  it("si no se verifica en la primera espera, la ventana sigue: solo el fin paciente cierra y no queda escuchando", async () => {
     vi.useFakeTimers();
     const p = pollarWallet.tokenDeSesion();
     await vi.advanceTimersByTimeAsync(TOPE_TOKEN_MS - 10);
     emitirSesion(h, { verificada: false });
     await vi.advanceTimersByTimeAsync(20);
-    await expect(p).resolves.toBeNull();
+    // La verificación falsa no entrega ni cierra: la ventana paciente sigue.
+    let listo = false;
+    void p.then(() => { listo = true; });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(listo).toBe(false);
     expect(TOPE_TOKEN_MS).toBe(8_000);
+    await vi.advanceTimersByTimeAsync(VENTANA_TOKEN_MS);
+    await expect(p).resolves.toBeNull();
     expect(h.oyentes.sesion.size).toBe(0);
   });
 
-  it("sin sesión abierta, o con un token vacío, no hay token", async () => {
+  it("quien pide su propio tope lo tiene: la ventana paciente es solo de la espera de siempre", async () => {
+    vi.useFakeTimers();
+    // La sesión sigue abierta pero sin verificar: con el tope de siempre la ventana sigue, con uno propio cierra a su hora.
+    const propio = pollarWallet.tokenDeSesion(2_000);
+    await vi.advanceTimersByTimeAsync(2_001);
+    await expect(propio).resolves.toBeNull();
+    expect(h.oyentes.sesion.size).toBe(0);
+    const deSiempre = pollarWallet.tokenDeSesion();
+    let listo = false;
+    void deSiempre.then(() => { listo = true; });
+    await vi.advanceTimersByTimeAsync(TOPE_TOKEN_MS + 2_001);
+    expect(listo).toBe(false);
+    await vi.advanceTimersByTimeAsync(VENTANA_TOKEN_MS);
+    await expect(deSiempre).resolves.toBeNull();
+  });
+
+  it("sin sesión abierta, o con un token vacío, no hay token (la sesión muerta sale en el primer vencido)", async () => {
     vi.useFakeTimers();
     h.verificada = true;
     h.paso = "idle";
     const sinSesion = pollarWallet.tokenDeSesion();
+    // El kit ya dice que la sesión no existe: al primer vencido sale null, sin gastar la ventana.
     await vi.advanceTimersByTimeAsync(TOPE_TOKEN_MS + 10);
     await expect(sinSesion).resolves.toBeNull();
     h.paso = "authenticated";
     h.token = "   ";
     const vacio = pollarWallet.tokenDeSesion();
-    await vi.advanceTimersByTimeAsync(TOPE_TOKEN_MS + 10);
+    // Con la sesión viva y el token vacío, la ventana paciente agota: null al fin.
+    await vi.advanceTimersByTimeAsync(VENTANA_TOKEN_MS + 10);
     await expect(vacio).resolves.toBeNull();
   });
 

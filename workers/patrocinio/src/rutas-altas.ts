@@ -96,6 +96,7 @@ import { ErrorDeRed, type Red } from "./red";
 import type { Respuesta } from "./servicio";
 import { type SorteoEnRed, leerNumeroDeSorteo } from "./sorteadora";
 import { FIRMAS_SIN_EXPLICAR_MAX, contarFirmas, patrocinioEsperado } from "./vigilancia";
+import { VENTANA_CUENTAS_MINUTOS } from "./lectura-cuentas";
 
 /** Códigos fallidos por persona y por hora. Pasado esto, 429 hasta que pase la hora. */
 export const FALLIDOS_POR_USUARIO_HORA = 5;
@@ -623,7 +624,9 @@ export class PuertaAltas {
     const { cfg, cupos, pollar } = this.d;
     if (cfg.red !== "mainnet" || !cfg.altas) return {};
     const desde = this.reloj() - VENTANA_FIRMAS_MS;
-    const [mov, pat] = pollar ? await Promise.all([pollar.movimientos(desde), pollar.patrocinio()]) : ([{ ok: false }, { ok: false }] as const);
+    // Las cuentas nuevas de la última hora salen de su propia consulta de uso por ventana (exacta, una por minuto como
+    // mucho): la página de movimientos de los créditos no sirve para contar, la llenan las firmas.
+    const [mov, pat, cue] = pollar ? await Promise.all([pollar.movimientos(desde), pollar.patrocinio(), pollar.cuentasDeLaUltimaHora()]) : ([{ ok: false }, { ok: false }, { ok: false }] as const);
     const e = cupos.firmasExplicadas(desde, { sorteos: !cfg.sorteoServidor });
     // La compra con QR: hasta 9 firmas por compra con movimiento en el día y una por cada pago con el saldo propio.
     const q = this.d.compras?.firmas(desde) ?? { compras: 0, pagosConSaldo: 0 };
@@ -638,6 +641,9 @@ export class PuertaAltas {
     return {
       firmasSinExplicar: sinExplicar,
       firmas: { cobradas: cobradas?.firmas ?? null, explicadas, ...e, ...q, completo: cobradas?.completo ?? null, desde },
+      // Las cuentas nuevas y las activaciones de los últimos 60 minutos corridos (issue 177): con ellas el vigilante avisa
+      // las rondas de cuentas que pasan el umbral. Si no se pudo contar, null: nunca un cero.
+      cuentas: cue.ok ? { minutos: VENTANA_CUENTAS_MINUTOS, nuevas: cue.nuevas, activaciones: cue.activaciones } : null,
       // Aparte de `firmas`, y solo con los pagos prendidos o con alguno en el día: sin ellos, la vigilancia es la de siempre.
       ...(pagosPrendidos(cfg) || pg.premios + pg.retiros > 0 ? { firmasPagos: pg } : {}),
       patrocinioPollar: patrocinio,

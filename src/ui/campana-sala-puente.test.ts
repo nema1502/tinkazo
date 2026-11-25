@@ -315,14 +315,14 @@ describe("volver a abrir y dejar la campaña", () => {
     expect(pasoDelPuente()).toEqual({ paso: "nada" });
   });
 
-  it("dejar la campaña le avisa a la herramienta", async () => {
+  it("armar otra campaña desde la lista cerrada le avisa a la herramienta", async () => {
     const m = mundo();
     espiar(m);
     const olvidar = vi.fn();
     m.deps.alOlvidar = olvidar;
     const p = nuevoPanel(m);
     await cerrarConDos(m, p);
-    boton(p, "Elegir otro archivo").click();
+    boton(p, "Armar otra campaña").click();
     boton(p, "Sí, dejarla").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
     expect(olvidar).toHaveBeenCalledTimes(1);

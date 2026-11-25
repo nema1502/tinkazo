@@ -11,9 +11,10 @@ import { entornoDelBuild } from "./venta-piloto";
 import { errorKey, esDeRed } from "./errores";
 import type { LecturaDeCotizacion, LoQueFalta, PasoDeVerificacion, PrecioDeCarga, QueSeAprueba, RutaDeBolivia } from "./rampa-pollar";
 import { ingresoPlanB } from "./ingreso-bandera";
-import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
+import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, VENTANA_RETOMA_MS, VENTANA_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 import type { SignedTx, WalletAdapter } from "./wallet";
-import { contarEntrada, contarVentanaDeGoogle, marcarEntrada, tomarEntrada } from "../contar";
+import { contarVentanaDeGoogle, marcarEntrada, tomarEntrada } from "../contar";
+import { contarEntradaConRed, contarPasoOficial } from "../ui/contadores";
 import { ceremoniaDelNavegador, hayPasskeys } from "./passkey";
 import { enNavegadorDeApp } from "../navegador";
 import { cargaOpcional } from "../carga-opcional";
@@ -111,8 +112,15 @@ export interface Profile {
   avatar: string;
 }
 
-/** Cuánto se espera al SDK a que lea su sesión guardada, que no necesita la red salvo para renovar una vencida. */
+/**
+ * Cuánto se espera a la primera mirada de que la sesión de Pollar quedó leída, que no necesita la red salvo para renovar
+ * una vencida. Si el proveedor todavía no contestó, el retomo sigue esperando (`VENTANA_RETOMA_MS`): no entrega
+ * "no hay cuenta" a la primera.
+ */
 export const LISTO_MS = 8_000;
+
+/** Cuánto sigue mirando al proveedor la retoma de la cuenta después de la primera mirada: `pollar-config.ts`. */
+export { VENTANA_RETOMA_MS };
 
 /** Lo que quedó de una entrada que no se completó, para que la pantalla diga qué pasó y se pueda reintentar. */
 export const ENTRADA_BLOQUEADA = "popup-blocked";
@@ -1097,8 +1105,8 @@ function conTope<T>(p: Promise<T>, ms: number): Promise<T> {
 /** Cuánto se espera, al cerrar sesión, a sacar este navegador de la cuenta, y a una confirmación que esté en curso. */
 export const TOPE_SACAR_NAVEGADOR_MS = 10_000;
 export const TOPE_CONFIRMACION_EN_CURSO_MS = 20_000;
-/** Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token (`tokenDeSesion`): `pollar-config.ts`. */
-export { TOPE_TOKEN_MS };
+/** Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token (`tokenDeSesion`), y hasta cuándo en total: `pollar-config.ts`. */
+export { TOPE_TOKEN_MS, VENTANA_TOKEN_MS };
 
 /**
  * ¿Se puede usar el desbloqueo de este celular o compu (huella, cara o clave) para la cuenta? Hace falta que el navegador
@@ -2073,11 +2081,23 @@ class PollarWallet implements SubmittingWallet {
    * Retoma la sesión al recargar la página (o al volver del redirect de Google, en el SDK anterior).
    *
    * Le pregunta al SDK, que lee su propia sesión guardada al armarse (`ready()`): no hay que esperar ocho segundos a ver
-   * si aparece una cuenta que no existe. Y si el SDK terminó y no tiene ninguna (la sesión venció, se borró, o la marca
-   * de acá era de otra época), la marca se olvida: antes quedaba para siempre y cada carga repetía ocho segundos de
-   * "Retomando…" para caer en "Para sellar, entrá con tu cuenta" (diagnóstico del 26 de octubre de 2026).
+   * si aparece una cuenta que no existe, ni volver a pedir entrar. Con la wifi lenta de un stand, el proveedor puede
+   * tardar más de la primera mirada en contestar: entonces el retomo tiene su ventana paciente (`VENTANA_RETOMA_MS`),
+   * con espera creciente, y abre la cuenta apenas llega, sin que la persona toque nada. Y si el SDK terminó y no tiene
+   * ninguna cuenta (la sesión venció, se borró, o la marca de acá era de otra época), la marca se olvida: antes quedaba
+   * para siempre y cada carga repetía ocho segundos de "Retomando…" para caer en "Para sellar, entrá con tu cuenta"
+   * (diagnóstico del 26 de octubre de 2026). Si el proveedor sigue afuera después de la ventana, sale con `null` y la
+   * marca en pie: salida honesta, y la próxima recarga lo vuelve a intentar.
+   *
+   * La pantalla no espera la ventana entera: cuando la primera mirada vence sin respuesta se avisa por `cuandoTarda`
+   * (una sola vez) y la cabecera se suelta como siempre, a los 8 segundos. La retoma sigue por detrás y, si el proveedor
+   * contesta, devuelve la cuenta: quien llama decide si todavía la abre (`restorePollar` de `wallet-ui.ts`).
+   *
+   * Solo la retoma de la cabecera puede seguir por detrás sin tener a nadie esperando. Quien sí espera la respuesta
+   * (`asegurarLaSesion`, la cuenta recordada del registro de equipos, la sala de campaña) pasa `ventanaMs: LISTO_MS`:
+   * una sola mirada de 8 segundos, como siempre, sin ventana paciente y sin aviso.
    */
-  async restore(): Promise<string | null> {
+  async restore(opciones: { cuandoTarda?: () => void; ventanaMs?: number } = {}): Promise<string | null> {
     let via: string | null = null;
     try {
       via = readIntent();
@@ -2091,7 +2111,7 @@ class PollarWallet implements SubmittingWallet {
     // Retomar la sesión son pedidos al servicio de cuentas (validarla, renovarla): un rechazo por límite queda anotado, así la
     // página del celular lo dice con la verdad. El mirador vive lo que vive el cliente.
     this.#sinMirarLimites ??= mirarLimites(client, (segundos) => this.anotarLimite(segundos));
-    const listo = await Promise.race([client.ready().then(() => true, () => false), new Promise<boolean>((r) => setTimeout(() => r(false), LISTO_MS))]);
+    const listo = await this.#esperarElListo(client, opciones.cuandoTarda, opciones.ventanaMs ?? VENTANA_RETOMA_MS);
     if (listo) this.#leidos.add(client);
     const wallet = client.getWallet();
     this.address = wallet?.address ?? null;
@@ -2100,9 +2120,43 @@ class PollarWallet implements SubmittingWallet {
       if (!(await this.#marcaViva(client, listo)) && !this.#entrando) this.#olvidarMarca();
       return null;
     }
-    // Volvió de Google con la cuenta: para el contador es una cuenta conectada, no una sesión retomada.
-    if (tomarEntrada()) contarEntrada(this.#via === "email" ? "email" : "google");
+    // Volvió de Google con la cuenta: para el contador es una cuenta conectada, no una sesión retomada. La red va con
+    // la entrada (issue #83): Google en la red principal y en prueba se suman por separado.
+    if (tomarEntrada()) contarEntradaConRed(this.#via === "email" ? "email" : "google", network.name);
     return this.address;
+  }
+
+  /**
+   * Espera paciente a que el kit termine de leer su sesión (`restore`): la primera mirada espera `LISTO_MS` y, si el
+   * proveedor todavía no contestó, avisa una vez por `cuandoTarda` y sigue con la ventana paciente (`VENTANA_RETOMA_MS`),
+   * con espera creciente. Cada vuelta se gana apenas el proveedor contesta, aunque el temporizador siga andando; el
+   * temporizador solo acota. Si el kit falla, sale enseguida con falso, como siempre, sin avisar que tarda.
+   */
+  async #esperarElListo(client: PollarClient, cuandoTarda: (() => void) | undefined, ventana: number): Promise<boolean> {
+    const ready = client.ready().then(() => "listo" as const, () => "falla" as const);
+    let gastado = 0;
+    let pausa = LISTO_MS;
+    for (;;) {
+      const ancho = Math.min(pausa, ventana - gastado);
+      let reloj: ReturnType<typeof setTimeout> | undefined;
+      const vence = new Promise<"vence">((r) => {
+        reloj = setTimeout(() => r("vence"), ancho);
+      });
+      const veredicto = await Promise.race([ready, vence]);
+      clearTimeout(reloj);
+      if (veredicto === "listo") return true;
+      if (veredicto === "falla") return false;
+      if (gastado === 0 && ventana > ancho) {
+        try {
+          cuandoTarda?.();
+        } catch {
+          /* soltar la pantalla no puede romper la retoma */
+        }
+      }
+      gastado += ancho;
+      if (gastado >= ventana) return false;
+      pausa = Math.min(pausa * 2, ventana - gastado);
+    }
   }
 
   /** Mira lo que el SDK guardó (`pollar:<huella>:session`) para saber si la marca de esta app sigue valiendo. */
@@ -3542,6 +3596,7 @@ class PollarWallet implements SubmittingWallet {
     await client.refreshWalletState().catch(() => null);
     if (cuentaCreada(client.getWallet())) {
       memoria.activacion = true;
+      contarPasoOficial("activada", network.name);
       return "activada";
     }
     // 3. El tope de votos fallados de esta pestaña.
@@ -3618,6 +3673,7 @@ class PollarWallet implements SubmittingWallet {
       }
       memoria.activacion = true;
       avisarCambioDeLaCuenta();
+      contarPasoOficial("activada", network.name);
       return "activada";
     }
     if (votamos) sumarVotoFallado();
@@ -3670,6 +3726,8 @@ class PollarWallet implements SubmittingWallet {
     if (activacion === "lista") memoria.activacion = true;
     const prot = proteccion ?? { proteccion: "lista" as const, correoConfirmado: false, tieneLlaves: false, unicoNavegador: false, correoDeLaCuenta: null };
     if (prot.proteccion === "lista") memoria.proteccion = true;
+    // El paso de la cuenta (issue #83): la lectura de verdad dijo que la cuenta quedó lista por todo.
+    if (activacion === "lista" && prot.proteccion === "lista") contarPasoOficial("lista", network.name);
     return { activacion, ...prot };
   }
 
@@ -3892,7 +3950,8 @@ class PollarWallet implements SubmittingWallet {
       }
       this.soltarElCliente();
     }
-    const dir = await this.restore();
+    // Quien pide la sesión espera la respuesta: la primera mirada de 8 segundos y nada más. La paciencia es de la cabecera.
+    const dir = await this.restore({ ventanaMs: LISTO_MS });
     this.#mirarLaLlave();
     return dir;
   }
@@ -4003,12 +4062,17 @@ class PollarWallet implements SubmittingWallet {
 
   /**
    * El token de la sesión de Pollar, solo con la sesión verificada por Pollar (`verified: true`): una sesión que el kit
-   * retomó de lo guardado y todavía no revalidó no sirve. Si no está verificada, espera hasta `tope` a que lo esté; si
-   * no, `null`. Es lo que pide el servidor de las altas (`alta-api.ts`) para saber quién es. No se guarda ni se anota:
-   * se pide cada vez, y nunca va en una dirección, en la consola ni en un mensaje de error. Sin token no se le pregunta
-   * nada al servidor. No toca la firma ni lo que se aprueba: solo lee la sesión.
+   * retomó de lo guardado y todavía no revalidó no sirve. Si no está verificada, espera: la primera mirada hasta
+   * `tope`; si cuando vence el kit dice que la sesión sigue abierta pero sin verificar, y quien pide no puso su propio
+   * tope, la ventana paciente (`VENTANA_TOKEN_MS`, issue 88) con espera creciente: una sesión recién creada es justo la que tarda en verificarse,
+   * y entregar `null` al primer vencido tiraba al paso «Dejá tu cuenta lista» a ofrecer «Entrar de nuevo» a quien ya
+   * entró. Cuando el kit dice que la sesión ya no existe, sí sale con `null` al toque: ahí conviene entrar de nuevo. No
+   * borra nunca la marca de la sesión. Es lo que pide el servidor de las altas (`alta-api.ts`) para saber quién es. No
+   * se guarda ni se anota: se pide cada vez, y nunca va en una dirección, en la consola ni en un mensaje de error. Sin
+   * token no se le pregunta nada al servidor. No toca la firma ni lo que se aprueba: solo lee la sesión.
    */
-  tokenDeSesion(tope = TOPE_TOKEN_MS): Promise<string | null> {
+  tokenDeSesion(topeDeQuienPide?: number): Promise<string | null> {
+    const tope = topeDeQuienPide ?? TOPE_TOKEN_MS;
     const client = this.#client;
     if (!client) return Promise.resolve(null);
     const deLaSesion = (s: unknown): string | null => {
@@ -4026,8 +4090,14 @@ class PollarWallet implements SubmittingWallet {
     if (ya) return Promise.resolve(ya);
     if (typeof client.onAuthStateChange !== "function") return Promise.resolve(null);
     return new Promise<string | null>((resolve) => {
+      // La ventana paciente es de la espera de siempre (el paso de la cuenta). Quien pide su propio tope, como la lectura
+      // del celular o la sala de campaña, tiene exactamente el suyo: ni más corto ni estirado a la ventana.
+      const total = topeDeQuienPide === undefined ? Math.max(tope, VENTANA_TOKEN_MS) : tope;
+      let gastado = 0;
+      let pausa = tope;
       let listo = false;
       let soltar: (() => void) | null = null;
+      let reloj: ReturnType<typeof setTimeout> | undefined;
       const terminar = (v: string | null): void => {
         if (listo) return;
         listo = true;
@@ -4039,7 +4109,37 @@ class PollarWallet implements SubmittingWallet {
         }
         resolve(v);
       };
-      const reloj = setTimeout(() => terminar(null), tope);
+      /** Cada vencido vuelve a mirar la sesión de verdad (`getAuthState`), no solo a los avisos: si el kit dice que la
+       * sesión ya no existe, no hay token y se sale; si sigue abierta sin verificar y queda ventana paciente, se sigue
+       * esperando con espera creciente. */
+      const alVencer = (): void => {
+        let viva: boolean;
+        let tk: string | null = null;
+        try {
+          const s = client.getAuthState();
+          viva = (s as { step?: unknown } | null)?.step === "authenticated";
+          if (viva) tk = deLaSesion(s);
+        } catch {
+          terminar(null);
+          return;
+        }
+        if (!viva) {
+          terminar(null);
+          return;
+        }
+        if (tk) {
+          terminar(tk);
+          return;
+        }
+        gastado += pausa;
+        if (gastado >= total) {
+          terminar(null);
+          return;
+        }
+        pausa = Math.min(pausa * 2, total - gastado);
+        reloj = setTimeout(alVencer, pausa);
+      };
+      reloj = setTimeout(alVencer, pausa);
       try {
         // El kit repite el estado al suscribirse: puede contestar antes de que `soltar` exista.
         soltar = client.onAuthStateChange((s) => {
@@ -4141,6 +4241,7 @@ class PollarWallet implements SubmittingWallet {
   async protegerConPasskey(): Promise<boolean> {
     const client = await this.#ensureClient();
     const s = await client.cosign.recovery.addPasskey({ name: "Tinkazo" });
+    if (s.configured) contarPasoOficial("protegida", network.name);
     return s.configured;
   }
 
@@ -4154,6 +4255,7 @@ class PollarWallet implements SubmittingWallet {
   async confirmarCodigoDeProteccion(code: string): Promise<boolean> {
     const client = await this.#ensureClient();
     const s = await client.cosign.recovery.confirmEmail(code);
+    if (s.configured) contarPasoOficial("protegida", network.name);
     return s.configured;
   }
 }

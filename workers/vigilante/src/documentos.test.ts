@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { asuntoDeClave, mensajeDeAlerta } from "./mensaje";
+import { asuntoDeClave, mensajeDeAlerta, mensajeDeCuentas } from "./mensaje";
 import { estadoBien } from "./mundo-falso";
 
 const raiz = fileURLToPath(new URL("../../../", import.meta.url));
@@ -161,12 +161,36 @@ describe("la hoja de operación", () => {
       "respuesta-invalida",
       "sin-lectura",
       "vigilante-sin-clave",
+      "cuentas-sin-conteo",
     ];
     for (const clave of claves) {
       const asunto = asuntoDeClave(clave);
       expect(asunto, clave).not.toBeNull();
       expect(seccion, clave).toContain(`| **${asunto}** |`);
     }
+  });
+
+  it("las filas del aviso de cuentas nuevas dicen qué paso frena la creación de cuentas y que pausar las altas no lo hace", () => {
+    for (const asunto of ["Muchas cuentas nuevas en una hora", "Muchas activaciones en una hora", "Muchas cuentas nuevas y activaciones en una hora"]) {
+      const fila = seccion.split(String.fromCharCode(10)).find((l) => l.startsWith(`| **${asunto}** |`));
+      expect(fila, asunto).toBeDefined();
+      expect(fila, asunto).toContain("Pausar las altas del portero no frena esto");
+      expect(fila, asunto).toContain("panel de Pollar");
+      expect(fila, asunto).toContain("quien mantiene el proyecto");
+    }
+    // Los asuntos de las filas son los que de verdad salen.
+    const aviso = (desbordados: Parameters<typeof mensajeDeCuentas>[0]["desbordados"]) =>
+      mensajeDeCuentas({ desbordados }, { estado: estadoBien(), ahora: new Date(0), portero: "https://pm.tinkazo.app" }).asunto;
+    expect(aviso([{ motivo: "cuentas-nuevas", hubo: 250, umbral: 200 }])).toBe("Muchas cuentas nuevas en una hora");
+    expect(aviso([{ motivo: "activaciones", hubo: 250, umbral: 200 }])).toBe("Muchas activaciones en una hora");
+    expect(aviso([{ motivo: "cuentas-nuevas", hubo: 250, umbral: 200 }, { motivo: "activaciones", hubo: 250, umbral: 200 }])).toBe("Muchas cuentas nuevas y activaciones en una hora");
+  });
+
+  it("la fila de las cuentas que no se cuentan habla de la consulta de uso y no de la lista de movimientos", () => {
+    const fila = seccion.split(String.fromCharCode(10)).find((l) => l.startsWith("| **No se están contando las cuentas nuevas** |"));
+    expect(fila).toBeDefined();
+    expect(fila).not.toMatch(/movimientos/);
+    expect(fila).toMatch(/consulta de uso/);
   });
 
   it("la fila del arreglo y del recordatorio están explicadas", () => {
@@ -296,6 +320,14 @@ describe("lo que la revisión lee del portero, tal como lo manda", () => {
     const vigilancia = rutas.slice(desdeVigilancia, rutas.indexOf("\n  async ", desdeVigilancia + 1));
     expect(vigilancia, "vigilancia() del portero cambió de forma").toContain("const q = this.d.compras?.firmas(desde) ?? { compras: 0, pagosConSaldo: 0 };");
     expect(vigilancia).toContain("firmas: { cobradas: cobradas?.firmas ?? null, explicadas, ...e, ...q, completo: cobradas?.completo ?? null, desde },");
+    // El bloque cuentas (issue 177): de la consulta de uso del proveedor por ventana de tiempo (los últimos 60 minutos), no de la
+    // página de movimientos, para que el vigilante avise las rondas de cuentas. Si no se pudo contar es null, no cero.
+    expect(rutas).toContain('import { VENTANA_CUENTAS_MINUTOS } from "./lectura-cuentas";');
+    expect(vigilancia).toContain("pollar.cuentasDeLaUltimaHora()");
+    expect(vigilancia).toContain("cuentas: cue.ok ? { minutos: VENTANA_CUENTAS_MINUTOS, nuevas: cue.nuevas, activaciones: cue.activaciones } : null,");
+    // La ventana que cuenta el portero es la que lee el vigilante.
+    expect(leer("workers/patrocinio/src/lectura-cuentas.ts")).toContain("export const VENTANA_CUENTAS_MINUTOS = 60;");
+    expect(leer("workers/vigilante/src/cuentas.ts")).toContain("export const VENTANA_CUENTAS_MINUTOS = 60;");
     expect(leer("workers/patrocinio/src/compras.ts")).toContain("firmas(desde: number): { compras: number; pagosConSaldo: number } {");
     // Las dos partes llegan a /v1/patrocinio/estado junto con lo de servicio.ts.
     const index = leer("workers/patrocinio/src/index.ts");
@@ -381,5 +413,20 @@ describe("lo que se publica", () => {
       const usuario = ["Nic", "olas"].join("");
       expect(texto, ruta).not.toMatch(new RegExp(`[A-Z]:[\\\\/]+${usuario}|${privado}`));
     }
+  });
+});
+
+describe("el umbral de las cuentas nuevas por hora: el valor de siempre se dice igual en el código, la configuración y el README", () => {
+  it("son 200 por hora, y el README lo dice junto con la variable del cupo del evento", () => {
+    expect(wrangler).toMatch(/^CUENTAS_UMBRAL = "200"\r?$/m);
+    expect(readme).toMatch(/`CUENTAS_UMBRAL`[^\n]*`200` por defecto/);
+    expect(readme).toMatch(/`CUENTAS_UMBRAL` \(200 por hora/);
+    expect(readme).not.toMatch(/`60` por defecto/);
+  });
+
+  it("el cupo del evento reemplaza al umbral y no se suma: el README y la configuración lo dicen, y dicen que hoy no avisa por activaciones", () => {
+    expect(readme).toMatch(/no se suma/);
+    expect(wrangler).toMatch(/no se suma/);
+    expect(readme).toMatch(/activaciones está apagado/);
   });
 });

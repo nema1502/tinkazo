@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { existsSync, readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { opcionesHtml, tieneCaptura, type OpcionDeJuego } from "./espera";
 import { SELECTOR } from "./recomendar";
 
@@ -325,5 +325,285 @@ describe("el nombre del juego en la barra de arriba de la espera", () => {
     const regla = css.slice(baja, css.indexOf("@media", baja + 10));
     expect(regla).not.toContain("display: none");
     expect(regla).toContain(".espera-juego-n { font-size: clamp(16px, 3.6vh, 22px); }");
+  });
+});
+
+/**
+ * La vista previa en movimiento (issue #116): en el panel de elección, la captura estática puede dejar su lugar unos
+ * segundos a la miniatura del propio juego (el canvas del juego, chico, sin audio y sin interacción), montada recién
+ * cuando la tarjeta entra en la vista y pausada al salir, con la captura volviendo a su lugar al terminar. Nada se
+ * baja ni se monta fuera de vista, con movimiento reducido no hay nada en movimiento, y un juego sin vista registrada
+ * queda con su captura de siempre (la elección y el orden no cambian).
+ *
+ * Las funciones se cargan aparte (`await import`) para que una función que falta no tire abajo las pruebas de arriba:
+ * el fallo de RED tiene que ser el de la función que falta y no un módulo roto entero.
+ */
+describe("la vista previa en movimiento del panel de elección", () => {
+  const espera = (): Promise<typeof import("./espera")> => import("./espera");
+
+  /** Lo que un juego registrado dejó hecho: cuántas veces se lo llamó y con qué marco. */
+  interface Llamadas {
+    montar: number;
+    pausar: number;
+    reanudar: number;
+    parar: number;
+    marcos: HTMLCanvasElement[];
+    control: { pausar(): void; reanudar(): void; parar(): void };
+  }
+  /** Un juego con vista previa que anota todo lo que el panel le pide. */
+  const vista = (game: string, segundos = 4): { v: import("./espera").VistaPreviaJuego; llamadas: Llamadas } => {
+    const llamadas: Llamadas = {
+      montar: 0,
+      pausar: 0,
+      reanudar: 0,
+      parar: 0,
+      marcos: [],
+      control: { pausar: () => llamadas.pausar++, reanudar: () => llamadas.reanudar++, parar: () => llamadas.parar++ },
+    };
+    return {
+      v: { game, segundos, montar: (marco: HTMLCanvasElement) => (llamadas.montar++, llamadas.marcos.push(marco), llamadas.control) },
+      llamadas,
+    };
+  };
+
+  /** Un IntersectionObserver falso: anota lo observado y deja disparar la vista a mano. */
+  const ioFalso = (() => {
+    class IOFalso {
+      static ultimo: IOFalso | null = null;
+      static cortado = false;
+      private enObs: Set<Element> = new Set();
+      constructor(private cb: IntersectionObserverCallback, _opts?: IntersectionObserverInit) {
+        IOFalso.ultimo = this;
+        IOFalso.cortado = false;
+      }
+      observe(el: Element): void {
+        this.enObs.add(el);
+      }
+      unobserve(el: Element): void {
+        this.enObs.delete(el);
+      }
+      disconnect(): void {
+        this.enObs.clear();
+        IOFalso.cortado = true;
+      }
+      /** La vista del navegador, a mano: `en` dice si está a la vista y `parte` la fracción visible. */
+      aviso(tarjetas: Element[], en: boolean, parte: number): void {
+        const vistas = tarjetas.filter((t) => this.enObs.has(t));
+        this.cb(vistas.map((t) => ({ target: t, isIntersecting: en, intersectionRatio: parte } as IntersectionObserverEntry)), this as unknown as IntersectionObserver);
+      }
+    }
+    return IOFalso;
+  })();
+
+  /** El panel como lo arma la espera: la lista de tarjetas dentro del panel. */
+  const panelDe = (juegos: OpcionDeJuego[]): HTMLElement => {
+    const panel = document.createElement("div");
+    panel.innerHTML = `<div class="espera-juegos-lista">${opcionesHtml(juegos)}</div>`;
+    document.body.append(panel);
+    return panel;
+  };
+  const tarjetaDe = (panel: HTMLElement, game: string): HTMLElement =>
+    panel.querySelector(`[data-game="${game}"]`) as HTMLElement;
+
+  /** En el entorno de pruebas no hay IntersectionObserver ni matchMedia: los dos entran con su doble, a mano. */
+  let reducido = false;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("IntersectionObserver", ioFalso);
+    vi.stubGlobal("matchMedia", (pregunta: string) => ({ matches: pregunta.includes("prefers-reduced-motion") && reducido }));
+    ioFalso.ultimo = null;
+    ioFalso.cortado = false;
+  });
+  afterEach(async () => {
+    // El registro de vistas es del módulo: sin limpieza, una prueba contamina a la siguiente.
+    const m = await espera();
+    m.pararVistasPrevias();
+    for (const game of ["race", "sapo", "fantasma"]) m.quitarVistaPrevia(game);
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("sin vista registrada no cambia nada: la tarjeta queda con su pareja de capturas y sin canvas", async () => {
+    const m = await espera();
+    const panel = panelDe([fila()]);
+    m.armarVistasPrevias(panel);
+    expect(ioFalso.ultimo, "sin vistas registradas ni siquiera hay que mirar la vista").toBeNull();
+    const tarjeta = tarjetaDe(panel, "race");
+    expect(tarjeta.querySelectorAll("img")).toHaveLength(2);
+    expect(tarjeta.querySelector("canvas")).toBeNull();
+  });
+
+  it("la vista registrada a mano se encuentra por el juego y se la puede quitar", async () => {
+    const m = await espera();
+    const { v, llamadas } = vista("race");
+    expect(m.previaDe("race")).toBeNull();
+    m.registrarVistaPrevia(v);
+    expect(m.previaDe("race")?.montar).toBe(v.montar);
+    // Un segundo registro del mismo juego reemplaza (no se acumulan dos).
+    const otra = vista("race");
+    m.registrarVistaPrevia(otra.v);
+    expect(m.previaDe("race")?.montar).toBe(otra.v.montar);
+    m.pararVistasPrevias();
+    expect(llamadas.montar, "registrar no monta nada por sí solo").toBe(0);
+    m.quitarVistaPrevia("race");
+    expect(m.previaDe("race")).toBeNull();
+  });
+
+  it("nada pesado fuera de vista: con la tarjeta fuera de la vista la vista previa no se monta", async () => {
+    const m = await espera();
+    const { v, llamadas } = vista("race");
+    m.registrarVistaPrevia(v);
+    const panel = panelDe([fila(), fila({ game: "sapo", nombre: "Sapo", rango: "6–50", recomendado: false })]);
+    m.armarVistasPrevias(panel);
+    expect(ioFalso.ultimo).not.toBeNull();
+    vi.advanceTimersByTime(60_000);
+    expect(llamadas.montar, "montar solo cuando entra en vista").toBe(0);
+    expect(tarjetaDe(panel, "race").querySelector("canvas")).toBeNull();
+  });
+
+  it("solo el juego en vista monta su miniatura: canvas chico, capturas escondidas, sin interacción ni audio", async () => {
+    const m = await espera();
+    const race = vista("race");
+    const sapo = vista("sapo");
+    m.registrarVistaPrevia(race.v);
+    m.registrarVistaPrevia(sapo.v);
+    const panel = panelDe([fila(), fila({ game: "sapo", nombre: "Sapo", rango: "6–50", recomendado: false })]);
+    m.armarVistasPrevias(panel);
+    ioFalso.ultimo!.aviso([tarjetaDe(panel, "race")], true, 1);
+    expect(race.llamadas.montar, "la tarjeta en vista monta").toBe(1);
+    expect(sapo.llamadas.montar, "la que no está en vista, no").toBe(0);
+    const canvas = tarjetaDe(panel, "race").querySelector("canvas") as HTMLCanvasElement;
+    expect(canvas.className).toContain("sel-img");
+    // La misma caja que la captura: el CSS que la mide va por la clase, y la acción de elegir no cambia de lugar.
+    expect(canvas.getAttribute("width")).toBe("320");
+    expect(canvas.getAttribute("height")).toBe("180");
+    // Como la captura: decorativa (el nombre ya lo dice el botón) y no toca nada.
+    expect(canvas.getAttribute("aria-hidden")).toBe("true");
+    for (const img of tarjetaDe(panel, "race").querySelectorAll("img")) {
+      expect(img.style.display, "la captura se esconde mientras la miniatura corre").toBe("none");
+    }
+    // La elección no cambia: la tarjeta sigue siendo la misma, marcada como estaba.
+    expect(tarjetaDe(panel, "race").dataset.game).toBe("race");
+    expect(tarjetaDe(panel, "race").getAttribute("aria-pressed")).toBe("false");
+    expect(ioFalso.cortado, "sigue mirando la vista: al salir tiene que pausar").toBe(false);
+  });
+
+  it("al salir de la vista se pausa y al volver se reanuda, sin montar de nuevo", async () => {
+    const m = await espera();
+    const race = vista("race");
+    m.registrarVistaPrevia(race.v);
+    const panel = panelDe([fila()]);
+    m.armarVistasPrevias(panel);
+    const tarjeta = tarjetaDe(panel, "race");
+    ioFalso.ultimo!.aviso([tarjeta], true, 1);
+    ioFalso.ultimo!.aviso([tarjeta], false, 0);
+    expect(race.llamadas.pausar).toBe(1);
+    ioFalso.ultimo!.aviso([tarjeta], true, 1);
+    expect(race.llamadas.reanudar).toBe(1);
+    expect(race.llamadas.montar, "una sola montura por apertura del panel").toBe(1);
+  });
+
+  it("la vista es corta: al cumplirse sus segundos vuelve la captura y se suelta la miniatura", async () => {
+    const m = await espera();
+    const race = vista("race", 4);
+    m.registrarVistaPrevia(race.v);
+    const panel = panelDe([fila()]);
+    m.armarVistasPrevias(panel);
+    const tarjeta = tarjetaDe(panel, "race");
+    ioFalso.ultimo!.aviso([tarjeta], true, 1);
+    expect(race.llamadas.parar).toBe(0);
+    vi.advanceTimersByTime(4_000);
+    expect(race.llamadas.parar).toBe(1);
+    expect(tarjeta.querySelector("canvas"), "el canvas vuelve a soltarse").toBeNull();
+    for (const img of tarjeta.querySelectorAll("img")) {
+      expect(img.style.display, "la captura vuelve a su lugar, como estaba: sin estilo puesto a mano").toBe("");
+    }
+  });
+
+  it("si montar falla, la captura vuelve a su lugar y el panel sigue entero", async () => {
+    const m = await espera();
+    const rota = vista("race");
+    rota.v.montar = (marco: HTMLCanvasElement) => {
+      rota.llamadas.montar++;
+      rota.llamadas.marcos.push(marco);
+      throw new Error("el juego no pudo armarse");
+    };
+    const buena = vista("sapo");
+    m.registrarVistaPrevia(rota.v);
+    m.registrarVistaPrevia(buena.v);
+    const panel = panelDe([fila(), fila({ game: "sapo", nombre: "Sapo", rango: "6–50", recomendado: false })]);
+    m.armarVistasPrevias(panel);
+    const tarjeta = tarjetaDe(panel, "race");
+    expect(() => ioFalso.ultimo!.aviso([tarjeta], true, 1)).not.toThrow();
+    expect(rota.llamadas.montar).toBe(1);
+    expect(tarjeta.querySelector("canvas"), "la miniatura que no armó no queda en la tarjeta").toBeNull();
+    for (const img of tarjeta.querySelectorAll("img")) {
+      expect(img.style.display, "la captura sigue a la vista, sin estilo puesto a mano").toBe("");
+    }
+    // No se reintenta cada vez que la tarjeta entra en la vista, y las demás siguen funcionando.
+    ioFalso.ultimo!.aviso([tarjeta], false, 0);
+    ioFalso.ultimo!.aviso([tarjeta], true, 1);
+    expect(rota.llamadas.montar, "una vista que falló no se reintenta").toBe(1);
+    ioFalso.ultimo!.aviso([tarjetaDe(panel, "sapo")], true, 1);
+    expect(buena.llamadas.montar).toBe(1);
+    // Al cerrar no hay nada de la vista rota que soltar.
+    expect(() => m.pararVistasPrevias()).not.toThrow();
+  });
+
+  it("cerrar el panel corta todo: se para la vista, se suelta el canvas y el observador queda desconectado", async () => {
+    const m = await espera();
+    const race = vista("race", 30);
+    m.registrarVistaPrevia(race.v);
+    const panel = panelDe([fila()]);
+    m.armarVistasPrevias(panel);
+    const tarjeta = tarjetaDe(panel, "race");
+    ioFalso.ultimo!.aviso([tarjeta], true, 1);
+    m.pararVistasPrevias();
+    expect(race.llamadas.parar).toBe(1);
+    expect(ioFalso.cortado).toBe(true);
+    expect(tarjeta.querySelector("canvas")).toBeNull();
+    for (const img of tarjeta.querySelectorAll("img")) expect(img.style.display).toBe("");
+    // Reabrir el panel (otro armado) no deja nada colgado de lo anterior.
+    ioFalso.ultimo!.aviso([tarjeta], true, 1);
+    expect(race.llamadas.montar, "desconectado no monto más").toBe(1);
+  });
+
+  it("con movimiento reducido no hay nada en movimiento: la captura se queda", async () => {
+    reducido = true;
+    const m = await espera();
+    const race = vista("race");
+    m.registrarVistaPrevia(race.v);
+    const panel = panelDe([fila()]);
+    m.armarVistasPrevias(panel);
+    // Sin observador ni montura: el armado se cae antes de mirar la vista, y la captura queda.
+    expect(ioFalso.ultimo).toBeNull();
+    expect(race.llamadas.montar).toBe(0);
+    expect(tarjetaDe(panel, "race").querySelector("canvas")).toBeNull();
+  });
+
+  it("sin IntersectionObserver (un navegador sin la API) no se arma nada: queda la captura", async () => {
+    // Sin la API de vista (el entorno de pruebas, un navegador viejo): acá vale el comportamiento con la API ausente.
+    vi.unstubAllGlobals();
+    expect(globalThis.IntersectionObserver).toBeUndefined();
+    const m = await espera();
+    const race = vista("race");
+    m.registrarVistaPrevia(race.v);
+    const panel = panelDe([fila()]);
+    m.armarVistasPrevias(panel);
+    expect(tarjetaDe(panel, "race").querySelector("canvas")).toBeNull();
+    vi.advanceTimersByTime(60_000);
+    expect(race.llamadas.montar).toBe(0);
+  });
+
+  it("la miniatura entra con la misma regla que la captura: el CSS que la mide conoce la clase (la acción no se tapa)", () => {
+    // El canvas vive con la clase `sel-img` dentro de su tarjeta: la regla que mide la captura (ancho completo, 16/9,
+    // fondo del campo) es la que lo mide. La tarjeta no crece, la barra de abajo no se corre y la acción principal
+    // queda donde estaba, en el celular también.
+    const regla = declaraciones(".espera-juego-op.con-captura .sel-img");
+    expect(regla).toContain("width: 100%");
+    expect(regla).toContain("aspect-ratio: 16 / 9");
+    // Y la marca propia de la miniatura no arma su propia regla de medida: no hay nada que se salga del marco.
+    expect(css).not.toMatch(/\.previa-viva\s*\{[^}]*width:/);
   });
 });

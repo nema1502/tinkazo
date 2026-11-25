@@ -136,7 +136,7 @@ vi.mock("./freeze", () => ({ refreshFreezeLabel: () => undefined }));
 vi.mock("./anchor", () => ({ precalentarSello: () => undefined }));
 vi.mock("./participants", () => ({ guardarBorrador: () => undefined }));
 vi.mock("../ensayo-modo", () => ({ enPractica: () => false, sinGrabar: () => h.sinGrabar }));
-vi.mock("../contar", () => ({ contarEntrada: () => undefined, marcarEntrada: () => undefined, tomarEntrada: () => undefined }));
+vi.mock("../contar", () => ({ contarEntrada: () => undefined, contarUnaVez: () => undefined, origenActual: () => "home", marcarEntrada: () => undefined, tomarEntrada: () => undefined }));
 vi.mock("./modo-ui", () => ({
   pasarAModo: () => true,
   abrirHojaDeModo: () => undefined,

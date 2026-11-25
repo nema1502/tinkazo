@@ -143,11 +143,14 @@ describe("PuertaAltas.vigilancia, para /v1/patrocinio/estado", () => {
     const ana = Keypair.random().publicKey();
     m.cupos.admitir(ana, "admin", T0 - DIA_MS);
     m.sql.exec("INSERT INTO uso (hash, cuenta, metodo, mes, creado, estado, estimado, real, vence) VALUES ('h1', ?, 'seal', '2026-11', ?, 'ok', 1, NULL, 0)", ana, T0 - HORA);
-    m.pm.movimientos = [firma(T0 - HORA), firma(T0 - HORA), firma(T0 - 2 * HORA), { event: "wallet.created:STELLAR:COSIGNED", amount: -15, createdAt: iso(T0 - HORA) }];
+    m.pm.movimientos = [firma(T0 - HORA), firma(T0 - HORA), firma(T0 - 2 * HORA)];
+    m.pm.uso = [{ event: "wallet.created:STELLAR:COSIGNED", count: 1, credits: "15" }];
     expect(await m.puerta.vigilancia()).toEqual({
       firmasSinExplicar: 2,
       firmas: { cobradas: 3, explicadas: 1, sellos: 1, sorteos: 0, activaciones: 0, compras: 0, pagosConSaldo: 0, completo: true, desde: T0 - DIA_MS },
       patrocinioPollar: { esperado: true, prendidos: [] },
+      // El bloque de las cuentas nuevas de los últimos 60 minutos (#177): sale de la consulta de uso, con un wallet.created.
+      cuentas: { minutos: 60, nuevas: 1, activaciones: 0 },
     });
     // Nunca negativo: más explicadas que cobradas es cero.
     m.pm.movimientos = [];
@@ -171,8 +174,8 @@ describe("PuertaAltas.vigilancia, para /v1/patrocinio/estado", () => {
   it("con Pollar caído, sin lectura: null, nunca cero", async () => {
     const m = montarAltas();
     m.pm.caido = true;
-    expect(await m.puerta.vigilancia()).toMatchObject({ firmasSinExplicar: null, firmas: { cobradas: null }, patrocinioPollar: null });
-    expect(await montarAltas({}, { sinPollar: true }).puerta.vigilancia()).toMatchObject({ firmasSinExplicar: null, patrocinioPollar: null });
+    expect(await m.puerta.vigilancia()).toMatchObject({ firmasSinExplicar: null, firmas: { cobradas: null }, patrocinioPollar: null, cuentas: null });
+    expect(await montarAltas({}, { sinPollar: true }).puerta.vigilancia()).toMatchObject({ firmasSinExplicar: null, patrocinioPollar: null, cuentas: null });
   });
 
   it("con las altas apagadas no suma nada ni le pregunta a Pollar", async () => {

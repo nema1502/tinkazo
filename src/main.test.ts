@@ -42,3 +42,18 @@ describe("el arranque abre el modo espectador", () => {
     expect(main).toContain("abrirEspectador");
   });
 });
+
+describe("la demostración acepta la cantidad de personas", () => {
+  const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+  const demo = main.slice(main.indexOf("async function autoDemo"), main.indexOf("async function poseScene"));
+
+  it("con ?n= válido carga esa lista y sin él carga la de ejemplo de siempre", () => {
+    expect(demo).toContain('cantidadDeLaDemo(params.get("n"))');
+    expect(demo).toMatch(/setList\(nombresDeEjemplo\(/);
+    expect(demo).toContain("loadSample()");
+  });
+
+  it("la escena fija arma su lista con la misma función", () => {
+    expect(main).toContain("nombresDeEjemplo(cantidad)");
+  });
+});

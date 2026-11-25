@@ -55,9 +55,22 @@ const MAX = 512;
 
 let destino = CONTADOR;
 
+/**
+ * Los conteos que el servicio publicado antes de la novedad no conoce y que no tienen una forma anterior: las etapas del
+ * paso de la cuenta. Si el servicio ya rechazó algo de lo nuevo, no se manda más de esto.
+ */
+const SIN_FORMA_ANTERIOR: ReadonlySet<Evento> = new Set<Evento>(["oficial_step", "cupon_llegada"]);
+
+/**
+ * El servicio contestó 400 a lo nuevo: es el de antes de la novedad. Desde ahí, lo que no tiene forma anterior se descarta
+ * en silencio, en lugar de mandarlo en vano una y otra vez. Hasta desplegar el servicio, esas etapas no se cuentan.
+ */
+let servicioDeAntes = false;
+
 /** Solo para las pruebas: otro destino. */
 export function probarCon(url: string): void {
   destino = url;
+  servicioDeAntes = false;
 }
 
 type Nav = Pick<Navigator, "doNotTrack"> & { globalPrivacyControl?: boolean; webdriver?: boolean };
@@ -99,6 +112,67 @@ function enviar(texto: string): boolean {
 }
 
 /**
+ * El mismo conteo con lo que el servicio de antes de la novedad entiende, o `null` si no trae nada nuevo. El sitio puede
+ * salir antes que el servicio: el que está publicado rechaza entero el conteo que trae la red de la cuenta conectada o el
+ * origen de una tarjeta, y con él se perdería lo que ya se contaba. Solo le saca lo nuevo y nunca le suma nada.
+ */
+export function paraElServicioViejo<E extends Evento>(e: E, p: PropsDe<E>): PropsDe<E> | null {
+  const props: Record<string, string> = { ...(p as Record<string, string>) };
+  let cambio = false;
+  if (e === "account_connected" && "network" in props) {
+    delete props.network;
+    cambio = true;
+  }
+  if (props.from === "tarjeta") {
+    delete props.from;
+    cambio = true;
+  }
+  return cambio ? (props as unknown as PropsDe<E>) : null;
+}
+
+/**
+ * Manda el conteo completo y mira qué contesta el servicio. Si dice que no lo entiende (400), manda el de antes
+ * (`respaldo`): se cuenta una sola vez en cualquiera de los dos casos. Si el pedido falla o el servicio pide esperar,
+ * no se reintenta. Nada de esto se ve: no hay aviso ni error.
+ */
+function enviarConRespaldo(texto: string, respaldo: string): boolean {
+  try {
+    if (typeof fetch !== "function") return enviar(respaldo);
+    void fetch(destino, { method: "POST", body: texto, keepalive: true, credentials: "omit", mode: "cors" }).then(
+      (r) => {
+        if (r.status === 400) {
+          servicioDeAntes = true;
+          enviar(respaldo);
+        }
+      },
+      () => undefined,
+    );
+    return true;
+  } catch {
+    return enviar(respaldo);
+  }
+}
+
+/**
+ * Manda un conteo que no tiene forma anterior y mira qué contesta el servicio. Si dice que no lo entiende (400), marca que
+ * es el de antes y no manda más de lo nuevo. No hay nada que reenviar: se descarta en silencio, sin aviso ni error.
+ */
+function enviarMirando(texto: string): boolean {
+  try {
+    if (typeof fetch !== "function") return enviar(texto);
+    void fetch(destino, { method: "POST", body: texto, keepalive: true, credentials: "omit", mode: "cors" }).then(
+      (r) => {
+        if (r.status === 400) servicioDeAntes = true;
+      },
+      () => undefined,
+    );
+    return true;
+  } catch {
+    return enviar(texto);
+  }
+}
+
+/**
  * Cuenta un paso. Devuelve si salió (o si sale cuando la página se vea, si el
  * navegador la tenía adelantada). Nunca falla.
  */
@@ -106,15 +180,24 @@ export function contar<E extends Evento>(e: E, p: PropsDe<E>, ref?: Ref): boolea
   try {
     if (!destino || !puedeContar(location, navigator)) return false;
     if (enPractica() && !DE_LA_PRACTICA.has(e)) return false;
+    const sinForma = SIN_FORMA_ANTERIOR.has(e);
+    if (sinForma && servicioDeAntes) return false;
     const texto = cuerpo(e, p, ref);
     if (texto.length > MAX) return false;
+    const viejo = paraElServicioViejo(e, p);
+    const respaldo = viejo ? cuerpo(e, viejo, ref) : null;
+    const salir = (): boolean => {
+      if (sinForma && servicioDeAntes) return false;
+      if (respaldo !== null) return enviarConRespaldo(texto, respaldo);
+      return sinForma ? enviarMirando(texto) : enviar(texto);
+    };
     // Una página adelantada (prerender) todavía no la vio nadie: sale si se muestra.
     const doc = document as Document & { prerendering?: boolean };
     if (doc.prerendering) {
-      doc.addEventListener("prerenderingchange", () => void enviar(texto), { once: true });
+      doc.addEventListener("prerenderingchange", () => void salir(), { once: true });
       return true;
     }
-    return enviar(texto);
+    return salir();
   } catch {
     return false;
   }

@@ -11,7 +11,7 @@ import {
   urlForMode,
   type NetworkName,
 } from "../stellar/config";
-import { hasPollarKey, leerMarcaPollar } from "../stellar/pollar-config";
+import { FUSIBLE_DE_RETOMA_MS, hasPollarKey, leerMarcaPollar } from "../stellar/pollar-config";
 import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
 import { precalentarSello } from "./anchor";
@@ -20,7 +20,8 @@ import { enPractica, sinGrabar } from "../ensayo-modo";
 import { enNavegadorDeApp as esDeApp } from "../navegador";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 import { hayCuentaGuardada } from "../stellar/cuenta-guardada";
-import { contarEntrada, tomarEntrada } from "../contar";
+import { tomarEntrada } from "../contar";
+import { contarEntradaConRed, contarPasoOficial } from "./contadores";
 import { crearChip } from "./cuenta-chip";
 import { MARCA_INGRESAR, MARCA_PRACTICAR, type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
 import { errorDeCodigo } from "./ingreso-errores";
@@ -246,6 +247,15 @@ const sinFoco = (): boolean => !document.activeElement || document.activeElement
  * vuelve espera esto en lugar de irse a la herramienta a mirar "Retomando tu cuenta…" (`entrar`).
  */
 let retomaTerminada: Promise<void> = Promise.resolve();
+/**
+ * Entrar y el pedido de entrar esperan la primera mirada de la retoma, como en la rama principal: la retoma suelta esta
+ * promesa a los 8 segundos (o con el fusible, a los 12) y sigue por detrás con paciencia. Mientras la sesión guardada
+ * todavía puede volver no se abre una ventana de Google nueva: quien tocó Entrar con una sesión válida y lenta entra solo,
+ * sin elegir otra cuenta ni gastar un ingreso del tope por minuto que comparte todo el wifi del salón.
+ */
+async function esperarLaRetoma(): Promise<void> {
+  if (retomando) await retomaTerminada;
+}
 /** Se llegó con ganas de entrar pero sin un toque (el final de la demo o del ensayo): la ventana de Google no se abre sola. */
 let pidiendoEntrar = false;
 /** La cuenta se acaba de abrir: la cabecera aparece con un pulso corto. */
@@ -307,8 +317,9 @@ function marcarQueVaASortear(): void {
  * entrar dicen "Conectando…" (`pintarCuenta`); si el navegador la bloquea o la
  * persona la cierra, la pantalla lo dice y se puede volver a intentar.
  *
- * Si la sesión guardada todavía está volviendo, se espera a que termine, con
- * cuenta o sin ella. Hasta el 26 de octubre de 2026 se mandaba a la persona a la
+ * Si la sesión guardada todavía está volviendo, se espera a que termine la primera mirada de la retoma (ocho segundos
+ * como mucho), con cuenta o sin ella: abrir Google a ciegas dejaba a quien tenía una sesión válida con una ventana de
+ * ingreso nueva. Hasta el 26 de octubre de 2026 se mandaba a la persona a la
  * herramienta a mirar "Retomando tu cuenta…" hasta ocho segundos, y si la marca
  * era vieja caía en "Para sellar, entrá con tu cuenta" sin que Google se
  * hubiera abierto nunca: "Entrar con Google a veces lleva al sorteo sin pasar por Pollar".
@@ -317,8 +328,8 @@ export async function entrar(opciones: { soloGoogle?: boolean } = {}): Promise<v
   if (session || conectando) return;
   // Quien entra va a sortear: al terminar, la página abre la herramienta (main.ts).
   marcarQueVaASortear();
-  if (retomando) await retomaTerminada;
-  if (session) return;
+  await esperarLaRetoma();
+  if (session || conectando) return;
   if (!entraConGoogle()) {
     await openPicker();
     return;
@@ -370,13 +381,16 @@ export function pedirEntrar(): void {
     return;
   }
   void (async () => {
-    if (retomando) await retomaTerminada;
+    await esperarLaRetoma();
     if (session) return;
     pidiendoEntrar = true;
     // La cabecera también: sin repintarla, el chip seguía diciendo en qué otro modo está la cuenta.
     pintarCuenta();
     applyGate();
-    document.querySelector<HTMLElement>("#gate button")?.focus({ preventScroll: true });
+    const alBoton = (): void => document.querySelector<HTMLElement>("#gate button")?.focus({ preventScroll: true });
+    alBoton();
+    // La retoma todavía sigue: mientras tanto la puerta dice que retoma y no tiene botón. Cuando se suelta, el foco va a Entrar.
+    if (retomando) void retomaTerminada.then(() => (!session && pidiendoEntrar ? alBoton() : undefined));
   })();
 }
 
@@ -418,9 +432,11 @@ export function initWalletUI(): void {
     render();
     terminarDeRetomar();
   };
-  void Promise.allSettled(ventanaDeGoogle ? [] : [restorePollar(), restoreSession()]).then(fin);
-  // Por si algo queda colgado: nunca más de 12 s diciendo que se retoma.
-  setTimeout(fin, 12_000);
+  // La retoma de Google suelta la cabecera sola cuando su primera mirada vence (8 s): sigue por detrás, con paciencia, y si
+  // la cuenta llega abre la sesión sin que nadie toque nada (`restorePollar`).
+  void Promise.allSettled(ventanaDeGoogle ? [] : [restorePollar(fin), restoreSession()]).then(fin);
+  // Por si algo queda colgado antes de la primera mirada: nunca más de 12 s diciendo que se retoma, como siempre.
+  setTimeout(fin, FUSIBLE_DE_RETOMA_MS);
   // Llegó de Practicar en Prueba (modo-ui.ts): la marca se consume ahora, una sola vez, y al terminar de retomar entra con
   // la cuenta de prueba sin abrir la ventana. Si volvió una sesión guardada, entra con esa.
   if (tomarMarcaDePractica()) void retomaTerminada.then(() => entrarAPracticar());
@@ -635,8 +651,11 @@ function revisarLaCuentaOficial(origen: "entrada" | "retomar"): void {
     .then((m) => m.revisarCuentaOficial(origen))
     .then(
       (abrio) => {
-        if (abrio) entradaCallada = false;
-        else anunciarSiCallada();
+        if (abrio) {
+          entradaCallada = false;
+          // El contador del embudo: la etapa «se abrió» del paso de la cuenta (solo se abre en Oficial).
+          contarPasoOficial("abrio", network.name);
+        } else anunciarSiCallada();
       },
       () => {
         // El flujo mismo no bajó: la entrada se anuncia y se dice que hay que volver a cargar.
@@ -665,12 +684,15 @@ function anunciarEntrada(): void {
   notice(texto, false);
 }
 
-/** Al volver del redirect de Google, la sesión se retoma sola. */
-async function restorePollar(): Promise<void> {
+/**
+ * Al volver del redirect de Google, la sesión se retoma sola. `alTardar` suelta la cabecera cuando la primera mirada del
+ * proveedor vence sin respuesta: la retoma sigue con paciencia y, si la cuenta llega después, se abre sola.
+ */
+async function restorePollar(alTardar: () => void): Promise<void> {
   try {
     const { pollarConfigured, pollarWallet } = await import("../stellar/wallet-pollar");
     if (!pollarConfigured()) return;
-    const address = await pollarWallet.restore();
+    const address = await pollarWallet.restore({ cuandoTarda: alTardar });
     if (!address) {
       // Sin cuenta y sin la marca de Pollar (`restore` la olvida si la sesión ya no existe), la de "sesión de Google
       // guardada" tampoco vale: si quedaba, cada carga repetía "Retomando…" y las páginas de lectura decían "Mi cuenta".
@@ -678,8 +700,11 @@ async function restorePollar(): Promise<void> {
       return;
     }
     const { setActiveWallet } = await lite();
-    if (session) return;
+    // Una retoma que llega tarde no abre nada dos veces: si la persona ya entró de nuevo, o la ventana de Google está
+    // abierta, gana la entrada que ya está.
+    if (session || conectando) return;
     setActiveWallet(pollarWallet);
+    pidiendoEntrar = false;
     // Con la cuenta de vuelta, la marca de sesión de Google queda guardada, como al entrar: la cabecera de las páginas de
     // lectura la mira para no ofrecer Entrar. Sin cuenta no se guarda nada (el borrado de arriba sigue valiendo).
     saveSessionKind("google", network.name);
@@ -1931,7 +1956,8 @@ async function afterConnect(
   // lo distingue su etiqueta. Retomar una sesión no pasa por acá, y la vuelta
   // de Google la cuenta `wallet-pollar.ts`: la marca de ida ya no hace falta.
   tomarEntrada();
-  contarEntrada(pick === "guest" ? "test" : pick === "freighter" ? "freighter" : wallet.label === "Email" ? "email" : "google");
+  // La red va con la entrada: Google en Prueba y Google en Oficial se suman por separado (issue #83).
+  contarEntradaConRed(pick === "guest" ? "test" : pick === "freighter" ? "freighter" : wallet.label === "Email" ? "email" : "google", network.name);
   // Con `?grifo=0` la cuenta de prueba nace vacía: no se dice que tiene fondos.
   if (wallet.kind === "guest") notice(t(grifoApagado ? "guestReadyOff" : "guestReady"), false);
   // El diálogo no se cierra hasta saber si la cuenta puede pagar. Cerrarlo y

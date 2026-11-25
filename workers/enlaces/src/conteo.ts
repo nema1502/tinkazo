@@ -73,9 +73,10 @@ export const ERRORES = [
 /**
  * De dónde llegó quien sortea: la marca `?o=` de la dirección a la que entró. Una palabra de esta lista y nada más:
  * la portada (`home`, también cuando no trae marca), las páginas de aula, de meetups, de ruleta y de eventos, y el
- * comprobante o el video de otro sorteo. Dice de qué enlace vino, nunca quién es.
+ * comprobante o el video de otro sorteo. `tarjeta` es el enlace impreso de un cupón de tarjeta (`scripts/cupones.mjs`).
+ * Dice de qué enlace vino, nunca quién es.
  */
-export const ORIGENES = ["home", "aula", "meetup", "ruleta", "eventos", "proof", "video"] as const;
+export const ORIGENES = ["home", "aula", "meetup", "ruleta", "eventos", "proof", "video", "tarjeta"] as const;
 
 /** El tamaño de una lista, en tramos: nunca la cantidad exacta. */
 export const TAMANOS = ["2-9", "10-49", "50-199", "200+"] as const;
@@ -97,8 +98,16 @@ export const EVENTOS = {
   tutorial_open: { p: { step: ["1", "2", "3", "4"] }, o: { from: ["offer", "button", "menu", "end"] }, ref: "no" },
   /** Prueba: el ensayo (`practice`) o la demo (`demo`) llegaron al ganador. Con `tutorial_open`, lo único que sale de la práctica. */
   practice_done: { p: { kind: ["practice", "demo"] }, o: {}, ref: "no" },
-  /** Conecta: la primera cuenta conectada de la pestaña, por la vía. Retomar una sesión no cuenta. */
-  account_connected: { p: { kind: ["google", "email", "freighter", "test"] }, o: { from: ORIGENES }, ref: "no" },
+  /** Conecta: la primera cuenta conectada de la pestaña, por la vía y la red. Retomar una sesión no cuenta. La red la lee quien la emite, de `src/stellar/config`. */
+  account_connected: { p: { kind: ["google", "email", "freighter", "test"] }, o: { from: ORIGENES, network: REDES }, ref: "no" },
+  /**
+   * El paso «Dejá tu cuenta lista» de una cuenta de Google o de correo (solo en la red principal), una vez por pestaña
+   * y por etapa: `abrio` se abrió, `cupon` canjeó el cupón, `activada` activó la cuenta, `protegida` la protegió,
+   * `lista` quedó lista y `prueba` salió a Prueba. Solo que pasó, nunca quién.
+   */
+  oficial_step: { p: { paso: ["abrio", "cupon", "activada", "protegida", "lista", "prueba"] }, o: {}, ref: "no" },
+  /** Llegó el cupón en el enlace (`#cupon=`): en el navegador en modo Oficial (`oficial`) o dentro de la app de otra (`app`). */
+  cupon_llegada: { p: { donde: ["oficial", "app"] }, o: {}, ref: "no" },
   /** Prepara: la primera lista de dos o más de la pestaña: pegada, escrita a mano, de un archivo o de Luma. */
   list_ready: { p: { source: ["paste", "typed", "csv", "luma"], size: TAMANOS }, o: {}, ref: "no" },
   /** Muestra: "Mostrar la lista en grande". */
@@ -185,6 +194,13 @@ export function contratoOficial(ref: Pick<Ref, "net" | "contract">, oficiales: R
 
 /** Lo más que puede medir un conteo, en bytes. */
 export const MAX_CUERPO = 512;
+
+/**
+ * Conteos por IP (en IPv6, por /64) y por hora. En memoria: la IP no se guarda, y si el objeto se duerme vuelven a cero.
+ * Un evento de unas 150 personas sale por una sola conexión (el wifi del salón) y cada persona cuenta varios pasos: con
+ * 1.000 por hora el final del evento se perdía en silencio. El tope por día en total sigue en `index.ts`.
+ */
+export const CONTEOS_POR_IP_POR_HORA = 5_000;
 
 const ES_CONTRATO = /^C[A-Z2-7]{55}$/;
 const ES_NUMERO = /^[1-9][0-9]{0,19}$/;

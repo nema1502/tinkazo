@@ -215,7 +215,9 @@ describe("leer el pedido", () => {
   });
 
   it("rechaza lo que no es una cuenta G válida", () => {
-    const sinSuma = `${cuentaNueva().slice(0, -1)}A`;
+    // El último carácter cambia siempre: con una cuenta nueva que ya terminaba en A, dejarlo igual la volvía válida.
+    const entera = cuentaNueva();
+    const sinSuma = `${entera.slice(0, -1)}${entera.endsWith("A") ? "B" : "A"}`;
     const malas = [undefined, 7, "", "G", sinSuma, "M".padEnd(69, "A"), cuentaNueva().toLowerCase()];
     for (const cuenta of malas) {
       expect(leerPedidoDeOrganizadora({ cuenta, evento: EVENTO }), String(cuenta)).toBeNull();

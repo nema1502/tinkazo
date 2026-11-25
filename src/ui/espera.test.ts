@@ -13,7 +13,7 @@ import { QUEDA_MS, elegirAlAzar, enRueda, type JuegoAzar } from "./azar";
  * ruleta: queda el elegido directo, con la misma marca y la misma espera.
  */
 
-const h = vi.hoisted(() => ({ reduce: false, semilla: 0, elegido: "race", armarQr: vi.fn((..._a: unknown[]): any => Promise.resolve(undefined)) }));
+const h = vi.hoisted(() => ({ reduce: false, ancho: 1366, semilla: 0, elegido: "race", armarQr: vi.fn((..._a: unknown[]): any => Promise.resolve(undefined)) }));
 
 vi.mock("../sound", () => ({ beep: () => undefined, note: (n: number) => n }));
 vi.mock("./vista-grande", () => ({ rechazarGrande: () => undefined }));
@@ -100,6 +100,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   armarPagina();
   h.reduce = false;
+  h.ancho = 1366;
   h.semilla = 0;
   h.elegido = "race";
   llevadas.mockClear();
@@ -107,7 +108,8 @@ beforeEach(() => {
   rectOriginal = Element.prototype.getBoundingClientRect;
   // jsdom no tiene matchMedia: la espera la consulta (ajustar) y el botón, para el movimiento reducido.
   vi.stubGlobal("matchMedia", (q: string) => ({
-    matches: q.includes("prefers-reduced-motion") && h.reduce,
+    // Reducir el movimiento, o un ancho de pantalla: (max-width: Npx) se cumple si la pantalla simulada es de N o menos.
+    matches: (q.includes("prefers-reduced-motion") && h.reduce) || (/max-width:\s*(\d+)px/u.test(q) && h.ancho <= Number(/max-width:\s*(\d+)px/u.exec(q)?.[1])),
     media: q,
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
@@ -999,5 +1001,195 @@ describe("la calcomanía de la sala cuando nace el número", () => {
     setLang("en");
     expect(sticker.textContent).toBe(T.en.espStickerYa);
     expect(capa.getAttribute("aria-label")).toBe(T.en.espStickerYa);
+  });
+});
+
+/**
+ * La presentación de la lista sellada durante la cuenta (`games-teaser.ts`,
+ * issue #78): el show de la espera en grande presenta a cada persona que
+ * participa, y todo lo que presenta sale de lo sellado: nada del resultado,
+ * que todavía no existe, y nada que cambie la selección del juego.
+ */
+describe("la presentación de la lista sellada durante la cuenta", () => {
+  /** Las tarjetas de la presentación, en el orden sellado. */
+  const tarjetas = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".espera-teaser-tarjeta")];
+
+  /** Con una lista sellada de 3, las tres presentaciones se ven durante la cuenta. */
+  it("con una lista sellada de 3, las tres presentaciones se muestran durante la cuenta, antes de que nazca la ronda", async () => {
+    const { setLang } = await import("../i18n");
+    const { T } = await import("../i18n");
+    setLang("es");
+    const { sortear } = await abrirEspera(1, { nombres: ["Ana", "Beto", "Cami"] });
+    expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(["Ana", "Beto", "Cami"]);
+    // La ronda no nació: el sorteo no arrancó y la sala sigue con el cartel de siempre.
+    expect(sortear).not.toHaveBeenCalled();
+    expect(document.querySelector(".espera .sticker")?.textContent).toBe(T.es.espSticker);
+    // La cuenta sigue y la presentación sigue en escena, sin adelantar nada.
+    vi.advanceTimersByTime(12_000);
+    expect(tarjetas()).toHaveLength(3);
+    expect(sortear).not.toHaveBeenCalled();
+  });
+
+  /** En el show antes de la ronda no hay señal del ganador ni de la selección. */
+  it("guard: nada del resultado antes de la ronda, y la selección no se toca", async () => {
+    const { setLang } = await import("../i18n");
+    setLang("es");
+    const { elegirJuego, sortear } = await abrirEspera(1, { nombres: ["Ana", "Beto", "Cami"] });
+    const teaser = document.querySelector<HTMLElement>(".espera-teaser");
+    // La presentación habla de quiénes participan, no de quien va a salir: guarda su texto sin pistas.
+    expect(teaser?.dataset.fuente).toBe("sellada");
+    expect(teaser?.textContent).not.toMatch(/ganador|ganado|gana\b|winner/i);
+    // La selección del juego tampoco cambia mientras presenta.
+    expect(elegirJuego).not.toHaveBeenCalled();
+    // Nace la ronda: ahí sí arranca el sorteo, y la presentación no agrega nada nuevo después.
+    const { nacioElNumero } = await import("./espera");
+    nacioElNumero();
+    expect(sortear).toHaveBeenCalledTimes(1);
+    const alNacer = tarjetas();
+    vi.advanceTimersByTime(10_000);
+    expect(tarjetas()).toEqual(alNacer);
+  });
+
+  /** El juego elegido da el gancho visual: al cambiar de juego durante la cuenta, la presentación lo sigue. */
+  it("al cambiar de juego durante la cuenta, la presentación toma el gancho del juego nuevo", async () => {
+    const { elegirJuego } = await abrirEspera(1, { nombres: ["Ana", "Beto", "Cami"] });
+    expect(document.querySelector<HTMLElement>(".espera-teaser")?.dataset.juego).toBe("race");
+    // Se elige otro juego desde el panel (el camino de verdad), y la página de atrás lo publica.
+    (document.querySelector(".espera [data-juego]") as HTMLButtonElement).click();
+    (document.querySelector('.espera-juegos [data-game="sapo"]') as HTMLButtonElement).click();
+    document.dispatchEvent(new CustomEvent("tinkazo:cambio-con-qr"));
+    expect(elegirJuego.mock.calls[elegirJuego.mock.calls.length - 1]?.[0]).toBe("sapo");
+    expect(document.querySelector<HTMLElement>(".espera-teaser")?.dataset.juego).toBe("sapo");
+    expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(["Ana", "Beto", "Cami"]);
+  });
+
+  /** La presentación aparece solo si entran todas las personas: con una lista más larga la espera queda como siempre. */
+  for (const [ancho, total] of [[1366, 2], [1366, 6], [1920, 6], [390, 2], [360, 1]] as const) {
+    it(`con ${total} personas a ${ancho} px hay ${total} tarjetas, sin línea de más y con un solo reloj`, async () => {
+      h.ancho = ancho;
+      const nombres = Array.from({ length: total }, (_, i) => `Persona ${i + 1}`);
+      await abrirEspera(1, { nombres });
+      expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(nombres);
+      expect(document.querySelector(".espera-teaser-mas")).toBeNull();
+      expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
+      expect(document.querySelectorAll(".espera-cinta").length).toBeGreaterThan(0);
+    });
+  }
+
+  for (const [ancho, total] of [[1366, 7], [1366, 18], [1366, 150], [1366, 300], [1920, 150], [390, 3], [390, 18], [390, 150]] as const) {
+    it(`con ${total} personas a ${ancho} px no hay presentación y la espera es la de siempre: el reloj y las cintas`, async () => {
+      h.ancho = ancho;
+      const nombres = Array.from({ length: total }, (_, i) => `Persona ${i + 1}`);
+      await abrirEspera(1, { nombres });
+      expect(tarjetas()).toHaveLength(0);
+      expect(document.querySelector(".espera-teaser")).toBeNull();
+      expect(document.querySelector(".espera-teaser-mas")).toBeNull();
+      expect(document.querySelector(".espera-teaser-t")).toBeNull();
+      expect(document.querySelector(".espera-teaser-caja")?.childElementCount).toBe(0);
+      expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
+      expect(document.querySelectorAll(".espera-cinta").length).toBeGreaterThan(0);
+    });
+  }
+
+  /** Un celular que se gira con la cuenta en marcha: se vuelve a decidir con el ancho nuevo, y nunca se ve un pedazo de la lista. */
+  it("al girar el celular con la cuenta en marcha, la presentación aparece si entran todas y se va si no", async () => {
+    const nombres = Array.from({ length: 5 }, (_, i) => `Persona ${i + 1}`);
+    h.ancho = 390;
+    await abrirEspera(1, { nombres });
+    expect(tarjetas()).toHaveLength(0);
+    h.ancho = 844;
+    window.dispatchEvent(new Event("resize"));
+    expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(nombres);
+    expect(document.querySelector(".espera-teaser-mas")).toBeNull();
+    h.ancho = 390;
+    window.dispatchEvent(new Event("resize"));
+    expect(tarjetas()).toHaveLength(0);
+    expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
+  });
+
+  /**
+   * jsdom no tiene diseño: se simula el alto de la capa. Lo fijo (premio, reloj, cintas, pie, QR) escala con `--ajuste` y con
+   * cada nivel de cintas quitadas, y la presentación suma su alto fijo mientras la capa no la esconda.
+   */
+  function simularAlto(visible: number, fijo: number, presentacion: number): { visible: (v: number) => void; restaurar: () => void } {
+    const sd = Object.getOwnPropertyDescriptor(Element.prototype, "scrollHeight");
+    const cd = Object.getOwnPropertyDescriptor(Element.prototype, "clientHeight");
+    let vis = visible;
+    const esCapa = (e: Element): e is HTMLElement => e.classList.contains("espera");
+    Object.defineProperty(Element.prototype, "scrollHeight", {
+      configurable: true,
+      get(this: Element) {
+        if (!esCapa(this)) return 0;
+        const ajuste = Number.parseFloat(this.style.getPropertyValue("--ajuste") || "1");
+        const nivel = Number(this.dataset.apretada ?? 0);
+        return fijo * ajuste * (1 - 0.1 * nivel) + (this.dataset.sinTeaser ? 0 : presentacion);
+      },
+    });
+    Object.defineProperty(Element.prototype, "clientHeight", { configurable: true, get: (): number => vis });
+    return {
+      visible: (v) => void (vis = v),
+      restaurar: () => {
+        if (sd) Object.defineProperty(Element.prototype, "scrollHeight", sd);
+        if (cd) Object.defineProperty(Element.prototype, "clientHeight", cd);
+      },
+    };
+  }
+  const capa = (): HTMLElement => document.querySelector<HTMLElement>(".espera") as HTMLElement;
+  const nombres150 = Array.from({ length: 6 }, (_, i) => `Persona ${i + 1}`);
+
+  it("en una pantalla donde el reloj y las cintas no entran con la presentación, se esconde ella y el reloj queda del tamaño completo", async () => {
+    // 1366 x 768: lo de siempre ocupa 700 y la presentación suma 130.
+    const alto = simularAlto(768, 700, 130);
+    try {
+      await abrirEspera(1, { nombres: nombres150 });
+      expect(capa().dataset.sinTeaser).toBe("1");
+      expect(capa().dataset.apretada).toBeUndefined();
+      expect(capa().style.getPropertyValue("--ajuste")).toBe("1");
+      // Con más alto, al cambiar el tamaño la presentación vuelve.
+      alto.visible(1000);
+      window.dispatchEvent(new Event("resize"));
+      expect(capa().dataset.sinTeaser).toBeUndefined();
+      expect(capa().style.getPropertyValue("--ajuste")).toBe("1");
+    } finally {
+      alto.restaurar();
+    }
+  });
+
+  it("donde todo entra con la presentación al tamaño completo, la presentación se queda", async () => {
+    const alto = simularAlto(1080, 700, 130);
+    try {
+      await abrirEspera(1, { nombres: nombres150 });
+      expect(capa().dataset.sinTeaser).toBeUndefined();
+      expect(capa().dataset.apretada).toBeUndefined();
+      expect(capa().style.getPropertyValue("--ajuste")).toBe("1");
+    } finally {
+      alto.restaurar();
+    }
+  });
+
+  it("si lo de siempre tampoco entra, se achica como antes y la presentación ya no suma", async () => {
+    const alto = simularAlto(600, 700, 130);
+    try {
+      await abrirEspera(1, { nombres: nombres150 });
+      expect(capa().dataset.sinTeaser).toBe("1");
+      const ajuste = Number.parseFloat(capa().style.getPropertyValue("--ajuste"));
+      expect(ajuste).toBeLessThan(1);
+      expect(ajuste).toBeGreaterThanOrEqual(0.7);
+    } finally {
+      alto.restaurar();
+    }
+  });
+
+  /** Con 6 personas entran todas, con una sola imagen por tarjeta, y el reloj y las cintas de nombres siguen en la pantalla. */
+  it("con 6 personas presenta a todas, deja el reloj y las cintas, y no agrega ningún reloj", async () => {
+    const nombres = Array.from({ length: 6 }, (_, i) => `Persona ${i + 1}`);
+    await abrirEspera(1, { nombres });
+    expect(tarjetas()).toHaveLength(6);
+    expect(document.querySelectorAll(".espera-teaser-mas")).toHaveLength(0);
+    // Una sola cuenta regresiva en la capa, y las cintas de nombres de siempre.
+    expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
+    expect(document.querySelectorAll(".espera-cinta").length).toBeGreaterThan(0);
+    // Y una sola imagen por tarjeta.
+    for (const t of tarjetas()) expect(t.querySelectorAll("img").length).toBeLessThanOrEqual(1);
   });
 });

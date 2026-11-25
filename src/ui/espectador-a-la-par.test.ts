@@ -50,6 +50,7 @@ import { listHash } from "../protocol/canonical";
 import { select } from "../protocol/select";
 import { app, paceSeconds } from "../state";
 import { t } from "../i18n";
+import { ponerEtiquetas } from "../equipos/etiquetas";
 import type { Registro } from "../protocol/verificacion";
 import { abrirEspectador, enlaceEspectador, type DatosEspectador, type OpcionesDeLaVista } from "./espectador";
 import { LARGA_IGUAL_TRAS_MS, horaDeLaTarjeta, juegoDelCelular, segundosDelJuego } from "./espectador-regla";
@@ -284,6 +285,23 @@ describe("el juego que la sala cambió con el QR a la vista", () => {
     await vi.advanceTimersByTimeAsync(600);
     expect(app.game).toBe("trompo");
     expect(h.actualizar).toHaveBeenCalled();
+  });
+
+  it("si el enlace releído trae nombres de personas, lo que se comparte desde este celular no los lleva", async () => {
+    const gana = NOMBRES[ganadores()[0] ?? 0] ?? "";
+    // El enlace de la sala no traía etiquetas; el releído las trae, marcadas como de personas.
+    const nuevo = datos({ g: "sapo", e: [[gana, "Nombre Privado"]], q: 1 });
+    const releer = vi.fn(async () => ({ ruta: ruta(nuevo), n: 2, version: '"2"', cambia: true }));
+    const abrirSorteo = vi.fn();
+    abrir(datos(), { ref, releer, cargarCompartir: async () => ({ abrirSorteo }) as unknown as typeof import("./compartir") });
+    await vi.advanceTimersByTimeAsync(NACE + 20_000 - Date.now());
+    expect(app.game).toBe("sapo");
+    alTerminar?.(true);
+    capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+    await vi.waitFor(() => expect(abrirSorteo).toHaveBeenCalled());
+    const compartido = (abrirSorteo.mock.calls[0]?.[0] as { ganadores: string[] }).ganadores.join("|");
+    expect(compartido).not.toContain("Nombre Privado");
+    ponerEtiquetas(new Map());
   });
 });
 

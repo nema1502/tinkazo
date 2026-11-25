@@ -3,6 +3,7 @@ import { campanasActivo } from "../campana/bandera";
 import {
   accionesDelPuente,
   alCambiarElPuente,
+  avisosPendientes,
   botonDelPaso,
   lineaDelPaso,
   pasoDelPuente,
@@ -653,6 +654,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   /** Mientras se cierra y se lee la lista desde esta pantalla: no es "retomada", no hace falta tocar Pasar la lista. */
   let cerrandoAhora = false;
   let entroAConfirmar = 0;
+  /** La pregunta de dejar la campaña salió de Armar otra campaña: al confirmar, además se abre el selector de archivo. */
+  let armandoOtra = false;
   let ultimoEnlace = "";
   let pararDespertar: (() => void) | null = null;
   let dejarElPuente: (() => void) | null = null;
@@ -2509,19 +2512,32 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     ponerPaso({ paso: "nada" });
     ponerRechazo(null);
     vista = "elegir";
+    armandoOtra = false;
     mensaje = clave ? tx(clave) : "";
     pintar();
   }
 
   /** Dejar la campaña: pide una confirmación de una línea. Con la sala todavía vacía, además la borra para liberar el archivo. */
-  function pedirOlvidar(): void {
+  function pedirOlvidar(deArmarOtra = false): void {
+    // Solo Armar otra campaña abre el selector al confirmar: cualquier otra pregunta lo apaga, aunque una anterior haya quedado
+    // abandonada sin cancelar ni confirmar (por ejemplo, si otra pestaña tomó la campaña mientras se preguntaba).
+    armandoOtra = deArmarOtra;
     vistaAntes = vista;
     vista = "olvidar";
     mensaje = "";
     pintar();
   }
 
+  /**
+   * Armar otra campaña desde la lista cerrada: con la lista cerrada o con avisos pendientes a los celulares, un toque de más
+   * dejaría a todas las personas sin su resultado, así que antes pregunta. Al confirmar se abre el selector de la siguiente.
+   */
+  function armarOtra(): void {
+    pedirOlvidar(true);
+  }
+
   function cancelarOlvidar(): void {
+    armandoOtra = false;
     vista = vistaAntes;
     // Con la pregunta abierta el pase no se renueva: si venció ahí no quedó nada programado y hay que retomarlo.
     if (conPase()) {
@@ -2542,7 +2558,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       if (s !== sala) return;
       if (!hecho) return aviso(tx("cpoSinConexion"));
     }
+    const abrirElSelector = armandoOtra;
     olvidar();
+    if (abrirElSelector) elegir();
   }
 
   /* --- el dibujo --- */
@@ -2741,7 +2759,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       else if (retomada && !leyendoLaLista) botones.push(principal(tx("cpoPasar"), () => void (sala && leerListaCompleta(sala))));
       botones.push(boton(tx("cpoGrande"), "ghost", (b) => grande.abrir(b)));
       if (!listaTrabada()) botones.push(boton(tx("cpoReabrir"), "enlace", () => void reabrir(), trabajando));
-      botones.push(otroArchivo());
+      // Armar otra campaña en el mismo lugar. La lista cerrada todavía tiene que llegar al sorteo: antes de olvidarla pregunta.
+      botones.push(boton(tx("cpoOtra"), "enlace", () => armarOtra()));
     } else if (vista === "sellada" || vista === "sorteada") {
       const delBoton = principalDelPaso();
       if (delBoton) botones.push(delBoton);
@@ -2752,7 +2771,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         if (g) botones.push(principal(fmt("cpoAvisarA", { nombre: g.nombre }), () => accionesDelPuente().avisarA?.(g.cuenta)));
       }
       // Los celulares todavía leen el resultado: la sala no se borra, solo se deja de recordar en esta compu.
-      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => olvidar()));
+      // Con un aviso pendiente a los celulares no se deja de un toque: la pregunta de siempre. Con la lista sellada siempre se
+      // pregunta, y con el sorteo hecho también, salvo con el resultado ya avisado a todas o con la sala borrada.
+      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (avisosPendientes(pasoDelPuente(), vista === "sorteada") ? pedirOlvidar() : olvidar())));
     } else if (vista === "sin-red") {
       botones.push(principal(tx("cpoReintentar"), () => reintentar?.()));
       botones.push(otroArchivo());
@@ -2860,6 +2881,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     let linea = "";
     if (vista === "elegir") linea = tx("cpoElegirLinea");
     if (vista === "confirmar") linea = tx("cpoCerrarLinea");
+    // Con la lista cerrada y sin ningún paso en curso, la línea dice la consecuencia. Si un paso habla, habla él (la fila viva o su línea).
+    if (vista === "cerrada" && pasoDelPuente().paso === "nada") linea = tx("cpoCerrarLinea");
     if (vista === "cerrada" && sinLeer) linea = tx("cpoNoLeyo");
     if (vista === "tomada") linea = tx("cpoTomadaL");
     if (vista === "tus") linea = tx("cpoTusL");
@@ -3005,6 +3028,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pieEl.hidden = vista !== "cerrada" || !sala || !campana;
     if (sala && campana && vista === "cerrada") {
       const fecha = fechaTexto(sala.vence, campana.zona, deps.idioma());
+      // La consecuencia dicha en simple: la lista queda a la vista, sin palabras que asusten.
       pieEl.textContent = fmt("cpoSeBorra", { fecha, hora: horaTexto(sala.vence, campana.zona, deps.idioma()) });
     }
     pintarPlegado();
@@ -3238,8 +3262,19 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const dicho = pasoDelPuente().paso;
     // El aviso del sello o del resultado dijo que el token no vale: otra compu tomó la campaña.
     if (sala && dicho === "tomada") return tomada();
-    if (sala && vista === "cerrada" && dicho === "avisada") irA("sellada", null);
-    else if (sala && (vista === "cerrada" || vista === "sellada") && dicho === "resultado") irA("sorteada", null);
+    // Con la pregunta de dejar la campaña abierta la fase sigue su camino: se mira la vista de la que se vino, la pregunta
+    // se queda en pantalla y, al cancelar, se vuelve a la fase nueva y no a la vieja.
+    const preguntando = vista === "olvidar";
+    const efectiva = preguntando ? vistaAntes : vista;
+    const nueva: FaseDeSala | null =
+      sala && efectiva === "cerrada" && dicho === "avisada" ? "sellada" : sala && (efectiva === "cerrada" || efectiva === "sellada") && dicho === "resultado" ? "sorteada" : null;
+    if (nueva) {
+      irA(nueva, null);
+      if (preguntando) {
+        vistaAntes = vista;
+        vista = "olvidar";
+      }
+    }
     pintar();
     grande.pintar();
   });

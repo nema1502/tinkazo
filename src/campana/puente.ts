@@ -39,6 +39,21 @@ export type PasoDelPuente =
   | { paso: "mandando" | "boton-resultado" | "guardar-sorteo" }
   | { paso: "resultado"; filas: FilaDeGanadora[]; otraBilletera: boolean };
 
+/**
+ * ¿Le falta al panel avisarle algo a los celulares? Si es así, dejar la campaña ahora los dejaría sin su sello o sin su
+ * resultado, así que antes hay que preguntar.
+ *
+ * Con la lista sellada y el sorteo sin hacer, el resultado todavía no salió: sea cual sea el paso, el panel se lo debe a
+ * los celulares. Con el sorteo hecho también se pregunta, salvo cuando el resultado ya está a la vista con todas las
+ * ganadoras avisadas o cuando la sala ya fue borrada, que no tiene a quién mandarle nada.
+ */
+export function avisosPendientes(p: PasoDelPuente, sorteoHecho: boolean): boolean {
+  if (!sorteoHecho) return true;
+  if (p.paso === "sala-borrada") return false;
+  if (p.paso === "resultado") return p.filas.some((f) => !f.avisada);
+  return true;
+}
+
 /** Lo que el panel puede pedirle a quien tiene la lógica de cada paso. Cada módulo registra la suya. */
 export interface AccionesDelPuente {
   reintentarPaso?: () => void;

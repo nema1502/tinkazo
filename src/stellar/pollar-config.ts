@@ -49,9 +49,43 @@ export function leerMarcaPollar(almacen: Pick<Storage, "getItem">, name: Network
 }
 
 /**
- * Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token (`tokenDeSesion` de
- * `wallet-pollar.ts`). En un stand con la red lenta, verificarla puede tardar varios segundos, y alguien con un cupón
- * válido no tiene que ver «probá de nuevo». Vive acá, sin la billetera, para que el paso «Dejá tu cuenta lista» lo use
- * sin traerla.
+ * Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token en la primera mirada
+ * (`tokenDeSesion` de `wallet-pollar.ts`). En un stand con la red lenta, verificarla puede tardar varios segundos, y
+ * alguien con un cupón válido no tiene que ver «probá de nuevo». Vive acá, sin la billetera, para que el paso «Dejá tu
+ * cuenta lista» lo use sin traerla.
  */
 export const TOPE_TOKEN_MS = 8_000;
+
+/**
+ * Cuánto sigue esperando el token en total cuando la primera mirada vence y el kit dice que la sesión sigue abierta,
+ * pero todavía sin verificar: la ventana paciente (issue 88). Una sesión recién creada es justo la que puede tardar más
+ * de los 8 segundos de la primera mirada, y entregar `null` ahí tiraba a quien ya entró a «Entrar de nuevo».
+ *
+ * En cada vencido se vuelve a mirar la sesión (`getAuthState`): si el kit dice que ya no existe, el token sale con
+ * `null` al toque (ahí sí conviene entrar de nuevo); si sigue abierta sin verificar, se espera de nuevo con espera
+ * creciente. Es de la espera de siempre (el paso de la cuenta): quien pide su propio tope (la sala de campaña con
+ * `ESPERA_TOKEN_MS`, la lectura del celular) tiene exactamente el suyo. Un vencimiento nunca toca la marca de la sesión.
+ */
+export const VENTANA_TOKEN_MS = 20_000;
+
+/**
+ * Cuánto sigue mirando al proveedor el retomo de la cuenta después de la primera mirada: la ventana paciente (issue 89).
+ * Con la red cargada de un stand, la `ready()` del kit puede contestar a los 10 o 12 segundos, y devolver
+ * "no hay cuenta" al primer vencido dejaba a quien ya entró con la página sin sesión, aunque la marca siguiera.
+ *
+ * Espera creciente: la primera espera es `LISTO_MS`, cada vuelta repite el doble de la anterior sin pasar de lo que
+ * queda de la ventana, y en cada vuelta se gana apenas el proveedor contesta (la carrera con su `ready()` se resuelve
+ * sola, sin que la gane el temporizador). Mientras espera, la marca no se toca: solo el chequeo del final, con el kit ya
+ * listo y sin sesión, la puede olvidar, como antes. Si el proveedor sigue afuera después de la ventana, `restore`
+ * devuelve `null` con la marca en pie: la próxima recarga lo vuelve a intentar y la página queda con su salida clara.
+ */
+export const VENTANA_RETOMA_MS = 30_000;
+
+/**
+ * Hasta cuándo la cabecera dice "Retomando tu cuenta…" aunque la retoma todavía no haya soltado la pantalla: los 12
+ * segundos de siempre, por si algo queda colgado antes de la primera mirada (el SDK del proveedor sin terminar de bajar).
+ * Lo normal es que la suelte antes la propia retoma, a los 8 segundos de la primera mirada (`cuandoTarda` de `restore`).
+ * La paciencia (`VENTANA_RETOMA_MS`) corre por detrás, sin tener a nadie esperando: si la sesión llega, se abre sola, y si
+ * la persona ya entró de nuevo, la retoma tardía se descarta.
+ */
+export const FUSIBLE_DE_RETOMA_MS = 12_000;

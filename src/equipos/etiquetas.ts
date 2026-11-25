@@ -77,6 +77,9 @@ export function nombreDelEquipo(cuenta: string): string | undefined {
 
 export const hayEtiquetas = (): boolean => etiquetas.size > 0;
 
+/** Si las etiquetas de ahora son nombres de personas (los de una campaña de empresa) y no de equipos. */
+export const etiquetasSonDePersonas = (): boolean => etiquetas.size > 0 && palabra === "personas";
+
 /**
  * Si una lista es de equipos: no está vacía y cada línea es la cuenta de un equipo que este navegador conoce. Una sola
  * línea que no lo sea (una persona, o un equipo de otro día) la vuelve una lista de personas. Es lo que decide la palabra

@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import deployments from "../../../src/stellar/deployments.json";
 import { CONTRACT_ERRORS } from "../../../src/stellar/errores";
 import {
+  CONTEOS_POR_IP_POR_HORA,
   ERRORES,
   EVENTOS,
   type Evento,
   MAX_CUERPO,
   OFICIALES,
   ORIGENES,
+  REDES,
   claveDeProps,
   claveDeRef,
   contratoOficial,
@@ -151,6 +153,18 @@ describe("la lista cerrada del contador", () => {
     });
   });
 
+  it("el tope de conteos por conexión alcanza para un evento entero que sale por una sola dirección", () => {
+    // 150 personas desde el wifi de un salón comparten una sola dirección: con 1.000 por hora el final del evento se
+    // perdía en silencio. El Worker usa este mismo número, sin copiarlo.
+    expect(CONTEOS_POR_IP_POR_HORA).toBe(5_000);
+    const personas = 150;
+    const porPersona = 20;
+    expect(CONTEOS_POR_IP_POR_HORA).toBeGreaterThanOrEqual(personas * porPersona);
+    const index = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    expect(index).toMatch(/dentroDelCupo\(this\.porIp, ip, CONTEOS_POR_IP_POR_HORA, ahora\)/);
+    expect(index).not.toMatch(/const CONTEOS_POR_IP_POR_HORA\s*=/);
+  });
+
   it("el tope por dirección agrupa IPv6 por /64", () => {
     expect(grupoDeIp("190.181.10.20")).toBe("190.181.10.20");
     expect(grupoDeIp("::ffff:190.181.10.20")).toBe("190.181.10.20");
@@ -223,7 +237,7 @@ describe("los eventos del aula y el origen", () => {
   });
 
   it("el origen es una palabra de la lista, en la entrada y al sellar, y puede faltar", () => {
-    expect([...ORIGENES]).toEqual(["home", "aula", "meetup", "ruleta", "eventos", "proof", "video"]);
+    expect([...ORIGENES]).toEqual(["home", "aula", "meetup", "ruleta", "eventos", "proof", "video", "tarjeta"]);
     for (const from of ORIGENES) {
       expect(validarConteo({ e: "seal_confirmed", p: { network: "mainnet", from } }), from).toMatchObject({ ok: true });
       expect(validarConteo({ e: "account_connected", p: { kind: "google", from } }), from).toMatchObject({ ok: true });
@@ -257,6 +271,49 @@ describe("los eventos del aula y el origen", () => {
       [{ e: "video_made", p: { format: "mp4", result: "ok" }, ref: REF }, "ref"],
     ];
     for (const [x, motivo] of casos) expect(validarConteo(x), JSON.stringify(x)).toEqual({ ok: false, motivo });
+  });
+});
+
+describe("la red de la entrada y el paso de la cuenta", () => {
+  it("account_connected lleva la red, y sigue valiendo sin ella (el sitio que todavía no la manda)", () => {
+    for (const net of REDES) expect(validarConteo({ e: "account_connected", p: { kind: "google", network: net } }), net).toMatchObject({ ok: true });
+    expect(validarConteo({ e: "account_connected", p: { kind: "google", network: "mainnet", from: "aula" } }).ok).toBe(true);
+    // Prueba y Oficial se separan; una red que no es del contrato no entra.
+    expect(validarConteo({ e: "account_connected", p: { kind: "test", network: "futurenet" } })).toEqual({ ok: false, motivo: "valor" });
+    expect(validarConteo({ e: "account_connected", p: { kind: "google", network: 1 } })).toEqual({ ok: false, motivo: "valor" });
+  });
+
+  it("oficial_step cuenta cada etapa del paso de la cuenta, una palabra de la lista", () => {
+    for (const paso of ["abrio", "cupon", "activada", "protegida", "lista", "prueba"]) {
+      expect(validarConteo({ e: "oficial_step", p: { paso } }), paso).toMatchObject({ ok: true });
+    }
+    expect(validarConteo({ e: "oficial_step" })).toEqual({ ok: false, motivo: "falta" });
+    expect(validarConteo({ e: "oficial_step", p: { paso: "otra-etapa" } })).toEqual({ ok: false, motivo: "valor" });
+    expect(validarConteo({ e: "oficial_step", p: { paso: "Ana" } })).toEqual({ ok: false, motivo: "valor" });
+  });
+
+  it("cupon_llegada dice si llegó en Oficial o dentro del navegador de una app", () => {
+    for (const donde of ["oficial", "app"]) expect(validarConteo({ e: "cupon_llegada", p: { donde } }), donde).toMatchObject({ ok: true });
+    expect(validarConteo({ e: "cupon_llegada", p: { donde: "prueba" } })).toEqual({ ok: false, motivo: "valor" });
+    expect(validarConteo({ e: "cupon_llegada" })).toEqual({ ok: false, motivo: "falta" });
+  });
+
+  it("lo nuevo no lleva token, cuenta, nombre ni horas: solo palabras de sus listas", () => {
+    const nuevos: Evento[] = ["oficial_step", "cupon_llegada"];
+    for (const e of nuevos) {
+      expect(e).toMatch(/^[a-z_]+$/);
+      expect(validarConteo({ ...ejemplo(e), ref: REF }), e).toEqual({ ok: false, motivo: "ref" });
+      const regla = EVENTOS[e];
+      for (const [k, valores] of [...Object.entries(regla.p), ...Object.entries(regla.o)]) {
+        expect(k).toMatch(/^[a-z]+$/);
+        // Una palabra corta de la lista: ni una dirección, ni un token, ni un correo, ni una hora.
+        for (const v of valores) {
+          expect(v, `${e}.${k}=${v}`).toMatch(/^[a-z]{1,20}$/);
+          expect(v).not.toMatch(/^[GC][A-Z2-7]{55}$/);
+          expect(v).not.toMatch(/[:@. ]/);
+        }
+      }
+    }
   });
 });
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CAMPANA_MAX,
   RECHAZOS_POR_CONEXION,
@@ -13,6 +13,16 @@ import {
   type AltaDePersona,
 } from "../../workers/sala/src/campana";
 import type { Ejecutar, ValorSql } from "../../workers/sala/src/registro";
+import {
+  altaDe,
+  campanaAbierta,
+  montarMundo,
+  personaDePrueba,
+  type MundoDeSala,
+  type SalaDeCampana,
+} from "./mundo-sala";
+
+vi.mock("cloudflare:workers", async () => await import("./cloudflare-falso"));
 
 /** Las altas de campaña contra un SQLite de verdad, con huellas inventadas y sin llamadas al proveedor. */
 function nuevaSala(): { sql: Ejecutar; db: DatabaseSync } {
@@ -189,5 +199,67 @@ describe("el alta de una persona con la sesión ya verificada", () => {
     const otro = estadoDeCelular(sql, cuentaN(1), huella("llave-2"));
     expect(otro).toEqual({ fase: "abierta", total: 1, cierraMs: CIERRA, anotada: false });
     expect(otro).not.toHaveProperty("n");
+  });
+});
+
+/** El día y la hora de las pruebas de contrato: el reloj lo mueve cada prueba. */
+const AHORA_CONTRATO = Date.UTC(2026, 10, 21, 15, 0, 0);
+const CIERRA_CONTRATO = AHORA_CONTRATO + 3_600_000;
+const VERIFY = "/v3/tokens/verify";
+
+describe("el contrato del alta de campaña en la sala (issue #168, residual en sala)", () => {
+  let mundo: MundoDeSala;
+  let sala: SalaDeCampana;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(AHORA_CONTRATO);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  async function total(): Promise<number> {
+    const r = await mundo.pedir(`/v1/sala/${sala.id}/campana/estado`);
+    return ((await r.json()) as { total: number }).total;
+  }
+
+  it("un instante antes del cierre todavía entra, y desde la hora de cierre da cerrada sin llamar al proveedor", async () => {
+    mundo = await montarMundo();
+    sala = await campanaAbierta(mundo, AHORA_CONTRATO);
+    vi.setSystemTime(CIERRA_CONTRATO - 1);
+    expect((await altaDe(mundo, sala.id, personaDePrueba(mundo, 1))).status).toBe(201);
+    const antes = mundo.proveedor.llamadas[VERIFY] ?? 0;
+    vi.setSystemTime(CIERRA_CONTRATO);
+    const tarde = await altaDe(mundo, sala.id, personaDePrueba(mundo, 2));
+    expect(tarde.status).toBe(409);
+    expect(await tarde.json()).toEqual({ error: "cerrada" });
+    // Fuera de hora no se pregunta nada a nadie: la campaña ya no recibe a nadie.
+    expect(mundo.proveedor.llamadas[VERIFY] ?? 0).toBe(antes);
+    expect(await total()).toBe(1);
+  });
+
+  it("el código del QR de otro evento no sirve; con el pase de esta sala la misma persona entra", async () => {
+    mundo = await montarMundo({ PASE: "1" });
+    sala = await campanaAbierta(mundo, AHORA_CONTRATO);
+    const otra = await campanaAbierta(mundo, AHORA_CONTRATO, { evento: "otra-feria" });
+    const pase = async (cual: SalaDeCampana): Promise<string> => {
+      const r = await mundo.pedir(`/v1/sala/${cual.id}/campana/pase`, {
+        cabeceras: { Authorization: `Bearer ${cual.token}` },
+      });
+      expect(r.status).toBe(200);
+      return ((await r.json()) as { p: string }).p;
+    };
+    const paseAjeno = await pase(otra);
+    const pasePropio = await pase(sala);
+    expect(paseAjeno).not.toBe(pasePropio);
+    const persona = personaDePrueba(mundo, 1);
+    const ajeno = await altaDe(mundo, sala.id, persona, { cuerpo: { p: paseAjeno } });
+    expect(ajeno.status).toBe(409);
+    expect(await ajeno.json()).toEqual({ error: "pase" });
+    const propio = await altaDe(mundo, sala.id, persona, { cuerpo: { p: pasePropio } });
+    expect(propio.status).toBe(201);
   });
 });

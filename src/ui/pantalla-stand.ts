@@ -145,6 +145,14 @@ export function crearPantallaDelStand(deps: DepsDePantalla): PantallaDelStand {
     chip.className = "stp-chip";
     chip.textContent = tx(ESTADO_CLAVE[f.estado]);
     li.append(nombre, chip);
+    if (f.repetido) {
+      // Marca visible para quien organiza: puede haber dos equipos de verdad con el mismo nombre, no se ocultan.
+      li.dataset.repetido = "1";
+      const marca = document.createElement("span");
+      marca.className = "stp-chip";
+      marca.textContent = tx("eqStRepetido");
+      li.append(marca);
+    }
     return li;
   }
 

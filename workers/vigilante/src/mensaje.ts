@@ -233,6 +233,12 @@ const CATALOGO: Record<string, Entrada> = {
     frase: () => "El portero no contestó en las últimas dos vueltas, unos 20 minutos. Nadie puede sellar con la cuenta de Google hasta que vuelva.",
     hacer: () => "Mirá el panel de Cloudflare: Workers, tinkazo-patrocinio-mainnet, y su registro. Si Cloudflare tiene una falla, esperá. Lo sellado no se pierde.",
   },
+  "cuentas-sin-conteo": {
+    asunto: () => "No se están contando las cuentas nuevas",
+    gravedad: () => 50,
+    frase: () => "El portero no pudo contar las cuentas nuevas en las últimas dos vueltas, unos 20 minutos. Mientras tanto, una ola de cuentas no avisaría.",
+    hacer: () => "Mirá el estado a mano y las cuentas nuevas en el panel de Pollar. Si hay un evento, vigilá las altas a mano hasta que vuelva el conteo.",
+  },
   "vigilante-sin-clave": {
     asunto: () => "Al vigilante le falta la clave del portero",
     gravedad: () => 88,
@@ -264,6 +270,7 @@ const ARREGLOS: Record<string, { corto: string; frase: string }> = {
   "no-es-mainnet": { corto: "portero equivocado", frase: "El vigilante vuelve a mirar el portero de producción." },
   "respuesta-invalida": { corto: "respuesta del portero", frase: "El portero volvió a contestar algo que se entiende." },
   "sin-lectura": { corto: "el portero vuelve a contestar", frase: "El portero volvió a contestar." },
+  "cuentas-sin-conteo": { corto: "conteo de cuentas", frase: "El portero volvió a contar las cuentas nuevas." },
   "vigilante-sin-clave": { corto: "clave del vigilante", frase: "El vigilante volvió a entrar al portero." },
 };
 
@@ -444,6 +451,44 @@ export function mensajeDeResumen(a: DatosDeResumen, c: Contexto): Mensaje {
   const cuando = a.horas === 24 ? "todos los días a las 8 de la mañana (hora de Bolivia)" : `cada ${a.horas} horas`;
   const vida = a.horas === 24 ? "Si un día no llega, el vigilante se cayó." : "Si deja de llegar a su hora, el vigilante se cayó.";
   texto.push("", `Este resumen llega ${cuando}. Es la señal de vida del vigilante. ${vida}`, "", horaDeBolivia(c.ahora), PIE);
+  return { asunto, texto: texto.join("\n") };
+}
+
+export interface DatosDeCuentas {
+  /** Los motivos que pasaron el umbral en los últimos 60 minutos, con su cifra y el umbral que cruzó cada uno. */
+  desbordados: Array<{ motivo: "cuentas-nuevas" | "activaciones"; hubo: number; umbral: number }>;
+}
+
+/**
+ * Lo que sirve y lo que no cuando se abren muchas cuentas. Pausar las altas del portero frena el canje de cupones y el alta de quien
+ * ganó, pero las cuentas las crea Pollar cuando alguien entra con Google, antes de pasar por el portero: esa pausa no las frena.
+ * El único corte está en el panel de Pollar, frena también a quien entra de verdad y lo decide quien mantiene el proyecto.
+ */
+const HACER_CUENTAS =
+  "Pausar las altas del portero no frena esto, porque las cuentas las crea Pollar cuando alguien entra, no el portero. Si no es una ola de gente de un evento, avisá a quien mantiene el proyecto: el único corte está en el panel de Pollar y frena también a quien entra de verdad. Los pasos están en docs/operacion.md, en Qué hacer con cada aviso.";
+
+/** El aviso por las cuentas nuevas y las activaciones por hora (issue 177): un correo por oleada y por motivo. */
+export function mensajeDeCuentas(a: DatosDeCuentas, c: Contexto): Mensaje {
+  const CADA_UNO: Record<DatosDeCuentas["desbordados"][number]["motivo"], { asunto: string; frase: (d: DatosDeCuentas["desbordados"][number]) => string; hacer: string }> = {
+    "cuentas-nuevas": {
+      asunto: "Muchas cuentas nuevas en una hora",
+      frase: (d) => `Se abrieron ${miles(d.hubo)} cuentas nuevas en una hora, más que el umbral de ${miles(d.umbral)}. Alguien podría estar creando cuentas con un guion, sin pasar por el stand.`,
+      hacer: `${HACER_CUENTAS} Mirá en el panel de Pollar qué cuentas se abrieron en esa hora y cuántos créditos bajaron.`,
+    },
+    activaciones: {
+      asunto: "Muchas activaciones en una hora",
+      frase: (d) => `Hubo ${miles(d.hubo)} activaciones de cuentas en una hora, más que el umbral de ${miles(d.umbral)}. Alguien podría estar activando cuentas con un guion.`,
+      hacer: `${HACER_CUENTAS} Mirá en el panel de Pollar qué cuentas se activaron en esa hora y cuántos créditos bajaron.`,
+    },
+  };
+  const asunto = a.desbordados.length === 2 ? "Muchas cuentas nuevas y activaciones en una hora" : CADA_UNO[a.desbordados[0]?.motivo ?? "cuentas-nuevas"].asunto;
+  const texto: string[] = [];
+  a.desbordados.forEach((d, i) => {
+    texto.push(CADA_UNO[d.motivo].frase(d));
+    texto.push(`Qué hacer: ${CADA_UNO[d.motivo].hacer}`);
+    if (i < a.desbordados.length - 1) texto.push("");
+  });
+  texto.push("", ...cifras(c), "", horaDeBolivia(c.ahora), PIE);
   return { asunto, texto: texto.join("\n") };
 }
 

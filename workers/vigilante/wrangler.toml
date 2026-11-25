@@ -42,3 +42,10 @@ CORREO_DOMINIO = "tinkazo.app"
 # Cada cuántas horas sale el resumen: 24 es uno por día, a las 12:00 UTC (las 8 de la mañana en Bolivia). El día de un evento
 # se puede bajar (por ejemplo 6 o 3) y volver a 24 después.
 RESUMEN_CADA_HORAS = "24"
+# El umbral del aviso de cuentas (issue 177): el vigilante manda un correo cuando en los últimos 60 minutos se abrieron, o se activaron,
+# más cuentas que este umbral. 200 por hora, para que un evento de 150 personas no dé falsa alarma.
+CUENTAS_UMBRAL = "200"
+# El cupo del evento: el día que hay un evento abierto se pone el cupo de cuentas de ese evento, y ese cupo toma el lugar
+# del umbral mientras la variable tenga un valor, y no se suma: con 150 de cupo, una cuenta de más ya avisa. Para un evento de
+# 150 personas, dejarla vacía (vale CUENTAS_UMBRAL) o poner un cupo holgado. Con la variable vacía (lo normal fuera del evento), vale CUENTAS_UMBRAL.
+CUENTAS_EVENTO_CUPO = ""

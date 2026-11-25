@@ -72,6 +72,11 @@ export interface FilaDePantalla {
   n: number;
   nombre: string;
   estado: EstadoEnPantalla;
+  /**
+   * Dos equipos con el mismo nombre (issue #119): los DOS quedan marcados para quien organiza. No se ocultan, porque
+   * puede haber dos equipos de verdad con el mismo nombre: la marca solo denuncia, nunca esconde.
+   */
+  repetido?: boolean;
 }
 
 /**
@@ -84,13 +89,27 @@ export interface FilaDePantalla {
  */
 export function filasDePantalla(modo: ModoEquipos, equipos: readonly Equipo[], evidencias: Evidencias): { filas: FilaDePantalla[]; conCupon: number; total: number } {
   const orden = [...equipos].sort((a, b) => a.n - b.n);
+  // Se cuenta primero, fuera de la fila: así los dos lados de una pareja de nombre repetido quedan marcados para
+  // quien organiza, no solo el que lleva el «(2)». Y la numeración no cambia: sigue el orden en que se anotaron.
+  const repetidos = new Map<string, number>();
+  for (const e of orden) {
+    if (e.revisar) continue;
+    const clave = e.nombre.toLocaleLowerCase();
+    repetidos.set(clave, (repetidos.get(clave) ?? 0) + 1);
+  }
   const vistas = new Map<string, number>();
   const filas: FilaDePantalla[] = [];
   for (const e of orden) {
     if (e.revisar) continue;
-    const veces = (vistas.get(e.nombre.toLocaleLowerCase()) ?? 0) + 1;
-    vistas.set(e.nombre.toLocaleLowerCase(), veces);
-    filas.push({ n: e.n, nombre: veces === 1 ? e.nombre : `${e.nombre} (${veces})`, estado: estadoEnPantalla(modo, e, evidencias) });
+    const clave = e.nombre.toLocaleLowerCase();
+    const veces = (vistas.get(clave) ?? 0) + 1;
+    vistas.set(clave, veces);
+    filas.push({
+      n: e.n,
+      nombre: veces === 1 ? e.nombre : `${e.nombre} (${veces})`,
+      estado: estadoEnPantalla(modo, e, evidencias),
+      ...(repetidos.get(clave) === 1 ? {} : { repetido: true }),
+    });
   }
   const conCupon = filas.filter((f) => f.estado === "cupon").length;
   return { filas, conCupon, total: filas.length };
