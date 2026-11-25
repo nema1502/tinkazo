@@ -14,9 +14,11 @@ import {
   pintarGano,
   pintarHola,
   pintarOtra,
+  ponerElSello,
   pintarSalio,
   pintarTermino,
 } from "./adentro";
+import type { ComprobacionDelSello, DeLaCampana } from "./comprobar";
 import type { TarjetaMontada } from "./confirmar";
 import type { Regresiva, Sorteo } from "./empieza";
 import { festejar } from "./festejo";
@@ -159,8 +161,14 @@ export interface DepsDelCelular {
   ventanaRapida?: boolean;
   /** Un número al azar entre 0 y 1: reparte el primer pedido de cada tramo del resultado entre los celulares. Sin esto, `Math.random`. */
   azar?: () => number;
-  /** Las cuentas elegidas y el enlace al comprobante, o null si todavía no hay resultado. */
-  resultado: () => Promise<{ ganadoras: string[]; comprobante: string | null } | null | "red">;
+  /** Las cuentas elegidas, el número del sorteo que la sala guardó y el enlace al comprobante, o null si todavía no hay resultado. */
+  resultado: () => Promise<{ sorteo?: string | null; ganadoras: string[]; comprobante: string | null } | null | "red">;
+  /**
+   * La comprobación propia del sello (`comprobar.ts`): el celular lee el sello en el historial público y comprueba él mismo
+   * que su cuenta está en la lista sellada de esta campaña, sin creerle a la sala. Dice `esta`, `no-esta` o `null` cuando no
+   * pudo comprobar, y en ese caso la pantalla no dice nada. Sin esto (la demostración) no se comprueba nada.
+   */
+  comprobar?: (o: { comprobante: string; cuenta: string; campana: DeLaCampana }) => Promise<ComprobacionDelSello>;
   /** Lleva a recibir el premio. */
   recibir: () => void;
   /** El enlace entero de Recibir mi premio, para llevarlo a otro navegador. Sin esto no se ofrece mandarlo. */
@@ -229,6 +237,10 @@ interface EstadoInterno {
   avisado: boolean;
   motivoSalida: MotivoDeSalida;
   festejoGrandeHecho: boolean;
+  /** Lo que la comprobación propia del sello dijo de este comprobante, y de cuál fue. Es `null` si no pudo comprobar. */
+  sello: ComprobacionDelSello;
+  selloDe: string | null;
+  comprobandoSello: boolean;
 }
 
 /** El festejo chico dura menos de un segundo: repintar antes lo borraría. */
@@ -304,6 +316,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     avisado: false,
     motivoSalida: "otro",
     festejoGrandeHecho: false,
+    sello: null,
+    selloDe: null,
+    comprobandoSello: false,
   };
   let desmontado = false;
   let consultando = false;
@@ -921,6 +936,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
         avisado: estado.avisado,
         comprobante: estado.comprobante,
         variante: premio?.varianteDeGanaste(deps, cuentaParaGanar()) ?? null,
+        comprobado: selloComprobado(),
       });
       if (!estado.festejoGrandeHecho) {
         estado.festejoGrandeHecho = true;
@@ -936,7 +952,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       return;
     }
     if (estado.pantalla === "otra") {
-      pintarOtra(raiz, deps, { comprobante: estado.comprobante });
+      pintarOtra(raiz, deps, { comprobante: estado.comprobante, comprobado: selloComprobado() });
       return;
     }
     if (estado.pantalla === "salio") {
@@ -1022,7 +1038,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     guardarMemoria(deps.memoria, deps.sala, memoria);
   }
 
-  async function pedirResultado(): Promise<{ ganadoras: string[]; comprobante: string | null } | null | "red"> {
+  async function pedirResultado(): Promise<{ sorteo?: string | null; ganadoras: string[]; comprobante: string | null } | null | "red"> {
     try {
       return await deps.resultado();
     } catch {
@@ -1049,7 +1065,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
    * las elegidas.
    */
   async function aplicarResultado(
-    resultado: { ganadoras: string[]; comprobante: string | null },
+    resultado: { sorteo?: string | null; ganadoras: string[]; comprobante: string | null },
     propio: EstadoPropio | null,
   ): Promise<void> {
     if (desmontado) return;
@@ -1069,6 +1085,42 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     } else {
       ir("otra");
     }
+    void comprobarElSello(resultado, cuenta);
+  }
+
+  /**
+   * La comprobación propia del sello, una sola vez por comprobante y sin esperarla: la pantalla del resultado ya está a la
+   * vista y el festejo corre. Cuando la respuesta llega, la línea se suma en su lugar sin repintar nada. Lo que no se pudo
+   * comprobar no se dice, y lo que dice otro comprobante que el de ahora tampoco.
+   */
+  async function comprobarElSello(
+    resultado: { sorteo?: string | null; ganadoras: string[]; comprobante: string | null },
+    cuenta: string | undefined,
+  ): Promise<void> {
+    const comprobar = deps.comprobar;
+    const comprobante = resultado.comprobante;
+    if (desmontado || !comprobar || !comprobante || !cuenta || estado.comprobandoSello || estado.selloDe === comprobante) return;
+    estado.comprobandoSello = true;
+    let dicho: ComprobacionDelSello = null;
+    try {
+      dicho = await comprobar({
+        comprobante,
+        cuenta,
+        campana: { sorteo: resultado.sorteo ?? null, ganadoras: resultado.ganadoras, promo: deps.campana.promo },
+      });
+    } catch {
+      dicho = null;
+    }
+    estado.comprobandoSello = false;
+    if (desmontado || estado.comprobante !== comprobante) return;
+    estado.sello = dicho;
+    estado.selloDe = comprobante;
+    if (estado.pantalla === "gano" || estado.pantalla === "otra") ponerElSello(raiz, deps, dicho);
+  }
+
+  /** Lo que se dice de la comprobación en una pantalla que se pinta de nuevo: nada si es de otro comprobante o no comprobó. */
+  function selloComprobado(): ComprobacionDelSello {
+    return estado.comprobante !== null && estado.comprobante === estado.selloDe ? estado.sello : null;
   }
 
   async function aplicarPropio(propio: EstadoPropio): Promise<void> {
@@ -1360,6 +1412,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     estado.propio = null;
     estado.errorAlta = null;
     estado.festejoGrandeHecho = false;
+    estado.sello = null;
+    estado.selloDe = null;
     entrada.desde = null;
     entrada.falla = null;
     soltarLaTarjeta(true);

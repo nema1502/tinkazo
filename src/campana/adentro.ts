@@ -1,6 +1,7 @@
 /** Pantallas de quien ya entró: solo pintan los datos recibidos y avisan las acciones de la persona. */
 
 import { horaTexto, premiosTexto } from "./formato";
+import type { ComprobacionDelSello } from "./comprobar";
 import type { MemoriaDeCampana } from "./memoria";
 import type { PasoDeCampana, TipoDePaso } from "./modelo";
 import { caja, conDestacado, llama, marcaDeTilde, rotulosChicos } from "./piezas";
@@ -404,7 +405,7 @@ export function pintarAdentro(
 export function pintarGano(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
-  datos: { avisado: boolean; comprobante: string | null; variante?: VarianteDeGanaste | null },
+  datos: { avisado: boolean; comprobante: string | null; variante?: VarianteDeGanaste | null; comprobado?: ComprobacionDelSello },
 ): void {
   const raiz = seccion(raizPrincipal, "#cmp-estado", "cmp-estado cmp-gano cmp-dos");
   if (!raiz) return;
@@ -424,6 +425,7 @@ export function pintarGano(
     raiz.append(der);
   }
   raiz.append(izq);
+  ponerElSello(raizPrincipal, deps, datos.comprobado ?? null);
   const accion = caja("cmp-accion");
   raiz.append(accion);
   parrafo(accion, datos.variante?.linea ?? deps.tx("cpParaRecibir"), "cmp-apoyo");
@@ -465,7 +467,7 @@ function pintarResultado(
 export function pintarOtra(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
-  datos: { comprobante: string | null },
+  datos: { comprobante: string | null; comprobado?: ComprobacionDelSello },
 ): void {
   pintarResultado(
     raizPrincipal,
@@ -473,6 +475,28 @@ export function pintarOtra(
     { titulo: deps.tx("cpOtraPersona"), apoyo: [deps.tx("cpGracias")] },
     datos.comprobante ? { texto: deps.tx("cpComoSeEligio"), enlace: datos.comprobante } : null,
   );
+  ponerElSello(raizPrincipal, deps, datos.comprobado ?? null);
+}
+
+/**
+ * La línea de la comprobación propia del sello, puesta en el bloque del resultado que ya está a la vista. No repinta nada:
+ * el festejo, el título y el botón siguen como estaban, y si la línea ya estaba solo cambia su texto. Con `null` no hace nada.
+ */
+export function ponerElSello(raizPrincipal: HTMLElement, deps: DepsDelCelular, dicho: ComprobacionDelSello): void {
+  if (dicho === null) return;
+  const bloque = raizPrincipal.querySelector<HTMLElement>("#cmp-estado .cmp-izq");
+  if (!bloque) return;
+  let linea = bloque.querySelector<HTMLElement>(":scope > .cmp-sello");
+  if (!linea) {
+    linea = document.createElement("p");
+    linea.className = "cmp-apoyo cmp-sello";
+    linea.setAttribute("role", "status");
+    // En Ganaste va antes del enlace para ver cómo se eligió, que cierra el bloque.
+    const enlace = bloque.querySelector(":scope > a");
+    if (enlace) enlace.before(linea);
+    else bloque.append(linea);
+  }
+  linea.textContent = deps.tx(dicho === "esta" ? "cpMiSelloEsta" : "cpMiSelloNo");
 }
 
 /** La salida de la lista siempre explica el motivo que informó la sala. */
