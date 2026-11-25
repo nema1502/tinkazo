@@ -189,14 +189,21 @@ describe("los pasos 01 a 03 de la portada", () => {
     }
   });
 
-  it("las capturas se cargan diferidas con su tamaño, y el sello usa la llama del símbolo de la página", () => {
-    for (const img of document.querySelectorAll<HTMLImageElement>(".steps img")) {
-      expect(img.getAttribute("loading")).toBe("lazy");
-      expect(img.getAttribute("width")).toMatch(/^\d+$/);
-      expect(img.getAttribute("height")).toMatch(/^\d+$/);
+  it("los tres son dibujos del mismo estilo, sin capturas, y el sello usa la llama del símbolo de la página", () => {
+    for (const p of document.querySelectorAll<HTMLElement>(".steps > article")) {
+      expect(p.querySelector(".paso-media svg"), p.textContent ?? "").not.toBeNull();
+      expect(p.querySelector("img"), p.textContent ?? "").toBeNull();
+      expect(p.querySelector(".paso-media svg")?.getAttribute("viewBox")).toBe("0 0 64 64");
     }
     expect(document.querySelector(".paso-sello use")?.getAttribute("href")).toBe("#llama");
     expect(document.getElementById("llama")).not.toBeNull();
+  });
+
+  it("van sin caja ni sombra, con el dibujo de 64 px al lado del texto", () => {
+    const regla = css.match(/\.steps article \{([^}]*)\}/)?.[1] ?? "";
+    expect(regla).toMatch(/grid-template-columns: 64px/);
+    expect(regla).not.toMatch(/box-shadow|border:|background/);
+    expect(css).toMatch(/\.steps \.paso-media \{ width: 64px; height: 64px;/);
   });
 
   it("no usa los stickers de la colección", () => {
@@ -216,5 +223,84 @@ describe("los pasos 01 a 03 de la portada", () => {
       expect(typeof T.es[k]).toBe("string");
       expect(typeof T.en[k]).toBe("string");
     }
+  });
+});
+
+describe("la portada en el celular y en la laptop", () => {
+  const bloque = (inicio: RegExp): string => {
+    const i = css.search(inicio);
+    expect(i, String(inicio)).toBeGreaterThan(-1);
+    let nivel = 0;
+    for (let j = css.indexOf("{", i); j < css.length; j++) {
+      if (css[j] === "{") nivel++;
+      if (css[j] === "}" && --nivel === 0) return css.slice(i, j + 1);
+    }
+    return "";
+  };
+
+  it("hasta 859 px, y en laptops bajas, cada puerta es un renglón con miniatura de 64 px y título, sin la línea", () => {
+    const b = bloque(/@media \(max-width: 859px\), \(min-width: 860px\) and \(max-height: 820px\) \{\s*\.puerta \{ display: grid;/);
+    expect(b).toMatch(/\.puerta \{ display: grid; grid-template-columns: 64px/);
+    expect(b).toMatch(/\.puerta-b \{ display: none; \}/);
+    expect(b).toMatch(/\.puerta-empresa \.cp-ejemplo \{ display: none; \}/);
+    expect(b).toMatch(/\.puerta-ico \{ display: grid;/);
+  });
+
+  it("la puerta de las empresas trae su ícono decorativo, que solo el renglón muestra", () => {
+    const ico = document.querySelector(".puerta-empresa .puerta-ico");
+    expect(ico?.getAttribute("aria-hidden")).toBe("true");
+    expect(ico?.querySelector("svg")).not.toBeNull();
+    expect(css).toMatch(/\.puerta-ico \{ display: none; \}/);
+  });
+
+  it("en el celular las puertas suben justo debajo del botón y lo demás baja", () => {
+    const b = bloque(/@media \(max-width: 700px\) \{\s*\.hero-portada \.hero-copy \{ display: contents; \}/);
+    expect(b).toMatch(/\.hero-portada \.hero-copy \{ display: contents; \}/);
+    const orden = (sel: string): number => Number(b.match(new RegExp(`\\.hero-portada \\.${sel} \\{[^}]*order: (\\d+)`))?.[1]);
+    expect(orden("puertas")).toBeLessThan(orden("hero-otras"));
+    expect(orden("hero-otras")).toBeLessThan(orden("hero-note"));
+    expect(orden("hero-note")).toBeLessThan(orden("built-on"));
+  });
+
+  it("la tarjeta entera responde: el área del botón se estira a toda la puerta", () => {
+    expect(css).toMatch(/\.puerta \{[^}]*position: relative/);
+    expect(css).toMatch(/\.puerta \.puerta-a::after \{ content: ""; position: absolute; inset: 0; \}/);
+  });
+
+  it("lado a lado la imagen es baja y los botones entran en la primera pantalla", () => {
+    expect(css).toMatch(/\.puerta-media \{[^}]*aspect-ratio: 21 \/ 9/);
+  });
+
+  it("la puerta de la lista no usa la ruleta y todas las imágenes vienen en par claro y oscuro", () => {
+    const lista = document.querySelector(".puerta-lista")!;
+    expect(lista.innerHTML).not.toContain("wheel");
+    for (const img of lista.querySelectorAll<HTMLImageElement>("img")) expect(img.getAttribute("src")).toMatch(/portada\/pinata(-light)?\.webp/);
+  });
+
+  it("el texto de la tarjeta de ejemplo no baja de 16 px", () => {
+    for (const sel of [".cp-nombres span", ".cp-rotulo", ".cp-premio span", ".cp-estado", ".cp-gente"]) {
+      const regla = css.match(new RegExp(`${sel.replace(/\./g, "\\.")} \\{[^}]*font-size: (\\d+)px`))?.[1];
+      expect(Number(regla), sel).toBeGreaterThanOrEqual(16);
+    }
+    expect(css).toMatch(/@media \(max-width: 359px\) \{ \.cp-nombres span \{ display: none; \} \}/);
+  });
+
+  it("la imagen del hero sigue el tema elegido con el mismo par claro y oscuro de las puertas", () => {
+    const hero = document.querySelector(".hero-shot")!;
+    const alts = [...hero.querySelectorAll<HTMLImageElement>("img.hero-alt")];
+    expect(alts.map((i) => i.getAttribute("src"))).toEqual(["/juegos/race.webp", "/juegos/race-light.webp"]);
+    for (const i of alts) {
+      expect(i.getAttribute("loading")).toBe("lazy");
+      expect(i.getAttribute("width")).toBe("900");
+      expect(i.getAttribute("height")).toBe("506");
+    }
+    // La primera imagen no se difiere y sigue siendo la que se pide en la primera pantalla.
+    expect(hero.querySelector("picture img")?.hasAttribute("loading")).toBe(false);
+    expect(css).toMatch(/:root\[data-theme="dark"\] \.hero-shot picture \{ display: none; \}/);
+    expect(css).toMatch(/:root\[data-theme="light"\] \.hero-shot picture \{ display: none; \}/);
+  });
+
+  it("el enlace de la campaña en Sortear se lee morado como los demás enlaces del panel", () => {
+    expect(css).toMatch(/\.premio-campana a \{[^}]*color: var\(--purple-ink\)/);
   });
 });

@@ -1735,6 +1735,7 @@ export const T: Record<Lang, Dict> = {
     navSortear: "Sortear",
     navComo: "Cómo funciona",
     navEmpresas: "Para empresas",
+    navEmpresasC: "Empresas",
     navMis: "Mis sorteos",
     // En el celular, lo que no entra en la fila de la cabecera (Juegos, Cómo funciona, Seguridad, Precios).
     navMas: "Más",
@@ -4869,6 +4870,7 @@ export const T: Record<Lang, Dict> = {
     navSortear: "Draw",
     navComo: "How it works",
     navEmpresas: "For companies",
+    navEmpresasC: "Companies",
     navMis: "My draws",
     // On a phone, what does not fit in the header row (Games, How it works, Security, Pricing).
     navMas: "More",
