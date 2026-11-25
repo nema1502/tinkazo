@@ -29,7 +29,7 @@ import { modesFlagOn, requestedMode, withMode } from "./modos/bandera";
 import { fechaLarga } from "./ui/agrupar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
 import { abrirSorteo } from "./ui/compartir";
-import { tomarLogoEntrante } from "./enlace-corto";
+import { tomarCortoDelVivo, tomarLogoEntrante } from "./enlace-corto";
 import { pintarFranja } from "./ui/logo-franja";
 import { montarConfianza } from "./ui/confianza";
 import { contarApertura, contarVeredicto, quitarMarca, refDe, viaDe } from "./contar";
@@ -197,6 +197,11 @@ let enlaceVerificado = "";
  * uno. Un enlace largo, o uno corto sin logo, abre sin él, con el mismo veredicto.
  */
 const logoDelEnlace = tomarLogoEntrante(location.pathname + location.hash);
+/**
+ * El enlace corto con el que entró el celular de quien llegó desde la vista en vivo (`ui/espectador.ts`), si lo dejó
+ * para esta ruta. Un enlace largo, o abrir la página sin pasar por la vista, no lo tiene.
+ */
+const cortoDelVivo = tomarCortoDelVivo(location.pathname + location.hash);
 /** El último estado del veredicto: compartir lleva el logo solo en verde o amarillo, como la franja. */
 let estadoDelVeredicto: "ok" | "partial" | "bad" | "working" = "working";
 /** Lo que se está mostrando, para volver a contarlo en otro idioma o cuando llegan los otros sellos. */
@@ -862,9 +867,11 @@ export function renderResult(
   // corto, ese mismo se vuelve a compartir.
   const compartir = $<HTMLButtonElement>("btn-compartir");
   compartir.style.display = "";
-  compartir.onclick = () =>
-    abrirSorteo({
-      enlace: enlaceVerificado,
+  compartir.onclick = () => {
+    const datos: Parameters<typeof abrirSorteo>[0] = {
+      // Llegó desde la vista en vivo: se comparte el corto con el que entró ese celular, sin crear otro desde la
+      // conexión del salón (el servicio de enlaces limita las altas por hora de cada conexión).
+      enlace: cortoDelVivo ?? enlaceVerificado,
       ganadores: winners.map((i) => mostrar(names[i] ?? "")),
       total: names.length,
       // Con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas: cuando la lista
@@ -880,7 +887,10 @@ export function renderResult(
       ...(esSinSello(proof) ? { sinSello: true } : {}),
       // El logo del enlace, para la foto y el mismo corto (src/logo.ts).
       ...(logoDelEnlace && (estadoDelVeredicto === "ok" || estadoDelVeredicto === "partial") ? { logo: logoDelEnlace } : {}),
-    });
+    };
+    if (cortoDelVivo) abrirSorteo(datos, undefined, { corto: false });
+    else abrirSorteo(datos);
+  };
   // El contrato, solo si es uno de Tinkazo: el enlace a uno ajeno sería darle crédito.
   if (r.ancla.tipo === "oficial") {
     const a = $<HTMLAnchorElement>("v-contract");
