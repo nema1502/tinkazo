@@ -12,6 +12,7 @@ import { seVeDesde } from "../campana/de-quien";
 import { type Campana, leerCampana } from "../campana/modelo";
 import { generarClave } from "./cifra";
 import { esCuentaValida } from "../../workers/sala/src/logica";
+import { formaDeLista } from "../campana/forma-de-lista";
 import { type Dependencias, type EquipoDeSala, type Sala, servicioDeSala } from "./cliente";
 import { horaDeLaSala } from "./hora";
 
@@ -348,16 +349,19 @@ export async function borrarSalaVacia(s: Sala, dep: DependenciasOrg = {}): Promi
 /** Cuántas vueltas de 200 se piden como mucho al leer la lista entera: una campaña admite 300. */
 const VUELTAS_DE_LECTURA = 10;
 
-/** Una fila de `GET equipos` tal como la devuelve la sala, o `null` si no tiene la forma: no se descarta en silencio. */
+/**
+ * Una fila de `GET equipos` tal como la devuelve la sala, o `null` si no tiene la forma: no se descarta en silencio. El campo
+ * `cuenta` es una cuenta o una línea de persona, y cuál de las dos lo decide la lista entera (`formaDeLista`), no cada fila.
+ */
 function leerFila(x: unknown): EquipoDeSala | null {
   if (!esObjeto(x)) return null;
   const { n, cuenta, d, estado, v } = x;
   if (!esEntero(n) || n < 1 || !esEntero(v) || v < 0 || typeof d !== "string" || typeof estado !== "string") return null;
-  if (!esCuentaValida(cuenta)) return null;
+  if (typeof cuenta !== "string") return null;
   return { n, cuenta, d, estado, v };
 }
 
-/** Una vuelta de la lista: las filas con versión mayor que `desde`, o `null` si el pedido falló o alguna fila no se entiende. */
+/** Una vuelta de la lista: las filas con versión mayor que `desde`, o `null` si el pedido falló o alguna fila no tiene la forma de una fila. */
 async function leerVuelta(s: Sala, desde: number, dep: DependenciasOrg): Promise<EquipoDeSala[] | null> {
   const r = await llamar(dep, rutaDe(s, `/equipos?desde=${desde}`), { headers: auth(s) });
   if (!r || !r.ok) return null;
@@ -377,8 +381,12 @@ async function leerVuelta(s: Sala, desde: number, dep: DependenciasOrg): Promise
  * DESPUÉS de las páginas: tiene que estar cerrada las dos veces, con el mismo total y las mismas quitadas, y una última
  * página vacía, pedida después del segundo estado, confirma que nadie entró entre medio. La cantidad leída tiene que ser
  * el total. Si algo no coincide, o cualquier pedido falla, `null` y la lista no se pasa.
+ *
+ * La lista tiene que ser de una sola forma: toda de cuentas o toda de líneas de persona. Una fila que no es ni una ni otra,
+ * sin ninguna línea de persona, es lo de siempre: `null` en cuanto se lee, sin pedir más. Una lista con líneas de persona
+ * junto a otra cosa no se sortea y reintentar no la cambia: `"mezclada"`, y solo si la lectura fue estable de punta a punta.
  */
-export async function leerTodasLasAnotadas(s: Sala, dep: DependenciasOrg = {}): Promise<EquipoDeSala[] | null> {
+export async function leerTodasLasAnotadas(s: Sala, dep: DependenciasOrg = {}): Promise<EquipoDeSala[] | "mezclada" | null> {
   const antes = await estadoConToken(s, dep);
   if (typeof antes === "string" || antes.fase !== "cerrada") return null;
   const leidas: EquipoDeSala[] = [];
@@ -389,6 +397,8 @@ export async function leerTodasLasAnotadas(s: Sala, dep: DependenciasOrg = {}): 
     if (!filas) return null;
     if (filas.length === 0) terminada = true;
     leidas.push(...filas);
+    // Una fila que no es una cuenta, con ninguna línea de persona en la lista, se rechaza al leerla, como siempre.
+    if (formaDeLista(leidas.map((f) => f.cuenta)) === "rara") return null;
     desde = Math.max(desde, ...filas.map((f) => f.v));
   }
   if (!terminada) return null;
@@ -397,7 +407,8 @@ export async function leerTodasLasAnotadas(s: Sala, dep: DependenciasOrg = {}): 
   if (despues.total !== antes.total || despues.quitadas !== antes.quitadas) return null;
   if (leidas.length !== despues.total || new Set(leidas.map((f) => f.n)).size !== leidas.length) return null;
   const ultima = await leerVuelta(s, desde, dep);
-  return ultima !== null && ultima.length === 0 ? leidas : null;
+  if (ultima === null || ultima.length !== 0) return null;
+  return formaDeLista(leidas.map((f) => f.cuenta)) === "mezclada" ? "mezclada" : leidas;
 }
 
 /** Lo que la sala contesta a un aviso de sellada: su motivo, o `red` si no hubo respuesta que se entienda. */
@@ -477,8 +488,15 @@ export interface ResultadoDeSala {
   comprobante: string;
 }
 
-/** Lee el resultado que la sala guardó, sin token. En este pedido `sin-resultado` es un 404. */
-export async function resultadoDeSala(s: Sala, dep: DependenciasOrg = {}): Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red"> {
+/**
+ * Lee el resultado que la sala guardó, sin token. En este pedido `sin-resultado` es un 404. Las ganadoras son todas cuentas o
+ * todas líneas de persona. Una fila que no es de ninguna de las dos, sin líneas de persona, es `red`, como siempre, y una
+ * mezcla es `mezclada`: reintentar no la cambia.
+ */
+export async function resultadoDeSala(
+  s: Sala,
+  dep: DependenciasOrg = {},
+): Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red" | "mezclada"> {
   const r = await llamar(dep, rutaDe(s, "/campana/resultado"), {});
   if (!r) return "red";
   if (r.status === 404) return (await motivoDe(r)) === "sin-resultado" ? "sin-resultado" : "no-existe";
@@ -487,9 +505,12 @@ export async function resultadoDeSala(s: Sala, dep: DependenciasOrg = {}): Promi
   if (!x || typeof x.sorteo !== "string" || typeof x.comprobante !== "string" || !Array.isArray(x.ganadoras)) return "red";
   const ganadoras: string[] = [];
   for (const g of x.ganadoras as unknown[]) {
-    if (!esCuentaValida(g)) return "red";
+    if (typeof g !== "string") return "red";
     ganadoras.push(g);
   }
+  const forma = formaDeLista(ganadoras);
+  if (forma === "rara") return "red";
+  if (forma === "mezclada") return "mezclada";
   return { sorteo: x.sorteo, ganadoras, comprobante: x.comprobante };
 }
 

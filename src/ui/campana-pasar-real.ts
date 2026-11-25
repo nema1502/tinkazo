@@ -44,7 +44,11 @@ function fijarCantidadDeLaCampana(si: boolean): void {
 export function depsDelPasoReales(): DepsDelPaso {
   return {
     ahora: () => Date.now(),
-    leer: (s) => leerTodasLasAnotadas(s),
+    // Una lista mezclada se trata como una lectura que falló. El paso de pasar la lista la manda a su propio aviso más adelante.
+    leer: async (s) => {
+      const leidas = await leerTodasLasAnotadas(s);
+      return leidas === "mezclada" ? null : leidas;
+    },
     descifrar: descifrarEquipo,
     nombreYFiltro: (datos) => {
       const r = revisarEquipo(datos);
