@@ -1418,6 +1418,37 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     expect(abrio).not.toHaveBeenCalled();
   });
 
+  it("con la pregunta abierta, el aviso del sello a los celulares pasa la campaña a sellada y cancelar la deja ahí", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await cerradaConDos(m, p);
+    boton(p, "Armar otra campaña").click();
+    expect(vistaDe(p)).toBe("olvidar");
+    // Mientras se pregunta, el sello termina de avisarse: la pregunta sigue en pantalla y lo que se recuerda ya es la lista sellada.
+    ponerPaso({ paso: "avisada" });
+    expect(vistaDe(p)).toBe("olvidar");
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("sellada");
+    boton(p, "Cancelar").click();
+    expect(vistaDe(p)).toBe("sellada");
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("sellada");
+  });
+
+  it("con la pregunta abierta, el resultado guardado pasa la campaña a sorteada y cancelar la deja ahí", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
+    m.sala.fase = "sellada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
+    await suelta();
+    boton(p, "Elegir otro archivo").click();
+    expect(vistaDe(p)).toBe("olvidar");
+    ponerPaso({ paso: "resultado", filas: [{ cuenta: "GUNO", nombre: "Ana", avisada: false, alta: "esperando" }], otraBilletera: false });
+    expect(vistaDe(p)).toBe("olvidar");
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("sorteada");
+    boton(p, "Cancelar").click();
+    expect(vistaDe(p)).toBe("sorteada");
+  });
+
   it("con la lista sellada y un aviso pendiente a los celulares, dejar la campaña pregunta", async () => {
     const m = mundo();
     guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
