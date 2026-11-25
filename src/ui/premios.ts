@@ -2,6 +2,7 @@ import { esc } from "../dom";
 import { getLang, onLangChange, t, T } from "../i18n";
 import { fijoPorCampana, ganadoresPedidos } from "./ganadores";
 import { lugaresDeMeta, pareceRotulo } from "./lugares-de-meta";
+import { actualizarAvisoDePlata } from "./premio-plata";
 
 /**
  * "¿Qué sorteás?", con opciones.
@@ -328,6 +329,7 @@ export const premiosNoEntran = (): boolean => lugarQueNoEntra() !== null;
  */
 function pintarLargo(): void {
   rotularElPrimero();
+  actualizarAvisoDePlata();
   const linea = document.getElementById("prize-largo");
   if (!linea) return;
   const fuera = lugarQueNoEntra();

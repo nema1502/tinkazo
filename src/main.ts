@@ -15,6 +15,7 @@ import { iniciarCupo } from "./ui/cupo-patrocinio";
 import { iniciarCupon } from "./ui/cupon-enlace-entorno";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
+import { montarAvisoDePlata } from "./ui/premio-plata";
 import { montarGanadores, ponerGanadores } from "./ui/ganadores";
 import { abrirConElModoPedido, montarTurnos } from "./ui/turnos";
 import { MAX_WINNERS } from "./protocol/select";
@@ -225,6 +226,7 @@ iniciarLogo();
 iniciarLogoEnElEstadio();
 bindParticipants();
 montarPremios();
+montarAvisoDePlata();
 montarGanadores();
 // «Orden de turnos»: escondido salvo con la bandera VITE_MODOS o con ?modo=turnos (src/modos/bandera.ts).
 montarTurnos();

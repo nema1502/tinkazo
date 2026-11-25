@@ -492,6 +492,14 @@
         <div class="premio-lugares" id="prize-lugares" hidden></div>
         <!-- Si lo escrito no entra entero en lo que se sella, lo dice acá y Sellar la lista no sigue hasta que se acorte. -->
         <p class="note aviso-premio" id="prize-largo" role="status" hidden></p>
+        <!-- Un premio escrito como monto (50 USD) avisa que una campaña de empresa se lo paga a quien gana (src/ui/premio-plata.ts).
+             Se cierra y no frena Sellar la lista. El enlace de abajo se ve solo con las campañas abiertas. -->
+        <div class="aviso-plata" id="prize-plata" role="status" hidden>
+          <p data-i="plAviso">Parece un premio en dólares digitales. Una campaña se lo paga a quien gana.</p>
+          <a class="enlace" href="/crear-campana.html" data-i="ptEmpresaA">Armar una campaña</a>
+          <button class="aviso-plata-x" id="prize-plata-x" type="button" aria-label="Cerrar aviso" data-i-aria="plCerrar"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <p class="note premio-campana" data-campana-enlace hidden><a class="enlace" href="/crear-campana.html" data-i="plEnlace">¿El premio es en dólares digitales? Armá una campaña.</a></p>
       </div>
       <div class="row mas-fila">
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>
