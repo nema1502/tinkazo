@@ -285,6 +285,7 @@ describe("donde el aviso no corresponde", () => {
   });
 
   it("si la ventana pierde el foco (cambio de pestaña o de aplicación) el campo no se da por abandonado", () => {
+    premio().focus();
     escribir(premio(), "50 USD");
     ventanaConFoco = false;
     salir(premio());
@@ -297,17 +298,20 @@ describe("donde el aviso no corresponde", () => {
   });
 
   it("cuando la ventana recupera el foco se vuelve a mirar el campo, y solo si la persona no sigue escribiendo", () => {
+    premio().focus();
     escribir(premio(), "50 USD");
     ventanaConFoco = false;
     salir(premio());
     expect(aviso().hidden).toBe(true);
+    // La ventana vuelve con el foco en el campo: sigue escribiendo y el aviso espera.
     ventanaConFoco = true;
-    // El foco volvió al campo: sigue escribiendo y el aviso espera.
-    premio().focus();
     window.dispatchEvent(new Event("focus"));
     expect(aviso().hidden).toBe(true);
-    // Si el foco quedó en otro lado, ahora sí se mira lo escrito.
+    // Si el foco se había ido del campo mientras la ventana estaba afuera, ahora sí se mira lo escrito.
+    ventanaConFoco = false;
     premio().blur();
+    expect(aviso().hidden).toBe(true);
+    ventanaConFoco = true;
     window.dispatchEvent(new Event("focus"));
     expect(aviso().hidden).toBe(false);
   });
