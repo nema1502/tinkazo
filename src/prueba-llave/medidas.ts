@@ -35,6 +35,18 @@ export interface PasoDeSorteo {
   cobro: Cobro;
 }
 
+/** Cómo salió entrar desde otro aparato con la misma llave. */
+export interface PasoDeEntrada {
+  /** De dónde salió la pista de nacimiento (`historial`, `rpc` o `local`), o `ninguna` si no se llegó a una. */
+  fuente: string;
+  ledgerDeNacimiento: number | null;
+  segundosBuscando: number;
+  /** Cuántas veces pidió la llave el desbloqueo al entrar: tiene que ser una. `null` si no se llegó a saber. */
+  desbloqueos: number | null;
+  /** Por qué no se entró, o `null` si se entró. */
+  motivo: string | null;
+}
+
 export interface FallaMedida {
   paso: string;
   motivo: string;
@@ -56,6 +68,7 @@ export interface Medidas {
   cuenta: PasoDeCuenta | null;
   sello: PasoDeSello | null;
   sorteo: PasoDeSorteo | null;
+  entrada: PasoDeEntrada | null;
   fallas: FallaMedida[];
 }
 
@@ -74,6 +87,7 @@ export function medidasVacias(ahora: Date = new Date()): Medidas {
     cuenta: null,
     sello: null,
     sorteo: null,
+    entrada: null,
     fallas: [],
   };
 }

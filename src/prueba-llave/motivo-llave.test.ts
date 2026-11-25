@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ErrorDeEntrada } from "./error-de-entrada";
 import { motivoDeLaLlave } from "./motivo-llave";
 
 const suelto = (name: string): Error => Object.assign(new Error(name), { name });
@@ -25,5 +26,11 @@ describe("el motivo de una llave que no salió", () => {
     expect(motivoDeLaLlave("texto", true)).toBe("otro");
     expect(motivoDeLaLlave(null, false)).toBe("otro");
     expect(motivoDeLaLlave(undefined, true)).toBe("otro");
+  });
+
+  it("un error de entrada de la prueba da su motivo antes que cualquier otra lectura", () => {
+    expect(motivoDeLaLlave(new ErrorDeEntrada("sin-cuenta"), true)).toBe("sin-cuenta");
+    expect(motivoDeLaLlave(new ErrorDeEntrada("firmantes", "politicas"), false)).toBe("firmantes");
+    expect(motivoDeLaLlave(new ErrorDeEntrada("vencida"), true)).toBe("vencida");
   });
 });

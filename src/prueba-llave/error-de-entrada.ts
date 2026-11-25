@@ -11,11 +11,13 @@ export type MotivoDeEntrada = MotivoDeBusqueda | "firmantes" | "rechazada";
 
 export class ErrorDeEntrada extends Error {
   readonly motivo: MotivoDeEntrada;
+  readonly detalle: string | undefined;
 
   constructor(motivo: MotivoDeEntrada, detalle?: string) {
     super(detalle ? `${motivo}: ${detalle}` : motivo);
     this.name = "ErrorDeEntrada";
     this.motivo = motivo;
+    this.detalle = detalle;
   }
 }
 

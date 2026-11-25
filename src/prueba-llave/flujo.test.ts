@@ -7,6 +7,7 @@ import { select } from "../protocol/select";
 import type { RespuestaConsulta, RespuestaEnvio } from "../stellar/envio";
 import { entradaDe } from "./ayuda-de-pruebas";
 import type { RespuestaCruda } from "./cobro";
+import { ErrorDeEntrada } from "./error-de-entrada";
 import type { Estado } from "./estados";
 import { Flujo, type EntornoDelFlujo, type OpcionesDeInicio, type RpcDelFlujo } from "./flujo";
 import type { Pagador } from "./pagador";
@@ -78,7 +79,10 @@ function montar(a: Ajustes = {}): Montaje {
     anotarCreacion: async () => undefined,
     conectar: async (credentialId, contractId) => ({ credentialId, contractId }),
     volver: async () => ({ credentialId: "cred", contractId: CUENTA }),
-    entrarConLlave: async () => ({ credentialId: "cred", contractId: CUENTA }),
+    entrarConLlave: async (avisos) => {
+      avisos?.alTerminarElDesbloqueo?.();
+      return { credentialId: "cred", contractId: CUENTA, entrada: { fuente: "historial", ledgerDeNacimiento: 99, segundosBuscando: 1.2, desbloqueos: 1 } };
+    },
     llavesGuardadas: async () => a.llaves ?? [],
     firmarEntrada: async (entrada, vence) => {
       if (a.firmarFalla) throw a.firmarFalla;
@@ -397,6 +401,91 @@ describe("al abrir la página", () => {
     };
     await m.f.entrar();
     expect(m.f.estado).toBe("no-aparece");
+  });
+
+  it("entrar con una llave de otro aparato pasa por entrando, buscando y la cuenta lista, y mide la entrada", async () => {
+    const m = montar();
+    await m.f.entrar();
+    expect(m.estados).toEqual(["entrando", "buscando", "cuenta-lista"]);
+    expect(m.f.contractId).toBe(CUENTA);
+    expect(m.f.medidas.entrada).toEqual({ fuente: "historial", ledgerDeNacimiento: 99, segundosBuscando: 1.2, desbloqueos: 1, motivo: null });
+  });
+
+  it("cada motivo por el que no se pudo entrar tiene su pantalla y no deja conexión", async () => {
+    const casos: Array<[ConstructorParameters<typeof ErrorDeEntrada>[0], Estado]> = [
+      ["sin-cuenta", "sin-cuenta"],
+      ["vencida", "vencida"],
+      ["sin-nacimiento", "no-se-comprobo"],
+      ["ambigua", "no-se-comprobo"],
+      ["firmantes", "no-se-comprobo"],
+      ["rechazada", "no-se-comprobo"],
+      ["red", "no-aparece"],
+    ];
+    for (const [motivo, pantalla] of casos) {
+      const m = montar();
+      m.puente.entrarConLlave = async (avisos) => {
+        avisos?.alTerminarElDesbloqueo?.();
+        throw new ErrorDeEntrada(motivo, "detalle");
+      };
+      await m.f.entrar();
+      expect(m.f.estado, motivo).toBe(pantalla);
+      expect(m.f.contractId, motivo).toBe("");
+      expect(m.f.error, motivo).toBe(`${motivo}:detalle`);
+      expect(m.f.medidas.fallas.at(-1), motivo).toMatchObject({ paso: "entrar", motivo });
+      expect(m.f.medidas.entrada, motivo).toMatchObject({ fuente: "ninguna", motivo, desbloqueos: null });
+    }
+  });
+
+  it("cancelar el desbloqueo vuelve al inicio sin buscar nada", async () => {
+    const m = montar();
+    m.puente.entrarConLlave = async () => {
+      throw DOM("NotAllowedError");
+    };
+    await m.f.entrar();
+    expect(m.estados).toEqual(["entrando", "inicio"]);
+    expect(m.f.datos.cancelada).toBe(true);
+    expect(m.f.medidas.entrada).toBeNull();
+  });
+
+  it("un error de la red al entrar es de red y se puede probar de nuevo", async () => {
+    const m = montar();
+    let intento = 0;
+    m.puente.entrarConLlave = async () => {
+      if (intento++ === 0) throw new Error("Smart account contract not found");
+      return { credentialId: "cred", contractId: CUENTA };
+    };
+    await m.f.entrar();
+    expect(m.f.estado).toBe("no-aparece");
+    expect(m.f.medidas.entrada).toMatchObject({ motivo: "red" });
+    await m.f.reintentar();
+    expect(m.f.estado).toBe("cuenta-lista");
+  });
+
+  it("si la búsqueda se pasa de su tiempo, pasa a no encontrada y lo que llegue tarde no cambia nada", async () => {
+    const m = montar();
+    let seguir: (() => void) | null = null;
+    m.puente.entrarConLlave = (avisos) =>
+      new Promise((resolver) => {
+        avisos?.alTerminarElDesbloqueo?.();
+        seguir = () => resolver({ credentialId: "cred", contractId: CUENTA });
+      });
+    const entrada = m.f.entrar();
+    await vi.waitFor(() => expect(m.f.estado).toBe("buscando"));
+    m.f.alTope("buscando");
+    expect(m.f.estado).toBe("no-aparece");
+    (seguir as unknown as () => void)();
+    await entrada;
+    expect(m.f.estado).toBe("no-aparece");
+    expect(m.f.contractId).toBe("");
+  });
+
+  it("una cuenta que no pasa la revisión de reglas al retomar la sesión tiene su pantalla", async () => {
+    const m = montar({ llaves: [{ credentialId: "cred", contractId: CUENTA, estado: "deployed" }] });
+    m.puente.volver = async () => {
+      throw new ErrorDeEntrada("firmantes", "politicas");
+    };
+    await m.f.usarLlave();
+    expect(m.f.estado).toBe("no-se-comprobo");
   });
 
   it("se acaba el tiempo de una pantalla de espera: pasa a la que corresponde, y solo si seguía en ella", () => {

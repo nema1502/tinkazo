@@ -58,6 +58,10 @@ Object.defineProperty(window, "__pruebaLlave", {
     get conFoco(): boolean {
       return flujo?.conFoco ?? true;
     },
+    /** La dirección de la cuenta con la que se entró: lo único que se muestra de la conexión. */
+    get contractId(): string {
+      return flujo?.contractId ?? "";
+    },
   }),
 });
 
@@ -250,6 +254,12 @@ async function iniciarFlujo(f: Flujo): Promise<void> {
   });
 }
 
+/** Con `?fuente=historial` o `?fuente=rpc` la cuenta se busca solo ahí. Cualquier otro valor se ignora. Sirve para probar cada fuente. */
+function fuenteDeLaBusqueda(): "historial" | "rpc" | null {
+  const f = new URLSearchParams(location.search).get("fuente");
+  return f === "historial" || f === "rpc" ? f : null;
+}
+
 function almacenDelNavegador(): Storage | null {
   try {
     return localStorage;
@@ -279,7 +289,7 @@ async function arrancar(): Promise<void> {
     ]);
     const rpc = new RpcDePrueba();
     const f = new Flujo({
-      puente: abrirKit({ nombreVisible: texto(lang, "nombreDeLaLlave") }),
+      puente: abrirKit({ nombreVisible: texto(lang, "nombreDeLaLlave"), fuente: fuenteDeLaBusqueda() }),
       rpc,
       crearPagador: () => crearPagador({ secuencia: (g) => rpc.secuencia(g) }),
       ahoraS: () => Math.floor(Date.now() / 1000),

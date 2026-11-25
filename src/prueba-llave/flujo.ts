@@ -6,6 +6,7 @@ import { select } from "../protocol/select";
 import { enviarYConfirmar, type Desenlace, type RespuestaConsulta, type RespuestaEnvio } from "../stellar/envio";
 import { leerCobro, retornoDe, type Cobro, type RespuestaCruda } from "./cobro";
 import { armarComprobante, enlaceDeComprobante } from "./comprobante";
+import { ErrorDeEntrada } from "./error-de-entrada";
 import { estadoInicial, type Estado } from "./estados";
 import { datosDeLaLista, GANADORES } from "./lista";
 import { medidasVacias, type FallaMedida, type Medidas } from "./medidas";
@@ -108,6 +109,23 @@ const ESPERA_DE_CONEXION_MS = 3_000;
 const TOPE_DEL_SORTEO_S = 120;
 
 const valorDeBase64 = (b64: string): unknown => scValToNative(xdr.ScVal.fromXDR(b64, "base64"));
+
+/** La pantalla que corresponde a cada motivo por el que no se pudo entrar. */
+function pantallaDeEntrada(motivo: string): Estado {
+  switch (motivo) {
+    case "sin-cuenta":
+      return "sin-cuenta";
+    case "vencida":
+      return "vencida";
+    case "sin-nacimiento":
+    case "ambigua":
+    case "firmantes":
+    case "rechazada":
+      return "no-se-comprobo";
+    default:
+      return "no-aparece";
+  }
+}
 
 export class Flujo {
   estado: Estado = "cargando";
@@ -225,6 +243,7 @@ export class Flujo {
         this.ir("cuenta-lista", { cancelada: true });
         break;
       case "entrando":
+      case "buscando":
         this.falla("entrar", "tiempo");
         this.ir("no-aparece", { codigo: this.error });
         break;
@@ -456,30 +475,63 @@ export class Flujo {
       this.conexion = await this.e.puente.conectar(k.credentialId, k.contractId);
       if (this.vigente(g)) this.ir("cuenta-lista");
     } catch (e) {
+      if (e instanceof ErrorDeEntrada) {
+        this.irPorErrorDeEntrada("usar", e);
+        return;
+      }
       this.falla("usar", "error", e instanceof Error ? e.message : "desconocido");
       this.ir("no-aparece", { codigo: this.error });
     }
   }
 
-  /** Entrar con una llave que no está en este aparato. */
+  /** Una cuenta que no se pudo encontrar, o que se encontró y no se pudo dar por buena: cada motivo tiene su pantalla. */
+  private irPorErrorDeEntrada(paso: string, e: ErrorDeEntrada, segundosBuscando = 0): void {
+    this.falla(paso, e.motivo, e.detalle);
+    this.medidas.entrada = { fuente: "ninguna", ledgerDeNacimiento: null, segundosBuscando, desbloqueos: null, motivo: e.motivo };
+    this.ir(pantallaDeEntrada(e.motivo), { codigo: this.error });
+  }
+
+  /** Entrar con una llave que no está en este aparato: un desbloqueo, la búsqueda de la cuenta en la red y la cuenta lista. */
   async entrar(): Promise<void> {
     const g = ++this.generacion;
     this.ir("entrando");
     this.conFoco = this.e.hayFoco();
+    const busqueda: { desdeMs: number | null } = { desdeMs: null };
     try {
-      this.conexion = await this.e.puente.entrarConLlave();
-      if (this.vigente(g)) this.ir("cuenta-lista");
+      const c = await this.e.puente.entrarConLlave({
+        alTerminarElDesbloqueo: () => {
+          if (!this.vigente(g)) return;
+          busqueda.desdeMs = this.e.ahoraMs();
+          this.ir("buscando");
+        },
+      });
+      if (!this.vigente(g)) return;
+      this.conexion = { credentialId: c.credentialId, contractId: c.contractId };
+      if (c.entrada) this.medidas.entrada = { ...c.entrada, motivo: null };
+      this.ir("cuenta-lista");
     } catch (e) {
       if (!this.vigente(g)) return;
+      const segundos = busqueda.desdeMs === null ? 0 : Math.round((this.e.ahoraMs() - busqueda.desdeMs) / 100) / 10;
+      if (e instanceof ErrorDeEntrada) {
+        this.irPorErrorDeEntrada("entrar", e, segundos);
+        return;
+      }
       const motivo = motivoDeLaLlave(e, this.conFoco);
       if (motivo === "cancelada" || motivo === "sin-foco") {
         this.falla("entrar", motivo);
         this.ir("inicio", { cancelada: true });
         return;
       }
-      this.falla("entrar", "no-aparece", e instanceof Error ? e.message : "desconocido");
+      // Cualquier otra falla del kit al entrar es que no se pudo leer la red ahora: no hay conexión y se puede probar de nuevo.
+      this.falla("entrar", "red", e instanceof Error ? e.message : "desconocido");
+      this.medidas.entrada = { fuente: "ninguna", ledgerDeNacimiento: null, segundosBuscando: segundos, desbloqueos: null, motivo: "red" };
       this.ir("no-aparece", { codigo: this.error });
     }
+  }
+
+  /** La dirección de la cuenta con la que se entró, para el recorrido automático. */
+  get contractId(): string {
+    return this.conexion?.contractId ?? "";
   }
 
   /** Otro sorteo con la misma llave. */
@@ -763,6 +815,7 @@ export class Flujo {
         await this.sortear();
         break;
       case "no-aparece":
+      case "sin-cuenta":
         await this.entrar();
         break;
       case "no-se-armo":
