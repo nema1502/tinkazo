@@ -191,10 +191,12 @@ este orden:
    por dónde entró y se cuenta aparte.
 6. Si la persona ya estaba, reconoce su nueva llave y contesta `200 {"cuenta","ya":true}` sin duplicarla. Cada persona
    tiene su propio tope de 6 reingresos por hora: pasado, contesta `429 {"error":"cupo-conexion"}` con `Retry-After` y no toca nada.
+   El reingreso no mira la hora de cierre: la hora cierra solo las altas nuevas (`409 cerrada`) y quien ya estaba anotada puede
+   volver a entrar desde otro celular después de esa hora. La fase cerrada a mano cierra a todas.
 7. Si la sesión no trae cuenta, la consulta al proveedor; una falla da `502 pollar` y la ausencia da `409 sin-billetera`, que
    cuenta como un rechazo de esa ficha (costó dos llamadas) y no como un rechazo de la conexión: la misma sesión sin billetera
    se consulta como mucho 5 veces en diez minutos. El celular no tiene que reintentar más que eso con la misma sesión.
-8. Vuelve a comprobar fase y pase, y anota en un bloque sin esperas. Un alta nueva contesta `201 {"cuenta"}`.
+8. Vuelve a comprobar fase, hora de cierre y pase, y anota en un bloque sin esperas. Un alta nueva contesta `201 {"cuenta"}`.
 
 Hay una persona por cuenta y una cuenta por persona. Se guardan la huella HMAC-SHA256 del id del proveedor con una sal de la
 sala y la huella SHA-256 de la llave del celular. El token, el id, el nombre y el correo no se guardan, no se escriben en la

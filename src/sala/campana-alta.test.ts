@@ -19,6 +19,7 @@ import {
   montarMundo,
   personaDePrueba,
   type MundoDeSala,
+  type PersonaDePrueba,
   type SalaDeCampana,
 } from "./mundo-sala";
 
@@ -226,19 +227,55 @@ describe("el contrato del alta de campaña en la sala (issue #168, residual en s
     return ((await r.json()) as { total: number }).total;
   }
 
-  it("un instante antes del cierre todavía entra, y desde la hora de cierre da cerrada sin llamar al proveedor", async () => {
+  it("un instante antes del cierre todavía entra, y desde la hora de cierre una persona nueva da cerrada", async () => {
     mundo = await montarMundo();
     sala = await campanaAbierta(mundo, AHORA_CONTRATO);
     vi.setSystemTime(CIERRA_CONTRATO - 1);
     expect((await altaDe(mundo, sala.id, personaDePrueba(mundo, 1))).status).toBe(201);
-    const antes = mundo.proveedor.llamadas[VERIFY] ?? 0;
     vi.setSystemTime(CIERRA_CONTRATO);
     const tarde = await altaDe(mundo, sala.id, personaDePrueba(mundo, 2));
     expect(tarde.status).toBe(409);
     expect(await tarde.json()).toEqual({ error: "cerrada" });
-    // Fuera de hora no se pregunta nada a nadie: la campaña ya no recibe a nadie.
-    expect(mundo.proveedor.llamadas[VERIFY] ?? 0).toBe(antes);
     expect(await total()).toBe(1);
+  });
+
+  it("pasada la hora de cierre, quien ya estaba anotada reingresa desde otro celular y la persona nueva sigue sin entrar", async () => {
+    mundo = await montarMundo();
+    sala = await campanaAbierta(mundo, AHORA_CONTRATO);
+    const anotada = personaDePrueba(mundo, 1);
+    expect((await altaDe(mundo, sala.id, anotada)).status).toBe(201);
+    vi.setSystemTime(CIERRA_CONTRATO + 5 * 60_000);
+    // Otro celular de la misma persona: otra sesión, otra ficha, la sala no la reconoce y la verifica.
+    const otraSesion: PersonaDePrueba = { ...anotada, token: `tok_otro_celular_${"z".repeat(24)}` };
+    mundo.proveedor.sesiones.set(otraSesion.token, { usuario: anotada.usuario, contenido: { wallet: anotada.cuenta } });
+    const reingreso = await altaDe(mundo, sala.id, otraSesion, { cuerpo: { llave: "celular2".padEnd(22, "x") } });
+    expect(reingreso.status).toBe(200);
+    expect(await reingreso.json()).toEqual({ cuenta: anotada.cuenta, ya: true });
+    // Y con la sesión que ya se había verificado.
+    expect((await altaDe(mundo, sala.id, anotada, { cuerpo: { llave: "celular3".padEnd(22, "x") } })).status).toBe(200);
+    // La hora sigue cerrando las altas nuevas.
+    const nueva = await altaDe(mundo, sala.id, personaDePrueba(mundo, 2));
+    expect(nueva.status).toBe(409);
+    expect(await nueva.json()).toEqual({ error: "cerrada" });
+    expect(await total()).toBe(1);
+  });
+
+  it("la fase cerrada a mano sigue cerrando también a quien ya estaba anotada", async () => {
+    mundo = await montarMundo();
+    sala = await campanaAbierta(mundo, AHORA_CONTRATO);
+    const anotada = personaDePrueba(mundo, 1);
+    expect((await altaDe(mundo, sala.id, anotada)).status).toBe(201);
+    const cierre = await mundo.pedir(`/v1/sala/${sala.id}/campana/fase`, {
+      metodo: "PUT",
+      cuerpo: { fase: "cerrada" },
+      cabeceras: { Authorization: `Bearer ${sala.token}` },
+    });
+    expect(cierre.status).toBe(204);
+    const otraSesion: PersonaDePrueba = { ...anotada, token: `tok_otro_celular_${"z".repeat(24)}` };
+    mundo.proveedor.sesiones.set(otraSesion.token, { usuario: anotada.usuario, contenido: { wallet: anotada.cuenta } });
+    const r = await altaDe(mundo, sala.id, otraSesion, { cuerpo: { llave: "celular2".padEnd(22, "x") } });
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ error: "cerrada" });
   });
 
   it("el código del QR de otro evento no sirve; con el pase de esta sala la misma persona entra", async () => {
