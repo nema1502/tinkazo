@@ -173,17 +173,21 @@ describe("el servicio manda y la red confirma", () => {
     expect(r).toEqual({ estado: "camino-de-hoy" });
   });
 
-  it("entró pero el contrato no se deja leer: no se manda nada más, termina sin confirmar con el enlace", async () => {
+  it("entró pero el contrato no se deja leer y el valor de la transacción no se entiende: no se manda nada más, sigue mirando y termina sin confirmar con el enlace", async () => {
     const m = armar({
       pedir: async () => mandado(H1),
       consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "scval" }),
       leer: async () => Promise.reject(new Error("rpc caído")),
+      valorDe: async () => null,
     });
     const r = await correr(sortear(m));
     expect(pasoDe(r)).toBe("error");
     expect((r as { error: Error & { txHash?: string } }).error.message).toBe("sin-confirmar");
     expect((r as { error: { txHash?: string } }).error.txHash).toBe(H1);
     expect(m.alFallar).toHaveBeenCalled();
+    expect(m.pedir).toHaveBeenCalledTimes(1);
+    expect(transcurrido()).toBeGreaterThanOrEqual(30_000);
+    expect(transcurrido()).toBeLessThanOrEqual(45_000);
   });
 
   it("PENDING y después FAILED: con el contrato sin el sorteo, camino de siempre", async () => {
@@ -340,19 +344,149 @@ describe("lo incierto nunca manda por los dos caminos", () => {
     expect(transcurrido()).toBeLessThan(30_000);
   });
 
-  it("incierto con el contrato que no se deja leer: termina sin confirmar, sin el camino de siempre, y avisa al RPC", async () => {
+  it("incierto con el contrato que no se deja leer: sigue mirando sin mandar nada hasta lo que da el camino de siempre y termina sin confirmar", async () => {
     const m = armar({ pedir: async () => ({ accion: "incierto" }), leer: async () => Promise.reject(new Error("rpc caído")) });
     const r = await correr(sortear(m));
     expect(pasoDe(r)).toBe("error");
     expect((r as { error: Error }).error.message).toBe("sin-confirmar");
     expect(m.alFallar).toHaveBeenCalled();
     expect(m.pedir).toHaveBeenCalledTimes(1);
-    expect(transcurrido()).toBeLessThanOrEqual(30_500);
+    expect(transcurrido()).toBeGreaterThanOrEqual(85_000);
+    expect(transcurrido()).toBeLessThanOrEqual(91_000);
+  });
+
+  it("incierto porque se cortó la red del celular unos 60 segundos: sigue mirando y, al volver, se da por hecho sin mandar nada más", async () => {
+    const m = armar({
+      pedir: async () => ({ accion: "incierto" }),
+      leer: async () => {
+        if (Date.now() - T0 < 60_000) throw new Error("sin red");
+        return GANADORES;
+      },
+    });
+    const r = await correr(sortear(m));
+    expect(r).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
+    expect(m.pedir).toHaveBeenCalledTimes(1);
+    expect(transcurrido()).toBeGreaterThanOrEqual(60_000);
+    expect(transcurrido()).toBeLessThanOrEqual(70_000);
+  });
+
+  it("incierto con la red del celular cortada y de vuelta con el contrato vacío: camino de siempre, una vez pasado el respiro", async () => {
+    const m = armar({
+      pedir: async () => ({ accion: "incierto" }),
+      leer: async () => {
+        if (Date.now() - T0 < 20_000) throw new Error("sin red");
+        return null;
+      },
+    });
+    expect(await correr(sortear(m))).toEqual({ estado: "camino-de-hoy" });
+    expect(m.pedir).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("una cola larga en el servicio no es una falla", () => {
+  it("el primer pedido tarda más de 10 segundos: se vuelve a pedir, el servicio dice que ya lo tiene en camino y se confirma, sin mandar por el camino de siempre", async () => {
+    const m = armar({
+      pedir: async (n) => (n === 0 ? new Promise<RespuestaDelSorteo>(() => undefined) : mandado(H1, false)),
+      consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "x" }),
+      leer: async () => GANADORES,
+    });
+    const r = await correr(sortear(m));
+    expect(m.pedir).toHaveBeenCalledTimes(2);
+    expect(r).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
+    expect(transcurrido()).toBeLessThan(20_000);
+  });
+
+  it("dos pedidos seguidos que se cortan por el tope: se mira la red y, vacía, sigue el camino de siempre antes de 30 segundos", async () => {
+    const m = armar({ leer: async () => null });
+    m.pedir.mockImplementation((() => new Promise(() => undefined)) as never);
+    expect(await correr(sortear(m))).toEqual({ estado: "camino-de-hoy" });
+    expect(m.pedir).toHaveBeenCalledTimes(2);
+    expect(transcurrido()).toBeLessThan(30_000);
+  });
+
+  it("un incierto que no es por el tope (un corte al instante) no vuelve a pedir: mira la red", async () => {
+    const m = armar({ pedir: async () => ({ accion: "incierto" }), leer: async () => null });
+    expect(await correr(sortear(m))).toEqual({ estado: "camino-de-hoy" });
+    expect(m.pedir).toHaveBeenCalledTimes(1);
+  });
+
+  it("la red ocupada hasta agotar la etapa: antes de pasar al camino de siempre se mira el contrato, y si el sorteo ya está, se da por hecho", async () => {
+    const m = armar({ pedir: async () => ({ accion: "espera" }), leer: async () => GANADORES });
+    expect(await correr(sortear(m))).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
+    expect(m.leer).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("el resultado de una transacción que ya entró", () => {
+  it("el contrato tarda 8 segundos en contestar: se espera esa lectura y se muestra con el enlace", async () => {
+    const m = armar({
+      pedir: async () => mandado(H1),
+      consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "scval" }),
+      leer: async () => {
+        await dormir(8000);
+        return GANADORES;
+      },
+    });
+    const r = await correr(sortear(m));
+    expect(r).toEqual({ estado: "listo", valor: { ...GANADORES, txHash: H1 }, yaEstaba: false });
+    expect(m.alFallar).not.toHaveBeenCalled();
+  });
+
+  it("el contrato no se deja leer pero la transacción es de este sorteo y devolvió los ganadores: se muestran, con el enlace", async () => {
+    const m = armar({
+      pedir: async () => mandado(H1),
+      consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "scval" }),
+      leer: async () => Promise.reject(new Error("rpc caído")),
+    });
+    const pasos: [string, string?][] = [];
+    const r = await correr(sortear(m, pasos));
+    expect(r).toEqual({ estado: "listo", valor: { ...GANADORES, txHash: H1 }, yaEstaba: false });
+    expect(pasos).toContainEqual(["confirmed", H1]);
+  });
+
+  it("lo mismo con un repetido: no se sabe de quién es la transacción, así que no se toma su valor y se sigue mirando el contrato", async () => {
+    const m = armar({
+      pedir: async () => mandado(H1, false),
+      consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "scval" }),
+      leer: async () => Promise.reject(new Error("rpc caído")),
+    });
+    const r = await correr(sortear(m));
+    expect(pasoDe(r)).toBe("error");
+    expect(transcurrido()).toBeGreaterThanOrEqual(30_000);
+  });
+
+  it("el enlace es solo de un número que el servicio dijo pendiente para ESTE sorteo: el de un sello gemelo no se muestra", async () => {
+    const del8 = armar({
+      pedir: async () => mandado(H1),
+      consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "x" }),
+      leer: async () => GANADORES,
+    });
+    expect(await correr(sortear(del8, [], 8n))).toEqual({ estado: "listo", valor: { ...GANADORES, txHash: H1 }, yaEstaba: false });
+    // Después, el sorteo 7 (mismo sello) recibe como repetido el número del 8: el resultado es el mismo, el enlace no.
+    const del7 = armar({
+      pedir: async () => mandado(H1, false),
+      consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "x" }),
+      leer: async () => GANADORES,
+    });
+    expect(await correr(sortear(del7, [], 7n))).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
+  });
+
+  it("con el reloj del aparato 3 minutos atrasado, el vencimiento sale de la hora de la red: no se da por vencida una transacción que sigue viva", async () => {
+    const m = armar({
+      pedir: async () => mandado(H1),
+      consultar: async () => (Date.now() - T0 < 150_000 ? { status: "NOT_FOUND", cierre: Date.now() / 1000 } : { status: "SUCCESS", cierre: Date.now() / 1000, valor: "x" }),
+      leer: async () => (Date.now() - T0 < 150_000 ? null : GANADORES),
+    });
+    m.fuentes.horaDeLaRed = () => Date.now() / 1000 - 180;
+    const r = await correr(sortear(m));
+    expect(r).toEqual({ estado: "listo", valor: { ...GANADORES, txHash: H1 }, yaEstaba: false });
+    expect(m.pedir).toHaveBeenCalledTimes(1);
+    expect(transcurrido()).toBeGreaterThanOrEqual(150_000);
   });
 });
 
 describe("ninguna espera sin tope", () => {
-  it("con todas las fuentes colgadas y nada aceptado, termina antes de 30 segundos de la entrada", async () => {
+  it("con todas las fuentes colgadas y nada aceptado, termina con un tope: el de siempre, 90 segundos desde la entrada", async () => {
     const colgada = (() => new Promise(() => undefined)) as never;
     const m = armar();
     m.pedir.mockImplementation(colgada);
@@ -360,7 +494,7 @@ describe("ninguna espera sin tope", () => {
     m.consultar.mockImplementation(colgada);
     const r = await correr(sortear(m));
     expect(pasoDe(r)).toBe("error");
-    expect(transcurrido()).toBeLessThanOrEqual(30_500);
+    expect(transcurrido()).toBeLessThanOrEqual(90_500);
   });
 
   it("con el servicio aceptado y la red colgada, termina con un tope", async () => {
