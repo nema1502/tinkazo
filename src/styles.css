@@ -2244,6 +2244,8 @@
     .hero-portada .hero-shot { margin-bottom: 4px; }
     .hero-portada .puertas { order: 1; margin-top: -12px; }
     .hero-portada .hero-otras { order: 2; }
+    /* Mientras se termina de entrar, el renglón de Cancelar es la única salida visible: queda pegado al botón, antes de las puertas. */
+    .hero-portada .hero-otras[data-cancelar-entrada] { order: 0; }
     .hero-portada .hero-note { order: 3; }
     .hero-portada .built-on { order: 4; }
   }
