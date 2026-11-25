@@ -132,6 +132,6 @@ describe("el lector de la red: la pieza cliente de get_prize", () => {
     expect(caida).toEqual({ ok: false, error: "red-caida" });
     // El contrato de premios no designa nada todavía (#167): la consulta de la instancia archivada es sin estado.
     const sinPromo = await premiosDeLaCuentaDeLaRed({ contrato: deLaTabla(CC), promo: "9", cuenta: GANADORA, cobrarHastaMs: HASTA, fetch: rpcFalso(rpcCC).fetch, esperaMs: 0 });
-    expect(sinPromo).toEqual({ ok: true, premios: [{ puesto: null, monto: null, estado: "por-recibir", hastaMs: HASTA }] });
+    expect(sinPromo).toEqual({ ok: false, error: "sin-estado" });
   });
 });
