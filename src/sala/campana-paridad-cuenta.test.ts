@@ -127,8 +127,10 @@ async function recorrido(mundo: MundoDeSala, conPase: boolean): Promise<string[]
   await rastro.ver("crear: sin premios", await mundo.pedir("/v1/campana", { cuerpo: archivo({ premios: [] }) }));
   await rastro.ver("crear: GET", await mundo.pedir("/v1/campana", { metodo: "GET" }));
   const buena = await mundo.pedir("/v1/campana", { cuerpo: archivo() });
-  const creada = JSON.parse(await rastro.ver("crear: buena", buena.clone())) as { id: string; token: string };
+  const creada = (await buena.clone().json()) as { id: string; token: string };
+  // El id y el token cambian en cada corrida: se conocen antes de anotar la respuesta para que salgan con un nombre fijo.
   rastro.conocer({ id: creada.id, token: creada.token });
+  await rastro.ver("crear: buena", buena);
   await rastro.ver("crear: repetida", await mundo.pedir("/v1/campana", { cuerpo: archivo() }));
   const id = creada.id;
   const auth = { Authorization: `Bearer ${creada.token}` };
@@ -246,7 +248,8 @@ async function recorrido(mundo: MundoDeSala, conPase: boolean): Promise<string[]
   // Cerrar y sellar.
   await rastro.ver("fase: cerrar", await mundo.pedir(sala("/campana/fase"), { metodo: "PUT", cuerpo: { fase: "cerrada" }, cabeceras: auth }));
   await alta("alta: con la lista cerrada", celular(persona(mundo, 12)));
-  await quitar("quitar: con la lista cerrada", { n: 5, motivo: "otro" });
+  // La cuarta fila es la de la sesión sin cuenta que el proveedor sí conocía: queda afuera y la lista es la de cuatro.
+  await quitar("quitar: con la lista cerrada", { n: 4, motivo: "otro" });
   await rastro.ver("fase: reabrir", await mundo.pedir(sala("/campana/fase"), { metodo: "PUT", cuerpo: { fase: "abierta", cierraMs: AHORA + 7_200_000 }, cabeceras: auth }));
   await alta("alta: eli reabierta", celular(eli));
   await rastro.ver("fase: cerrar de nuevo", await mundo.pedir(sala("/campana/fase"), { metodo: "PUT", cuerpo: { fase: "cerrada" }, cabeceras: auth }));
@@ -366,7 +369,7 @@ async function recorridoDelCorreo(mundo: MundoDeSala): Promise<string[]> {
   lectura.valor = { sello: { ...sello, sorteado: true }, ganadores: [2, 0] };
   await rastro.ver("correo: resultado", await mundo.pedir(sala("/campana/resultado"), { metodo: "PUT", cuerpo: { sorteo: SORTEO, comprobante: COMPROBANTE }, cabeceras: auth }));
   await mundo.esperarSegundoPlano();
-  rastro.nota("correo: búsquedas", mundo.proveedor.busquedas);
+  rastro.nota("correo: búsquedas", [...mundo.proveedor.busquedas].sort());
   rastro.nota("correo: enviados", enviados.map((m) => ({ to: m.to, subject: m.subject })).sort((a, b) => (a.to < b.to ? -1 : 1)));
   rastro.nota("correo: marcas", foto(mundo, id));
   await rastro.ver("correo: yo", await mundo.pedir(sala("/campana/yo"), { cuerpo: { cuenta: orden[2], llave: gente.find((p) => p.cuenta === orden[2])?.llave } }));
