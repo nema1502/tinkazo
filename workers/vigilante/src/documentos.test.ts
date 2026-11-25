@@ -430,3 +430,28 @@ describe("el umbral de las cuentas nuevas por hora: el valor de siempre se dice 
     expect(readme).toMatch(/activaciones está apagado/);
   });
 });
+
+describe("la clave de solo lectura del portero (issue 219) en la hoja de operación y en el aviso", () => {
+  const filas = seccion.split("\n").filter((l) => l.startsWith("|"));
+
+  it("la fila de la clave que falta habla también de la clave de solo lectura y del orden en que se carga", () => {
+    const fila = filas.find((l) => l.includes("**Al vigilante le falta la clave del portero**")) ?? "";
+    expect(fila).toContain("PORTERO_TOKEN_LECTURA");
+    expect(fila).toContain("PORTERO_ADMIN_TOKEN");
+    expect(fila).toMatch(/en qué orden se carga/);
+  });
+
+  it("el aviso de la clave que falta dice las dos claves posibles, y no solo la de operar", () => {
+    const codigo = leer("workers/vigilante/src/mensaje.ts");
+    const entrada = codigo.slice(codigo.indexOf('"vigilante-sin-clave": {'));
+    const hacer = entrada.slice(entrada.indexOf("hacer:"), entrada.indexOf("\n  },", entrada.indexOf("hacer:")));
+    expect(hacer).toContain("PORTERO_TOKEN_LECTURA");
+    expect(hacer).toContain("PORTERO_ADMIN_TOKEN");
+  });
+
+  it("la tabla de secretos cierra todas sus filas", () => {
+    const tabla = seccion.split("\n").filter((l) => /^\s+\| `[A-Z_]+` \|/.test(l));
+    expect(tabla.length).toBeGreaterThanOrEqual(5);
+    for (const fila of tabla) expect(fila.trimEnd().endsWith("|"), fila.slice(0, 40)).toBe(true);
+  });
+});

@@ -208,13 +208,6 @@ El objeto `Patrocinio` (SQLite, uno por red) guarda cuentas (G…), el mes y el 
 Con `Authorization: Bearer <ADMIN_TOKEN>` (secreto de 32 caracteres o más; si no está cargado, estos caminos no existen):
 
 | Pedido | Qué hace |
-
-## Lectura del estado
-
-Con `Authorization: Bearer <TOKEN_LECTURA>` (secreto de 32 caracteres o más, issue #219) se abre **solo** `GET /v1/patrocinio/estado`: quien solo mira el estado no puede apagar, cambiar ajustes ni exportar tablas. La clave de administración también abre el estado, como siempre. Si las dos se cargan iguales, la bitácora lo anota como `error-config` `claves-iguales`.
-
-Para cargarla: `wrangler secret put TOKEN_LECTURA` en cada red (y darla solo a quien lee: el flujo `vigilar-portero.yml` y el vigilante la usan si está cargada).
-
 | --- | --- |
 | `POST /v1/patrocinio/apagar` | Nadie patrocina: `503 apagado` |
 | `POST /v1/patrocinio/pollar` | Devuelve el patrocinio a Pollar: el portero no paga y `/cupo` dice `rige:"pollar"` |
@@ -224,6 +217,12 @@ Para cargarla: `wrangler secret put TOKEN_LECTURA` en cada red (y darla solo a q
 | `GET /v1/patrocinio/exportar` | Todas las tablas, en JSON |
 
 `APAGADO=1` como variable apaga aunque el objeto diga otra cosa.
+
+## Lectura del estado
+
+Con `Authorization: Bearer <TOKEN_LECTURA>` (secreto de 32 caracteres o más, distinto del de administración, issue #219) se abre **solo** `GET /v1/patrocinio/estado`: quien solo mira el estado no puede apagar, cambiar ajustes ni exportar tablas, y cualquier otra ruta de administración le da `401`. La clave de administración también abre el estado, como siempre. Si las dos se cargan iguales, el registro lo anota como `error-config` `claves-iguales`.
+
+**En qué orden se carga.** La clave de lectura se carga primero en el portero, después en el vigilante y al final en GitHub. Si se carga en el vigilante o en GitHub antes de que el portero la conozca, el portero la rechaza con `401` y la vigilancia avisa de una caída que no existe. Para cargarla en el portero: `npx wrangler@4 secret put TOKEN_LECTURA --env mainnet`, desde esta carpeta. El vigilante la guarda como `PORTERO_TOKEN_LECTURA` y el flujo `vigilar-portero.yml` como `PORTERO_MAINNET_TOKEN_LECTURA`. Sin ellas siguen usando la de administración, así que borrar la de lectura de cualquiera de los dos devuelve todo a como estaba. Los pasos completos, con cómo se comprueba cada uno, están en la hoja de operación, en «La clave de solo lectura del portero: en qué orden se carga».
 
 ## Los pagos de premios, los retiros y el alta de quien ganó
 
