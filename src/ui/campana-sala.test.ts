@@ -910,12 +910,13 @@ describe("cerrar la lista", () => {
       await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
       // La hora de la sala cae dentro de [hasta - 2 min, hasta). Con la compu 29 segundos pasada del hasta, la sala puede ir
       // 149 segundos atrás sin que se estime ningún desfase: el máximo se mide desde el comienzo de esa ventana.
-      m.hastaDelPase = m.ahora - 29_000;
+      const hasta = m.ahora - 29_000;
+      m.hastaDelPase = hasta;
       boton(p, "Volver a abrir la lista").click();
       await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
       const hora = m.fases[m.fases.length - 1]?.[1];
       expect(typeof hora).toBe("number");
-      const salaMasAtrasada = m.hastaDelPase - 120_000;
+      const salaMasAtrasada = hasta - 120_000;
       expect(hora as number).toBeLessThanOrEqual(salaMasAtrasada + 12 * 3_600_000 - 4 * 60_000);
     });
 
