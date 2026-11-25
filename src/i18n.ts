@@ -1122,7 +1122,7 @@ export const T: Record<Lang, Dict> = {
     espStickerOrden: "Todavía nadie sabe el orden",
     espFaltan: "para que empiece",
     // La presentación de la lista sellada durante la cuenta (issue #78): quiénes participan y el lugar de cada uno. Habla solo de lo sellado, nunca del resultado.
-    espTeaserT: "Les presentamos, uno por uno",
+    espTeaserT: "Quienes participan",
     espTeaserDe: (i, n) => `${i} de ${n}`,
     espTeaserMas: (n) => `y ${n} más`,
     espVolver: "Volver a la página",
@@ -4262,7 +4262,7 @@ export const T: Record<Lang, Dict> = {
     espStickerOrden: "Nobody knows the order yet",
     espFaltan: "until it starts",
     // The presentation of the sealed list during the countdown (issue #78): who takes part and each one's place. Spoken from the sealed list only, never the result.
-    espTeaserT: "Introducing them, one by one",
+    espTeaserT: "Who is taking part",
     espTeaserDe: (i, n) => `${i} of ${n}`,
     espTeaserMas: (n) => `and ${n} more`,
     espVolver: "Back to the page",
