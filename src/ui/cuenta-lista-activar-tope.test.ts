@@ -108,7 +108,8 @@ async function abrir(srv: ReturnType<typeof servidorFalso>, cf: ReturnType<typeo
   const op: OpcionesDelPaso = { para: "entrada", correo: "ana@example.org", celular: true, inicial: cf.e.est, acceso: srv.acceso, ...o };
   const promesa = abrirCuentaLista(cf.cuenta, salidasFalsas(), op);
   await pasa();
-  return promesa;
+  // Se devuelve dentro de un objeto: la promesa del paso solo se resuelve al cerrarlo y esperarla colgaría la prueba.
+  return { promesa };
 }
 
 /** La hora de verdad corre sin que corran los relojes: lo que pasa con una pestaña congelada en segundo plano. */
