@@ -274,6 +274,62 @@ Solo se puede en la red principal. Hace falta una vista previa del sitio que pag
 
 Mueve 3 dólares digitales entre cuentas propias (1 queda en cobros), unos cientos de stroops de XLM, una activación y unas siete firmas (unos 180 créditos). Si sale bien, se deja reanudado o pausado según decida quien mantiene el proyecto. Si la vista previa del sitio no está a tiempo, el paso 1 se hace con `curl` y el token de la sesión de quien organiza, copiado de la vista previa y sin escribirlo en ningún archivo, y la cuenta nueva se activa con la vista previa del paso.
 
+## Las banderas del sitio y su estado en producción
+
+Las funciones del sitio se prenden con variables `VITE_` que se leen al construir y quedan escritas en su código. Esta tabla dice cuáles trae hoy el sitio publicado. **Leído del sitio publicado el 25 de noviembre de 2026**, del código que sirve tinkazo.app, y vigilado cada día por `pnpm check:banderas`, que baja el sitio, saca el valor de cada variable y falla si una fila ya no coincide o si el sitio trae una variable que la tabla no nombra.
+
+- **Sin la variable.** Lo que pasa cuando no está definida. Una variable ausente no es una bandera apagada: `VITE_EQUIPOS`, `VITE_MODOS`, `VITE_FOTO_JUEGO` y las pistas de música nacen prendidas, y solo un valor de apagado las frena. Las demás nacen apagadas.
+- **En producción.** El valor escrito, `sin definir` si el sitio no la trae, o `definida` si la trae y su valor es un monto, una dirección o una llave pública: de esas la tabla no escribe el valor y la comprobación solo mira que exista.
+- **Desde cuándo.** Las variables viven en Vercel y ningún archivo del repositorio registra el día en que se pusieron. Se sabe que el sitio abre en Oficial desde el 20 de noviembre de 2026 y que el código de cada bandera de pagos y campañas ya estaba hecho el 18 de noviembre de 2026. Las de pagos y campañas están prendidas desde mediados de noviembre de 2026.
+- **Qué no entra.** Las variables `VITE_VERCEL_` las pone el sistema de publicación y no son banderas.
+- **Cómo se cambia una fila.** Se cambia la variable en Vercel, se publica de nuevo y en el mismo pedido se corrige la tabla. Si no, la vigilancia diaria falla.
+
+| Variable | Sin la variable | En producción | Qué cambia |
+|---|---|---|---|
+| `VITE_STELLAR_NETWORK` | abre en Prueba | `mainnet` | La red con que abre el sitio: con `mainnet` abre en Oficial |
+| `VITE_ALTA` | apagada, solo con `1` | `1` | El acceso por cupón o por pago en la red principal. Exige `VITE_PATROCINIO_URL_MAINNET` |
+| `VITE_ALTA_LIBRE` | apagada, solo con `1` | `sin definir` | Salida de emergencia: activar una cuenta sin acceso confirmado. No vale junto con `VITE_ALTA` |
+| `VITE_ALTA_PAGO` | apagada, solo con `1` | `sin definir` | La compra de sorteos |
+| `VITE_PAGO_CON_SALDO` | apagada, solo con `1` | `sin definir` | Pagar un paquete con el saldo de la cuenta |
+| `VITE_COMPRA_QR` | apagada, solo con `1` | `sin definir` | Comprar un paquete con el QR del banco |
+| `VITE_VENTA_ABIERTA` | apagada, solo con `1` | `sin definir` | La venta a la vista de todos. Sin ella, las tres anteriores valen solo en el piloto |
+| `VITE_SORTEO_SERVIDOR` | apagada, solo con `1` | `sin definir` | El sorteo lo manda el servidor |
+| `VITE_REGALO` | apagada, solo con `1` | `1` | Los primeros 3 sorteos oficiales gratis |
+| `VITE_CAMPANAS` | apagada, con `1` o `true` | `1` | La campaña de una empresa: panel, página del celular y entrada de quien ganó |
+| `VITE_EQUIPOS` | prendida, se apaga con `0` o `false` | `1` | Los equipos con cupón |
+| `VITE_MODOS` | prendida, se apaga con `0` o `false` | `1` | El selector de modos del sorteo |
+| `VITE_FOTO_JUEGO` | prendida, se apaga con `0` o `false` | `sin definir` | La foto con el dibujo del juego al compartir |
+| `VITE_MUSICA` | pistas prendidas, solo `sintetizada` las apaga | `sin definir` | La música de los juegos: pistas o sintetizada |
+| `VITE_VIDEO_DESCARGA` | apagada, solo con `1` | `sin definir` | La descarga del video del sorteo |
+| `VITE_INGRESO_PLAN_B` | apagada, solo con `1` | `1` | El plan B del ingreso. Solo se aplica en el modo Prueba: en Oficial no se ve |
+| `VITE_PAGOS` | apagada, solo con `1` | `1` | Pagar premio y el panel de ganadores |
+| `VITE_PAGOS_ACTIVO` | el USDC de prueba de Circle | `sin definir` | El activo de los premios en testnet |
+| `VITE_PAGOS_CUENTAS` | ninguna cuenta | `sin definir` | Cuentas que pagan premios sin ser la que selló |
+| `VITE_PAGAR_CON_GOOGLE` | apagada, solo con `1` | `1` | Cargar y pagar el premio desde la cuenta de Google |
+| `VITE_VOTO_POR_CONTENIDO` | apagada, solo con `1` | `1` | La cuenta de Google vota solo la transacción que armó la página |
+| `VITE_RAMPA` | apagada | `premios` | Tus dólares digitales: ver el saldo y recibir un premio |
+| `VITE_RAMPA_CUENTAS` | sin lista de cuentas | `sin definir` | El piloto de la carga con bolivianos |
+| `VITE_RAMPA_MINIMO` | sin mínimo, solo en localhost | `sin definir` | Un mínimo de prueba, solo en localhost |
+| `VITE_RAMPA_DEMO` | apagada, solo en localhost | `sin definir` | Una demostración de la carga, solo en localhost |
+| `VITE_RAMPA_REGISTRO` | apagada, solo con `1` | `sin definir` | El registro de la carga en la consola |
+| `VITE_RAMPA_PRACTICA` | apagada, solo en localhost | `sin definir` | La práctica de la carga, solo en localhost |
+| `VITE_MONEDAS` | apagada | `sin definir` | Monedas, tiendita y Canjear para quien organiza |
+| `VITE_CUENTA_URL` | sin dirección | `sin definir` | Dónde está el servicio de cuenta |
+| `VITE_CUENTA_PLANES` | sin cuenta | `sin definir` | La cuenta que cobra el plan del equipo |
+| `VITE_PLAN_EQUIPO` | apagada | `sin definir` | La compra del plan del equipo |
+| `VITE_ENLACES` | el servicio de enlaces de siempre | `sin definir` | Otro servicio de enlaces cortos |
+| `VITE_PATROCINIO_URL` | sin dirección | `sin definir` | La dirección vieja del portero, que vale solo en Prueba |
+| `VITE_PATROCINIO_URL_TESTNET` | sin dirección | `sin definir` | El portero de la red de prueba |
+| `VITE_PATROCINIO_URL_MAINNET` | sin dirección | `definida` | El portero de la red principal |
+| `VITE_POLLAR_PUBLISHABLE_KEY` | sin entrada con Google | `definida` | La llave publicable del proveedor de cuentas |
+| `VITE_POLLAR_PUBLISHABLE_KEY_MAINNET` | cae a la de siempre | `definida` | La misma llave, para la red principal |
+| `VITE_POLLAR_PUBLISHABLE_KEY_TESTNET` | cae a la de siempre | `sin definir` | La misma llave, para la red de prueba |
+| `VITE_RETIRO_COSTO` | no se cobra el retiro | `definida` | El costo del retiro |
+| `VITE_RETIRO_CUENTA` | no se cobra el retiro | `definida` | La cuenta que recibe el costo del retiro |
+| `VITE_COMISION_PB` | no se cobra a las campañas | `definida` | Los puntos básicos que se cobran a una campaña |
+| `VITE_COMISION_MINIMO` | no se cobra a las campañas | `definida` | Lo menos que se cobra a una campaña |
+| `VITE_COMISION_CUENTA` | no se cobra a las campañas | `definida` | La cuenta que recibe el cobro a las campañas |
+
 ## La campaña de una empresa
 
 Es el sorteo de una empresa por QR: la empresa pone el premio, la gente se anota desde el celular con su cuenta de Google y quien organiza lo maneja desde un panel de la herramienta, que se abre con `?campana`. Junta cuatro piezas: el portero (comisiones, altas y pagos), el servicio de conteo, la sala de campaña (`workers/sala`, en `s.tinkazo.app`) y el sitio. Esta sección dice cómo se prepara, qué se despliega y en qué orden, qué se prueba antes, qué se hace el día y qué queda para después. Lo del portero (el pago de un premio, el retiro con su costo y el alta de quien ganó) no se repite: está en la sección anterior, Los pagos de premios, los retiros y el alta de quien ganó, y acá se enlaza. El contrato de la sala, ruta por ruta, está en [workers/sala/README.md](../workers/sala/README.md), en Las salas de campaña firmadas.
