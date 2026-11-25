@@ -163,6 +163,7 @@
   .steps .paso-mas summary { cursor: pointer; display: flex; align-items: center; min-height: 44px; font-size: var(--letra-sec); font-weight: 700; color: var(--ink2); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; list-style: none; }
   .steps .paso-mas summary::-webkit-details-marker { display: none; }
   .steps .paso-mas p { margin-top: 0; padding-bottom: 6px; }
+  @media (max-width: 560px) { .steps .paso-media { aspect-ratio: 2.4 / 1; } }
   section.block { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); margin-bottom: 34px; }
   .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 22px; border-bottom: var(--bw) solid var(--ink); flex-wrap: wrap; }
   .head h2 { font-size: var(--letra-prin); font-weight: 800; }
@@ -2156,6 +2157,8 @@
   :root[data-theme="dark"] .puerta-media .pj-cla { display: none; }
   .puerta-t { font-size: 22px; font-weight: 900; line-height: 1.15; letter-spacing: -0.01em; }
   .puerta-b { color: var(--ink2); font-size: var(--letra-sec); }
+  /* Lado a lado, la línea reserva dos renglones: los tres títulos y los tres botones quedan a la misma altura. */
+  @media (min-width: 860px) { .puerta-b { min-height: 3em; } }
   /* La imagen se estira y absorbe el alto que sobra: con tres tarjetas de alto parejo, los botones quedan en la misma línea. */
   .puerta .puerta-a { min-height: 48px; margin-top: 6px; display: inline-flex; align-items: center; justify-content: center; text-align: center; width: 100%; }
 
@@ -2194,6 +2197,8 @@
   /* En un celular o una tableta las tarjetas van una debajo de otra, sin pasar de un ancho cómodo. */
   @media (max-width: 859px) {
     .puertas, .puertas:has(> .puerta[hidden]) { grid-template-columns: minmax(0, 1fr); max-width: 520px; width: 100%; margin-inline: auto; }
+    /* Apiladas, las capturas bajan a 2 a 1 para que las tres puertas no alarguen la primera mirada. */
+    .puerta-media { aspect-ratio: 2 / 1; }
   }
 
   /* La demo se presenta: una franja arriba y una invitación al final. */
