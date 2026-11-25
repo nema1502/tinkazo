@@ -29,10 +29,12 @@ describe("validar la lista de vistas", () => {
       { accion: "pausa", ms: 1500 },
       { accion: "tecla", tecla: "Enter" },
       { accion: "desplazar", selector: "#winner-box" },
+      { accion: "clicHasta", selector: "#btn-espera", hasta: ".espera-reloj" },
     ];
     const { vistas, errores: e } = validarVistas([vista({ ancho: 390, alto: 844, tema: "dark", idioma: "en", esperar: "main", pausaMs: 0, paginaEntera: true, pasos })]);
     expect(e).toEqual([]);
-    expect(vistas[0].pasos).toHaveLength(8);
+    expect(vistas[0].pasos).toHaveLength(9);
+    expect(vistas[0].pasos[8]).toEqual({ accion: "clicHasta", selector: "#btn-espera", hasta: ".espera-reloj" });
     expect(vistas[0].pasos[4].ms).toBe(DEFECTOS.esperarMs);
   });
 
@@ -93,6 +95,13 @@ describe("validar la lista de vistas", () => {
     expect(con({ accion: "esperar", selector: "#a", ms: 50 })[0]).toContain('"ms"');
     expect(con({ accion: "tecla", tecla: "F13" })[0]).toContain('"tecla"');
     expect(con({ accion: "tecla", tecla: "toString" })[0]).toContain('"tecla"');
+    expect(con({ accion: "clicHasta", selector: "#a" })[0]).toContain('"hasta"');
+    expect(con({ accion: "clicHasta", hasta: "#a" })[0]).toContain('"selector"');
+    expect(con({ accion: "clicHasta", selector: "#a", hasta: "" })[0]).toContain('"hasta"');
+    expect(con({ accion: "clicHasta", selector: "#a", hasta: "x".repeat(201) })[0]).toContain('"hasta"');
+    expect(con({ accion: "clicHasta", selector: "#a", hasta: "#b", ms: 5 })[0]).toContain('"ms"');
+    expect(con({ accion: "clicHasta", selector: "#a", hasta: "#b
+" })[0]).toContain('"hasta"');
     expect(con("clic")[0]).toContain("objeto");
     expect(errores([vista({ pasos: "clic" })])[0]).toContain("lista");
     expect(errores([vista({ pasos: Array.from({ length: 31 }, () => ({ accion: "pausa", ms: 1 })) })])[0]).toContain("tope es 30");
@@ -110,6 +119,12 @@ describe("validar la lista de vistas", () => {
   it("limita lo que una vista puede esperar en total", () => {
     const pasos = Array.from({ length: 5 }, () => ({ accion: "pausa", ms: 60_000 }));
     expect(errores([vista({ pasos })])[0]).toContain("tope es 240 s");
+  });
+
+  it("cada clicHasta suma su tope de 20 s a lo que una vista puede esperar", () => {
+    const paso = { accion: "clicHasta", selector: "#a", hasta: "#b" };
+    expect(errores([vista({ pausaMs: 0, pasos: Array.from({ length: 12 }, () => paso) })])).toEqual([]);
+    expect(errores([vista({ pausaMs: 0, pasos: Array.from({ length: 13 }, () => paso) })])[0]).toContain("tope es 240 s");
   });
 
   it("leerVistas avisa de un JSON roto o vacío", () => {
