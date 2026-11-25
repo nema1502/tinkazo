@@ -17,13 +17,23 @@ export function crearTablasDeVigilancia(sql: Ejecutar): void {
 /**
  * Anota una alta nueva como activación explicada del día. Solo entra una vez por persona: el reingreso (otro celular, otra
  * pestaña) no llama al proveedor ni vuelve a explicar una firma, así que no se anota.
+ *
+ * Dos cuidados, porque la persona ya quedó anotada cuando esto corre. Uno: las salas creadas antes de que existiera esta
+ * tabla no la tienen (las tablas se crean al crear la sala), así que se asegura acá, al usarla. Dos: el conteo es
+ * vigilancia, no parte del alta, y nunca lanza: si falla, el alta sigue y se pierde solo esa cifra.
  */
 export function anotarAltaDeCampana(sql: Ejecutar, dia: string): void {
-  sql("INSERT INTO campana_activaciones (dia, n) VALUES (?, 1) ON CONFLICT(dia) DO UPDATE SET n = n + 1", dia);
+  try {
+    crearTablasDeVigilancia(sql);
+    sql("INSERT INTO campana_activaciones (dia, n) VALUES (?, 1) ON CONFLICT(dia) DO UPDATE SET n = n + 1", dia);
+  } catch (error) {
+    console.log(JSON.stringify({ evento: "conteo-de-altas-fallo", motivo: error instanceof Error ? error.name : "desconocido" }));
+  }
 }
 
 /** Cuántas altas de campaña explican firmas, por día. Solo cifras: ningún dato de persona. */
 export function activacionesDeCampana(sql: Ejecutar): Record<string, number> {
+  crearTablasDeVigilancia(sql);
   const filas = sql<{ dia: string; n: number }>("SELECT dia, n FROM campana_activaciones ORDER BY dia");
   const dias: Record<string, number> = {};
   for (const fila of filas) dias[fila.dia] = fila.n;

@@ -59,4 +59,28 @@ describe("la vigilancia de las altas de campaña", () => {
     expect(conteo[DIA]).toBe(2);
     expect(JSON.stringify(conteo)).not.toMatch(/usuario|tok_|G[A-Z2-7]{55}|llave/i);
   });
+
+  it("una sala creada antes del cambio, sin la tabla del conteo, anota igual y empieza a contar", async () => {
+    // El almacén de una sala que ya existía el día de desplegar: sus tablas se crearon sin la del conteo.
+    mundo.ejecutar(`sala:${sala.id}`, "DROP TABLE campana_activaciones");
+    for (let n = 1; n <= 2; n++) {
+      const r = await altaDe(mundo, sala.id, personaDePrueba(mundo, n));
+      expect(r.status).toBe(201);
+      expect(((await r.json()) as { ya: boolean }).ya).toBe(false);
+    }
+    expect(await activaciones(mundo, sala.id)).toMatchObject({ ok: true, [DIA]: 2 });
+    // La persona quedó en la lista: reingresar la reconoce.
+    const otra = await altaDe(mundo, sala.id, personaDePrueba(mundo, 1), { cuerpo: { llave: "otroCelular".padEnd(22, "x") } });
+    expect(((await otra.json()) as { ya: boolean }).ya).toBe(true);
+  });
+
+  it("si el conteo falla, la persona queda anotada y recibe su respuesta de siempre", async () => {
+    mundo.ejecutar(`sala:${sala.id}`, "DROP TABLE campana_activaciones");
+    // Un conteo que no se puede escribir: una vista en el lugar de la tabla.
+    mundo.ejecutar(`sala:${sala.id}`, "CREATE VIEW campana_activaciones AS SELECT '2026-01-01' AS dia, 1 AS n");
+    const r = await altaDe(mundo, sala.id, personaDePrueba(mundo, 1));
+    expect(r.status).toBe(201);
+    const estado = await mundo.pedir(`/v1/sala/${sala.id}/campana/estado`);
+    expect(((await estado.json()) as { total: number }).total).toBe(1);
+  });
 });
