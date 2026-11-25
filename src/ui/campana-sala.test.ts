@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { Keypair } from "@stellar/stellar-sdk";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -17,6 +18,7 @@ vi.mock("../stellar/config", async (orig) => {
 vi.mock("./qr", () => ({ pintarQr: async () => true, precargarQr: async () => undefined }));
 
 import { type PasoDelPuente, ponerPaso } from "../campana/puente";
+import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
 import { nadaSeAbreSolo } from "./cuenta-lista-flujo";
 import { CLAVE_EVENTOS_ORG, CLAVE_INTENTOS_ORG, CLAVE_ORG, guardarOrg, leerOrg } from "../sala/campana-org";
 import { montarPanelDeCampana } from "./campana-sala";
@@ -1685,140 +1687,147 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     expect(vistaDe(p)).toBe("elegir");
   });
 
-  describe("la pregunta dice qué se pierden los celulares", () => {
-    const SELLO = "Los celulares todavía no recibieron el aviso de la lista sellada. Si la dejás, no lo van a ver.";
-    const RESULTADO = "Los celulares todavía no recibieron su resultado. Si la dejás, no lo van a ver.";
-    const GANADORA = "Alguna ganadora todavía no recibió su aviso. Si dejás la campaña, no se va a enterar desde su celular.";
+  describe("la pregunta dice en una sola línea qué se pierden los celulares", () => {
+    const LINEA = "Si la dejás ahora, los celulares que todavía no recibieron su aviso se quedan sin verlo.";
+    const LINEA_EN = "If you leave now, phones that have not received their notice yet will not see it.";
+    const GANADORA_SIN_AVISAR: PasoDelPuente = { paso: "resultado", filas: [{ cuenta: "GUNO", nombre: "Ana", avisada: false, alta: "esperando" }], otraBilletera: false };
 
-    it("con el sello sin avisar, dice que los celulares no van a ver la lista sellada", async () => {
+    /** El panel en la vista sellada o sorteada, retomado como después de una recarga. */
+    async function enLaVista(m: Mundo, fase: "sellada" | "sorteada"): Promise<Panel> {
+      guardarOrg(m.almacen, { sala: SALA, fase });
+      m.sala.fase = fase;
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe(fase));
+      await suelta();
+      return p;
+    }
+
+    it("desde la lista cerrada, con cualquier paso, la pregunta abierta lleva la línea", async () => {
       const m = mundo();
       const p = nuevoPanel(m);
       await cerradaConDos(m, p);
-      ponerPaso({ paso: "no-avisamos" });
-      boton(p, "Elegir otro archivo").click();
-      expect(vistaDe(p)).toBe("olvidar");
-      expect(texto(p, "#cpo-h")).toBe("¿Dejar esta campaña?");
-      expect(texto(p, "#cpo-linea")).toBe(SELLO);
+      for (const paso of [{ paso: "nada" }, { paso: "leyendo" }, { paso: "sin-conexion" }, { paso: "no-avisamos" }, { paso: "boton-avisar" }, { paso: "avisada" }] as const) {
+        ponerPaso(paso);
+        boton(p, "Elegir otro archivo").click();
+        expect(vistaDe(p), paso.paso).toBe("olvidar");
+        expect(texto(p, "#cpo-h"), paso.paso).toBe("¿Dejar esta campaña?");
+        expect(texto(p, "#cpo-linea"), paso.paso).toBe(LINEA);
+        boton(p, "Cancelar").click();
+      }
       m.idioma = "en";
+      ponerPaso({ paso: "nada" });
       p.pintar();
-      expect(texto(p, "#cpo-linea")).toBe("The phones have not received the sealed list notice yet. If you leave, they will not see it.");
+      boton(p, "Choose another file").click();
+      expect(texto(p, "#cpo-linea")).toBe(LINEA_EN);
     });
 
-    it("con la lista cerrada y nada avisado, dice lo mismo del sello", async () => {
+    it("desde la lista sellada, con varios pasos, la pregunta abierta lleva la línea", async () => {
+      const m = mundo();
+      const p = await enLaVista(m, "sellada");
+      for (const paso of [{ paso: "nada" }, { paso: "leyendo" }, { paso: "sin-conexion" }, { paso: "avisada" }, { paso: "otro-sorteo" }, { paso: "no-avisamos" }] as const) {
+        ponerPaso(paso);
+        boton(p, "Elegir otro archivo").click();
+        expect(vistaDe(p), paso.paso).toBe("olvidar");
+        expect(texto(p, "#cpo-linea"), paso.paso).toBe(LINEA);
+        boton(p, "Cancelar").click();
+      }
+    });
+
+    it("desde el sorteo hecho con avisos sin entregar, la pregunta abierta lleva la línea, en los dos idiomas", async () => {
+      const m = mundo();
+      const p = await enLaVista(m, "sorteada");
+      for (const paso of [{ paso: "nada" }, { paso: "boton-resultado" }, { paso: "mandando" }, { paso: "sin-conexion" }, GANADORA_SIN_AVISAR] as const) {
+        ponerPaso(paso);
+        boton(p, "Elegir otro archivo").click();
+        expect(vistaDe(p), paso.paso).toBe("olvidar");
+        expect(texto(p, "#cpo-linea"), paso.paso).toBe(LINEA);
+        boton(p, "Cancelar").click();
+      }
+      ponerPaso(GANADORA_SIN_AVISAR);
+      m.idioma = "en";
+      p.pintar();
+      boton(p, "Choose another file").click();
+      expect(texto(p, "#cpo-linea")).toBe(LINEA_EN);
+    });
+
+    it("con la sala ya borrada la pregunta sale sin línea, desde la lista cerrada y desde la sellada", async () => {
       const m = mundo();
       const p = nuevoPanel(m);
       await cerradaConDos(m, p);
-      boton(p, "Elegir otro archivo").click();
-      expect(texto(p, "#cpo-linea")).toBe(SELLO);
-    });
-
-    it("con el sello avisado y el sorteo sin hacer, dice que falta el resultado", async () => {
-      const m = mundo();
-      guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
-      m.sala.fase = "sellada";
-      const p = nuevoPanel(m);
-      await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
-      await suelta();
-      ponerPaso({ paso: "avisada" });
-      boton(p, "Elegir otro archivo").click();
-      expect(texto(p, "#cpo-linea")).toBe(RESULTADO);
-    });
-
-    it("con el sorteo hecho y el resultado todavía por mandar, dice que falta el resultado y en inglés también", async () => {
-      const m = mundo();
-      guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
-      m.sala.fase = "sorteada";
-      const p = nuevoPanel(m);
-      await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
-      await suelta();
-      ponerPaso({ paso: "boton-resultado" });
-      boton(p, "Elegir otro archivo").click();
-      expect(texto(p, "#cpo-linea")).toBe(RESULTADO);
-      m.idioma = "en";
-      p.pintar();
-      expect(texto(p, "#cpo-linea")).toBe("The phones have not received their result yet. If you leave, they will not see it.");
-    });
-
-    it("con el resultado ya en la sala y una ganadora sin avisar, dice que falta avisarle a ella y no que falta el resultado", async () => {
-      const m = mundo();
-      guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
-      m.sala.fase = "sorteada";
-      const p = nuevoPanel(m);
-      await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
-      await suelta();
-      ponerPaso({ paso: "resultado", filas: [{ cuenta: "GUNO", nombre: "Ana", avisada: false, alta: "esperando" }], otraBilletera: false });
+      ponerPaso({ paso: "sala-borrada" });
       boton(p, "Elegir otro archivo").click();
       expect(vistaDe(p)).toBe("olvidar");
-      expect(texto(p, "#cpo-linea")).toBe(GANADORA);
-      expect(texto(p, "#cpo-linea")).not.toContain("resultado");
-      m.idioma = "en";
-      p.pintar();
-      expect(texto(p, "#cpo-linea")).toBe("A winner has not been notified yet. If you leave the campaign, they will not find out from their phone.");
+      expect(texto(p, "#cpo-linea")).toBe("");
+      boton(p, "Cancelar").click();
+
+      const otro = mundo();
+      const q = await enLaVista(otro, "sellada");
+      ponerPaso({ paso: "sala-borrada" });
+      boton(q, "Elegir otro archivo").click();
+      expect(vistaDe(q)).toBe("olvidar");
+      expect(texto(q, "#cpo-linea")).toBe("");
     });
 
-    it("si el aviso cambia con la pregunta abierta, la línea sigue al aviso", async () => {
+    it("si la sala se borra con la pregunta abierta, la línea se va", async () => {
       const m = mundo();
       const p = nuevoPanel(m);
       await cerradaConDos(m, p);
       ponerPaso({ paso: "boton-avisar" });
       boton(p, "Elegir otro archivo").click();
-      expect(texto(p, "#cpo-linea")).toBe(SELLO);
-      ponerPaso({ paso: "avisada" });
-      expect(texto(p, "#cpo-linea")).toBe(RESULTADO);
-    });
-
-    it("con la sala ya borrada y la lista sellada se pregunta igual, pero la pregunta no inventa un aviso", async () => {
-      const m = mundo();
-      guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
-      m.sala.fase = "sellada";
-      const p = nuevoPanel(m);
-      await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
-      await suelta();
+      expect(texto(p, "#cpo-linea")).toBe(LINEA);
       ponerPaso({ paso: "sala-borrada" });
-      boton(p, "Elegir otro archivo").click();
-      expect(vistaDe(p)).toBe("olvidar");
-      // Ya no hay sala a la que avisarle nada: la línea queda vacía en lugar de decir que falta el sello.
       expect(texto(p, "#cpo-linea")).toBe("");
     });
 
-    it("con el sello ya llegado, el resultado es lo que falta aunque el paso sea de otro tipo", async () => {
+    it("con el sorteo hecho y todas avisadas, no se pregunta y no hay línea", async () => {
       const m = mundo();
-      guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
-      m.sala.fase = "sellada";
-      const p = nuevoPanel(m);
-      await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
-      await suelta();
-      for (const paso of [{ paso: "nada" }, { paso: "otro-sorteo" }, { paso: "sin-conexion" }] as const) {
-        ponerPaso(paso);
-        boton(p, "Elegir otro archivo").click();
-        expect(vistaDe(p), paso.paso).toBe("olvidar");
-        expect(texto(p, "#cpo-linea"), paso.paso).toBe(RESULTADO);
-        boton(p, "Cancelar").click();
-      }
-    });
-
-    it("con el sorteo hecho y el resultado avisado a todas, no se pregunta y no queda línea", async () => {
-      const m = mundo();
-      guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
-      m.sala.fase = "sorteada";
-      const p = nuevoPanel(m);
-      await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
-      await suelta();
+      const p = await enLaVista(m, "sorteada");
       ponerPaso({ paso: "resultado", filas: [{ cuenta: "GUNO", nombre: "Ana", avisada: true, alta: "esperando" }], otraBilletera: false });
       boton(p, "Elegir otro archivo").click();
       expect(vistaDe(p)).toBe("elegir");
-      expect(texto(p, "#cpo-linea")).not.toContain("no lo van a ver");
+      expect(texto(p, "#cpo-linea")).not.toBe(LINEA);
     });
 
-    it("desde una campaña abierta, la pregunta queda sin línea aunque quede un aviso viejo en el puente", async () => {
+    it("tocar Cancelar no deja la línea colgada en la vista siguiente", async () => {
+      const m = mundo();
+      const p = await enLaVista(m, "sorteada");
+      ponerPaso({ paso: "boton-resultado" });
+      boton(p, "Elegir otro archivo").click();
+      expect(texto(p, "#cpo-linea")).toBe(LINEA);
+      boton(p, "Cancelar").click();
+      expect(vistaDe(p)).toBe("sorteada");
+      expect(texto(p, "#cpo-linea")).not.toBe(LINEA);
+      // Y al confirmar, la pantalla de elegir el archivo tampoco la arrastra.
+      boton(p, "Elegir otro archivo").click();
+      expect(texto(p, "#cpo-linea")).toBe(LINEA);
+      boton(p, "Sí, dejarla").click();
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
+      expect(texto(p, "#cpo-linea")).not.toBe(LINEA);
+    });
+
+    it("desde una campaña abierta la pregunta no lleva la línea, aunque quede un aviso viejo en el puente", async () => {
       const m = mundo();
       const p = nuevoPanel(m);
       await abrirInscripcion(m, p);
       ponerPaso({ paso: "no-avisamos" });
       boton(p, "Elegir otro archivo").click();
       expect(vistaDe(p)).toBe("olvidar");
-      // Con la pregunta abierta, sin tocar Cancelar: es ahí donde la línea tendría que aparecer si el cambio la mostrara de más.
+      // Con la pregunta abierta, sin tocar Cancelar: es ahí donde la línea aparecería si el cambio la mostrara de más.
       expect(texto(p, "#cpo-linea")).toBe("");
+    });
+
+    it("no quedan claves de texto sueltas de las tres líneas que se fueron, y la que queda se usa", () => {
+      const fuente = readFileSync(new URL("./campana-sala.ts", import.meta.url), "utf8");
+      const puente = readFileSync(new URL("../campana/puente.ts", import.meta.url), "utf8");
+      for (const idioma of ["es", "en"] as const) {
+        const claves = Object.keys(TEXTOS_SALA_CAMPANA[idioma]).filter((k) => k.startsWith("cpoOlvidar"));
+        expect(claves.sort(), idioma).toEqual(["cpoOlvidarAviso", "cpoOlvidarSi", "cpoOlvidarT"]);
+      }
+      for (const vieja of ["cpoOlvidarSello", "cpoOlvidarResultado", "cpoOlvidarGanadora", "avisoQueFalta"]) {
+        expect(fuente.includes(vieja), vieja).toBe(false);
+        expect(puente.includes(vieja), vieja).toBe(false);
+      }
+      expect(fuente.includes("cpoOlvidarAviso")).toBe(true);
     });
   });
 });

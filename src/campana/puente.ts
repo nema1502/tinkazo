@@ -48,34 +48,10 @@ export type PasoDelPuente =
  * ganadoras avisadas o cuando la sala ya fue borrada, que no tiene a quién mandarle nada.
  */
 export function avisosPendientes(p: PasoDelPuente, sorteoHecho: boolean): boolean {
-  return avisoQueFalta(p, sorteoHecho ? "sorteada" : "sellada") !== null;
-}
-
-/**
- * Qué falta si se deja la campaña ahora: el aviso de la lista sellada, el resultado de todos los celulares, el aviso a alguna
- * ganadora en particular (el resultado ya llegó a la sala), o `"sin-sala"` cuando la sala ya no existe y no hay nada concreto
- * que decirles.
- */
-export type AvisoQueFalta = "sello" | "resultado" | "ganadora" | "sin-sala";
-
-/** La vista del panel desde la que se deja la campaña. */
-export type VistaDelAviso = "cerrada" | "sellada" | "sorteada";
-
-/**
- * Lo que el panel todavía le debe a los celulares, o `null` si no les debe nada. Decide por la vista y no por el paso: con la
- * lista cerrada todavía no se selló, y falta el aviso del sello. Con la lista sellada el sello ya llegó a la sala, y falta
- * siempre el resultado. Con el sorteo hecho, el paso `resultado` quiere decir que el resultado ya está en la sala: entonces
- * solo falta avisarle a cada ganadora que todavía no recibió su aviso, y con todas avisadas no falta nada. En los demás pasos
- * del sorteo hecho el resultado todavía no llegó a la sala y falta el resultado. Con la sala ya borrada no queda nadie a quien
- * avisar: con el sorteo hecho no se pregunta, y antes de eso se pregunta pero sin decir qué falta.
- * Es la regla que decide si se pregunta antes de dejar la campaña y qué dice la pregunta: no hay otra.
- */
-export function avisoQueFalta(p: PasoDelPuente, vista: VistaDelAviso): AvisoQueFalta | null {
-  if (p.paso === "sala-borrada") return vista === "sorteada" ? null : "sin-sala";
-  if (vista === "cerrada") return "sello";
-  if (vista === "sellada") return "resultado";
-  if (p.paso === "resultado") return p.filas.some((f) => !f.avisada) ? "ganadora" : null;
-  return "resultado";
+  if (!sorteoHecho) return true;
+  if (p.paso === "sala-borrada") return false;
+  if (p.paso === "resultado") return p.filas.some((f) => !f.avisada);
+  return true;
 }
 
 /** Lo que el panel puede pedirle a quien tiene la lógica de cada paso. Cada módulo registra la suya. */
