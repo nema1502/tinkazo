@@ -240,6 +240,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: herramienta
+          persist-credentials: false
       # Los datos de entrada se validan antes de construir nada. Llegan por variables de entorno
       # y no se escriben dentro del comando. Las variables válidas pasan a las del resto del trabajo.
       - name: Validar los datos de entrada
@@ -253,6 +254,7 @@ jobs:
         with:
           ref: ${{ inputs.rama || github.sha }}
           path: sitio
+          persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11

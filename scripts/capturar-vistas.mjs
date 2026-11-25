@@ -24,6 +24,9 @@
  * 300 caracteres del texto visible (`textoVisible`): por eso ningún nombre puede terminar en -FALLO. Sale con 1 si alguna vista no se pudo capturar (lo
  * que sí salió queda escrito) y con 2 si la lista o los argumentos no valen.
  *
+ * El guion entero tiene un tope de 35 minutos (el trabajo de GitHub corta a los 40): lo que no
+ * llegó a hacerse queda en el informe como `sinHacer`, con el motivo, y el código de salida es 1.
+ *
  * Cada vista es un objeto:
  *   nombre        sale <nombre>.png (letras, números, punto, guion, guion bajo)
  *   ruta          camino y consulta, con / adelante: "/?demo=wheel&instant=1&lead=3"
@@ -72,7 +75,7 @@ import { mkdirSync, readFileSync, appendFileSync, writeFileSync } from "node:fs"
 import { join, resolve } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { clicHasta, cortarFueraDelOrigen, evidenciaDelFallo } from "./lib/vistas-pagina.mjs";
-import { TECLAS, TOPES, direccionDeVista, generarNombres, leerEntorno, leerVistas, problemaDeBase, problemaDeRama } from "./lib/vistas.mjs";
+import { TECLAS, TOPES, direccionDeVista, generarNombres, leerEntorno, leerVistas, plazoDeLaVista, problemaDeBase, problemaDeRama } from "./lib/vistas.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -119,7 +122,7 @@ if (problemaBase) salirConErrores("la base no vale", [`--base ${problemaBase}`])
 const out = resolve(opt("--out", "capturas"));
 mkdirSync(out, { recursive: true });
 
-/** Cuánto puede tardar una vista entera, con sus pasos y esperas declaradas. */
+/** Cuánto puede tardar una vista entera, con sus pasos y esperas declaradas (y nunca más de lo que queda del tiempo total). */
 const PLAZO_VISTA_MS = TOPES.totalMs + 120_000;
 const ALTO_MAXIMO_ENTERA = 16_000;
 
@@ -223,7 +226,7 @@ async function fotografiar(page, archivo, entera) {
   return truncada;
 }
 
-async function capturar(browser, v) {
+async function capturar(browser, v, plazoMs, porElTotal) {
   const url = direccionDeVista(v, base);
   const fila = { nombre: v.nombre, ok: false, archivo: null, error: null, direccion: url, direccionFinal: null, idiomaDeLaPagina: null, pantalla: `${v.ancho}x${v.alto}`, tema: v.tema, idioma: v.idioma, paginaEntera: v.paginaEntera, truncada: false, scrollHorizontal: null, anchoDelContenido: null, anchoDeLaPantalla: null, erroresDeConsola: [], archivoDelFallo: null, direccionEnElFallo: null, textoVisible: null };
   const page = await browser.open("about:blank");
@@ -284,7 +287,7 @@ async function capturar(browser, v) {
     await Promise.race([
       trabajo,
       new Promise((_, rej) => {
-        plazo = setTimeout(() => rej(new Error(`la vista tardó más de ${Math.round(PLAZO_VISTA_MS / 1000)} s`)), PLAZO_VISTA_MS);
+        plazo = setTimeout(() => rej(new Error(porElTotal ? `se acabó el tiempo total de ${MINUTOS_TOTAL} minutos durante esta vista` : `la vista tardó más de ${Math.round(plazoMs / 1000)} s`)), plazoMs);
       }),
     ]);
   } catch (e) {
@@ -300,18 +303,27 @@ async function capturar(browser, v) {
   return fila;
 }
 
-const informe = { base, vistas: [], total: vistas.length, falladas: 0 };
+const MINUTOS_TOTAL = TOPES.scriptMs / 60_000;
+/** Una vista a la que no le tocó turno porque el tiempo total ya se había acabado: queda marcada, no desaparece. */
+function vistaSinHacer(v) {
+  return { nombre: v.nombre, ok: false, sinHacer: true, archivo: null, error: `no se hizo: se acabó el tiempo total de ${MINUTOS_TOTAL} minutos`, direccion: direccionDeVista(v, base), pantalla: `${v.ancho}x${v.alto}`, tema: v.tema, idioma: v.idioma, erroresDeConsola: [] };
+}
+
+const informe = { base, vistas: [], total: vistas.length, falladas: 0, sinHacer: 0, topeTotalMinutos: MINUTOS_TOTAL };
 const guardar = () => writeFileSync(join(out, "informe.json"), `${JSON.stringify(informe, null, 2)}\n`);
 guardar();
 
 const browser = await launch({ width: 1280, height: 900 });
 try {
+  const inicio = Date.now();
   for (const v of vistas) {
-    const fila = await capturar(browser, v);
+    const { hacer, plazoMs, porElTotal } = plazoDeLaVista(Date.now() - inicio, PLAZO_VISTA_MS);
+    const fila = hacer ? await capturar(browser, v, plazoMs, porElTotal) : vistaSinHacer(v);
     informe.vistas.push(fila);
     informe.falladas = informe.vistas.filter((f) => !f.ok).length;
+    informe.sinHacer = informe.vistas.filter((f) => f.sinHacer).length;
     guardar();
-    console.log(`${fila.ok ? "OK    " : "FALLÓ "} ${v.nombre} (${fila.pantalla})${fila.ok ? `${fila.scrollHorizontal ? " con scroll horizontal" : ""}${fila.erroresDeConsola.length ? ` y ${fila.erroresDeConsola.length} errores de consola` : ""}` : `: ${fila.error}${fila.archivoDelFallo ? ` (foto: ${fila.archivoDelFallo})` : ""}`}`);
+    console.log(`${fila.sinHacer ? "SIN HACER" : fila.ok ? "OK    " : "FALLÓ "} ${v.nombre} (${fila.pantalla})${fila.ok ? `${fila.scrollHorizontal ? " con scroll horizontal" : ""}${fila.erroresDeConsola.length ? ` y ${fila.erroresDeConsola.length} errores de consola` : ""}` : `: ${fila.error}${fila.archivoDelFallo ? ` (foto: ${fila.archivoDelFallo})` : ""}`}`);
   }
 } finally {
   await browser.close();

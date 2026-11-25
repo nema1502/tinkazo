@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DEFECTOS, TOPES, direccionDeVista, generarNombres, leerEntorno, leerVistas, problemaDeBase, problemaDeRama, problemaDeRuta, validarVistas } from "./vistas.mjs";
+import { DEFECTOS, TOPES, direccionDeVista, plazoDeLaVista, generarNombres, leerEntorno, leerVistas, problemaDeBase, problemaDeRama, problemaDeRuta, validarVistas } from "./vistas.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const guion = join(aqui, "..", "capturar-vistas.mjs");
@@ -136,6 +136,53 @@ describe("validar la lista de vistas", () => {
     expect(leerVistas("").errores[0]).toContain("VISTAS_JSON vacía");
     expect(leerVistas("{no").errores[0]).toContain("no es un JSON válido");
     expect(leerVistas('[{"nombre":"a","ruta":"/"}]').errores).toEqual([]);
+  });
+});
+
+describe("el tope total del guion", () => {
+  const vista35 = 35 * 60_000;
+  const plazoVista = 360_000;
+  it("son 35 minutos, menos que lo que dura el trabajo de GitHub (40)", () => {
+    expect(TOPES.scriptMs).toBe(vista35);
+  });
+  it("al principio cada vista tiene su plazo entero", () => {
+    expect(plazoDeLaVista(0, plazoVista)).toEqual({ hacer: true, plazoMs: plazoVista, porElTotal: false });
+  });
+  it("cuando queda menos que el plazo de una vista, la vista tiene lo que queda y se avisa que es por el total", () => {
+    expect(plazoDeLaVista(vista35 - 100_000, plazoVista)).toEqual({ hacer: true, plazoMs: 100_000, porElTotal: true });
+  });
+  it("cuando no queda casi nada, la vista no se hace", () => {
+    expect(plazoDeLaVista(vista35 - 5_000, plazoVista).hacer).toBe(false);
+    expect(plazoDeLaVista(vista35 + 1, plazoVista).hacer).toBe(false);
+    expect(plazoDeLaVista(vista35 - TOPES.vistaMinimaMs, plazoVista).hacer).toBe(true);
+  });
+  it("40 vistas que tardan lo máximo no pasan del tope: las que no entran quedan sin hacer", () => {
+    let t = 0;
+    let hechas = 0;
+    for (let i = 0; i < TOPES.vistas; i++) {
+      const p = plazoDeLaVista(t, plazoVista);
+      if (!p.hacer) continue;
+      hechas++;
+      t += p.plazoMs;
+    }
+    expect(t).toBeLessThanOrEqual(vista35);
+    expect(hechas).toBeLessThan(TOPES.vistas);
+  });
+});
+
+describe("las credenciales del trabajo de capturas", () => {
+  const flujo = readFileSync(join(aqui, "..", "..", ".github", "workflows", "auditores.yml"), "utf8").replace(/\r\n/g, "\n");
+  const trabajo = flujo.slice(flujo.indexOf("\n  capturas:\n"));
+
+  it("los dos checkout del trabajo de capturas no dejan el token en el disco", () => {
+    const pasos = trabajo.split("\n      - ").filter((p) => p.startsWith("uses: actions/checkout@"));
+    expect(pasos).toHaveLength(2);
+    for (const p of pasos) expect(p, p).toContain("persist-credentials: false");
+  });
+
+  it("el trabajo de capturas dura más que el tope del guion", () => {
+    const minutos = Number(/timeout-minutes: (\d+)/.exec(trabajo)?.[1]);
+    expect(minutos * 60_000).toBeGreaterThan(TOPES.scriptMs);
   });
 });
 
