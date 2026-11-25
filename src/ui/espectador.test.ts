@@ -43,8 +43,17 @@ vi.mock("./draw", () => ({
 vi.mock("./espectador-reloj", () => ({ desfaseDelReloj: () => h.desfaseDelReloj() }));
 // El QR y el enlace corto del panel del espectador; la sala, para la vista del participante.
 vi.mock("./qr", () => ({ pintarQr: (...a: unknown[]) => h.pintarQr(...a) }));
-vi.mock("../enlace-corto", () => ({ acortar: (...a: unknown[]) => h.acortar(...a), enlaceParaElQr: (...a: unknown[]) => h.enlaceParaElQr(...a) }));
+vi.mock("../enlace-corto", () => ({
+  acortar: (...a: unknown[]) => h.acortar(...a),
+  enlaceParaElQr: (...a: unknown[]) => h.enlaceParaElQr(...a),
+  // Lo que pide el diálogo de compartir al armar el enlace y el logo: en la prueba, sin red ni registro.
+  ponerLogoDeRuta: () => undefined,
+  rutaDe: (enlace: string) => enlace,
+  releerCorto: (...a: unknown[]) => Promise.resolve(null),
+}));
 vi.mock("../sala/cliente", () => ({ servicioDeSala: () => "http://sala.test" }));
+// El diálogo de compartir (`compartir.ts`) pinta la foto: en la prueba, un PNG que no toca el canvas.
+vi.mock("./foto", () => ({ fotoPng: async () => new Blob(["png"], { type: "image/png" }), fotoDelJuegoPng: async () => null }));
 vi.mock("../sala/participante", async (orig) => ({
   ...(await orig<typeof import("../sala/participante")>()),
   anotarseEnSala: (...a: unknown[]) => h.anotarseEnSala(...a),
@@ -60,6 +69,8 @@ import { esSoloMirar, setSoloMirar } from "../solo-mirar";
 import { T, type Lang } from "../i18n";
 import type { Registro } from "../protocol/verificacion";
 import { abrirEspectador, abrirPanelQrEspectador, abrirParticipante, avisarEnlaceRoto, datosDelEnlace, enlaceEspectador, type DatosEspectador, type OpcionesDeLaVista } from "./espectador";
+import { decodeProof } from "../protocol/proof";
+import { mensajeDeSorteo } from "./compartir";
 import { LARGA_IGUAL_TRAS_MS, MARGEN_DEL_FINAL_PARTE, MARGEN_DE_LA_CADENA_S, RETRASO_TRAS_LO_GRABADO_MS } from "./espectador-regla";
 import { LECTURA_DE_LA_TARJETA_S } from "../arranque-del-show";
 
@@ -910,5 +921,138 @@ describe("la vista del participante", () => {
     abrirParticipante(PARTICIPANTE, "es");
     abrirParticipante(PARTICIPANTE, "es");
     expect(document.querySelectorAll(".participante")).toHaveLength(1);
+  });
+});
+
+/* ------------------------------------------------------------ compartir en vivo (issue #247) */
+
+describe("compartir el sorteo desde la vista en vivo", () => {
+  const dialogo = (): HTMLDialogElement => document.querySelector("dialog") as HTMLDialogElement;
+
+  beforeEach(() => {
+    // Lo justo para abrir el diálogo en jsdom: diálogos modales, hojas del sistema y la foto en memoria.
+    if (!HTMLDialogElement.prototype.showModal) {
+      HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+        this.open = true;
+      };
+      HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+        this.open = false;
+        this.dispatchEvent(new Event("close"));
+      };
+    }
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: false, media: q, addEventListener: () => undefined, removeEventListener: () => undefined }));
+    // Sin compresión en jsdom (su Blob no tiene .stream()): el comprobante viaja sin comprimir, igual de válido.
+    vi.stubGlobal("CompressionStream", undefined);
+    URL.createObjectURL = () => "blob:prueba";
+    URL.revokeObjectURL = () => undefined;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** El camino de todos, hasta ver Lo que salió en la vista del espectador. */
+  const hastaElFin = async (): Promise<void> => {
+    abrir(datos());
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
+    (h.jugar.mock.calls[0]?.[0] as () => void)();
+    // El show corre su duración y Lo que salió espera su margen (`horaDelFinal`), como en las pruebas del final.
+    await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000 + 10_000);
+  };
+
+  it("durante el vivo, Lo que salió ofrece compartir y abre el mismo diálogo de «Compartir el sorteo»", async () => {
+    await hastaElFin();
+    const b = capa().querySelector<HTMLButtonElement>("[data-compartir]");
+    expect(b?.textContent).toBe(T.es.cmpBtn);
+    b?.click();
+    await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+    expect(dialogo().querySelector("h2")?.textContent).toBe(T.es.cmpSorteo);
+    // La vista completa: la acción principal y las dos formas de ir a mano, listas, con la foto a la vista.
+    const wa = dialogo().querySelector<HTMLButtonElement>("[data-whatsapp]");
+    expect(wa?.textContent).toBe(T.es.cmpWa);
+    expect(wa?.disabled).toBe(false);
+    expect(dialogo().querySelector<HTMLButtonElement>("[data-bajar]")?.disabled).toBe(false);
+    expect(dialogo().querySelector<HTMLButtonElement>("[data-copiar]")?.disabled).toBe(false);
+    expect(dialogo().querySelector(".cmp-png")).toBeTruthy();
+  });
+
+  it("el mensaje y el comprobante son los del sorteo de la sala, no una variante nueva", async () => {
+    await hastaElFin();
+    capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+    await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+    const txt = dialogo().querySelector<HTMLTextAreaElement>(".cmp-txt");
+    expect(txt?.value).toBeTruthy();
+    // El enlace de verificación lleva el mismo comprobante que arma la sala: la lista, la ronda, la firma y el número.
+    const pieza = txt?.value.match(/https?:\/\/\S+\/verificar\.html#\S+/)?.[0] ?? "";
+    expect(pieza).not.toBe("");
+    const comprobante = await decodeProof("#" + new URL(pieza).hash.slice(1));
+    expect(comprobante).toMatchObject({
+      names: NOMBRES,
+      round: R,
+      sealedAt: roundTime(R),
+      prize: "Una polera",
+      signature: h.firma,
+      net: "testnet",
+      contract: CONTRATO_PRUEBA,
+      id: "42",
+    });
+    // Y el mensaje sale del mismo camino que comparte la sala: cada palabra igual para un mismo sorteo.
+    const esperado = mensajeDeSorteo("es", {
+      enlace: pieza,
+      ganadores: ganadores().map((i) => NOMBRES[i] ?? ""),
+      total: NOMBRES.length,
+      personas: NOMBRES.length,
+      premio: "Una polera",
+      fecha: roundTime(R),
+      numero: "42",
+      red: "testnet",
+    });
+    expect(txt?.value).toBe(esperado);
+  });
+
+  it("con quién ganó cada premio, el mensaje nombra a los que ya salieron y nada de lo que falta", async () => {
+    // Un espectador de un sorteo con dos premios: la vista es la misma, con la lista de los dos. La cadena de prueba
+    // graba el sorteo con sus dos ganadores, para que el celular sa adelante a jugar.
+    abrir(datos({ z: "Vinos del valle", w: 2 }), { leer: async () => registro({ grabado: true, n: NOMBRES, numWinners: 2, winners: ganadores(NOMBRES, 2), meta: "Vinos del valle" }) });
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
+    (h.jugar.mock.calls[0]?.[0] as () => void)();
+    await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000 + 10_000);
+    capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+    await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+    const esperados = ganadores(NOMBRES, 2).map((i) => NOMBRES[i] ?? "");
+    const txt = dialogo().querySelector<HTMLTextAreaElement>(".cmp-txt")?.value ?? "";
+    for (const nombre of esperados) expect(txt).toContain(nombre);
+    expect(txt).toContain(T.es.cmpNadieVarios);
+  });
+
+  it("al cerrar el diálogo se vuelve a la vista con su estado: Lo que salió y «otro premio? escaneá el QR nuevo»", async () => {
+    await hastaElFin();
+    capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+    await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+    dialogo().querySelector<HTMLButtonElement>("[data-cerrar]")?.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dialogo()).toBeFalsy();
+    const ganador = NOMBRES[ganadores()[0] ?? 0] ?? "";
+    expect(capa().querySelector(".espectador-ganadores")?.textContent).toBe(ganador);
+    expect(capa().textContent).toContain(T.es.espFinSiguiente);
+    // La vista no se fue a ningún lado (sin salida) y «Ver de nuevo» sigue donde estaba.
+    expect(irA).not.toHaveBeenCalled();
+    capa().querySelector<HTMLButtonElement>("[data-otra-vez]")?.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.verDeNuevo).toHaveBeenCalledTimes(1);
+  });
+
+  it("con el diálogo abierto, Escape lo cierra a él: no se sale de la vista en vivo", async () => {
+    await hastaElFin();
+    capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+    await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    // La vista sigue, con su estado: nadie llamó a salir.
+    expect(capa()).toBeTruthy();
+    expect(irA).not.toHaveBeenCalled();
+    // Y cerrado el diálogo, Escape de la vista sigue andando como siempre.
+    dialogo().querySelector<HTMLButtonElement>("[data-cerrar]")?.click();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(irA).toHaveBeenCalled();
   });
 });

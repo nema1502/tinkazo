@@ -3,7 +3,8 @@ import { getLang, setLang, t, T, type Lang } from "../i18n";
 import { app, avatar, conCuenta, forzarRitmo, paceSeconds, type Beacon } from "../state";
 import { setSoloMirar } from "../solo-mirar";
 import { beep, note } from "../sound";
-import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime } from "../protocol/quicknet";
+import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime, roundUrl } from "../protocol/quicknet";
+import { PROOF_VERSION, proofUrl, type Proof } from "../protocol/proof";
 import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { listHash } from "../protocol/canonical";
@@ -22,11 +23,12 @@ import {
   type DatosParticipante,
   type RondaViva,
 } from "../sala/participante";
-import { etiquetaConCuenta, ponerEtiquetas } from "../equipos/etiquetas";
-import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
+import { etiquetaConCuenta, etiquetaDe, esListaDeEquipos, ponerEtiquetas } from "../equipos/etiquetas";
+import { contar as contarPersonas, nombreDePersona, seCuentaPorPersona } from "../participaciones";
+import { refDe } from "../contar";
 import { hayModoOficial } from "../stellar/config";
-import { modesVisible } from "../modos/bandera";
-import { isTurnOrder } from "../modos/turnos";
+import { modesVisible, withMode } from "../modos/bandera";
+import { isTurnOrder, modoDelComprobante, ordenSinComprobante } from "../modos/turnos";
 import { isSecretSanta } from "../modos/amigo";
 import { PLAZO_DEL_RELAY_MS, conPlazo } from "../pedido-con-plazo";
 import { desfaseDelReloj } from "./espectador-reloj";
@@ -132,6 +134,76 @@ function nombresDeGanadores(datos: DatosEspectador, winners: readonly number[]):
 /** Lo que un enlace releído puede cambiar: el juego, la duración y los nombres de los equipos. Lo demás tiene que ser igual. */
 function mismoSorteo(a: DatosEspectador, b: DatosEspectador): boolean {
   return a.r === b.r && a.w === b.w && (a.z ?? "") === (b.z ?? "") && a.net === b.net && a.k === b.k && a.i === b.i && a.n.length === b.n.length && a.n.every((x, i) => x === b.n[i]);
+}
+
+/**
+ * El enlace del comprobante del sorteo que este celular ya verificó: el mismo comprobante que arma la sala para su
+ * resultado (`buildProof`, en `draw.ts`), con lo que acá es parte del enlace y de la cadena: la lista, la ronda, la
+ * firma y el número del sorteo. La fecha del sello la pone el instante de la ronda: el teléfono no leyó cuándo se
+ * selló, y la página de verificación dice la lista completa y su día igual. Sin los hashes de las transacciones
+ * (`stx`/`dtx`), que son la pantalla del organizador al grabar: el enlace se verifica igual y el mensaje queda el
+ * mismo que comparte la sala.
+ */
+async function enlaceDelComprobante(datos: DatosEspectador, d: NonNullable<(typeof app)["drawn"]>): Promise<string> {
+  // Un orden de turnos sin sello no tiene comprobante; pero un espectador siempre mira un sorteo sellado: no pasa.
+  if (ordenSinComprobante(datos.n.length, d.winners.length, datos.z ?? "", false)) return "";
+  const proof: Proof = {
+    v: PROOF_VERSION,
+    names: datos.n,
+    round: datos.r,
+    sealedAt: roundTime(datos.r),
+    ...(datos.z ? { prize: datos.z } : {}),
+    // La firma va siempre, como en la sala: con ella la matemática se puede rehacer aunque el RPC no conteste.
+    signature: d.beacon.signature,
+    // La red, el contrato y el número viajan en el enlace del espectador, y la cadena ya confirmó que el sorteo
+    // grabado con este número es el mismo que este celular calculó (`esperarElGrabado`): van al comprobante.
+    net: datos.net,
+    contract: datos.k,
+    id: datos.i,
+  };
+  try {
+    // Sin los modos a la vista el enlace queda como siempre, también el de un orden de turnos.
+    return withMode(await proofUrl(proof), modoDelComprobante(datos.n, d.winners.length, datos.z ?? "", modesVisible()));
+  } catch {
+    // Sin comprobante, el QR al menos lleva a la ronda del faro, como en la sala.
+    return roundUrl(datos.r);
+  }
+}
+
+/**
+ * Compartir lo que ya pasó (issue #247): mientras se mira en vivo, Lo que salió de la vista del espectador también
+ * deja avisar al grupo. Abre el mismo diálogo de «Compartir el sorteo» que la sala (`compartir.ts`), sin cambiarle
+ * nada: recibe los datos de este sorteo tal como van —los ganadores ya revelados y nada de lo que falta— y el
+ * mensaje y la foto salen del mismo camino de siempre (`abrirSorteo`). Al cerrar, la vista en vivo sigue como estaba.
+ */
+async function compartirElSorteo(datos: DatosEspectador, d: NonNullable<(typeof app)["drawn"]>): Promise<void> {
+  const enlace = await enlaceDelComprobante(datos, d);
+  // Los nombres como los manda la sala: la línea sellada sin su marca cuando la lista se lee por persona, y el
+  // nombre del equipo cuando la lista es de equipos con etiqueta (`etiquetaDe`).
+  const porPersona = seCuentaPorPersona(datos.n, modesVisible());
+  const ganadores = d.winners.map((i) => {
+    const linea = etiquetaDe(datos.n[i] ?? "");
+    return porPersona ? nombreDePersona(linea) : linea;
+  });
+  // El premio de un orden de turnos lo dice el modo (`turnMessage`); comparte el orden con el premio que tenga.
+  void import("./compartir").then((m) =>
+    m.abrirSorteo(
+      {
+        enlace,
+        ganadores,
+        total: datos.n.length,
+        personas: contarPersonas(datos.n, porPersona).personas,
+        ...(esListaDeEquipos(datos.n) ? { equipos: true } : {}),
+        premio: datos.z ?? "",
+        fecha: roundTime(datos.r),
+        numero: datos.i,
+        red: datos.net,
+        // La referencia pública para el contador, la misma que usa la sala: red, contrato, número (`src/contar.ts`).
+        ref: refDe({ net: datos.net, contract: datos.k, id: datos.i }),
+      },
+      getLang(),
+    ),
+  );
 }
 
 /**
@@ -260,8 +332,12 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     (op.irA ?? ((url: string) => location.assign(url)))(location.pathname);
   };
   const tecla = (e: KeyboardEvent): void => {
+    if (e.key !== "Escape") return;
     // Mientras corre el show, Escape no cierra la vista (ni salta el juego: el show se mira entero).
-    if (e.key === "Escape" && fase !== "show" && fase !== "numero" && fase !== "grabando") salir();
+    if (fase === "show" || fase === "numero" || fase === "grabando") return;
+    // Con el diálogo de compartir abierto, Escape lo cierra a él: al cerrarse, la vista en vivo sigue como estaba.
+    if (document.querySelector("dialog[open]")) return;
+    salir();
   };
   addEventListener("keydown", tecla);
 
@@ -297,6 +373,18 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     otraVez?.addEventListener("click", () => {
       void import("./draw").then((m) => m.verDeNuevo());
     });
+    // Compartir lo que ya pasó (issue #247): el mismo diálogo de «Compartir el sorteo» que la sala, reusado tal
+    // cual. Mientras la vista en vivo sigue abierta (aquí no sale de ella), su estado amanece igual al cerrarlo.
+    const compartir = document.createElement("button");
+    compartir.type = "button";
+    compartir.className = "ghost";
+    compartir.setAttribute("data-compartir", "");
+    compartir.textContent = t("cmpBtn");
+    compartir.addEventListener("click", () => {
+      if (!app.drawn) return;
+      void compartirElSorteo(datos, app.drawn);
+    });
+    sigue?.querySelector<HTMLElement>(".espectador-acc")?.insertBefore(compartir, sigue.querySelector(".espectador-propio"));
     otraVez?.focus({ preventScroll: true });
   };
 
