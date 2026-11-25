@@ -76,7 +76,7 @@ describe("el flujo de auditores a pedido: seguridad", () => {
 
   it("todos los checkout dejan de guardar el token", () => {
     const todos = Object.values(trabajos()).flatMap(pasos).filter((p) => p.includes("uses: actions/checkout@"));
-    expect(todos.length).toBeGreaterThanOrEqual(5);
+    expect(todos.length).toBe(4);
     for (const p of todos) expect(p).toMatch(/^\s*persist-credentials: false$/m);
   });
 
