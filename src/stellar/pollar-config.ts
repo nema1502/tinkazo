@@ -82,8 +82,10 @@ export const VENTANA_TOKEN_MS = 20_000;
 export const VENTANA_RETOMA_MS = 30_000;
 
 /**
- * Hasta cuándo la cabecera dice "Retomando tu cuenta…" antes de cortar por si algo queda colgado. Tiene que ser más
- * largo que la ventana de la retoma, con margen para bajar el SDK del proveedor antes de que empiece: si cortara antes,
- * la cabecera ofrecería Entrar con la sesión todavía en camino. Termina apenas la retoma termina, mucho antes que esto.
+ * Hasta cuándo la cabecera dice "Retomando tu cuenta…" aunque la retoma todavía no haya soltado la pantalla: los 12
+ * segundos de siempre, por si algo queda colgado antes de la primera mirada (el SDK del proveedor sin terminar de bajar).
+ * Lo normal es que la suelte antes la propia retoma, a los 8 segundos de la primera mirada (`cuandoTarda` de `restore`).
+ * La paciencia (`VENTANA_RETOMA_MS`) corre por detrás, sin tener a nadie esperando: si la sesión llega, se abre sola, y si
+ * la persona ya entró de nuevo, la retoma tardía se descarta.
  */
-export const FUSIBLE_DE_RETOMA_MS = VENTANA_RETOMA_MS + 10_000;
+export const FUSIBLE_DE_RETOMA_MS = 12_000;

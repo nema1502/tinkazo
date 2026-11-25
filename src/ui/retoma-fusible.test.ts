@@ -3,25 +3,28 @@ import { describe, expect, it } from "vitest";
 import { FUSIBLE_DE_RETOMA_MS, VENTANA_RETOMA_MS } from "../stellar/pollar-config";
 
 /**
- * La cabecera no ofrece Entrar mientras la sesión de Google todavía se está retomando.
+ * El fusible de la cabecera y la retoma de la sesión de Google.
  *
- * La retoma espera al proveedor hasta `VENTANA_RETOMA_MS` (30 segundos, con la red lenta de un stand). El fusible de la
- * cabecera, que corta el "Retomando…" por si algo queda colgado, tiene que ser más largo: si no, a los 12 segundos la
- * cabecera mostraba Entrar con la sesión todavía en camino, y la persona podía empezar otra entrada en paralelo.
+ * La cabecera dice Retomando como máximo lo de siempre: 8 segundos de primera mirada del proveedor y 12 de fusible. La
+ * retoma paciente (`VENTANA_RETOMA_MS`, 30 segundos) corre por detrás y no cambia lo que se ve: pasada la primera
+ * mirada la retoma misma suelta la cabecera (`cuandoTarda`), y si la sesión llega después, se abre sola.
  */
 
-const fuente = (ruta: string): string => readFileSync(new URL(ruta, import.meta.url), "utf8").replace(/\r\n/g, "\n");
+const fuente = (ruta: string): string => readFileSync(new URL(ruta, import.meta.url), "utf8").replace(/
+/g, "
+");
 
 describe("el fusible de la cabecera y la retoma de la sesión", () => {
-  it("el fusible es más largo que la ventana de la retoma, con margen para bajar el SDK", () => {
-    expect(FUSIBLE_DE_RETOMA_MS).toBeGreaterThanOrEqual(VENTANA_RETOMA_MS + 5_000);
+  it("el fusible es el de siempre y la ventana paciente corre por detrás, más larga que él", () => {
+    expect(FUSIBLE_DE_RETOMA_MS).toBe(12_000);
+    expect(VENTANA_RETOMA_MS).toBeGreaterThan(FUSIBLE_DE_RETOMA_MS);
   });
 
-  it("la cabecera usa ese fusible y ya no corta a los 12 segundos", () => {
+  it("la cabecera usa ese fusible y la retoma la suelta al terminar su primera mirada", () => {
     const ui = fuente("./wallet-ui.ts");
     expect(ui).toMatch(/setTimeout\(fin,\s*FUSIBLE_DE_RETOMA_MS\)/);
-    expect(ui).not.toMatch(/setTimeout\(fin,\s*12_000\)/);
-    expect(ui).not.toMatch(/nunca más de 12 s/);
+    expect(ui).toMatch(/restorePollar\(fin\)/);
+    expect(ui).toMatch(/restore\(\{\s*cuandoTarda:/);
   });
 
   it("la retoma de wallet-pollar.ts y el fusible miran la misma ventana", () => {

@@ -244,6 +244,79 @@ describe("el retomo paciente de la sesión de Google (issue 89)", () => {
     expect(datos.get(MARCA)).toBe("google");
   });
 
+  it("avisa una sola vez que la primera mirada venció, a los 8 segundos, y sigue esperando hasta abrir la cuenta", async () => {
+    vi.useFakeTimers();
+    almacenDeLaSesion({ [MARCA]: "google" });
+    za.ready = "tardia";
+    za.readyTardaMs = 12_000;
+    za.wallet = { address: DIR };
+    const { pollarWallet, LISTO_MS } = await moduloDeLaSesion();
+    const avisos: number[] = [];
+    const t0 = Date.now();
+    let fin: string | null | undefined;
+    void pollarWallet.restore({ cuandoTarda: () => avisos.push(Date.now() - t0) }).then((v) => (fin = v), () => undefined);
+    await vi.advanceTimersByTimeAsync(LISTO_MS - 100);
+    expect(avisos, "antes de la primera mirada no hay aviso").toEqual([]);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toBeGreaterThanOrEqual(LISTO_MS);
+    expect(avisos[0]).toBeLessThan(LISTO_MS + 500);
+    expect(fin).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fin, "la cuenta llegó sola después del aviso").toBe(DIR);
+    expect(avisos, "el aviso no se repite en las vueltas siguientes").toHaveLength(1);
+  });
+
+  it("si el proveedor contesta dentro de la primera mirada, no hay aviso", async () => {
+    vi.useFakeTimers();
+    almacenDeLaSesion({ [MARCA]: "google" });
+    za.ready = "tardia";
+    za.readyTardaMs = 3_000;
+    za.wallet = { address: DIR };
+    const { pollarWallet } = await moduloDeLaSesion();
+    let avisos = 0;
+    let fin: string | null | undefined;
+    void pollarWallet.restore({ cuandoTarda: () => void avisos++ }).then((v) => (fin = v), () => undefined);
+    await vi.advanceTimersByTimeAsync(3_500);
+    expect(fin).toBe(DIR);
+    expect(avisos).toBe(0);
+  });
+
+  it("si el proveedor no contesta nunca, avisa una vez y entrega sin cuenta al fin de la ventana, con la marca en pie", async () => {
+    vi.useFakeTimers();
+    const datos = almacenDeLaSesion({ [MARCA]: "google" });
+    za.ready = "nunca";
+    const { pollarWallet, LISTO_MS, VENTANA_RETOMA_MS } = await moduloDeLaSesion();
+    let avisos = 0;
+    let fin: string | null | undefined;
+    void pollarWallet.restore({ cuandoTarda: () => void avisos++ }).then((v) => (fin = v), () => undefined);
+    await vi.advanceTimersByTimeAsync(LISTO_MS + 100);
+    expect(avisos).toBe(1);
+    await vi.advanceTimersByTimeAsync(VENTANA_RETOMA_MS);
+    expect(fin).toBeNull();
+    expect(avisos).toBe(1);
+    expect(datos.get(MARCA)).toBe("google");
+  });
+
+  it("un aviso que falla no rompe la retoma", async () => {
+    vi.useFakeTimers();
+    almacenDeLaSesion({ [MARCA]: "google" });
+    za.ready = "tardia";
+    za.readyTardaMs = 10_000;
+    za.wallet = { address: DIR };
+    const { pollarWallet } = await moduloDeLaSesion();
+    let fin: string | null | undefined;
+    void pollarWallet
+      .restore({
+        cuandoTarda: () => {
+          throw new Error("la pantalla no pudo soltarse");
+        },
+      })
+      .then((v) => (fin = v), () => undefined);
+    await vi.advanceTimersByTimeAsync(11_000);
+    expect(fin).toBe(DIR);
+  });
+
   it("la sesión muerta de verdad se borra igual cuando el kit contesta enseguida (preservado)", async () => {
     const datos = almacenDeLaSesion({ [MARCA]: "google" });
     const { pollarWallet } = await moduloDeLaSesion();

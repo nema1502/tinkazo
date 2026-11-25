@@ -2088,8 +2088,12 @@ class PollarWallet implements SubmittingWallet {
    * para siempre y cada carga repetía ocho segundos de "Retomando…" para caer en "Para sellar, entrá con tu cuenta"
    * (diagnóstico del 26 de octubre de 2026). Si el proveedor sigue afuera después de la ventana, sale con `null` y la
    * marca en pie: salida honesta, y la próxima recarga lo vuelve a intentar.
+   *
+   * La pantalla no espera la ventana entera: cuando la primera mirada vence sin respuesta se avisa por `cuandoTarda`
+   * (una sola vez) y la cabecera se suelta como siempre, a los 8 segundos. La retoma sigue por detrás y, si el proveedor
+   * contesta, devuelve la cuenta: quien llama decide si todavía la abre (`restorePollar` de `wallet-ui.ts`).
    */
-  async restore(): Promise<string | null> {
+  async restore(opciones: { cuandoTarda?: () => void } = {}): Promise<string | null> {
     let via: string | null = null;
     try {
       via = readIntent();
@@ -2103,7 +2107,7 @@ class PollarWallet implements SubmittingWallet {
     // Retomar la sesión son pedidos al servicio de cuentas (validarla, renovarla): un rechazo por límite queda anotado, así la
     // página del celular lo dice con la verdad. El mirador vive lo que vive el cliente.
     this.#sinMirarLimites ??= mirarLimites(client, (segundos) => this.anotarLimite(segundos));
-    const listo = await this.#esperarElListo(client);
+    const listo = await this.#esperarElListo(client, opciones.cuandoTarda);
     if (listo) this.#leidos.add(client);
     const wallet = client.getWallet();
     this.address = wallet?.address ?? null;
@@ -2120,20 +2124,31 @@ class PollarWallet implements SubmittingWallet {
 
   /**
    * Espera paciente a que el kit termine de leer su sesión (`restore`): la primera mirada espera `LISTO_MS` y, si el
-   * proveedor todavía no contestó, la ventana paciente (`VENTANA_RETOMA_MS`), con espera creciente. La carrera de cada
-   * vuelta se gana apenas el proveedor contesta, aunque el temporizador de esa vuelta siga andando; el temporizador solo
-   * acota (y si el kit falla, sale enseguida con falso, como siempre).
+   * proveedor todavía no contestó, avisa una vez por `cuandoTarda` y sigue con la ventana paciente (`VENTANA_RETOMA_MS`),
+   * con espera creciente. Cada vuelta se gana apenas el proveedor contesta, aunque el temporizador siga andando; el
+   * temporizador solo acota. Si el kit falla, sale enseguida con falso, como siempre, sin avisar que tarda.
    */
-  async #esperarElListo(client: PollarClient): Promise<boolean> {
+  async #esperarElListo(client: PollarClient, cuandoTarda?: () => void): Promise<boolean> {
+    const ready = client.ready().then(() => "listo" as const, () => "falla" as const);
     let gastado = 0;
     let pausa = LISTO_MS;
     for (;;) {
       const ancho = Math.min(pausa, VENTANA_RETOMA_MS - gastado);
-      const listo = await Promise.race([
-        client.ready().then(() => true, () => false),
-        new Promise<boolean>((r) => setTimeout(() => r(false), ancho)),
-      ]);
-      if (listo) return true;
+      let reloj: ReturnType<typeof setTimeout> | undefined;
+      const vence = new Promise<"vence">((r) => {
+        reloj = setTimeout(() => r("vence"), ancho);
+      });
+      const veredicto = await Promise.race([ready, vence]);
+      clearTimeout(reloj);
+      if (veredicto === "listo") return true;
+      if (veredicto === "falla") return false;
+      if (gastado === 0) {
+        try {
+          cuandoTarda?.();
+        } catch {
+          /* soltar la pantalla no puede romper la retoma */
+        }
+      }
       gastado += ancho;
       if (gastado >= VENTANA_RETOMA_MS) return false;
       pausa = Math.min(pausa * 2, VENTANA_RETOMA_MS - gastado);
