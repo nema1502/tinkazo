@@ -169,8 +169,16 @@ describe("los textos, en los dos idiomas", () => {
       for (const k of CLAVES) {
         const v = T[l][k] as string;
         expect(v, `${l}.${k}`).not.toMatch(/[«»;]/);
-        expect(v, `${l}.${k}`).not.toMatch(/rifa|loter|raffle|ticket|boleto|apuesta|suerte|plata|dinero|money|cash/i);
+        // El aviso sí dice dinero: es justo lo que le explica a quien escribe un monto (ver la prueba de abajo).
+        const vedadas = k === "plAviso" ? /rifa|loter|raffle|ticket|boleto|apuesta|suerte|plata|cash/i : /rifa|loter|raffle|ticket|boleto|apuesta|suerte|plata|dinero|money|cash/i;
+        expect(v, `${l}.${k}`).not.toMatch(vedadas);
       }
     }
+  });
+
+  it("el aviso pregunta si el premio es dinero, que es lo que se entiende, y no si tiene valor", () => {
+    expect(T.es.plAviso).toBe("¿El premio es dinero? Con una campaña, quien gana lo recibe en dólares digitales.");
+    expect(T.en.plAviso).toBe("Is the prize money? With a campaign, the winner gets it in digital dollars.");
+    expect(html).toContain(`data-i="plAviso">${T.es.plAviso}<`);
   });
 });
