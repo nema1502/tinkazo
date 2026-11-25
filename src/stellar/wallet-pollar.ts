@@ -11,7 +11,7 @@ import { entornoDelBuild } from "./venta-piloto";
 import { errorKey, esDeRed } from "./errores";
 import type { LecturaDeCotizacion, LoQueFalta, PasoDeVerificacion, PrecioDeCarga, QueSeAprueba, RutaDeBolivia } from "./rampa-pollar";
 import { ingresoPlanB } from "./ingreso-bandera";
-import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, VENTANA_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
+import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, VENTANA_RETOMA_MS, VENTANA_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 import type { SignedTx, WalletAdapter } from "./wallet";
 import { contarVentanaDeGoogle, marcarEntrada, tomarEntrada } from "../contar";
 import { contarEntradaConRed, contarPasoOficial } from "../ui/contadores";
@@ -119,18 +119,8 @@ export interface Profile {
  */
 export const LISTO_MS = 8_000;
 
-/**
- * Cuánto sigue mirando al proveedor el retomo de la cuenta después de la primera mirada: la ventana paciente (issue 89).
- * Con la red cargada de un stand, la `ready()` del kit puede contestar a los 10 o 12 segundos, y devolver
- * "no hay cuenta" al primer vencido dejaba a quien ya entró con la página sin sesión, aunque la marca siguiera.
- *
- * Espera creciente: la primera espera es `LISTO_MS`, cada vuelta repite el doble de la anterior sin pasar de lo que
- * queda de la ventana, y en cada vuelta se gana apenas el proveedor contesta (la carrera con su `ready()` se resuelve
- * sola, sin que la gane el temporizador). Mientras espera, la marca no se toca: solo el chequeo del final, con el kit ya
- * listo y sin sesión, la puede olvidar, como antes. Si el proveedor sigue afuera después de la ventana, `restore`
- * devuelve `null` con la marca en pie: la próxima recarga lo vuelve a intentar y la página queda con su salida clara.
- */
-export const VENTANA_RETOMA_MS = 30_000;
+/** Cuánto sigue mirando al proveedor la retoma de la cuenta después de la primera mirada: `pollar-config.ts`. */
+export { VENTANA_RETOMA_MS };
 
 /** Lo que quedó de una entrada que no se completó, para que la pantalla diga qué pasó y se pueda reintentar. */
 export const ENTRADA_BLOQUEADA = "popup-blocked";
