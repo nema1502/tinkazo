@@ -1077,10 +1077,11 @@
     font-weight: 800; font-size: clamp(14px, 1.7vw, 24px); white-space: nowrap;
   }
   .espera-pie { font-size: clamp(14px, 1.5vw, 18px); color: var(--muted); max-width: 60ch; }
-  /* La presentación de la lista sellada durante la cuenta (games-teaser.ts): hasta 6 tarjetas y, hasta 480 px de ancho,
-     2. La cantidad, no un recorte, cuida el alto: ninguna regla de acá corta, así que ninguna tarjeta ni la línea de las
-     que faltan queda a medias. Lo que sobra de alto lo absorbe la capa (`ajustar`, espera.ts), que achica el resto. */
+  /* La presentación de la lista sellada durante la cuenta (games-teaser.ts): una tarjeta por persona, solo si entran todas
+     (hasta 6 y, hasta 480 px de ancho, 2). La cantidad, no un recorte, cuida el alto: ninguna regla de acá corta, así que
+     ninguna tarjeta queda a medias. Sin presentación la caja queda vacía y no ocupa lugar. */
   .espera-teaser-caja { max-width: 100%; }
+  .espera-teaser-caja:empty { display: none; }
   .espera-teaser {
     display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; margin: 4px 0 2px;
   }
@@ -1092,7 +1093,6 @@
   }
   .espera-teaser-tarjeta .sel-img { display: block; width: 76px; height: 43px; object-fit: cover; border-radius: 6px; background: var(--field); flex-shrink: 0; }
   .espera-teaser-tarjeta b { overflow-wrap: anywhere; }
-  .espera-teaser-mas { font-weight: 700; font-size: clamp(14px, 1.4vw, 18px); color: var(--muted); }
   .espera-nadie { font-size: clamp(14px, 1.7vw, 22px); font-weight: 800; color: var(--ink); max-width: 46ch; text-wrap: balance; }
   .espera-ensayo {
     font-size: clamp(14px, 1.6vw, 22px); font-weight: 900; letter-spacing: 0.08em; max-width: 100%;

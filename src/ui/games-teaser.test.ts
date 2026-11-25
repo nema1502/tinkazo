@@ -73,43 +73,6 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
   });
 });
 
-describe("un tope de tarjetas para que la espera siga entrando en la pantalla", () => {
-  const ciento50 = Array.from({ length: 150 }, (_, i) => `Persona ${i + 1}`);
-
-  it("con 150 nombres arma como mucho el tope, en el orden sellado, y dice cuántos faltan", () => {
-    const c = caja();
-    presentarTeaser(c, "race", ciento50);
-    expect(TOPE_TARJETAS).toBeGreaterThan(0);
-    expect(TOPE_TARJETAS).toBeLessThanOrEqual(8);
-    expect(tarjetas(c).map((t) => t.dataset.nombre)).toEqual(ciento50.slice(0, TOPE_TARJETAS));
-    // El lugar sigue siendo el de la lista entera, no el de las que se ven.
-    expect(tarjetas(c)[0]?.textContent).toContain("1 de 150");
-    const mas = c.querySelector<HTMLElement>(".espera-teaser-mas");
-    expect(mas?.textContent).toBe(T.es.espTeaserMas(150 - TOPE_TARJETAS));
-    expect(mas?.textContent).toContain(String(150 - TOPE_TARJETAS));
-    // Las imágenes también tienen tope: una por tarjeta.
-    expect(c.querySelectorAll("img")).toHaveLength(TOPE_TARJETAS);
-  });
-
-  it("el aviso de cuántos faltan existe en los dos idiomas, sin punto y coma ni comillas angulares", () => {
-    expect(T.es.espTeaserMas(144)).toBe("y 144 más");
-    expect(T.en.espTeaserMas(144)).toBe("and 144 more");
-    expect(T.es.espTeaserMas(1)).not.toMatch(/[;«»]/);
-    expect(T.en.espTeaserMas(1)).not.toMatch(/[;«»]/);
-    setLang("en");
-    const c = caja();
-    presentarTeaser(c, "race", ciento50);
-    expect(c.querySelector(".espera-teaser-mas")?.textContent).toBe("and 144 more");
-  });
-
-  it("con el tope justo o menos no hay aviso y todos se presentan", () => {
-    const c = caja();
-    presentarTeaser(c, "race", ciento50.slice(0, TOPE_TARJETAS));
-    expect(tarjetas(c)).toHaveLength(TOPE_TARJETAS);
-    expect(c.querySelector(".espera-teaser-mas")).toBeNull();
-  });
-});
-
 /** Simula un ancho de pantalla: responde a las consultas (max-width: Npx) y (min-width: Npx) como lo haría el navegador. */
 const conAncho = (ancho: number): void => {
   vi.stubGlobal("matchMedia", (q: string) => {
@@ -120,72 +83,111 @@ const conAncho = (ancho: number): void => {
   });
 };
 
-describe("la cantidad de tarjetas la decide el ancho de la pantalla", () => {
-  const nombresDe = (n: number): string[] => Array.from({ length: n }, (_, i) => `Persona ${i + 1}`);
+const nombresDe = (n: number): string[] => Array.from({ length: n }, (_, i) => `Persona ${i + 1}`);
+
+describe("la presentación aparece solo si entran todas las personas de la lista", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("el celular se corta en 480 px y presenta menos tarjetas que una pantalla ancha", () => {
+  it("los topes son 6 en pantalla ancha y 2 hasta 480 px", () => {
     expect(ANCHO_ANGOSTO).toBe(480);
     expect(TOPE_TARJETAS_ANGOSTO).toBe(2);
     expect(TOPE_TARJETAS).toBe(6);
   });
 
-  for (const total of [150, 300]) {
-    for (const [ancho, tope] of [[320, 2], [360, 2], [390, 2], [480, 2], [481, 6], [768, 6], [1366, 6], [1920, 6]] as const) {
-      it(`con ${total} personas a ${ancho} px presenta ${tope} tarjetas y la línea dice que faltan ${total - tope}`, () => {
-        conAncho(ancho);
-        const c = caja();
-        presentarTeaser(c, "race", nombresDe(total));
-        expect(tarjetas(c)).toHaveLength(tope);
-        expect(tarjetas(c).map((t) => t.dataset.nombre)).toEqual(nombresDe(tope));
-        const mas = c.querySelectorAll(".espera-teaser-mas");
-        expect(mas).toHaveLength(1);
-        expect(mas[0]?.textContent).toBe(`y ${total - tope} más`);
-        // La línea es un hijo de la lista, no de una zona aparte con recorte, y viene después de las tarjetas.
-        expect(mas[0]?.parentElement?.classList.contains("espera-teaser")).toBe(true);
-        expect(mas[0]?.previousElementSibling?.classList.contains("espera-teaser-tarjeta")).toBe(true);
-      });
-    }
+  for (const total of [1, 2, 3, 6]) {
+    it(`en pantalla ancha con ${total} personas hay ${total} tarjetas, en el orden sellado y sin línea de más`, () => {
+      conAncho(1366);
+      const c = caja();
+      presentarTeaser(c, "race", nombresDe(total));
+      expect(tarjetas(c).map((t) => t.dataset.nombre)).toEqual(nombresDe(total));
+      expect(c.querySelector(".espera-teaser-mas")).toBeNull();
+      expect(tarjetas(c)[0]?.textContent).toContain(`1 de ${total}`);
+    });
   }
 
-  it("en inglés la línea también dice cuántas faltan, en pantalla angosta y en ancha", () => {
-    setLang("en");
-    conAncho(360);
-    const a = caja();
-    presentarTeaser(a, "race", nombresDe(150));
-    expect(a.querySelector(".espera-teaser-mas")?.textContent).toBe("and 148 more");
-    conAncho(1366);
-    const b = caja();
-    presentarTeaser(b, "race", nombresDe(150));
-    expect(b.querySelector(".espera-teaser-mas")?.textContent).toBe("and 144 more");
+  for (const total of [7, 18, 150, 300]) {
+    it(`en pantalla ancha con ${total} personas no hay presentación: la caja queda vacía`, () => {
+      conAncho(1366);
+      const c = caja();
+      presentarTeaser(c, "race", nombresDe(total));
+      expect(tarjetas(c)).toHaveLength(0);
+      expect(c.querySelector(".espera-teaser")).toBeNull();
+      expect(c.querySelector(".espera-teaser-t")).toBeNull();
+      expect(c.querySelector(".espera-teaser-mas")).toBeNull();
+      expect(c.querySelector("img")).toBeNull();
+      expect(c.childElementCount).toBe(0);
+    });
+  }
+
+  for (const ancho of [320, 360, 390, 480]) {
+    it(`a ${ancho} px con 2 personas hay 2 tarjetas y con 3 no hay presentación`, () => {
+      conAncho(ancho);
+      const dos = caja();
+      presentarTeaser(dos, "race", nombresDe(2));
+      expect(tarjetas(dos).map((t) => t.dataset.nombre)).toEqual(["Persona 1", "Persona 2"]);
+      expect(dos.querySelector(".espera-teaser-mas")).toBeNull();
+      const tres = caja();
+      presentarTeaser(tres, "race", nombresDe(3));
+      expect(tarjetas(tres)).toHaveLength(0);
+      expect(tres.childElementCount).toBe(0);
+    });
+  }
+
+  it("con 3 a 6 personas en un celular no hay presentación y en una pantalla ancha sí", () => {
+    for (const total of [3, 4, 5, 6]) {
+      conAncho(481);
+      const ancha = caja();
+      presentarTeaser(ancha, "race", nombresDe(total));
+      expect(tarjetas(ancha)).toHaveLength(total);
+      conAncho(390);
+      const angosta = caja();
+      presentarTeaser(angosta, "race", nombresDe(total));
+      expect(tarjetas(angosta)).toHaveLength(0);
+    }
   });
 
-  it("con pocas personas en un celular, todas se presentan y no hay línea de faltantes", () => {
-    conAncho(360);
-    const c = caja();
-    presentarTeaser(c, "race", nombresDe(TOPE_TARJETAS_ANGOSTO));
-    expect(tarjetas(c)).toHaveLength(TOPE_TARJETAS_ANGOSTO);
-    expect(c.querySelector(".espera-teaser-mas")).toBeNull();
-    const d = caja();
-    presentarTeaser(d, "race", nombresDe(TOPE_TARJETAS_ANGOSTO + 1));
-    expect(d.querySelector(".espera-teaser-mas")?.textContent).toBe("y 1 más");
+  it("nunca muestra un subconjunto: o están todas las personas o no hay ninguna tarjeta", () => {
+    for (const ancho of [320, 390, 480, 481, 768, 1366, 1920]) {
+      conAncho(ancho);
+      for (const total of [1, 2, 3, 5, 6, 7, 18, 150, 300]) {
+        const c = caja();
+        presentarTeaser(c, "race", nombresDe(total));
+        const vistas = tarjetas(c).length;
+        expect([0, total], `${total} personas a ${ancho} px`).toContain(vistas);
+      }
+    }
   });
 
-  it("al girar el celular se vuelve a armar con la cantidad del ancho nuevo, sin repetir lo que ya está", () => {
-    const lista = nombresDe(150);
-    conAncho(1366);
+  it("al girar el celular se vuelve a decidir: con 2 personas se ven siempre, con 5 aparece al ensanchar y se va al angostar", () => {
+    const cinco = nombresDe(5);
+    conAncho(390);
     const c = caja();
-    presentarTeaser(c, "race", lista);
+    presentarTeaser(c, "race", cinco);
+    expect(tarjetas(c)).toHaveLength(0);
+    conAncho(844);
+    presentarTeaser(c, "race", cinco);
+    expect(tarjetas(c).map((t) => t.dataset.nombre)).toEqual(cinco);
     const primera = tarjetas(c)[0];
-    presentarTeaser(c, "race", lista);
+    presentarTeaser(c, "race", cinco);
     expect(tarjetas(c)[0]).toBe(primera);
     conAncho(390);
-    presentarTeaser(c, "race", lista);
-    expect(tarjetas(c)).toHaveLength(TOPE_TARJETAS_ANGOSTO);
-    expect(c.querySelector(".espera-teaser-mas")?.textContent).toBe("y 148 más");
+    presentarTeaser(c, "race", cinco);
+    expect(tarjetas(c)).toHaveLength(0);
+    expect(c.childElementCount).toBe(0);
+    conAncho(844);
+    presentarTeaser(c, "race", cinco);
+    expect(tarjetas(c)).toHaveLength(5);
+  });
+
+  it("si la lista crece de 6 a 7 la presentación se va, y si vuelve a 6 vuelve", () => {
     conAncho(1366);
-    presentarTeaser(c, "race", lista);
-    expect(tarjetas(c)).toHaveLength(TOPE_TARJETAS);
+    const c = caja();
+    presentarTeaser(c, "race", nombresDe(6));
+    expect(tarjetas(c)).toHaveLength(6);
+    presentarTeaser(c, "race", nombresDe(7));
+    expect(c.childElementCount).toBe(0);
+    presentarTeaser(c, "race", nombresDe(6));
+    expect(tarjetas(c)).toHaveLength(6);
   });
 
   it("con otra lista o con otro idioma se vuelve a armar aunque el ancho sea el mismo", () => {
@@ -197,6 +199,11 @@ describe("la cantidad de tarjetas la decide el ancho de la pantalla", () => {
     setLang("en");
     presentarTeaser(c, "race", ["Ana", "Cami"]);
     expect(c.querySelector(".espera-teaser-t")?.textContent).toBe("Who is taking part");
+  });
+
+  it("la línea de más ya no existe en los textos", () => {
+    expect((T.es as unknown as Record<string, unknown>).espTeaserMas).toBeUndefined();
+    expect((T.en as unknown as Record<string, unknown>).espTeaserMas).toBeUndefined();
   });
 });
 
@@ -268,6 +275,11 @@ describe("el aspecto de la presentación vive en la hoja de estilos", () => {
 
   it("en una pantalla baja la presentación se esconde para no empujar el reloj", () => {
     expect(css).toMatch(/@media \(max-height: 560px\)\s*\{[^@]*\.espera-teaser-caja\s*\{\s*display:\s*none/);
+  });
+
+  it("la caja vacía no ocupa lugar: sin presentación la espera queda como siempre", () => {
+    expect(css).toMatch(/\.espera-teaser-caja:empty\s*\{\s*display:\s*none/);
+    expect(css).not.toMatch(/\.espera-teaser-mas/);
   });
 
   it("cuando la capa decide que no hay alto para la presentación, la hoja de estilos la esconde", () => {
