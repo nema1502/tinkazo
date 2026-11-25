@@ -521,6 +521,36 @@ describe("la vista previa en movimiento del panel de elección", () => {
     }
   });
 
+  it("si montar falla, la captura vuelve a su lugar y el panel sigue entero", async () => {
+    const m = await espera();
+    const rota = vista("race");
+    rota.v.montar = (marco: HTMLCanvasElement) => {
+      rota.llamadas.montar++;
+      rota.llamadas.marcos.push(marco);
+      throw new Error("el juego no pudo armarse");
+    };
+    const buena = vista("sapo");
+    m.registrarVistaPrevia(rota.v);
+    m.registrarVistaPrevia(buena.v);
+    const panel = panelDe([fila(), fila({ game: "sapo", nombre: "Sapo", rango: "6–50", recomendado: false })]);
+    m.armarVistasPrevias(panel);
+    const tarjeta = tarjetaDe(panel, "race");
+    expect(() => ioFalso.ultimo!.aviso([tarjeta], true, 1)).not.toThrow();
+    expect(rota.llamadas.montar).toBe(1);
+    expect(tarjeta.querySelector("canvas"), "la miniatura que no armó no queda en la tarjeta").toBeNull();
+    for (const img of tarjeta.querySelectorAll("img")) {
+      expect(img.style.display, "la captura sigue a la vista, sin estilo puesto a mano").toBe("");
+    }
+    // No se reintenta cada vez que la tarjeta entra en la vista, y las demás siguen funcionando.
+    ioFalso.ultimo!.aviso([tarjeta], false, 0);
+    ioFalso.ultimo!.aviso([tarjeta], true, 1);
+    expect(rota.llamadas.montar, "una vista que falló no se reintenta").toBe(1);
+    ioFalso.ultimo!.aviso([tarjetaDe(panel, "sapo")], true, 1);
+    expect(buena.llamadas.montar).toBe(1);
+    // Al cerrar no hay nada de la vista rota que soltar.
+    expect(() => m.pararVistasPrevias()).not.toThrow();
+  });
+
   it("cerrar el panel corta todo: se para la vista, se suelta el canvas y el observador queda desconectado", async () => {
     const m = await espera();
     const race = vista("race", 30);

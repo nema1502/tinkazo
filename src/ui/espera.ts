@@ -378,7 +378,15 @@ export function armarVistasPrevias(panel: HTMLElement | null): void {
       if (primera) tarjeta.insertBefore(canvas, primera);
       else tarjeta.append(canvas);
       for (const img of capturas) img.style.setProperty("display", "none");
-      const control = hook.montar(canvas);
+      let control: Corriendo["control"];
+      try {
+        control = hook.montar(canvas);
+      } catch {
+        // El juego no pudo armarse: la tarjeta vuelve a como estaba, con su captura a la vista, y no se reintenta.
+        canvas.remove();
+        for (const img of capturas) img.style.removeProperty("display");
+        return;
+      }
       const anotar: Corriendo = { control, canvas, capturas, vencer: 0 };
       anotar.vencer = window.setTimeout(() => {
         soltarVista(anotar);
