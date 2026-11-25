@@ -262,6 +262,19 @@ describe("la portada en el celular y en la laptop", () => {
     expect(orden("hero-note")).toBeLessThan(orden("built-on"));
   });
 
+  it("en el celular Cancelar queda pegado al botón de entrar, antes de las puertas", () => {
+    // Mientras se termina de entrar con Google, el renglón de Cancelar (cancelar-en-portada.ts) es la única salida visible.
+    const b = bloque(/@media \(max-width: 700px\) \{\s*\.hero-portada \.hero-copy \{ display: contents; \}/);
+    const m = b.match(/\.hero-portada \.hero-otras\[data-cancelar-entrada\] \{[^}]*order: (-?\d+)/);
+    expect(m, "falta la regla que sube el renglón de Cancelar").not.toBeNull();
+    const puertas = Number(b.match(/\.hero-portada \.puertas \{[^}]*order: (\d+)/)?.[1]);
+    expect(Number(m![1])).toBeLessThan(puertas);
+    // El renglón marcado es el que arma cancelar-en-portada.ts: la clase y la marca tienen que seguir siendo esas.
+    const cancelar = readFileSync("src/ui/cancelar-en-portada.ts", "utf8");
+    expect(cancelar).toMatch(/renglon\.className = "hero-otras";\s*renglon\.setAttribute\(MARCA, ""\)/);
+    expect(cancelar).toMatch(/const MARCA = "data-cancelar-entrada"/);
+  });
+
   it("la tarjeta entera responde: el área del botón se estira a toda la puerta", () => {
     expect(css).toMatch(/\.puerta \{[^}]*position: relative/);
     expect(css).toMatch(/\.puerta \.puerta-a::after \{ content: ""; position: absolute; inset: 0; \}/);
