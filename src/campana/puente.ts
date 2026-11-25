@@ -20,6 +20,8 @@ export type PasoDelPuente =
   | { paso: "leyendo" }
   | { paso: "en-el-sorteo"; n: number }
   | { paso: "no-leyo" }
+  /** La lista o las ganadoras que tiene la sala mezclan cuentas con líneas de persona: reintentar no lo cambia, así que no hay botón. */
+  | { paso: "lista-rara" }
   | { paso: "pocos"; n: number }
   | { paso: "otra-cuenta"; fin: string }
   | { paso: "lista-sellada"; soltable: boolean }
@@ -136,6 +138,8 @@ export function lineaDelPaso(p: PasoDelPuente): LineaDelPaso | null {
       return { clave: "cpoEnElSorteo", vars: { n: String(p.n) } };
     case "no-leyo":
       return sin("cpoNoLeyo");
+    case "lista-rara":
+      return sin("cpoListaRara");
     case "pocos":
       return p.n <= 2 ? sin("cpoPocos") : { clave: "cpoPocosPremios", vars: { n: String(p.n) } };
     case "otra-cuenta":

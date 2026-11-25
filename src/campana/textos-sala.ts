@@ -223,6 +223,8 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoSeguirNoL: "No pudimos abrirla aquí. Probá de nuevo.",
     cpoAntesConNumero: "Quienes se anotaron antes salen con su número. Si escanean el QR de nuevo, aparece su nombre.",
     cpoAntesCerrada: "Quienes se anotaron antes salen con su número.",
+    // Las que siguen son de las campañas de personas: van juntas al final de cada idioma.
+    cpoListaRara: "La lista de la sala no se puede sortear. Avisale a Tinkazo.",
   },
   en: {
     cpoTitulo: "Company campaign",
@@ -441,5 +443,7 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoSeguirNoL: "We couldn't open it here. Try again.",
     cpoAntesConNumero: "People who signed up earlier show with their number. If they scan the QR again, their name appears.",
     cpoAntesCerrada: "People who signed up earlier show with their number.",
+    // These are for people campaigns: they stay together at the end of each language.
+    cpoListaRara: "The list on the server can't be drawn. Let Tinkazo know.",
   },
 };
