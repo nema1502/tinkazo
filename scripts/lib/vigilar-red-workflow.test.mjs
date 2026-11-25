@@ -9,8 +9,10 @@
 // `main`), con la clave de operar por `env` y nunca dentro del comando, y que vigilar-red.yml ya
 // no la nombre. Y que recuerde lo que ya avisó en la caché de Actions, con las mismas acciones
 // (y los mismos SHA) que vigilar-red.yml: si no, falla en cada corrida mientras dure el problema.
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -157,8 +159,83 @@ describe("vigilar-portero.yml: el portero de mainnet", () => {
     expect(vivo.match(/secrets\./g)).toHaveLength(2);
   });
 
-  it("sin la clave no falla: avisa y sale con 0", () => {
+  it("sin ninguna de las dos claves no falla: avisa y sale con 0", () => {
     const run = renglonesDelPaso(texto, PASO).join("\n");
+    expect(run).toMatch(/CLAVE="\$\{PORTERO_TOKEN_LECTURA:-\$PORTERO_ADMIN_TOKEN\}"/);
+    expect(run).toMatch(/if \[ -z "\$CLAVE" \]; then[\s\S]*exit 0/);
+  });
+});
+
+/**
+ * El comportamiento de la clave, corriendo el paso de verdad con un curl y un node de mentira: qué clave viaja a
+ * /estado según cuáles estén cargadas. No toca la red ni ningún secreto: los valores son de prueba.
+ */
+const hayBash = spawnSync("bash", ["-c", "exit 0"]).status === 0;
+describe.skipIf(!hayBash)("vigilar-portero.yml: qué clave viaja al portero", () => {
+  const texto = readFileSync(WORKFLOW_PORTERO, "utf8");
+  const paso = renglonesDelPaso(texto, "Portero de mainnet").join("\n");
+  const run = paso
+    .slice(paso.indexOf("run: |") + "run: |".length)
+    .split("\n")
+    .map((r) => r.replace(/^ {10}/, ""))
+    .join("\n");
+  const LECTURA = "lectura-de-prueba";
+  const OPERAR = "operar-de-prueba";
+
+  /** Corre el paso con esas claves cargadas. Devuelve lo que dijo, cómo terminó y la clave con la que llamó a /estado. */
+  function correrPaso(claves) {
+    const carpeta = mkdtempSync(join(tmpdir(), "vigilar-portero-"));
+    try {
+      const bin = join(carpeta, "bin");
+      mkdirSync(bin);
+      // El curl de mentira anota el encabezado de autorización y deja un archivo de respuesta.
+      writeFileSync(join(bin, "curl"), '#!/bin/sh\nwhile [ $# -gt 0 ]; do\n  case "$1" in\n    -H) echo "$2" >> "$LLAMADAS"; shift ;;\n    -o) echo "{}" > "$2"; shift ;;\n  esac\n  shift\ndone\n', { mode: 0o755 });
+      writeFileSync(join(bin, "node"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      const llamadas = join(carpeta, "llamadas.txt");
+      writeFileSync(llamadas, "");
+      const r = spawnSync("bash", ["-c", run], {
+        cwd: carpeta,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${bin}${delimiter}${process.env.PATH}`,
+          LLAMADAS: llamadas,
+          PORTERO_URL: "https://portero.example.org",
+          GITHUB_STEP_SUMMARY: join(carpeta, "resumen.md"),
+          USAR_MEMORIA: "true",
+          PORTERO_TOKEN_LECTURA: claves.lectura ?? "",
+          PORTERO_ADMIN_TOKEN: claves.operar ?? "",
+        },
+      });
+      return { codigo: r.status, salida: `${r.stdout}${r.stderr}`, encabezados: readFileSync(llamadas, "utf8").split("\n").filter(Boolean) };
+    } finally {
+      rmSync(carpeta, { recursive: true, force: true });
+    }
+  }
+
+  it("con las dos cargadas viaja la de solo lectura y la de operar no sale", () => {
+    const r = correrPaso({ lectura: LECTURA, operar: OPERAR });
+    expect(r.codigo).toBe(0);
+    expect(r.encabezados).toEqual([`Authorization: Bearer ${LECTURA}`]);
+  });
+
+  it("solo con la de operar, viaja esa: el flujo sigue como antes de que existiera la de lectura", () => {
+    const r = correrPaso({ operar: OPERAR });
+    expect(r.codigo).toBe(0);
+    expect(r.encabezados).toEqual([`Authorization: Bearer ${OPERAR}`]);
+  });
+
+  it("solo con la de lectura, viaja esa", () => {
+    const r = correrPaso({ lectura: LECTURA });
+    expect(r.codigo).toBe(0);
+    expect(r.encabezados).toEqual([`Authorization: Bearer ${LECTURA}`]);
+  });
+
+  it("sin ninguna no llama al portero, lo dice y sale con 0", () => {
+    const r = correrPaso({});
+    expect(r.codigo).toBe(0);
+    expect(r.encabezados).toEqual([]);
+    expect(r.salida).toContain("el portero de mainnet no se mira");
   });
 });
 
