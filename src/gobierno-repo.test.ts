@@ -73,6 +73,21 @@ describe("CONTRIBUTING.md", () => {
     expect(exigidas.filter((nombre) => !ci.includes(`name: ${nombre}`))).toEqual([]);
   });
 
+  it("al decir cómo se une nombra las tres cosas y no dice que frenen solo las comprobaciones", () => {
+    const unir = seccion(contribuir, "Cómo se revisa y se une");
+    expect(unir).toMatch(/comprobaciones/);
+    expect(unir).toMatch(/al día/);
+    expect(unir).toMatch(/revisión de la dirección/);
+    expect(unir).not.toMatch(/lo (único|que) (que )?frena/i);
+  });
+
+  it("tomar un issue con responsable tiene salida y esperar una respuesta es un consejo", () => {
+    const antes = seccion(contribuir, "Antes de empezar");
+    expect(antes).toMatch(/la dirección decide quién sigue/);
+    expect(antes).not.toMatch(/sin respuesta no se empieza/i);
+    expect(antes).not.toMatch(/esperá (una|la) respuesta/i);
+  });
+
   it("la plantilla de pedido nombra comandos y guiones que existen", () => {
     const comandos = [...plantilla.matchAll(/pnpm ([a-z][\w:-]*)/g)].map((m) => m[1]!);
     expect(comandos.filter((n) => n !== "install" && !(n in paquete.scripts))).toEqual([]);

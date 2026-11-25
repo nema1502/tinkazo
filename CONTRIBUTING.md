@@ -7,8 +7,8 @@ Si lo que encontraste es una falla de seguridad, no abras un issue. Seguí [SECU
 ## Antes de empezar
 
 1. Buscá si ya hay un issue o un pedido sobre lo mismo. Si lo hay, comentá ahí en vez de abrir otro.
-2. Si no lo hay, abrí un issue con el formulario que corresponda y esperá una respuesta antes de escribir mucho código. Un cambio que nadie pidió puede quedar sin unir, y es una pena que pase después de horas de trabajo.
-3. Un issue tiene un solo dueño, la persona asignada. Para tomar uno de otra persona, preguntá en el issue y esperá la respuesta. Sin respuesta no se empieza.
+2. Si no lo hay, abrí un issue con el formulario que corresponda. Conviene esperar una respuesta antes de escribir mucho código, para no trabajar en algo que no va a entrar: un cambio que nadie pidió puede quedar sin unir, y es una pena que pase después de horas de trabajo.
+3. Un issue tiene un solo dueño, la persona asignada. Si el issue tiene responsable, preguntale en el mismo issue antes de empezar. Si pasan unos días sin respuesta, avisá ahí mismo y la dirección decide quién sigue.
 4. Un pedido por issue, y chico. Si el issue es grande, se parte en issues antes de empezar.
 
 ## Las zonas
@@ -19,7 +19,7 @@ Quienes tienen escritura se reparten el trabajo por zonas. La dirección pone en
 |---|---|---|
 | Frente | Las páginas de lectura y de sorteo, la portada, los juegos de `src/games/`, la interfaz de `src/ui/`, el armado de campañas, las imágenes de `public/juegos/` y lo que suena | Ningún audio nuevo se prende sin que alguien lo escuche. `public/marca/coleccion` no se toca |
 | Servicios | Los servicios de `workers/`, la integración continua, las dependencias, los datos de la cadena y los guiones de datos de `scripts/` | El despliegue de un servicio, los flujos con secretos y `release.yml` |
-| Dirección | El protocolo y el contrato, lo que se sella, el ingreso con cuenta, la plata, los secretos, `vercel.json` y la producción | Todo esto se pregunta antes en el issue |
+| Dirección | El protocolo y el contrato, lo que se sella, el ingreso con cuenta, los pagos, los secretos, `vercel.json` y la producción | Todo esto se pregunta antes en el issue |
 
 La lista completa de carpetas y archivos de cada zona está en el issue 277.
 
@@ -67,7 +67,7 @@ Según lo que tocaste:
 
 ## La revisión automática
 
-Cada pedido corre la integración continua. Para unir a `main` se exigen:
+Cada pedido corre la integración continua. Para unir a `main` se exigen, además de la revisión de la dirección que se cuenta más abajo:
 
 - La comprobación `Sitio (Vite + TypeScript)`, que resume las pruebas, los tipos, la construcción y las comprobaciones de las páginas.
 - La comprobación `Contratos Soroban`.
@@ -79,7 +79,7 @@ Los pedidos desde una copia propia del repositorio esperan que la dirección apr
 
 ## Cómo se revisa y se une
 
-La dirección revisa cada pedido y lo une con su permiso de administración, con rebase o con squash y nunca con un commit de unión, para que la historia de `main` quede lineal. Lo que frena la unión son las comprobaciones de arriba.
+La dirección revisa cada pedido y lo une con su permiso de administración, con rebase o con squash y nunca con un commit de unión, para que la historia de `main` quede lineal. Para que un pedido entre hacen falta las tres cosas juntas: las comprobaciones en verde, la rama al día con `main` y la revisión de la dirección, que es la única que une los pedidos.
 
 Si hace falta arreglar algo de tu pedido, la dirección lo hace en commits aparte sobre tu rama. A veces junta varios pedidos en un paquete para integrarlos juntos, y conserva la autoría de cada uno. En ese caso el issue lleva la etiqueta `en integración` y nadie más lo toma.
 
