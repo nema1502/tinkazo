@@ -186,6 +186,26 @@ describe("cortarFueraDelOrigen: la pestaña no sale del sitio servido", () => {
     expect(corte.fuera).toHaveLength(1);
   });
 
+  it("si la conexión ya se cerró, contestar un pedido pausado no tira el guion abajo", async () => {
+    const page = paginaFalsa();
+    await cortarFueraDelOrigen(page, ORIGEN);
+    page.send = () => {
+      throw new Error("la conexión se cerró");
+    };
+    // Un error dentro de un oyente de eventos no sale por dispatchEvent: sale como excepción sin atrapar.
+    const sueltas = [];
+    const oyente = (e) => sueltas.push(e);
+    process.on("uncaughtException", oyente);
+    try {
+      page.pausa(pedido(`${ORIGEN}/`));
+      page.pausa(pedido("https://example.org/"));
+      await new Promise((r) => setTimeout(r, 20));
+    } finally {
+      process.off("uncaughtException", oyente);
+    }
+    expect(sueltas).toEqual([]);
+  });
+
   it("ignora los mensajes del protocolo que no son suyos", async () => {
     const page = paginaFalsa();
     await cortarFueraDelOrigen(page, ORIGEN);
