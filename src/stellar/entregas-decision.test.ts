@@ -118,6 +118,16 @@ describe("la decisión pura por premio", () => {
     });
   });
 
+  it("un plazo que no es un número finito no se adivina: no se llama y se dice sin saber", async () => {
+    const lectura = conEstados(await leida(rpcCD3, CD3, "1"), "Owed");
+    for (const cobrarHastaMs of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(entregasDeLaPromocion(lectura, { cobrarHastaMs, ahoraMs: AHORA, laLineaDe: lineas() }), String(cobrarHastaMs)).toEqual({
+        ok: true,
+        entregas: [expect.objectContaining({ accion: "no", motivo: "no-se-sabe" })],
+      });
+    }
+  });
+
   it("vencido no se llama, con el plazo que llega: justo el día del plazo ya no va", async () => {
     const lectura = conEstados(await leida(rpcCD3, CD3, "1"), "Owed");
     expect(entregasDeLaPromocion(lectura, { cobrarHastaMs: AHORA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
