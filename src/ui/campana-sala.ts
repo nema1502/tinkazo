@@ -3,7 +3,6 @@ import { campanasActivo } from "../campana/bandera";
 import {
   accionesDelPuente,
   alCambiarElPuente,
-  avisoQueFalta,
   avisosPendientes,
   botonDelPaso,
   lineaDelPaso,
@@ -2919,13 +2918,12 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (vista === "tomada") linea = tx("cpoTomadaL");
     if (vista === "tus") linea = tx("cpoTusL");
     if (vista === "seguir") linea = tx("cpoSeguirL");
-    // La pregunta de dejar la campaña dice qué pierden los celulares, con la misma regla que decide si se pregunta. Solo desde
-    // la lista cerrada, sellada o sorteada: antes de eso no hay nada que avisarles.
+    // La pregunta de dejar la campaña dice, en una sola línea condicional, qué pasa con los celulares que todavía esperan un aviso.
+    // Sale con la misma regla que decide si se pregunta por los avisos (la de siempre, avisosPendientes), desde la lista cerrada,
+    // sellada o sorteada, y no sale con la sala ya borrada: no queda nadie a quien avisar. Las demás preguntas no la llevan.
     if (vista === "olvidar" && (vistaAntes === "cerrada" || vistaAntes === "sellada" || vistaAntes === "sorteada")) {
-      const falta = avisoQueFalta(pasoDelPuente(), vistaAntes);
-      if (falta === "sello") linea = tx("cpoOlvidarSello");
-      if (falta === "resultado") linea = tx("cpoOlvidarResultado");
-      if (falta === "ganadora") linea = tx("cpoOlvidarGanadora");
+      const paso = pasoDelPuente();
+      if (paso.paso !== "sala-borrada" && avisosPendientes(paso, vistaAntes === "sorteada")) linea = tx("cpoOlvidarAviso");
     }
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? lineaDelPaso(pasoDelPuente()) : null;
     // Lo que la fila viva ya dice no se repite en la línea: la fila ocupa su lugar.
