@@ -260,9 +260,7 @@ describe("Entrar espera la primera mirada de la retoma, como siempre", () => {
   });
 
   it("Entrar y el pedido de entrar esperan la promesa de la retoma, que se suelta a la primera mirada, sin un tope propio", () => {
-    const ui = readFileSync("src/ui/wallet-ui.ts", "utf8").replace(/
-/g, "
-");
+    const ui = readFileSync("src/ui/wallet-ui.ts", "utf8").replace(/\r\n/g, "\n");
     expect(ui).not.toMatch(/ESPERA_DE_ENTRAR_MS/);
     expect(ui.match(/await retomaTerminada/g) ?? []).toHaveLength(1);
     expect(ui.match(/await esperarLaRetoma\(\)/g) ?? []).toHaveLength(2);
