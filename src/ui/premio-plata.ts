@@ -1,5 +1,5 @@
 import { campanasActivo } from "../campana/bandera";
-import { EVENTO_PRACTICA, enPractica } from "../ensayo-modo";
+import { EVENTO_PRACTICA, sinGrabar } from "../ensayo-modo";
 import { montoDelPremio } from "../stellar/pagos";
 import { fijoPorCampana } from "./ganadores";
 
@@ -11,7 +11,7 @@ import { fijoPorCampana } from "./ganadores";
  * pista: se puede cerrar, no vuelve en la sesión, nunca frena Sellar la lista ni suma un botón principal. Un falso positivo
  * ("Entrada $10") cuesta un toque en la cruz. Solo existe con las campañas abiertas y solo en el modo de sortear premios:
  * en el orden de turnos y en el amigo secreto el campo es el nombre del orden. Tampoco aparece en un sorteo que ya viene de una
- * campaña (quien la armó no necesita que se la ofrezcan) ni en el ensayo y el modo stand, donde nada se graba ni se paga. Si
+ * campaña (quien la armó no necesita que se la ofrezcan) ni en la demostración, el ensayo y el modo stand, donde nada se graba ni se paga. Si
  * estaba a la vista cuando eso pasa, se esconde: entrar al ensayo o al modo stand lo avisa con un evento del documento.
  *
  * Aparece al salir del campo, cuando la persona terminó de escribir, y no mientras escribe: así no empuja Sellar la lista
@@ -61,7 +61,7 @@ export const avisoDePlataVisible = (): boolean => aviso()?.hidden === false;
 export function actualizarAvisoDePlata(): void {
   const el = aviso();
   if (!el) return;
-  const ver = montado && activo && enModoDeSorteo() && !fijoPorCampana() && !enPractica() && !seCerroAntes() && textosDelPremio().some(parecePremioEnPlata);
+  const ver = montado && activo && enModoDeSorteo() && !fijoPorCampana() && !sinGrabar() && !seCerroAntes() && textosDelPremio().some(parecePremioEnPlata);
   if (el.hidden === !ver) return;
   el.hidden = !ver;
 }
