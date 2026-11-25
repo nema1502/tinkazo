@@ -4044,7 +4044,7 @@ class PollarWallet implements SubmittingWallet {
    * El token de la sesión de Pollar, solo con la sesión verificada por Pollar (`verified: true`): una sesión que el kit
    * retomó de lo guardado y todavía no revalidó no sirve. Si no está verificada, espera: la primera mirada hasta
    * `tope`; si cuando vence el kit dice que la sesión sigue abierta pero sin verificar, y quien pide no puso su propio
-   * tope, la ventana paciente (`VENTANA_TOKEN_MS`, issue 88) con espera creciente — una sesión recién creada es justo la que tarda en verificarse,
+   * tope, la ventana paciente (`VENTANA_TOKEN_MS`, issue 88) con espera creciente: una sesión recién creada es justo la que tarda en verificarse,
    * y entregar `null` al primer vencido tiraba al paso «Dejá tu cuenta lista» a ofrecer «Entrar de nuevo» a quien ya
    * entró. Cuando el kit dice que la sesión ya no existe, sí sale con `null` al toque: ahí conviene entrar de nuevo. No
    * borra nunca la marca de la sesión. Es lo que pide el servidor de las altas (`alta-api.ts`) para saber quién es. No

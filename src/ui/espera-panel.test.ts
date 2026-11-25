@@ -333,7 +333,7 @@ describe("el nombre del juego en la barra de arriba de la espera", () => {
  * segundos a la miniatura del propio juego (el canvas del juego, chico, sin audio y sin interacción), montada recién
  * cuando la tarjeta entra en la vista y pausada al salir, con la captura volviendo a su lugar al terminar. Nada se
  * baja ni se monta fuera de vista, con movimiento reducido no hay nada en movimiento, y un juego sin vista registrada
- * queda con su captura de siempre (S4: la elección y el orden no cambian).
+ * queda con su captura de siempre (la elección y el orden no cambian).
  *
  * Las funciones se cargan aparte (`await import`) para que una función que falta no tire abajo las pruebas de arriba:
  * el fallo de RED tiene que ser el de la función que falta y no un módulo roto entero.
@@ -424,7 +424,7 @@ describe("la vista previa en movimiento del panel de elección", () => {
     vi.unstubAllGlobals();
   });
 
-  it("sin vista registrada no cambia nada: la tarjeta queda con su pareja de capturas y sin canvas (S4)", async () => {
+  it("sin vista registrada no cambia nada: la tarjeta queda con su pareja de capturas y sin canvas", async () => {
     const m = await espera();
     const panel = panelDe([fila()]);
     m.armarVistasPrevias(panel);
@@ -450,7 +450,7 @@ describe("la vista previa en movimiento del panel de elección", () => {
     expect(m.previaDe("race")).toBeNull();
   });
 
-  it("nada pesado fuera de vista: con la tarjeta fuera de la vista la vista previa no se monta (S2)", async () => {
+  it("nada pesado fuera de vista: con la tarjeta fuera de la vista la vista previa no se monta", async () => {
     const m = await espera();
     const { v, llamadas } = vista("race");
     m.registrarVistaPrevia(v);
@@ -462,7 +462,7 @@ describe("la vista previa en movimiento del panel de elección", () => {
     expect(tarjetaDe(panel, "race").querySelector("canvas")).toBeNull();
   });
 
-  it("solo el juego en vista monta su miniatura: canvas chico, capturas escondidas, sin interacción ni audio (S1)", async () => {
+  it("solo el juego en vista monta su miniatura: canvas chico, capturas escondidas, sin interacción ni audio", async () => {
     const m = await espera();
     const race = vista("race");
     const sapo = vista("sapo");
@@ -483,7 +483,7 @@ describe("la vista previa en movimiento del panel de elección", () => {
     for (const img of tarjetaDe(panel, "race").querySelectorAll("img")) {
       expect(img.style.display, "la captura se esconde mientras la miniatura corre").toBe("none");
     }
-    // La elección no cambia: la tarjeta sigue siendo la misma, marcada como estaba (S4).
+    // La elección no cambia: la tarjeta sigue siendo la misma, marcada como estaba.
     expect(tarjetaDe(panel, "race").dataset.game).toBe("race");
     expect(tarjetaDe(panel, "race").getAttribute("aria-pressed")).toBe("false");
     expect(ioFalso.cortado, "sigue mirando la vista: al salir tiene que pausar").toBe(false);
@@ -566,7 +566,7 @@ describe("la vista previa en movimiento del panel de elección", () => {
     expect(race.llamadas.montar).toBe(0);
   });
 
-  it("la miniatura entra con la misma regla que la captura: el CSS que la mide conoce la clase (la acción no se tapa, S2)", () => {
+  it("la miniatura entra con la misma regla que la captura: el CSS que la mide conoce la clase (la acción no se tapa)", () => {
     // El canvas vive con la clase `sel-img` dentro de su tarjeta: la regla que mide la captura (ancho completo, 16/9,
     // fondo del campo) es la que lo mide. La tarjeta no crece, la barra de abajo no se corre y la acción principal
     // queda donde estaba, en el celular también.

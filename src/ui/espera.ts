@@ -279,7 +279,7 @@ export interface VistaPreviaJuego {
    * captura escondida mientras corre. La misma regla del CSS que mide la captura lo mide a él: la tarjeta no crece y
    * la acción de elegir no se corre. El contrato no se negocia: sin audio, sin interacción (el toque cae en el botón
    * que elige, como siempre), sin tocar la elección ni el orden, y con lo propio del juego (código, texturas) bajado
-   * recién adentro de `montar` — nada pesado viaja en la página ni se pide por una tarjeta fuera de vista.
+   * recién adentro de `montar`: nada pesado viaja en la página ni se pide por una tarjeta fuera de vista.
    */
   montar(marco: HTMLCanvasElement): { parar(): void; pausar(): void; reanudar(): void };
 }
