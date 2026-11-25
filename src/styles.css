@@ -2128,17 +2128,6 @@
   .hero-shot { position: relative; display: block; }
   .hero-shot img { width: 100%; height: auto; display: block; border: var(--bw) solid var(--ink); box-shadow: var(--sh); transform: rotate(1.2deg); transition: transform 0.15s ease; }
   .hero-shot:hover img { transform: rotate(0deg) scale(1.01); }
-  /* La imagen del hero sigue el tema elegido (?theme o el botón de tema), no solo el del sistema: si difieren, la de arriba se
-     esconde y entra la del par, igual que en las puertas. */
-  .hero-shot img.hero-alt { display: none; }
-  @media (prefers-color-scheme: light) {
-    :root[data-theme="dark"] .hero-shot picture { display: none; }
-    :root[data-theme="dark"] .hero-shot img.hero-alt-osc { display: block; }
-  }
-  @media (prefers-color-scheme: dark) {
-    :root[data-theme="light"] .hero-shot picture { display: none; }
-    :root[data-theme="light"] .hero-shot img.hero-alt-cla { display: block; }
-  }
   .hero-shot .mascot { position: absolute; left: -30px; bottom: -34px; }
   .hero-shot .mascot svg { width: 104px; height: 90px; }
   @media (max-width: 700px) {
