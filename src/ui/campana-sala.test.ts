@@ -1817,8 +1817,8 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     });
 
     it("no quedan claves de texto sueltas de las tres líneas que se fueron, y la que queda se usa", () => {
-      const fuente = readFileSync(new URL("./campana-sala.ts", import.meta.url), "utf8");
-      const puente = readFileSync(new URL("../campana/puente.ts", import.meta.url), "utf8");
+      const fuente = readFileSync("src/ui/campana-sala.ts", "utf8");
+      const puente = readFileSync("src/campana/puente.ts", "utf8");
       for (const idioma of ["es", "en"] as const) {
         const claves = Object.keys(TEXTOS_SALA_CAMPANA[idioma]).filter((k) => k.startsWith("cpoOlvidar"));
         expect(claves.sort(), idioma).toEqual(["cpoOlvidarAviso", "cpoOlvidarSi", "cpoOlvidarT"]);
