@@ -1671,7 +1671,7 @@
        la izquierda se leía como un renglón suelto. */
     footer .pies a:last-child:nth-child(odd) { grid-column: 1 / -1; }
     /* Con las campañas cerradas Para empresas sigue en el marcado, escondido: cuenta como hijo y los visibles quedan impares. */
-    footer .pies:has(a[hidden]) a:last-child { grid-column: 1 / -1; }
+    html[data-campanas]:not([data-campanas="1"]):not([data-campanas="true"]) footer .pies a:last-child { grid-column: 1 / -1; }
   }
 
   /* ------------------------------------------------ la ventana de importar
@@ -1823,18 +1823,21 @@
      la fila lleva cuatro entradas y esta sobra. menu.ts lo sigue agregando siempre
      y acá se esconde, así el texto no se pierde. */
   @media (min-width: 761px) { .topnav .mas-lista a[href="/#como-se-usa"] { display: none; } }
-  /* Para empresas va en la fila de escritorio y dentro de Más en el celular, y solo con las campañas abiertas (el atributo
-     hidden lo saca main.ts). Desde el 25 de noviembre de 2026 ya no se esconde en la laptop: era la entrada de quien arma una
-     campaña y casi siempre lo hace desde una compu. */
-  .topnav .mas-lista a[data-campana-enlace][hidden] { display: none; }
-  /* El nombre corto de Para empresas va en la fila del celular, de 375 a 760 px. Ahí sale de Más para no repetirse; por debajo de
-     375 px la fila no tiene lugar y sigue dentro de Más. */
+  /* Todo lo de las empresas (la cabecera, la puerta y el final de la portada, el aviso de Sortear y el pie) se ve solo con las
+     campañas abiertas, y eso se decide antes del primer pintado: index.html lleva en el elemento html el valor de VITE_CAMPANAS
+     (data-campanas), puesto al construir, y esta regla esconde lo marcado cuando no vale 1 ni true, que es lo que acepta
+     src/campana/bandera.ts. Sin la variable o con la bandera cerrada no se ve ninguno y no queda hueco. Nada nace con hidden ni
+     espera a un guion: la portada no salta de dos a tres puertas ni la cabecera se mueve en cada visita. Desde el 25 de noviembre
+     de 2026 Para empresas tampoco se esconde en la laptop: era la entrada de quien arma una campaña y casi siempre lo hace desde
+     una compu. */
+  html[data-campanas]:not([data-campanas="1"]):not([data-campanas="true"]) [data-campana-enlace] { display: none; }
+  /* El nombre corto de Para empresas va en la fila del celular, de 375 a 760 px, antes de Más. Ahí sale de Más para no repetirse
+     y por debajo de 375 px la fila no tiene lugar y sigue dentro de Más. */
   .topnav a.nav-empresas-cel { display: none; }
   @media (min-width: 375px) and (max-width: 760px) {
-    .topnav a.nav-empresas-cel:not([hidden]) { display: inline-flex; order: 2; }
+    .topnav a.nav-empresas-cel { display: inline-flex; }
     .topnav .mas-lista a[data-campana-enlace] { display: none; }
   }
-  .pies a[hidden] { display: none; }
   /* En la fila quedan cuatro: Sortear, Mis sorteos, Juegos y Cómo funciona (8 de noviembre
      de 2026; Seguridad y Precios bajaron al pie). Con las siete de antes, entre 1101 y
      1279 px y con la cuenta abierta, se apretaban contra el nombre. Un poco menos de aire
@@ -1849,8 +1852,7 @@
      cortado a 390 px (hallazgo H2). Botón y lista miden 44 px de alto como
      mínimo. Entre 761 y 1100 px las cuatro entradas entran en la fila. */
   @media (max-width: 760px) {
-    .topnav > a[href="/#mis-sorteos"] { order: 2; }
-    .topnav .mas { display: block; position: relative; order: 3; }
+    .topnav .mas { display: block; position: relative; }
     .topnav .mas-btn {
       display: inline-flex; align-items: center; gap: 7px; min-height: 44px; min-width: 44px; padding: 0 11px;
       background: none; border: 0; border-bottom: 3px solid transparent; color: var(--ink);
@@ -2127,8 +2129,15 @@
   .hero-shot .mascot svg { width: 104px; height: 90px; }
   @media (max-width: 700px) {
     .hero-portada { grid-template-columns: 1fr; gap: 18px; padding-top: 20px; }
-    /* La imagen del show va arriba, antes del título: lo que mejor explica qué es Tinkazo entra en la primera pantalla. */
-    .hero-portada .hero-shot { display: block; order: -1; }
+    /* En el celular el orden es el del HTML: el título, la línea, el botón de entrar, su renglón de Otras formas de entrar (que
+       mientras se entra lleva Cancelar) y después las puertas. La imagen es lo único que se mueve, y es un enlace repetido de
+       la puerta de Mirá cómo es: por defecto va al final, después de las puertas, para que el botón principal quede arriba. */
+    .hero-portada .hero-shot { order: 2; margin-top: 6px; }
+  }
+  /* En una pantalla angosta y alta sobra lugar: la imagen del show va arriba, antes del título, y el botón principal sigue entero
+     en la primera pantalla. */
+  @media (max-width: 700px) and (min-height: 741px) {
+    .hero-portada .hero-shot { order: -1; margin-top: 0; margin-bottom: 4px; }
   }
   /* En una laptop el botón de sortear tiene que verse sin bajar. Con 1366×768
      al 100%, a Chrome le quedan unos 625 píxeles de alto, y el título en cuatro
@@ -2150,15 +2159,18 @@
   .portada-juegos .pj-ver { font-size: 14px; }
 
   /* Las tres puertas de la portada (25 de noviembre de 2026): una tarjeta por lo que viene a hacer cada quien, con su imagen,
-     un título, una línea y su acción. Van dentro del hero y ocupan el ancho entero. La de las empresas nace escondida y la
-     muestra main.ts con las campañas abiertas: sin ella quedan dos tarjetas que se reparten el ancho, sin hueco. */
-  .puertas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: stretch; margin-top: 0; }
-  .puertas:has(> .puerta[hidden]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+     un título, una línea y su acción. Van dentro del hero y ocupan el ancho entero. La de las empresas se ve solo con las campañas
+     abiertas: sin ellas quedan dos tarjetas que se reparten el ancho, sin hueco. */
+  .puertas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: stretch; margin-top: 0; }
+  /* Con las campañas abiertas (data-campanas de html) son tres. Cerradas, la tarjeta de las empresas no se ve (display: none) y las
+     dos que quedan se reparten el ancho, sin hueco. */
+  @media (min-width: 860px) {
+    html[data-campanas="1"] .puertas, html[data-campanas="true"] .puertas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
   .puerta {
     display: flex; flex-direction: column; gap: 8px; padding: 14px; background: var(--card); color: var(--ink);
     border: var(--bw) solid var(--ink); box-shadow: var(--sh); min-width: 0; position: relative;
   }
-  .puerta[hidden] { display: none; }
   /* Lado a lado, la imagen es más baja que la del hero: los botones de las puertas entran en la primera pantalla de una laptop. */
   .puerta-media { position: relative; flex: 1 0 auto; aspect-ratio: 21 / 9; border: 2px solid var(--ink); background: var(--field); overflow: hidden; margin-bottom: 4px; }
   .puerta-media .pj-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -2215,12 +2227,9 @@
   @media (prefers-reduced-motion: reduce) { .puerta, .puerta:hover { transition: none; transform: none; } }
   /* En un celular o una tableta cada puerta es un renglón: una miniatura de 64 px, el título y la acción, sin la línea. El renglón
      entero es el enlace. La tarjeta de ejemplo de las empresas se cambia por un regalo. Las tarjetas grandes quedan en escritorio. */
+  /* Los renglones ocupan el ancho del contenido, a la izquierda, alineados con el título y el botón de arriba. */
   @media (max-width: 859px) {
-    .puertas, .puertas:has(> .puerta[hidden]) { grid-template-columns: minmax(0, 1fr); max-width: 520px; width: 100%; margin-inline: auto; gap: 8px; }
-  }
-  /* En una tableta los renglones ocupan el ancho del contenido, alineados con el título de arriba. */
-  @media (min-width: 701px) and (max-width: 859px) {
-    .puertas, .puertas:has(> .puerta[hidden]) { max-width: none; }
+    .puertas { grid-template-columns: minmax(0, 1fr); width: 100%; gap: 8px; }
   }
   @media (max-width: 859px), (min-width: 860px) and (max-height: 820px) {
     .puerta { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 14px; row-gap: 0; align-items: center; align-content: center; padding: 6px 12px 6px 6px; border-width: 2px; box-shadow: var(--sh-sm); }
@@ -2235,19 +2244,6 @@
     .puerta-empresa .puerta-media { background: var(--yellow); }
     .puerta-ico { display: grid; place-items: center; width: 100%; height: 100%; color: #191919; }
     .puerta-ico svg { width: 38px; height: 38px; }
-  }
-  /* En el celular las puertas suben justo debajo del botón de entrar, antes de "Otras formas de entrar", y lo que seguía
-     (los dos enlaces y la firma de la red) baja para hacerles lugar. El texto del hero deja de ser una caja para que sus
-     partes se ordenen junto con las puertas. */
-  @media (max-width: 700px) {
-    .hero-portada .hero-copy { display: contents; }
-    .hero-portada .hero-shot { margin-bottom: 4px; }
-    .hero-portada .puertas { order: 1; margin-top: -12px; }
-    .hero-portada .hero-otras { order: 2; }
-    /* Mientras se termina de entrar, el renglón de Cancelar es la única salida visible: queda pegado al botón, antes de las puertas. */
-    .hero-portada .hero-otras[data-cancelar-entrada] { order: 0; }
-    .hero-portada .hero-note { order: 3; }
-    .hero-portada .built-on { order: 4; }
   }
 
   /* La demo se presenta: una franja arriba y una invitación al final. */
@@ -4175,7 +4171,7 @@
   .espera-juegos.pase .espera-juego-op.pase-atras { opacity: 0.5; transform: scale(0.96); z-index: 1; }
   @media (prefers-reduced-motion: reduce) { .espera-juegos.pase .espera-juego-op { transition: none; } }
 
-  /* --- El temblor de los dos botones del hero (estilos-atencion.ts): tras ~8 s
+  /* --- El temblor del botón principal de la portada y del par del cierre (estilos-atencion.ts): tras ~8 s
      sin interactuar, una sacudida sutil de ~0,5 s con dos vaivenes. --- */
   @keyframes temblor-atencion {
     0%, 100% { transform: none; }

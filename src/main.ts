@@ -642,7 +642,8 @@ if (location.hash.startsWith("#participante=")) {
 }
 // Las campañas de empresas (detrás de VITE_CAMPANAS): la entrada de quien ganó y la pestaña que deja la ventana de Google.
 if (campanasActivo()) {
-  // Los enlaces a armar la campaña de una empresa (la cabecera, la puerta de la portada y el pie) se ven solo con las campañas abiertas.
+  // Los enlaces a armar la campaña de una empresa los muestra o esconde el atributo data-campanas de html (index.html y styles.css) desde
+  // el primer pintado. Esto queda para las páginas que traen enlaces con hidden y no ese atributo.
   mostrarEnlacesDeCampana(document);
   void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);
 }
