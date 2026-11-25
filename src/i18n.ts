@@ -143,6 +143,8 @@ export interface Dict {
   /** La presentación de la lista sellada durante la cuenta (issue #78, games-teaser.ts): el titular que anuncia a los participantes, y el lugar de cada uno ("1 de 3"). */
   espTeaserT: string;
   espTeaserDe: (i: number, n: number) => string;
+  /** Cuántas personas más tiene la lista que las tarjetas que caben (games-teaser.ts). */
+  espTeaserMas: (n: number) => string;
   cConstPass: (n: string) => string;
   cLanes: (k: number, n: number) => string;
   /** La tarjeta de "cómo se juega": cuántos participan y cuántos premios. */
@@ -1122,6 +1124,7 @@ export const T: Record<Lang, Dict> = {
     // La presentación de la lista sellada durante la cuenta (issue #78): quiénes participan y el lugar de cada uno. Habla solo de lo sellado, nunca del resultado.
     espTeaserT: "Les presentamos, uno por uno",
     espTeaserDe: (i, n) => `${i} de ${n}`,
+    espTeaserMas: (n) => `y ${n} más`,
     espVolver: "Volver a la página",
     espQrT: "Escaneá y miralo en tu celular",
     espQrBoton: "QR para ver en vivo",
@@ -4261,6 +4264,7 @@ export const T: Record<Lang, Dict> = {
     // The presentation of the sealed list during the countdown (issue #78): who takes part and each one's place. Spoken from the sealed list only, never the result.
     espTeaserT: "Introducing them, one by one",
     espTeaserDe: (i, n) => `${i} of ${n}`,
+    espTeaserMas: (n) => `and ${n} more`,
     espVolver: "Back to the page",
     espQrT: "Scan to watch on your phone",
     espQrBoton: "QR to watch live",

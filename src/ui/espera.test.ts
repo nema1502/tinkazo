@@ -1060,4 +1060,18 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
     expect(document.querySelector<HTMLElement>(".espera-teaser")?.dataset.juego).toBe("sapo");
     expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(["Ana", "Beto", "Cami"]);
   });
+
+  /** Con 150 personas la presentación tiene tope: el reloj y las cintas de nombres siguen en la pantalla. */
+  it("con 150 personas presenta hasta el tope, deja el reloj y las cintas, y no agrega ningún reloj", async () => {
+    const { TOPE_TARJETAS } = await import("./games-teaser");
+    const nombres = Array.from({ length: 150 }, (_, i) => `Persona ${i + 1}`);
+    await abrirEspera(1, { nombres });
+    expect(tarjetas()).toHaveLength(TOPE_TARJETAS);
+    expect(document.querySelectorAll(".espera-teaser-mas")).toHaveLength(1);
+    // Una sola cuenta regresiva en la capa, y las cintas de nombres de siempre.
+    expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
+    expect(document.querySelectorAll(".espera-cinta").length).toBeGreaterThan(0);
+    // Y una sola imagen por tarjeta.
+    for (const t of tarjetas()) expect(t.querySelectorAll("img").length).toBeLessThanOrEqual(1);
+  });
 });
