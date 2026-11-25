@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -7,11 +8,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * es el de siempre y la lectura del saldo, de mentira.
  */
 
-const h = vi.hoisted(() => ({ red: null as "testnet" | "mainnet" | null }));
+const h = vi.hoisted(() => ({ red: null as "testnet" | "mainnet" | null, rompeElTotal: false }));
 // El modo de la pestaña, que cada prueba pone a mano.
 vi.mock("../stellar/config", async (orig) => {
   const real = await orig<typeof import("../stellar/config")>();
   return { ...real, network: new Proxy(real.network, { get: (t, k) => (k === "name" && h.red ? h.red : Reflect.get(t, k)) }) };
+});
+// El cálculo del total de premios, que una prueba hace lanzar como lanzaría con un premio negativo.
+vi.mock("../campana/comision", async (orig) => {
+  const real = await orig<typeof import("../campana/comision")>();
+  return {
+    ...real,
+    totalDePremios: (premios: readonly bigint[]) => {
+      if (h.rompeElTotal) throw new Error("comision: premio negativo");
+      return real.totalDePremios(premios);
+    },
+  };
 });
 vi.mock("./qr", () => ({ pintarQr: async () => true, precargarQr: async () => undefined }));
 
@@ -27,6 +39,7 @@ import {
   type Mundo,
   type Panel,
   archivoDe,
+  boton,
   cerrarTodos,
   elegirArchivo,
   mundo,
@@ -77,6 +90,7 @@ beforeEach(() => {
 
 afterEach(() => {
   h.red = null;
+  h.rompeElTotal = false;
   cerrarTodos();
   document.body.innerHTML = "";
 });
@@ -293,5 +307,192 @@ describe("los textos de la línea del premio", () => {
       expect(TEXTOS_SALA_CAMPANA[idioma].cpoDepAlcanza).toContain("{premios}");
       expect(TEXTOS_SALA_CAMPANA[idioma].cpoDepFalta).toContain("{falta}");
     }
+  });
+});
+
+describe("ninguna excepción de la línea tumba el panel", () => {
+  it("si el cálculo del total lanza, no hay línea y el panel se dibuja igual", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    h.rompeElTotal = true;
+    const p = await previa(m);
+    expect(vistaDe(p)).toBe("previa");
+    expect(linea(p)).toBe("");
+    expect(leer).not.toHaveBeenCalled();
+    expect($(p, ".cpo-premio").textContent).not.toBe("");
+    expect(principales(p)).toHaveLength(1);
+    // Repintar con el cálculo roto tampoco lanza ni lee nada.
+    expect(() => p.pintar()).not.toThrow();
+    expect(leer).not.toHaveBeenCalled();
+  });
+
+  it("cuando el cálculo vuelve a andar, la línea vuelve", async () => {
+    const { m } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    h.rompeElTotal = true;
+    const p = await previa(m);
+    h.rompeElTotal = false;
+    p.pintar();
+    await suelta(6);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+  });
+
+  it("si al volver a la pestaña el cálculo lanza, el evento no lanza y la línea se apaga", async () => {
+    const { m } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = await previa(m);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    h.rompeElTotal = true;
+    await m.correr(6_000);
+    expect(() => document.dispatchEvent(new Event("visibilitychange"))).not.toThrow();
+    p.pintar();
+    expect(linea(p)).toBe("");
+  });
+});
+
+describe("la línea no queda vieja", () => {
+  it("pasado un minuto vuelve a leer, y mientras lee no afirma nada", async () => {
+    const pendientes: Array<(l: SaldoDeDolares) => void> = [];
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>((resolver) => void pendientes.push(resolver)));
+    const p = await previa(m);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    await m.correr(59_000);
+    expect(leer).toHaveBeenCalledTimes(1);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    await m.correr(2_000);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(linea(p)).toBe("");
+    pendientes[0]?.({ tipo: "saldo", saldo: "25.0000000" });
+    await suelta(6);
+    expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: "15,00" }));
+  });
+
+  it("si la relectura falla, la línea de antes no sigue afirmando", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
+    leer.mockImplementation(async () => {
+      throw new Error("sin conexión");
+    });
+    const p = await previa(m);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+    await m.correr(61_000);
+    expect(linea(p)).toBe("");
+  });
+
+  it("con el panel a la vista lee como mucho una vez por minuto", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    await previa(m);
+    await m.correr(180_000);
+    expect(leer.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(leer.mock.calls.length).toBeLessThanOrEqual(4);
+  });
+
+  it("con la pestaña escondida no lee, y la línea vieja se apaga", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    const p = await previa(m);
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    await m.correr(300_000);
+    p.pintar();
+    await suelta(4);
+    expect(leer).toHaveBeenCalledTimes(1);
+    expect(linea(p)).toBe("");
+    // Al volver se lee de nuevo y la línea reaparece.
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await suelta(6);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+  });
+
+  it("al tocar Abrir la inscripción vuelve a leer, y si queda en la vista previa la línea es la de la lectura nueva", async () => {
+    let saldo = "25.0000000";
+    const { m, leer } = armar({ tipo: "saldo", saldo });
+    leer.mockImplementation(async () => ({ tipo: "saldo", saldo }));
+    const p = await previa(m);
+    expect(linea(p)).toBe(dice("es", "cpoDepFalta", { falta: "15,00" }));
+    saldo = "125.0000000";
+    m.respuestasAlCrear.push("red");
+    // Sin esperar los 5 segundos de la vuelta a la pestaña: el toque siempre mira.
+    boton(p, "Abrir la inscripción").click();
+    await suelta(8);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(vistaDe(p)).toBe("previa");
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+  });
+
+  it("mientras la lectura de antes de abrir no vuelve, no afirma nada y abrir no espera", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementationOnce(async () => ({ tipo: "saldo", saldo: "125.0000000" }));
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
+    const p = await previa(m);
+    m.respuestasAlCrear.push("red");
+    boton(p, "Abrir la inscripción").click();
+    await suelta(8);
+    expect(m.creadas).toHaveLength(1);
+    expect(vistaDe(p)).toBe("previa");
+    expect(linea(p)).toBe("");
+  });
+});
+
+describe("la primera lectura que falla se reintenta una vez", () => {
+  it("a los cinco segundos vuelve a leer y, si anda, aparece la línea", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementationOnce(async () => {
+      throw new Error("sin conexión");
+    });
+    const p = await previa(m);
+    expect(linea(p)).toBe("");
+    await m.correr(4_000);
+    expect(leer).toHaveBeenCalledTimes(1);
+    await m.correr(2_000);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(linea(p)).toBe(dice("es", "cpoDepAlcanza", { premios: PREMIO }));
+  });
+
+  it("si el reintento también falla, no vuelve a probar hasta el minuto", async () => {
+    const { m, leer } = armar("falla");
+    const p = await previa(m);
+    await m.correr(30_000);
+    expect(leer).toHaveBeenCalledTimes(2);
+    expect(linea(p)).toBe("");
+  });
+
+  it("una primera lectura que anda no se reintenta", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    await previa(m);
+    await m.correr(30_000);
+    expect(leer).toHaveBeenCalledTimes(1);
+  });
+
+  it("si se deja el panel antes de los cinco segundos, no lee", async () => {
+    const { m, leer } = armar("falla");
+    const p = await previa(m);
+    p.detener();
+    await m.correr(10_000);
+    expect(leer).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("el lugar de la línea está reservado", () => {
+  it("la línea ya está en la página, vacía, mientras la primera lectura no vuelve", async () => {
+    const { m, leer } = armar({ tipo: "saldo", saldo: "125.0000000" });
+    leer.mockImplementation(() => new Promise<SaldoDeDolares>(() => undefined));
+    const p = await previa(m);
+    const el = p.raiz.querySelector<HTMLElement>("#cpo-deposito");
+    expect(el).not.toBeNull();
+    expect(el?.textContent).toBe("");
+    expect(el?.hidden).toBe(false);
+    // Va antes del botón que se toca, así que al aparecer el texto el botón no se corre.
+    const botonPrincipal = principales(p)[0];
+    expect(botonPrincipal).toBeDefined();
+    expect(el && botonPrincipal && el.compareDocumentPosition(botonPrincipal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("la hoja le da un alto mínimo aunque esté vacía", () => {
+    const css = readFileSync("src/campana/campana-sala.css", "utf8");
+    const inicio = css.indexOf(".cpo-deposito:empty:not([hidden]) {");
+    expect(inicio).toBeGreaterThan(-1);
+    const regla = css.slice(inicio, css.indexOf("}", inicio));
+    expect(regla).toContain("display: block");
+    expect(regla).toMatch(/min-height:\s*\d/u);
   });
 });
