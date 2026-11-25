@@ -45,4 +45,8 @@ describe("la página de escucha en el build", () => {
     expect(html).toMatch(/background: var\(--fondo\)/);
     expect(html).toMatch(/min-height: 44px/);
   });
+
+  it("los enlaces de la página también son blancos de toque de 44 píxeles", () => {
+    expect(leer("escucha.html")).toMatch(/\.nota a \{[^}]*display: inline-block;[^}]*min-height: 44px;/);
+  });
 });

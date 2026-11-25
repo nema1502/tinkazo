@@ -13,49 +13,53 @@ export const TEXTOS_ESCUCHA = {
   es: {
     titulo: "Página de escucha",
     subtitulo: "Candidatas de música por juego. Ninguna se prende en el sitio sin que alguien la escuche y elija.",
-    apagada: "La página de escucha está apagada: abrila con ?escucha=1.",
+    apagada: "La página de escucha está apagada.",
     capas: "Capas del show",
     capaEspera: "Espera",
     capaTension: "Tensión",
     capaGanador: "Ganador",
     capaFestejo: "Festejo",
     btnTodo: "Todo el show",
-    tempo: "Golpes por minuto: largada, grupo y recta",
+    tempo: "Velocidad en la largada, el grupo y la recta",
     ritmos: "Ritmos",
     instrumentos: "Instrumentos",
-    etiquetaTexto: "Etiquetas de intención: dicen lo que apunta la identidad, los instrumentos siguen siendo sintetizados.",
+    etiquetaTexto: "Las etiquetas dicen lo que busca cada estilo. Los sonidos se arman en el momento, no son grabaciones.",
     votar: "Voto",
     quitar: "Quitar",
     votos: "votos",
     sinVotos: "todavía nadie votó",
-    sinAudio: "Este navegador no tiene audio: escuchalo en un celular, una tablet o el parlante del proyector.",
+    sinAudio: "Este navegador no puede reproducir audio. Probalo en un celular, una tablet o el parlante del proyector.",
     preparando: "Armando la pieza…",
-    notaSemilla: "La pieza sale de una semilla fija: la misma candidata suena igual cada vez que se escucha.",
-    fueraDelSelector: "Juegos que salieron del selector y siguen abriendo con ?demo=",
+    parar: "Parar",
+    otroIdioma: "English",
+    notaSemilla: "Cada pieza suena igual cada vez que se escucha.",
+    fueraDelSelector: "Juegos que ya no están en el selector",
     probarAdelgazado: "Abrir un show de prueba donde la música se aligera cuando el equipo va lento",
   },
   en: {
     titulo: "Listening page",
     subtitulo: "Music candidates per game. None goes live on the site until someone hears it and picks it.",
-    apagada: "The listening page is off: open it with ?escucha=1.",
+    apagada: "The listening page is off.",
     capas: "Show layers",
     capaEspera: "Waiting",
     capaTension: "Tension",
     capaGanador: "Winner",
     capaFestejo: "Celebration",
     btnTodo: "The whole show",
-    tempo: "Beats per minute: start, pack and straight",
+    tempo: "Speed at the start, the pack and the straight",
     ritmos: "Rhythms",
     instrumentos: "Instruments",
-    etiquetaTexto: "Intent tags: they say what the identity aims for. The instruments are still synthesized.",
+    etiquetaTexto: "The tags say what each style is going for. The sounds are made on the spot, they are not recordings.",
     votar: "Vote",
     quitar: "Remove",
     votos: "votes",
     sinVotos: "nobody voted yet",
-    sinAudio: "This browser has no audio: try it on a phone, a tablet or the projector speaker.",
+    sinAudio: "This browser cannot play audio. Try it on a phone, a tablet or the projector speaker.",
     preparando: "Building the piece…",
-    notaSemilla: "The piece comes from a fixed seed: the same candidate sounds the same every time.",
-    fueraDelSelector: "Games that left the selector and still open with ?demo=",
+    parar: "Stop",
+    otroIdioma: "Español",
+    notaSemilla: "Each piece sounds the same every time you play it.",
+    fueraDelSelector: "Games no longer in the selector",
     probarAdelgazado: "Open a test show where the music thins out when the device is slow",
   },
 } as const;
@@ -108,3 +112,27 @@ export const NOMBRES_ESCUCHA: Readonly<Record<string, { es: string; en: string }
 
 /** El nombre de un juego en el idioma dado; si el id no tiene nombre, el id. */
 export const nombreDeJuego = (id: string, lang: IdiomaEscucha): string => NOMBRES_ESCUCHA[id]?.[lang] ?? id;
+
+/**
+ * Los ritmos y los instrumentos que nombran las identidades de los juegos (`IDENTIDADES` en `music.ts`), en el idioma de
+ * quien elige. Los ritmos son nombres propios y quedan como se escriben. Los instrumentos se traducen.
+ */
+export const ETIQUETAS_ESCUCHA: Readonly<Record<string, { es: string; en: string }>> = {
+  huayño: { es: "huayño", en: "huayño" },
+  huayno: { es: "huayño", en: "huayño" },
+  caporal: { es: "caporal", en: "caporal" },
+  taquirari: { es: "taquirari", en: "taquirari" },
+  cueca: { es: "cueca", en: "cueca" },
+  chovena: { es: "chovena", en: "chovena" },
+  saya: { es: "saya", en: "saya" },
+  morenada: { es: "morenada", en: "morenada" },
+  kullawada: { es: "kullawada", en: "kullawada" },
+  charango: { es: "charango", en: "charango" },
+  zampoña: { es: "zampoña", en: "panpipes" },
+  quena: { es: "quena", en: "quena flute" },
+  bombo: { es: "bombo", en: "bass drum" },
+  guitarra: { es: "guitarra", en: "guitar" },
+};
+
+/** Un ritmo o un instrumento en el idioma dado; si no tiene traducción, se deja como viene. */
+export const nombreDeEtiqueta = (etiqueta: string, lang: IdiomaEscucha): string => ETIQUETAS_ESCUCHA[etiqueta]?.[lang] ?? etiqueta;

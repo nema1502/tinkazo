@@ -275,3 +275,198 @@ describe("el contexto de audio nace en el toque, no después del render", () => 
     expect(prepararContextoDeEscucha()).toBeNull();
   });
 });
+
+describe("el último toque manda, no el último render en terminar", () => {
+  const id = IDENTIDADES.race!;
+  /** Un render que termina cuando la prueba lo suelta. */
+  function renderPendiente(): { promesa: Promise<AudioBuffer | null>; soltar: (b: AudioBuffer | null) => void } {
+    let soltar: (b: AudioBuffer | null) => void = () => undefined;
+    const promesa = new Promise<AudioBuffer | null>((r) => {
+      soltar = r;
+    });
+    return { promesa, soltar };
+  }
+
+  it("una pieza larga que termina después de otra pedida más tarde no suena", async () => {
+    const { pedirPieza } = await import("./escucha");
+    const larga = renderPendiente();
+    const corta = renderPendiente();
+    const suenan: unknown[] = [];
+    const sonar = (b: AudioBuffer): boolean => suenan.push(b) > 0;
+    const primero = pedirPieza("todo", id, undefined, { render: () => larga.promesa, sonar });
+    const segundo = pedirPieza("espera", id, undefined, { render: () => corta.promesa, sonar });
+    const bufferCorto = { nombre: "corta" } as unknown as AudioBuffer;
+    const bufferLargo = { nombre: "larga" } as unknown as AudioBuffer;
+    corta.soltar(bufferCorto);
+    await segundo;
+    larga.soltar(bufferLargo);
+    await primero;
+    expect(suenan).toEqual([bufferCorto]);
+  });
+
+  it("avisa que está armando la pieza y cuando terminó", async () => {
+    const { pedirPieza } = await import("./escucha");
+    const r = renderPendiente();
+    const estados: string[] = [];
+    const pedido = pedirPieza("espera", id, (e) => estados.push(e), { render: () => r.promesa, sonar: () => true });
+    expect(estados).toEqual(["preparando"]);
+    r.soltar({} as AudioBuffer);
+    await pedido;
+    expect(estados).toEqual(["preparando", "listo"]);
+  });
+
+  it("parar cancela lo que todavía se está armando", async () => {
+    const { pedirPieza, pararPieza } = await import("./escucha");
+    const r = renderPendiente();
+    const suenan: unknown[] = [];
+    const pedido = pedirPieza("todo", id, undefined, { render: () => r.promesa, sonar: (b) => suenan.push(b) > 0 });
+    pararPieza();
+    r.soltar({} as AudioBuffer);
+    await pedido;
+    expect(suenan).toEqual([]);
+  });
+});
+
+describe("la pieza que suena se suelta y se corta", () => {
+  class Fuente {
+    static todas: Fuente[] = [];
+    buffer: unknown = null;
+    onended: (() => void) | null = null;
+    connect = vi.fn();
+    disconnect = vi.fn();
+    start = vi.fn();
+    stop = vi.fn();
+    constructor() {
+      Fuente.todas.push(this);
+    }
+  }
+  class Contexto {
+    state = "running";
+    resume = vi.fn(() => Promise.resolve());
+    destination = {};
+    createBufferSource = (): Fuente => new Fuente();
+  }
+
+  afterEach(() => {
+    delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+    Fuente.todas = [];
+  });
+
+  it("al terminar sola, la pieza suelta su nodo", async () => {
+    (window as unknown as { AudioContext: unknown }).AudioContext = Contexto;
+    vi.resetModules();
+    const { hacerSonar } = await import("./escucha");
+    expect(hacerSonar({} as AudioBuffer)).toBe(true);
+    const f = Fuente.todas[0]!;
+    f.onended?.();
+    expect(f.disconnect).toHaveBeenCalled();
+  });
+
+  it("al pasar a otra pieza, la anterior se corta y se suelta", async () => {
+    (window as unknown as { AudioContext: unknown }).AudioContext = Contexto;
+    vi.resetModules();
+    const { hacerSonar, pararSonido } = await import("./escucha");
+    hacerSonar({} as AudioBuffer);
+    hacerSonar({} as AudioBuffer);
+    const [primera, segunda] = Fuente.todas;
+    expect(primera!.stop).toHaveBeenCalled();
+    expect(primera!.disconnect).toHaveBeenCalled();
+    expect(segunda!.stop).not.toHaveBeenCalled();
+    pararSonido();
+    expect(segunda!.stop).toHaveBeenCalled();
+    expect(segunda!.disconnect).toHaveBeenCalled();
+  });
+});
+
+describe("el encabezado de la página", () => {
+  afterEach(() => {
+    delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+    delete (window as unknown as { OfflineAudioContext?: unknown }).OfflineAudioContext;
+  });
+
+  it("sin audio en el navegador, avisa", () => {
+    const doc = pagina();
+    armarEscucha(doc, opciones(true, () => undefined));
+    expect(doc.querySelector(".aviso-sin-audio")?.textContent).toBe(es.sinAudio);
+  });
+
+  it("con audio en el navegador, no avisa nada", () => {
+    (window as unknown as { AudioContext: unknown }).AudioContext = function () {};
+    (window as unknown as { OfflineAudioContext: unknown }).OfflineAudioContext = function () {};
+    const doc = pagina();
+    armarEscucha(doc, opciones(true, () => undefined));
+    expect(doc.querySelector(".aviso-sin-audio")).toBeNull();
+  });
+
+  it("trae un enlace para pasar al otro idioma y un lugar para decir que se está armando la pieza", () => {
+    const docEs = pagina();
+    armarEscucha(docEs, opciones(true, () => undefined));
+    expect(docEs.querySelector("a.idioma")?.getAttribute("href")).toBe("?escucha=1&lang=en");
+    expect(docEs.querySelector("a.idioma")?.textContent).toBe(TEXTOS_ESCUCHA.es.otroIdioma);
+    const docEn = pagina();
+    armarEscucha(docEn, { ...opciones(true, () => undefined), lang: "en" });
+    expect(docEn.querySelector("a.idioma")?.getAttribute("href")).toBe("?escucha=1&lang=es");
+    expect(docEs.querySelector("#estado-escucha")?.getAttribute("role")).toBe("status");
+  });
+
+  it("el botón de parar avisa a la orden", () => {
+    const doc = pagina();
+    const parar = vi.fn();
+    armarEscucha(doc, { ...opciones(true, () => undefined), parar });
+    doc.querySelector(".parar")?.dispatchEvent(new Event("click", { bubbles: true }));
+    expect(parar).toHaveBeenCalledTimes(1);
+  });
+
+  it("los ritmos y los instrumentos salen en el idioma de la página", () => {
+    const docEn = pagina();
+    armarEscucha(docEn, { ...opciones(true, () => undefined), lang: "en" });
+    const carrera = docEn.querySelector('.tarjeta[data-juego="race"] .etiquetas')?.textContent ?? "";
+    expect(carrera).toContain("panpipes");
+    expect(carrera).toContain("bass drum");
+    expect(carrera).not.toContain("zampoña");
+    const docEs = pagina();
+    armarEscucha(docEs, opciones(true, () => undefined));
+    expect(docEs.querySelector('.tarjeta[data-juego="race"] .etiquetas')?.textContent).toContain("zampoña");
+  });
+});
+
+describe("la página al volver a la vista", () => {
+  class Fuente {
+    onended: (() => void) | null = null;
+    connect = vi.fn();
+    disconnect = vi.fn();
+    start = vi.fn();
+    stop = vi.fn();
+  }
+  class Contexto {
+    static ultimo: Contexto | null = null;
+    state = "running";
+    resume = vi.fn(() => Promise.resolve());
+    destination = {};
+    createBufferSource = (): Fuente => new Fuente();
+    constructor() {
+      Contexto.ultimo = this;
+    }
+  }
+
+  afterEach(() => {
+    delete (window as unknown as { AudioContext?: unknown }).AudioContext;
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("el contexto que el teléfono cortó se reanuda al volver a la vista", async () => {
+    (window as unknown as { AudioContext: unknown }).AudioContext = Contexto;
+    vi.resetModules();
+    const { hacerSonar, montarEscucha: montar } = await import("./escucha");
+    window.history.replaceState(null, "", "?escucha=1");
+    montar(pagina());
+    expect(hacerSonar({} as AudioBuffer)).toBe(true);
+    const ctx = Contexto.ultimo!;
+    ctx.state = "interrupted";
+    ctx.resume.mockClear();
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    delete (document as unknown as { visibilityState?: string }).visibilityState;
+    expect(ctx.resume).toHaveBeenCalledTimes(1);
+  });
+});
