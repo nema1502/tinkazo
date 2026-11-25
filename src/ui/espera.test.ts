@@ -1063,37 +1063,47 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
     expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(["Ana", "Beto", "Cami"]);
   });
 
-  /** La cantidad de tarjetas sigue al ancho de la pantalla, con 150 y con 300 personas: la línea de las que faltan es la cuenta exacta. */
-  for (const total of [150, 300]) {
-    for (const [ancho, tope] of [[360, 2], [390, 2], [1366, 6], [1920, 6]] as const) {
-      it(`con ${total} personas a ${ancho} px muestra ${tope} tarjetas, la línea de las que faltan y un solo reloj`, async () => {
-        h.ancho = ancho;
-        const nombres = Array.from({ length: total }, (_, i) => `Persona ${i + 1}`);
-        await abrirEspera(1, { nombres });
-        expect(tarjetas()).toHaveLength(tope);
-        expect(document.querySelector(".espera-teaser-mas")?.textContent).toBe(`y ${total - tope} más`);
-        expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
-        expect(document.querySelectorAll(".espera-cinta").length).toBeGreaterThan(0);
-        // Nada del resultado: la presentación habla solo de lo sellado y la selección no se toca.
-        expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(nombres.slice(0, tope));
-      });
-    }
+  /** La presentación aparece solo si entran todas las personas: con una lista más larga la espera queda como siempre. */
+  for (const [ancho, total] of [[1366, 2], [1366, 6], [1920, 6], [390, 2], [360, 1]] as const) {
+    it(`con ${total} personas a ${ancho} px hay ${total} tarjetas, sin línea de más y con un solo reloj`, async () => {
+      h.ancho = ancho;
+      const nombres = Array.from({ length: total }, (_, i) => `Persona ${i + 1}`);
+      await abrirEspera(1, { nombres });
+      expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(nombres);
+      expect(document.querySelector(".espera-teaser-mas")).toBeNull();
+      expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
+      expect(document.querySelectorAll(".espera-cinta").length).toBeGreaterThan(0);
+    });
   }
 
-  /** Un celular que se gira con la cuenta en marcha: la presentación se vuelve a armar para el ancho nuevo y el reloj sigue siendo uno. */
-  it("al girar el celular con la cuenta en marcha, la presentación pasa de pocas a más tarjetas y de más a pocas", async () => {
-    const nombres = Array.from({ length: 150 }, (_, i) => `Persona ${i + 1}`);
+  for (const [ancho, total] of [[1366, 7], [1366, 18], [1366, 150], [1366, 300], [1920, 150], [390, 3], [390, 18], [390, 150]] as const) {
+    it(`con ${total} personas a ${ancho} px no hay presentación y la espera es la de siempre: el reloj y las cintas`, async () => {
+      h.ancho = ancho;
+      const nombres = Array.from({ length: total }, (_, i) => `Persona ${i + 1}`);
+      await abrirEspera(1, { nombres });
+      expect(tarjetas()).toHaveLength(0);
+      expect(document.querySelector(".espera-teaser")).toBeNull();
+      expect(document.querySelector(".espera-teaser-mas")).toBeNull();
+      expect(document.querySelector(".espera-teaser-t")).toBeNull();
+      expect(document.querySelector(".espera-teaser-caja")?.childElementCount).toBe(0);
+      expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
+      expect(document.querySelectorAll(".espera-cinta").length).toBeGreaterThan(0);
+    });
+  }
+
+  /** Un celular que se gira con la cuenta en marcha: se vuelve a decidir con el ancho nuevo, y nunca se ve un pedazo de la lista. */
+  it("al girar el celular con la cuenta en marcha, la presentación aparece si entran todas y se va si no", async () => {
+    const nombres = Array.from({ length: 5 }, (_, i) => `Persona ${i + 1}`);
     h.ancho = 390;
     await abrirEspera(1, { nombres });
-    expect(tarjetas()).toHaveLength(2);
+    expect(tarjetas()).toHaveLength(0);
     h.ancho = 844;
     window.dispatchEvent(new Event("resize"));
-    expect(tarjetas()).toHaveLength(6);
-    expect(document.querySelector(".espera-teaser-mas")?.textContent).toBe("y 144 más");
+    expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(nombres);
+    expect(document.querySelector(".espera-teaser-mas")).toBeNull();
     h.ancho = 390;
     window.dispatchEvent(new Event("resize"));
-    expect(tarjetas()).toHaveLength(2);
-    expect(document.querySelector(".espera-teaser-mas")?.textContent).toBe("y 148 más");
+    expect(tarjetas()).toHaveLength(0);
     expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
   });
 
@@ -1125,7 +1135,7 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
     };
   }
   const capa = (): HTMLElement => document.querySelector<HTMLElement>(".espera") as HTMLElement;
-  const nombres150 = Array.from({ length: 150 }, (_, i) => `Persona ${i + 1}`);
+  const nombres150 = Array.from({ length: 6 }, (_, i) => `Persona ${i + 1}`);
 
   it("en una pantalla donde el reloj y las cintas no entran con la presentación, se esconde ella y el reloj queda del tamaño completo", async () => {
     // 1366 x 768: lo de siempre ocupa 700 y la presentación suma 130.
@@ -1170,13 +1180,12 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
     }
   });
 
-  /** Con 150 personas la presentación tiene tope: el reloj y las cintas de nombres siguen en la pantalla. */
-  it("con 150 personas presenta hasta el tope, deja el reloj y las cintas, y no agrega ningún reloj", async () => {
-    const { TOPE_TARJETAS } = await import("./games-teaser");
-    const nombres = Array.from({ length: 150 }, (_, i) => `Persona ${i + 1}`);
+  /** Con 6 personas entran todas, con una sola imagen por tarjeta, y el reloj y las cintas de nombres siguen en la pantalla. */
+  it("con 6 personas presenta a todas, deja el reloj y las cintas, y no agrega ningún reloj", async () => {
+    const nombres = Array.from({ length: 6 }, (_, i) => `Persona ${i + 1}`);
     await abrirEspera(1, { nombres });
-    expect(tarjetas()).toHaveLength(TOPE_TARJETAS);
-    expect(document.querySelectorAll(".espera-teaser-mas")).toHaveLength(1);
+    expect(tarjetas()).toHaveLength(6);
+    expect(document.querySelectorAll(".espera-teaser-mas")).toHaveLength(0);
     // Una sola cuenta regresiva en la capa, y las cintas de nombres de siempre.
     expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
     expect(document.querySelectorAll(".espera-cinta").length).toBeGreaterThan(0);
