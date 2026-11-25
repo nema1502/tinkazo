@@ -56,6 +56,9 @@ export const TECLAS = {
   PageDown: { code: "PageDown", vk: 34 },
 };
 
+/** Los nombres que Windows no deja usar como archivo, tengan o no extensión: quien baje el artefacto allá no podría abrirlo. */
+const NOMBRE_RESERVADO = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+
 const CAMPOS_VISTA = ["nombre", "ruta", "ancho", "alto", "tema", "idioma", "esperar", "pausaMs", "paginaEntera", "pasos"];
 const CAMPOS_PASO = {
   clic: ["selector"],
@@ -181,6 +184,10 @@ export function validarVistas(lista) {
     if (sobran.length) errores.push(`${etiqueta}: campos desconocidos ${sobran.map((k) => `"${k}"`).join(", ")} (los válidos son ${CAMPOS_VISTA.join(", ")})`);
     if (typeof v.nombre !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(v.nombre) || v.nombre.length > TOPES.largoNombre) {
       errores.push(`${etiqueta}: "nombre" tiene que llevar solo letras, números, punto, guion y guion bajo (hasta ${TOPES.largoNombre}) y empezar con letra o número`);
+    } else if (NOMBRE_RESERVADO.test(v.nombre)) {
+      errores.push(`${etiqueta}: "nombre" es un nombre reservado de Windows (con, prn, aux, nul, com1 a com9, lpt1 a lpt9, con o sin extensión): el archivo no se podría crear`);
+    } else if (v.nombre.endsWith(".")) {
+      errores.push(`${etiqueta}: "nombre" no puede terminar en punto (Windows lo descarta al crear el archivo)`);
     } else if (/-fallo$/i.test(v.nombre)) {
       errores.push(`${etiqueta}: "nombre" no puede terminar en -FALLO (queda para la foto de una vista que falla)`);
     } else if (vistos.has(v.nombre.toLowerCase())) {

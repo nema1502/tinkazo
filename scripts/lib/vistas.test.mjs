@@ -83,6 +83,21 @@ describe("validar la lista de vistas", () => {
     expect(errores([vista({ nombre: "fallo-de-red" }), vista({ nombre: "sin-fallos" })])).toEqual([]);
   });
 
+  it("los nombres que Windows reserva se rechazan, también con mayúsculas o con extensión", () => {
+    const reservados = ["con", "CON", "prn", "aux", "nul", "Nul", "con.txt", "aux.v2", ...Array.from({ length: 9 }, (_, i) => `com${i + 1}`), ...Array.from({ length: 9 }, (_, i) => `lpt${i + 1}`)];
+    for (const nombre of reservados) expect(errores([vista({ nombre })]).join(" "), nombre).toContain("reservado");
+  });
+
+  it("un nombre que termina en punto se rechaza", () => {
+    expect(errores([vista({ nombre: "portada." })]).join(" ")).toContain("punto");
+    expect(errores([vista({ nombre: "portada.." })]).join(" ")).toContain("punto");
+  });
+
+  it("los nombres parecidos a los reservados pero propios siguen valiendo", () => {
+    const buenos = ["consola", "com", "com10", "com0", "lpt0", "auxiliar", "nulo", "con-1", "prn_x", "portada.v2", "contacto"];
+    for (const nombre of buenos) expect(errores([vista({ nombre })]), nombre).toEqual([]);
+  });
+
   it("rechaza campos desconocidos: un error de tipeo no se pierde en silencio", () => {
     expect(errores([vista({ pausa: 10 })])[0]).toContain('"pausa"');
     expect(errores([{ ...vista(), pasos: [{ accion: "clic", selector: "#a", ms: 5 }] }])[0]).toContain('"ms"');
