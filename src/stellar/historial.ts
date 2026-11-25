@@ -120,6 +120,11 @@ export interface OpcionesDelHistorial {
   intentos?: number;
   /** Cuánto se espera entre un intento y el siguiente (700 ms, creciente). */
   esperaMs?: number;
+  /**
+   * Que una lectura fallida por el límite de pedidos (429) lo diga con `limitado: true`. Es para quien repite lecturas desde
+   * muchos celulares a la vez y no debe seguir pidiendo. Sin esto la lectura es la de siempre.
+   */
+  distinguirLimite?: boolean;
 }
 
 const TIEMPO_MS = 8_000;
@@ -256,7 +261,7 @@ export async function leerHistorial(red: NetworkName, hash: string, op: Opciones
   if (!base) return fallo("contrato-ajeno");
 
   const pedido = await traer(`${base}/transactions/${hash}`, op);
-  if (pedido.tipo !== "ok") return fallo(pedido.tipo, pedido.tipo === "red-caida" && pedido.limitado ? { limitado: true } : {});
+  if (pedido.tipo !== "ok") return fallo(pedido.tipo, pedido.tipo === "red-caida" && pedido.limitado && op.distinguirLimite ? { limitado: true } : {});
 
   let rec: unknown;
   try {

@@ -289,7 +289,7 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
         import("./comprobar"),
         p.leerSello
           ? Promise.resolve(p.leerSello)
-          : import("../stellar/historial").then((m) => (red: NetworkName, hash: string) => m.leerHistorial(red, hash, { intentos: 1 })),
+          : import("../stellar/historial").then((m) => (red: NetworkName, hash: string) => m.leerHistorial(red, hash, { intentos: 1, distinguirLimite: true })),
         import("../stellar/oficiales"),
       ]);
       const conPremios = p.campana.promo !== null || contratoDePremios(p.red, p.campana.contrato) !== null;
