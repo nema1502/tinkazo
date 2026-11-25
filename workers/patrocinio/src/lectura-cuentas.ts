@@ -27,9 +27,13 @@ function numero(x: unknown): number | null {
   return null;
 }
 
-/** Un instante de Pollar en ms (texto ISO, o un número en ms o en segundos), o null. */
+/** Un instante de Pollar en ms (texto ISO, o un número en ms o en segundos), o null. Una fecha que no existe es null. */
 function instante(x: unknown): number | null {
-  if (typeof x === "number" && Number.isFinite(x) && x > 0) return x >= 1e12 ? x : x * 1000;
+  if (typeof x === "number" && Number.isFinite(x) && x > 0) {
+    const ms = x >= 1e12 ? x : x * 1000;
+    // Un número más grande que la última fecha posible no es una fecha: no se puede escribir en ISO y no se adivina.
+    return Number.isFinite(new Date(ms).getTime()) ? ms : null;
+  }
   if (typeof x === "string" && x.length <= 64) {
     const ms = Date.parse(x);
     return Number.isFinite(ms) ? ms : null;

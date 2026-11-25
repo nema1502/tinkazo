@@ -59,6 +59,16 @@ describe("contarCuentasPorHora: las cuentas nuevas y las activaciones de cada ho
     ]);
   });
 
+  it("una fecha numérica más grande que la última fecha posible no lanza: el movimiento cuenta en la hora del reloj", () => {
+    const r = contarCuentasPorHora([nueva(T0, { createdAt: 1e20 }), nueva(T0, { createdAt: 8.64e15 + 1 }), activacion(T0, { createdAt: 1e300 })], T0 - HORA, T0);
+    expect(r.porHora).toEqual([
+      { hora: horaDe(T0 - HORA), nuevas: 0, activaciones: 0 },
+      { hora: horaDe(T0), nuevas: 2, activaciones: 1 },
+    ]);
+    // La última fecha posible sí es una fecha: cuenta en la hora del reloj porque esa hora todavía no existe, y no lanza.
+    expect(() => contarCuentasPorHora([nueva(T0, { createdAt: 8.64e15 })], T0 - HORA, T0)).not.toThrow();
+  });
+
   it("lo que no sea una lista de movimientos da cero y completo", () => {
     expect(contarCuentasPorHora("no es una lista", T0 - HORA, T0)).toEqual({
       porHora: [
