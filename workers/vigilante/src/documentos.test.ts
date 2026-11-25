@@ -399,7 +399,6 @@ describe("el umbral de las cuentas nuevas por hora: el valor de siempre se dice 
   it("el cupo del evento reemplaza al umbral y no se suma: el README y la configuración lo dicen, y dicen que hoy no avisa por activaciones", () => {
     expect(readme).toMatch(/no se suma/);
     expect(wrangler).toMatch(/no se suma/);
-    expect(readme).toMatch(/activaciones[^
-]*apagado/);
+    expect(readme).toMatch(/activaciones está apagado/);
   });
 });
