@@ -243,7 +243,7 @@ export function comparar(tabla, variables) {
     let ok = true;
     let estado;
     if (f.produccion === SIN_DEFINIR) {
-      const prendida = /^(pistas )?prendidas?/i.test(f.sinLaVariable);
+      const prendida = /^(pistas )?prendidas?\b/i.test(f.sinLaVariable);
       estado = escrita ? "definida en el sitio" : prendida ? `sin definir, así que está prendida por defecto (${f.sinLaVariable})` : `sin definir, ${f.sinLaVariable}`;
       if (escrita) {
         ok = false;
