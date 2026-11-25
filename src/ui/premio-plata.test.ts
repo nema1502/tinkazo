@@ -275,6 +275,19 @@ describe("donde el aviso no corresponde", () => {
     expect(aviso().hidden).toBe(false);
   });
 
+  it("al entrar al ensayo o al modo stand el aviso que estaba a la vista se esconde solo, sin tocar el campo", () => {
+    (document.getElementById("btn-freeze") as HTMLButtonElement).focus();
+    ponerPremio("50 USD");
+    expect(aviso().hidden).toBe(false);
+    marcarEnsayo(true);
+    expect(aviso().hidden).toBe(true);
+    marcarEnsayo(false);
+    escribirYSalir(premio(), "50 USD");
+    expect(aviso().hidden).toBe(false);
+    marcarStand(true);
+    expect(aviso().hidden).toBe(true);
+  });
+
   it("en el modo stand tampoco", () => {
     marcarStand(true);
     escribirYSalir(premio(), "50 USD");

@@ -1,5 +1,5 @@
 import { campanasActivo } from "../campana/bandera";
-import { enPractica } from "../ensayo-modo";
+import { EVENTO_PRACTICA, enPractica } from "../ensayo-modo";
 import { montoDelPremio } from "../stellar/pagos";
 import { fijoPorCampana } from "./ganadores";
 
@@ -12,7 +12,7 @@ import { fijoPorCampana } from "./ganadores";
  * ("Entrada $10") cuesta un toque en la cruz. Solo existe con las campañas abiertas y solo en el modo de sortear premios:
  * en el orden de turnos y en el amigo secreto el campo es el nombre del orden. Tampoco aparece en un sorteo que ya viene de una
  * campaña (quien la armó no necesita que se la ofrezcan) ni en el ensayo y el modo stand, donde nada se graba ni se paga. Si
- * estaba a la vista cuando eso pasa, se esconde.
+ * estaba a la vista cuando eso pasa, se esconde: entrar al ensayo o al modo stand lo avisa con un evento del documento.
  *
  * Aparece al salir del campo, cuando la persona terminó de escribir, y no mientras escribe: así no empuja Sellar la lista
  * debajo de su dedo. Si la ventana pierde el foco (cambio de pestaña o de aplicación) el navegador también avisa que el campo
@@ -135,6 +135,8 @@ export function montarAvisoDePlata(campanas: boolean = campanasActivo()): void {
   // Al salir del campo y no al escribir: `focusout` sube desde cada campo de los demás lugares.
   document.addEventListener("pointerdown", alTocar, true);
   window.addEventListener("focus", alRecuperarElFoco);
+  // Entrar al ensayo o al modo stand, o salir de ellos: el aviso que estaba a la vista se esconde sin esperar a otro evento.
+  document.addEventListener(EVENTO_PRACTICA, refrescarAvisoDePlata);
   document.getElementById("prize")?.addEventListener("focusout", alSalirDelCampo);
   document.getElementById("prize-lugares")?.addEventListener("focusout", alSalirDelCampo);
   // Cambiar de modo cambia lo que quiere decir el campo.
@@ -151,4 +153,5 @@ export function reiniciarAvisoDePlata(): void {
   ultimoToqueABoton = -Infinity;
   document.removeEventListener("pointerdown", alTocar, true);
   window.removeEventListener("focus", alRecuperarElFoco);
+  document.removeEventListener(EVENTO_PRACTICA, refrescarAvisoDePlata);
 }
