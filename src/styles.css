@@ -3276,8 +3276,6 @@
     .espera-t { font-size: clamp(16px, 4vh, 28px); }
     .espera-cinta span { font-size: clamp(16px, 4.4vh, 28px); padding: 2px 12px; }
     .espera-nombres { gap: 6px; margin: 2px 0; }
-    /* La presentación de la lista sellada se esconde: el reloj y los nombres primero. */
-    .espera-teaser-caja { display: none; }
     .espera-pie { font-size: clamp(14px, 3.4vh, 22px); }
     .espera-nadie { font-size: clamp(16px, 3.6vh, 24px); }
     .espera-id { font-size: clamp(14px, 3.2vh, 20px); }
@@ -3288,6 +3286,11 @@
      el botón abre la lista con el actual marcado. Si hay ancho (una tablet o una laptop de 1024 x 560) el nombre se queda. */
   @media (max-height: 560px) and (max-width: 999px) {
     .espera-juego.en-barra .espera-juego-n { display: none; }
+  }
+  /* La presentación de la lista sellada se esconde en una pantalla baja (un celular acostado, un zoom de 200 %): el reloj y
+     los nombres primero. Va en su propio bloque, después del de la barra: las pruebas de la barra miran el de arriba. */
+  @media (max-height: 560px) {
+    .espera-teaser-caja { display: none; }
   }
   /* En un celular la barra de arriba (calcomanía, Prueba y Volver) va en el flujo y no fija. Fija, la capa le reservaba
      72 px de relleno, pensados para una calcomanía de un renglón: con tres (Todavía nadie sabe quién gana, a 390 px) la
