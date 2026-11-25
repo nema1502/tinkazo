@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setLang, T } from "../i18n";
-import { presentarTeaser, TOPE_TARJETAS } from "./games-teaser";
+import { ANCHO_ANGOSTO, presentarTeaser, TOPE_TARJETAS, TOPE_TARJETAS_ANGOSTO } from "./games-teaser";
 
 /**
  * La presentación de la lista sellada durante la cuenta (`games-teaser.ts`,
@@ -110,6 +110,103 @@ describe("un tope de tarjetas para que la espera siga entrando en la pantalla", 
   });
 });
 
+/** Simula un ancho de pantalla: responde a las consultas (max-width: Npx) y (min-width: Npx) como lo haría el navegador. */
+const conAncho = (ancho: number): void => {
+  vi.stubGlobal("matchMedia", (q: string) => {
+    const max = /max-width:\s*(\d+)px/u.exec(q);
+    const min = /min-width:\s*(\d+)px/u.exec(q);
+    const cumple = (max ? ancho <= Number(max[1]) : true) && (min ? ancho >= Number(min[1]) : true);
+    return { matches: cumple && (max !== null || min !== null), media: q };
+  });
+};
+
+describe("la cantidad de tarjetas la decide el ancho de la pantalla", () => {
+  const nombresDe = (n: number): string[] => Array.from({ length: n }, (_, i) => `Persona ${i + 1}`);
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("el celular se corta en 480 px y presenta menos tarjetas que una pantalla ancha", () => {
+    expect(ANCHO_ANGOSTO).toBe(480);
+    expect(TOPE_TARJETAS_ANGOSTO).toBe(2);
+    expect(TOPE_TARJETAS).toBe(6);
+  });
+
+  for (const total of [150, 300]) {
+    for (const [ancho, tope] of [[320, 2], [360, 2], [390, 2], [480, 2], [481, 6], [768, 6], [1366, 6], [1920, 6]] as const) {
+      it(`con ${total} personas a ${ancho} px presenta ${tope} tarjetas y la línea dice que faltan ${total - tope}`, () => {
+        conAncho(ancho);
+        const c = caja();
+        presentarTeaser(c, "race", nombresDe(total));
+        expect(tarjetas(c)).toHaveLength(tope);
+        expect(tarjetas(c).map((t) => t.dataset.nombre)).toEqual(nombresDe(tope));
+        const mas = c.querySelectorAll(".espera-teaser-mas");
+        expect(mas).toHaveLength(1);
+        expect(mas[0]?.textContent).toBe(`y ${total - tope} más`);
+        // La línea es un hijo de la lista, no de una zona aparte con recorte, y viene después de las tarjetas.
+        expect(mas[0]?.parentElement?.classList.contains("espera-teaser")).toBe(true);
+        expect(mas[0]?.previousElementSibling?.classList.contains("espera-teaser-tarjeta")).toBe(true);
+      });
+    }
+  }
+
+  it("en inglés la línea también dice cuántas faltan, en pantalla angosta y en ancha", () => {
+    setLang("en");
+    conAncho(360);
+    const a = caja();
+    presentarTeaser(a, "race", nombresDe(150));
+    expect(a.querySelector(".espera-teaser-mas")?.textContent).toBe("and 148 more");
+    conAncho(1366);
+    const b = caja();
+    presentarTeaser(b, "race", nombresDe(150));
+    expect(b.querySelector(".espera-teaser-mas")?.textContent).toBe("and 144 more");
+  });
+
+  it("con pocas personas en un celular, todas se presentan y no hay línea de faltantes", () => {
+    conAncho(360);
+    const c = caja();
+    presentarTeaser(c, "race", nombresDe(TOPE_TARJETAS_ANGOSTO));
+    expect(tarjetas(c)).toHaveLength(TOPE_TARJETAS_ANGOSTO);
+    expect(c.querySelector(".espera-teaser-mas")).toBeNull();
+    const d = caja();
+    presentarTeaser(d, "race", nombresDe(TOPE_TARJETAS_ANGOSTO + 1));
+    expect(d.querySelector(".espera-teaser-mas")?.textContent).toBe("y 1 más");
+  });
+
+  it("al girar el celular se vuelve a armar con la cantidad del ancho nuevo, sin repetir lo que ya está", () => {
+    const lista = nombresDe(150);
+    conAncho(1366);
+    const c = caja();
+    presentarTeaser(c, "race", lista);
+    const primera = tarjetas(c)[0];
+    presentarTeaser(c, "race", lista);
+    expect(tarjetas(c)[0]).toBe(primera);
+    conAncho(390);
+    presentarTeaser(c, "race", lista);
+    expect(tarjetas(c)).toHaveLength(TOPE_TARJETAS_ANGOSTO);
+    expect(c.querySelector(".espera-teaser-mas")?.textContent).toBe("y 148 más");
+    conAncho(1366);
+    presentarTeaser(c, "race", lista);
+    expect(tarjetas(c)).toHaveLength(TOPE_TARJETAS);
+  });
+
+  it("con otra lista o con otro idioma se vuelve a armar aunque el ancho sea el mismo", () => {
+    conAncho(1366);
+    const c = caja();
+    presentarTeaser(c, "race", ["Ana", "Beto"]);
+    presentarTeaser(c, "race", ["Ana", "Cami"]);
+    expect(tarjetas(c).map((t) => t.dataset.nombre)).toEqual(["Ana", "Cami"]);
+    setLang("en");
+    presentarTeaser(c, "race", ["Ana", "Cami"]);
+    expect(c.querySelector(".espera-teaser-t")?.textContent).toBe("Who is taking part");
+  });
+});
+
+describe("el titular no promete presentar a cada persona una por una", () => {
+  it("dice quienes participan en los dos idiomas", () => {
+    expect(T.es.espTeaserT).toBe("Quienes participan");
+    expect(T.en.espTeaserT).toBe("Who is taking part");
+  });
+});
+
 describe("una sola imagen por tarjeta, la del tema", () => {
   const srcs = (c: HTMLElement): string[] => [...c.querySelectorAll("img")].map((i) => i.getAttribute("src") ?? "");
   const conTema = (tema: string | null): void => {
@@ -154,12 +251,19 @@ describe("una sola imagen por tarjeta, la del tema", () => {
 describe("el aspecto de la presentación vive en la hoja de estilos", () => {
   const css = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 
-  it("las tarjetas no llevan estilos en línea y la caja tiene un alto máximo", () => {
+  it("las tarjetas no llevan estilos en línea", () => {
     const c = caja();
     presentarTeaser(c, "race", ["Ana", "Beto"]);
     expect(c.querySelector("[style]")).toBeNull();
-    expect(css).toMatch(/\.espera-teaser\s*\{[^}]*max-height:/);
-    expect(css).toMatch(/\.espera-teaser\s*\{[^}]*overflow:\s*hidden/);
+  });
+
+  it("ninguna zona de la presentación recorta: ni alto máximo ni overflow, para que ninguna tarjeta ni la línea de faltantes queden cortadas", () => {
+    const reglas = [...css.matchAll(/(\.espera-teaser[\w-]*(?:\s+[^{,]+)?)\s*\{([^}]*)\}/gu)].map((m) => ({ sel: (m[1] ?? "").trim(), cuerpo: m[2] ?? "" }));
+    expect(reglas.length).toBeGreaterThan(3);
+    for (const r of reglas) {
+      expect(r.cuerpo, r.sel).not.toMatch(/max-height:/);
+      expect(r.cuerpo, r.sel).not.toMatch(/overflow(?:-y)?:\s*(?:hidden|clip|auto|scroll)/);
+    }
   });
 
   it("en una pantalla baja la presentación se esconde para no empujar el reloj", () => {

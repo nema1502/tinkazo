@@ -566,7 +566,13 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   // Que entre en la pantalla: ahora, cuando cambia el tamaño (un proyector que se conecta, un zoom) y cuando llegan las letras.
   const ajusta = (): void => ajustar(back);
   ajusta();
-  addEventListener("resize", ajusta);
+  // Un cambio de tamaño también rehace la presentación: un celular que se gira pasa de 2 tarjetas a más. Si lo armado ya es
+  // lo que toca para ese ancho, `presentarTeaser` no hace nada.
+  const alRedimensionar = (): void => {
+    armarTeaser();
+    ajusta();
+  };
+  addEventListener("resize", alRedimensionar);
   void document.fonts?.ready.then(() => back.isConnected && ajusta());
 
   const sticker = back.querySelector<HTMLElement>(".sticker");
@@ -608,7 +614,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     pararPase();
     // La espera se cierra entera (el panel va con ella): también sus vistas previas (issue #116).
     pararVistasPrevias();
-    removeEventListener("resize", ajusta);
+    removeEventListener("resize", alRedimensionar);
     removeEventListener("resize", medirBarra);
     removeEventListener("keydown", tecla);
     document.removeEventListener("tinkazo:error", alError);

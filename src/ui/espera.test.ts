@@ -13,7 +13,7 @@ import { QUEDA_MS, elegirAlAzar, enRueda, type JuegoAzar } from "./azar";
  * ruleta: queda el elegido directo, con la misma marca y la misma espera.
  */
 
-const h = vi.hoisted(() => ({ reduce: false, semilla: 0, elegido: "race", armarQr: vi.fn((..._a: unknown[]): any => Promise.resolve(undefined)) }));
+const h = vi.hoisted(() => ({ reduce: false, ancho: 1366, semilla: 0, elegido: "race", armarQr: vi.fn((..._a: unknown[]): any => Promise.resolve(undefined)) }));
 
 vi.mock("../sound", () => ({ beep: () => undefined, note: (n: number) => n }));
 vi.mock("./vista-grande", () => ({ rechazarGrande: () => undefined }));
@@ -100,6 +100,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   armarPagina();
   h.reduce = false;
+  h.ancho = 1366;
   h.semilla = 0;
   h.elegido = "race";
   llevadas.mockClear();
@@ -107,7 +108,8 @@ beforeEach(() => {
   rectOriginal = Element.prototype.getBoundingClientRect;
   // jsdom no tiene matchMedia: la espera la consulta (ajustar) y el botón, para el movimiento reducido.
   vi.stubGlobal("matchMedia", (q: string) => ({
-    matches: q.includes("prefers-reduced-motion") && h.reduce,
+    // Reducir el movimiento, o un ancho de pantalla: (max-width: Npx) se cumple si la pantalla simulada es de N o menos.
+    matches: (q.includes("prefers-reduced-motion") && h.reduce) || (/max-width:\s*(\d+)px/u.test(q) && h.ancho <= Number(/max-width:\s*(\d+)px/u.exec(q)?.[1])),
     media: q,
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
@@ -1059,6 +1061,40 @@ describe("la presentación de la lista sellada durante la cuenta", () => {
     expect(elegirJuego.mock.calls[elegirJuego.mock.calls.length - 1]?.[0]).toBe("sapo");
     expect(document.querySelector<HTMLElement>(".espera-teaser")?.dataset.juego).toBe("sapo");
     expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(["Ana", "Beto", "Cami"]);
+  });
+
+  /** La cantidad de tarjetas sigue al ancho de la pantalla, con 150 y con 300 personas: la línea de las que faltan es la cuenta exacta. */
+  for (const total of [150, 300]) {
+    for (const [ancho, tope] of [[360, 2], [390, 2], [1366, 6], [1920, 6]] as const) {
+      it(`con ${total} personas a ${ancho} px muestra ${tope} tarjetas, la línea de las que faltan y un solo reloj`, async () => {
+        h.ancho = ancho;
+        const nombres = Array.from({ length: total }, (_, i) => `Persona ${i + 1}`);
+        await abrirEspera(1, { nombres });
+        expect(tarjetas()).toHaveLength(tope);
+        expect(document.querySelector(".espera-teaser-mas")?.textContent).toBe(`y ${total - tope} más`);
+        expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
+        expect(document.querySelectorAll(".espera-cinta").length).toBeGreaterThan(0);
+        // Nada del resultado: la presentación habla solo de lo sellado y la selección no se toca.
+        expect(tarjetas().map((t) => t.dataset.nombre)).toEqual(nombres.slice(0, tope));
+      });
+    }
+  }
+
+  /** Un celular que se gira con la cuenta en marcha: la presentación se vuelve a armar para el ancho nuevo y el reloj sigue siendo uno. */
+  it("al girar el celular con la cuenta en marcha, la presentación pasa de pocas a más tarjetas y de más a pocas", async () => {
+    const nombres = Array.from({ length: 150 }, (_, i) => `Persona ${i + 1}`);
+    h.ancho = 390;
+    await abrirEspera(1, { nombres });
+    expect(tarjetas()).toHaveLength(2);
+    h.ancho = 844;
+    window.dispatchEvent(new Event("resize"));
+    expect(tarjetas()).toHaveLength(6);
+    expect(document.querySelector(".espera-teaser-mas")?.textContent).toBe("y 144 más");
+    h.ancho = 390;
+    window.dispatchEvent(new Event("resize"));
+    expect(tarjetas()).toHaveLength(2);
+    expect(document.querySelector(".espera-teaser-mas")?.textContent).toBe("y 148 más");
+    expect(document.querySelectorAll(".espera-reloj")).toHaveLength(1);
   });
 
   /** Con 150 personas la presentación tiene tope: el reloj y las cintas de nombres siguen en la pantalla. */
