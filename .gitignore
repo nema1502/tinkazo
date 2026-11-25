@@ -58,3 +58,4 @@ workers/musica/camas/
 # Los videos de vista previa que deja scripts/capturas-video.mjs no se versionan
 /public/juegos/vistas-previas/**/*.mp4
 /public/juegos/vistas-previas/**/*.webm
+/capturas/
