@@ -3,6 +3,7 @@ import { campanasActivo } from "../campana/bandera";
 import {
   accionesDelPuente,
   alCambiarElPuente,
+  avisoQueFalta,
   avisosPendientes,
   botonDelPaso,
   lineaDelPaso,
@@ -2791,7 +2792,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       botones.push(boton(tx("cpoGrande"), "ghost", (b) => grande.abrir(b)));
       if (!listaTrabada()) botones.push(boton(tx("cpoReabrir"), "enlace", () => void reabrir(), trabajando));
       // Armar otra campaña en el mismo lugar. La lista cerrada todavía tiene que llegar al sorteo: antes de olvidarla pregunta.
-      botones.push(boton(tx("cpoOtra"), "enlace", () => armarOtra()));
+      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => armarOtra()));
     } else if (vista === "sellada" || vista === "sorteada") {
       const delBoton = principalDelPaso();
       if (delBoton) botones.push(delBoton);
@@ -2918,6 +2919,12 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (vista === "tomada") linea = tx("cpoTomadaL");
     if (vista === "tus") linea = tx("cpoTusL");
     if (vista === "seguir") linea = tx("cpoSeguirL");
+    // La pregunta de dejar la campaña dice qué pierden los celulares, con la misma regla que decide si se pregunta. Solo desde
+    // la lista cerrada, sellada o sorteada: antes de eso no hay nada que avisarles.
+    if (vista === "olvidar" && (vistaAntes === "cerrada" || vistaAntes === "sellada" || vistaAntes === "sorteada")) {
+      const falta = avisoQueFalta(pasoDelPuente(), vistaAntes === "sorteada");
+      if (falta) linea = tx(falta === "sello" ? "cpoOlvidarSello" : "cpoOlvidarResultado");
+    }
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? lineaDelPaso(pasoDelPuente()) : null;
     // Lo que la fila viva ya dice no se repite en la línea: la fila ocupa su lugar.
     if (delPaso) linea = enLaFila()?.texto === tx(delPaso.clave) ? "" : fmt(delPaso.clave, { ...delPaso.vars, boton: deps.botonDeSellar?.() ?? t("freeze") });

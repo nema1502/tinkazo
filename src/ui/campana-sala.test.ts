@@ -1491,11 +1491,11 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
 
   afterEach(() => ponerPaso({ paso: "nada" }));
 
-  it("con la lista cerrada, un toque en Armar otra campaña pregunta y no olvida la sala", async () => {
+  it("con la lista cerrada, un toque en Elegir otro archivo pregunta y no olvida la sala", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
     await cerradaConDos(m, p);
-    boton(p, "Armar otra campaña").click();
+    boton(p, "Elegir otro archivo").click();
     // Un toque de más no deja a todas las personas sin su resultado: antes pregunta.
     expect(vistaDe(p)).toBe("olvidar");
     expect(texto(p, "#cpo-h")).toBe("¿Dejar esta campaña?");
@@ -1505,7 +1505,7 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     boton(p, "Cancelar").click();
     expect(vistaDe(p)).toBe("cerrada");
     expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("cerrada");
-    expect(botones(p).map((b) => b.textContent)).toContain("Armar otra campaña");
+    expect(botones(p).map((b) => b.textContent)).toContain("Elegir otro archivo");
   });
 
   it("al confirmar, olvida la campaña y abre el selector de archivo de la siguiente", async () => {
@@ -1513,7 +1513,7 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     const p = nuevoPanel(m);
     await cerradaConDos(m, p);
     const abrio = vi.spyOn($<HTMLInputElement>(p, "#cpo-archivo"), "click");
-    boton(p, "Armar otra campaña").click();
+    boton(p, "Elegir otro archivo").click();
     expect(abrio).not.toHaveBeenCalled();
     boton(p, "Sí, dejarla").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
@@ -1526,7 +1526,7 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     const p = nuevoPanel(m);
     await cerradaConDos(m, p);
     const abrio = vi.spyOn($<HTMLInputElement>(p, "#cpo-archivo"), "click");
-    boton(p, "Armar otra campaña").click();
+    boton(p, "Elegir otro archivo").click();
     boton(p, "Cancelar").click();
     // Deja la campaña por el otro camino de siempre: el selector no se abre solo.
     boton(p, "Volver a abrir la lista").click();
@@ -1537,13 +1537,13 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     expect(abrio).not.toHaveBeenCalled();
   });
 
-  it("si la pregunta de Armar otra campaña se abandona por otro camino, un Elegir otro archivo posterior no abre el selector solo", async () => {
+  it("si la pregunta de Elegir otro archivo se abandona por otro camino, un Elegir otro archivo posterior no abre el selector solo", async () => {
     const compartido = bus();
     const a = mundo({ canal: compartido.canal });
     const p = nuevoPanel(a);
     await cerradaConDos(a, p);
     const abrio = vi.spyOn($<HTMLInputElement>(p, "#cpo-archivo"), "click");
-    boton(p, "Armar otra campaña").click();
+    boton(p, "Elegir otro archivo").click();
     expect(vistaDe(p)).toBe("olvidar");
     // Otra pestaña toma la campaña: la pregunta queda abandonada sin cancelarla ni confirmarla.
     const b = mundo({ canal: compartido.canal, almacen: a.almacen });
@@ -1564,7 +1564,7 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     const m = mundo();
     const p = nuevoPanel(m);
     await cerradaConDos(m, p);
-    boton(p, "Armar otra campaña").click();
+    boton(p, "Elegir otro archivo").click();
     expect(vistaDe(p)).toBe("olvidar");
     // Mientras se pregunta, el sello termina de avisarse: la pregunta sigue en pantalla y lo que se recuerda ya es la lista sellada.
     ponerPaso({ paso: "avisada" });
@@ -1685,4 +1685,86 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     expect(vistaDe(p)).toBe("elegir");
   });
 
+  describe("la pregunta dice qué se pierden los celulares", () => {
+    const SELLO = "Los celulares todavía no recibieron el aviso de la lista sellada. Si la dejás, no lo van a ver.";
+    const RESULTADO = "Los celulares todavía no recibieron su resultado. Si la dejás, no lo van a ver.";
+
+    it("con el sello sin avisar, dice que los celulares no van a ver la lista sellada", async () => {
+      const m = mundo();
+      guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
+      m.sala.fase = "sellada";
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
+      await suelta();
+      ponerPaso({ paso: "no-avisamos" });
+      boton(p, "Elegir otro archivo").click();
+      expect(vistaDe(p)).toBe("olvidar");
+      expect(texto(p, "#cpo-h")).toBe("¿Dejar esta campaña?");
+      expect(texto(p, "#cpo-linea")).toBe(SELLO);
+      m.idioma = "en";
+      p.pintar();
+      expect(texto(p, "#cpo-linea")).toBe("The phones have not received the sealed list notice yet. If you leave, they will not see it.");
+    });
+
+    it("con la lista cerrada y nada avisado, dice lo mismo del sello", async () => {
+      const m = mundo();
+      const p = nuevoPanel(m);
+      await cerradaConDos(m, p);
+      boton(p, "Elegir otro archivo").click();
+      expect(texto(p, "#cpo-linea")).toBe(SELLO);
+    });
+
+    it("con el sello avisado y el sorteo sin hacer, dice que falta el resultado", async () => {
+      const m = mundo();
+      guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
+      m.sala.fase = "sellada";
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
+      await suelta();
+      ponerPaso({ paso: "avisada" });
+      boton(p, "Elegir otro archivo").click();
+      expect(texto(p, "#cpo-linea")).toBe(RESULTADO);
+    });
+
+    it("con el sorteo hecho y alguien sin avisar, dice que falta el resultado y en inglés también", async () => {
+      const m = mundo();
+      guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+      m.sala.fase = "sorteada";
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+      await suelta();
+      ponerPaso({ paso: "boton-resultado" });
+      boton(p, "Elegir otro archivo").click();
+      expect(texto(p, "#cpo-linea")).toBe(RESULTADO);
+      m.idioma = "en";
+      p.pintar();
+      expect(texto(p, "#cpo-linea")).toBe("The phones have not received their result yet. If you leave, they will not see it.");
+    });
+
+    it("si el aviso cambia con la pregunta abierta, la línea sigue al aviso", async () => {
+      const m = mundo();
+      guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
+      m.sala.fase = "sellada";
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
+      await suelta();
+      ponerPaso({ paso: "boton-avisar" });
+      boton(p, "Elegir otro archivo").click();
+      expect(texto(p, "#cpo-linea")).toBe(SELLO);
+      ponerPaso({ paso: "avisada" });
+      expect(texto(p, "#cpo-linea")).toBe(RESULTADO);
+    });
+
+    it("sin avisos pendientes, o desde una campaña abierta, la pregunta queda sin línea", async () => {
+      const m = mundo();
+      const p = nuevoPanel(m);
+      await abrirInscripcion(m, p);
+      boton(p, "Elegir otro archivo").click();
+      expect(vistaDe(p)).toBe("olvidar");
+      expect(texto(p, "#cpo-linea")).toBe("");
+      // Con el sorteo hecho y el resultado avisado a todas no se pregunta (ver arriba), y con la sala borrada tampoco.
+      boton(p, "Cancelar").click();
+      expect(texto(p, "#cpo-linea")).not.toContain("no lo van a ver");
+    });
+  });
 });
