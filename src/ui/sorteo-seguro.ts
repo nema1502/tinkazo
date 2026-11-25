@@ -87,6 +87,16 @@ export function sorteoReintentable(e: unknown): boolean {
 }
 
 /**
+ * Si el error es el tope de sorteos del mes que el servicio de comisiones le puso a la cuenta (`cupo-cuenta` de los
+ * sorteos). Por el nombre y la forma, como `esErrorDelPortero`: el módulo del portero se baja aparte.
+ */
+export function esTopeDeSorteos(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const x = e as { name?: unknown; motivo?: unknown; que?: unknown };
+  return x.name === "ErrorPortero" && x.motivo === "cupo-cuenta" && x.que === "sorteos";
+}
+
+/**
  * La línea que ve la sala mientras se vuelve a probar, según lo que pasó (la
  * clave de i18n). Hasta el 21 de octubre de 2026 todo lo que no era la red caída
  * decía "la cadena todavía no ve esa ronda", también con la red ocupada.

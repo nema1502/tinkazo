@@ -89,7 +89,7 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
   // la ronda (`reloj-de-la-ronda.ts`), el mismo de la puerta de la grabación: sin medir, es el de la compu.
   const falta = msHasta(arranqueDelShow(p.round).grabable, (p.ahora ?? ahoraDeLaRondaMs)());
   if (falta > 0) await dormir(falta);
-  const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable }] = await Promise.all([import("../protocol/drand"), import("./sorteo-seguro")]);
+  const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable, esTopeDeSorteos }] = await Promise.all([import("../protocol/drand"), import("./sorteo-seguro")]);
   // Apagado en el build, la condición es una constante falsa y todo este bloque desaparece: el camino de siempre, sin
   // cargar nada de más. Prendido, el servicio de comisiones manda el sorteo de una cuenta de Google en la red principal
   // (`sorteo-del-servicio.ts`) y, si asegura que no lo manda, sigue el camino de abajo. Lo que se esperó al servicio se
@@ -98,6 +98,7 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
   // reintentos. Si ni siquiera se puede preparar el servicio (un módulo que no baja, una configuración que no se lee),
   // todavía no se pidió nada y se sigue por el camino de siempre.
   let yaGastadoMs: number | undefined;
+  let reservaPosible = false;
   if (import.meta.env.VITE_SORTEO_SERVIDOR === "1") {
     let servicio: typeof import("./sorteo-del-servicio") | null = null;
     try {
@@ -119,12 +120,25 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
       if (r.estado === "listo") return comparar(p.esperados, r.valor, r.yaEstaba);
       if (r.estado === "error") return { estado: "fallo", error: r.error };
       yaGastadoMs = Math.max(0, ahora() - desde);
+      reservaPosible = servicio.reservaDelServicioViva(p.raffleId, p.ahora);
     }
   }
+  // Si el servicio pudo dejar reservado este sorteo en el cupo de la cuenta sin que se sepa cómo terminó (se cierra solo en
+  // unos catorce minutos), un tope de sorteos del mes que aparece ahora puede ser de esa reserva: el sorteo quizás ya está o
+  // está por entrar. No se da por definitivo ni se firma de nuevo: se sigue mirando la red con las esperas de siempre.
+  let esperandoAlServicio: unknown = null;
   const fin = await sortearConReintentos<{ winners: number[]; randomness: string; txHash?: string }>({
-    intentar: () => drawOnChain(p.raffleId, decompressG1(p.signature), p.alPaso ?? (() => undefined), { pagarConMiCuenta: !!p.pagarConMiCuenta }),
+    intentar: async () => {
+      if (esperandoAlServicio) throw esperandoAlServicio;
+      try {
+        return await drawOnChain(p.raffleId, decompressG1(p.signature), p.alPaso ?? (() => undefined), { pagarConMiCuenta: !!p.pagarConMiCuenta });
+      } catch (e) {
+        if (reservaPosible && esTopeDeSorteos(e)) esperandoAlServicio = e;
+        throw e;
+      }
+    },
     yaEsta: () => readDraw(p.raffleId),
-    reintentable: sorteoReintentable,
+    reintentable: (e) => (esperandoAlServicio !== null && e === esperandoAlServicio) || sorteoReintentable(e),
     alReintentar: p.alReintentar ?? (() => undefined),
     ...(p.ahora ? { ahora: p.ahora } : {}),
     ...(yaGastadoMs !== undefined ? { yaGastadoMs } : {}),

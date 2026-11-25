@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { errorKey } from "../stellar/errores";
-import { ESPERAS_DEL_SORTEO_MS, PRESUPUESTO_MINIMO_DEL_SORTEO_MS, SORTEO_REINTENTABLE, avisoDelReintento, sorteoReintentable, sortearConReintentos } from "./sorteo-seguro";
+import { ErrorPortero } from "../stellar/patrocinador";
+import { ESPERAS_DEL_SORTEO_MS, PRESUPUESTO_MINIMO_DEL_SORTEO_MS, SORTEO_REINTENTABLE, avisoDelReintento, esTopeDeSorteos, sorteoReintentable, sortearConReintentos } from "./sorteo-seguro";
 
 /** Un reloj de mentira: `dormir` lo adelanta en el acto. */
 function reloj() {
@@ -218,5 +219,19 @@ describe("la puerta del premio y el sorteo", () => {
 
   it("el aviso del reintento es el de siempre para lo que no se sabe", () => {
     expect(avisoDelReintento("premioSinSaber")).toBe("drawTryOtra");
+  });
+});
+
+describe("esTopeDeSorteos", () => {
+  it("es solo el tope de sorteos del mes del servicio de comisiones", () => {
+    expect(esTopeDeSorteos(new ErrorPortero("cupo-cuenta", 429, { que: "sorteos" }))).toBe(true);
+    expect(esTopeDeSorteos(new ErrorPortero("cupo-cuenta", 429, { que: "sellos" }))).toBe(false);
+    expect(esTopeDeSorteos(new ErrorPortero("fondo", 503))).toBe(false);
+    expect(esTopeDeSorteos(new Error("portero-cupo-cuenta"))).toBe(false);
+    expect(esTopeDeSorteos(null)).toBe(false);
+    expect(esTopeDeSorteos("cupo-cuenta")).toBe(false);
+  });
+  it("no se reintenta solo: sin reserva del servicio es un no definitivo", () => {
+    expect(sorteoReintentable(new ErrorPortero("cupo-cuenta", 429, { que: "sorteos" }))).toBe(false);
   });
 });
