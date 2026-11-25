@@ -30,8 +30,10 @@ import type { DepsDelCelular, EstadoPublico, MotivoDeAlta, ResultadoDelAlta, Ses
 import type { Campana } from "./modelo";
 import { MARCA_DE_CORREO_ENCENDIDA } from "./marca-de-correo";
 import { VENTANA_RAPIDA_ENCENDIDA } from "./ventana-rapida";
+import type { ComprobacionDelSello } from "./comprobar";
 import { leerMemoria } from "./memoria";
 import { destinoDeRecibir, enlaceParaMandar } from "./recibir";
+import { hayLimiteDeLaRed, loRecordadoDelSello, marcarElLimiteDeLaRed, recordarElSello } from "./sello-memoria";
 import type { SesionDeGoogle } from "./sesion";
 
 /** Lo que el celular consulta cada 15 segundos se estira a 30: 150 pestañas visibles suman 18.000 pedidos por hora. */
@@ -40,8 +42,13 @@ export const CONSULTA_ESTIRADA_MS = 30_000;
 export const RETRASO_DE_LA_LECTURA_MS = 1_500;
 /** Cuánto se espera para repetir la primera carga o la primera consulta, si fallaron. */
 export const ESPERA_DE_LA_PRIMERA_MS = 3_000;
-/** Cuánto como máximo se demora, al azar, la comprobación del sello: 150 celulares reciben el resultado a la vez y no leen juntos. */
-export const RETRASO_DE_LA_COMPROBACION_MS = 6_000;
+/**
+ * Cuánto como máximo se demora, al azar, la comprobación del sello. 150 o 300 celulares reciben el resultado a la vez y cada
+ * uno baja por primera vez el SDK de Stellar (del orden de 150 kB comprimidos) para leer el sello: repartidos en 45 segundos son
+ * unos 8 Mbps en total y no compiten con el festejo, el sondeo de la sala ni lo que hace quien organiza. La línea puede tardar:
+ * no es lo que la persona espera ver.
+ */
+export const RETRASO_DE_LA_COMPROBACION_MS = 45_000;
 
 export type BaseDelCelular = Pick<
   DepsDelCelular,
@@ -92,6 +99,17 @@ export async function cargarConUnReintento(
   return cargarCampana(fetchServicio, servicio, sala, evento);
 }
 
+/** Lo que el navegador dice de la conexión (la API de información de red, que no tienen todos los navegadores). */
+export interface ConexionDelNavegador {
+  saveData?: boolean;
+  effectiveType?: string;
+}
+
+/** Sin la API, `undefined`: no se sabe, y se comprueba. */
+function conexionDelNavegador(): ConexionDelNavegador | undefined {
+  return typeof navigator === "undefined" ? undefined : (navigator as Navigator & { connection?: ConexionDelNavegador }).connection;
+}
+
 export interface PiezasDelCelular {
   base: BaseDelCelular;
   campana: Campana;
@@ -125,6 +143,8 @@ export interface PiezasDelCelular {
   leerSello?: (red: NetworkName, hash: string) => Promise<LecturaDelHistorial>;
   /** Para esperar sin el reloj de verdad. */
   esperar?: (ms: number) => Promise<void>;
+  /** Lo que el navegador dice de la conexión. Sin esto, el del navegador. */
+  conexion?: () => ConexionDelNavegador | undefined;
 }
 
 /** Las dependencias del celular con lo de verdad. */
@@ -151,6 +171,15 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
     ultimoFinal = null;
     soloGoogleDe = null;
     huellaRechazada = null;
+  };
+  /** Con el ahorro de datos prendido o una conexión que no es de las buenas, el celular no baja nada de más. Sin dato, sí. */
+  const conexionLimitada = (): boolean => {
+    try {
+      const c = (p.conexion ?? conexionDelNavegador)();
+      return c !== undefined && (c.saveData === true || (typeof c.effectiveType === "string" && c.effectiveType !== "4g"));
+    } catch {
+      return false;
+    }
   };
   const cuentaActual = (): string | null =>
     actual?.cuenta ?? leerMemoria(p.memoria, p.sala, ahora())?.cuenta ?? null;
@@ -277,26 +306,46 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
       // El celular ya llega a Terminó por el estado y por `yo`: acá solo le sirve lo que se pudo leer.
       return r === "terminada" ? "red" : r;
     },
-    // La comprobación propia del sello se baja recién cuando hay resultado: la página de antes no carga nada de esto. Cada celular
-    // espera su turno al azar y la lectura se repite una vez si la red falla, con tope (`comprobar.ts`). Cada lectura es un solo
-    // pedido a la red (sin los reintentos de adentro) y no usa el lector que recuerda lo que falló: con cientos de celulares detrás
-    // de la misma conexión, los pedidos de más son lo que hace que la red empiece a limitar. Una campaña con premios no repite:
-    // su sello suma una lectura al servicio que usa quien organiza para sellar y sortear.
+    // La comprobación propia del sello se baja recién cuando hay resultado: la página de antes no carga nada de esto. Lo que cuida:
+    //  - Una campaña con premios no la hace: su sello se lee también en el servicio de la red que usa quien organiza para sellar el
+    //    siguiente premio y pagar, justo después del resultado, y ahí está la plata.
+    //  - Con el ahorro de datos prendido o una conexión que no es de las buenas no baja ni lee nada.
+    //  - Lo que ya se comprobó (o no se pudo hace poco) y el aviso de demasiados pedidos se recuerdan en el celular
+    //    (`sello-memoria.ts`): recargar, volver a abrir el enlace o tener dos pestañas no repite lecturas.
+    //  - Cada celular espera su turno al azar y la lectura se repite una vez si la red falla, con tope (`comprobar.ts`). Cada
+    //    lectura es un solo pedido a la red (sin los reintentos de adentro) y no usa el lector que recuerda lo que falló: con
+    //    cientos de celulares detrás de la misma conexión, los pedidos de más son lo que hace que la red empiece a limitar.
     comprobar: async ({ comprobante, cuenta, campana }) => {
+      if (p.campana.promo !== null || conexionLimitada()) return null;
+      const { contratoDePremios } = await import("../stellar/oficiales");
+      if (contratoDePremios(p.red, p.campana.contrato) !== null) return null;
+      const huella = await huellaDe(`${comprobante}\n${cuenta}`);
+      const yaSeSabe = (): ComprobacionDelSello | undefined => {
+        const recordado = loRecordadoDelSello(almacenDeLlaves, p.sala, huella, ahora());
+        if (recordado === "esta") return "esta";
+        return recordado === "no-se-pudo" || hayLimiteDeLaRed(almacenDeLlaves, ahora()) ? null : undefined;
+      };
+      const antes = yaSeSabe();
+      if (antes !== undefined) return antes;
       const dormir = p.esperar ?? esperar;
       await dormir(Math.round(azar() * RETRASO_DE_LA_COMPROBACION_MS));
-      const [{ comprobarConReintento }, leerSello, { contratoDePremios }] = await Promise.all([
+      // Mientras esperaba su turno, otra pestaña pudo leer, o la red pudo pedir que se frene.
+      const despues = yaSeSabe();
+      if (despues !== undefined) return despues;
+      const [{ comprobarConReintento }, leerSello] = await Promise.all([
         import("./comprobar"),
         p.leerSello
           ? Promise.resolve(p.leerSello)
           : import("../stellar/historial").then((m) => (red: NetworkName, hash: string) => m.leerHistorial(red, hash, { intentos: 1, distinguirLimite: true })),
-        import("../stellar/oficiales"),
       ]);
-      const conPremios = p.campana.promo !== null || contratoDePremios(p.red, p.campana.contrato) !== null;
-      return comprobarConReintento(
-        { comprobante, cuenta, red: p.red, contrato: p.campana.contrato, campana },
-        { leer: (red, hash) => leerSello(red as NetworkName, hash), esperar: dormir, ahora, ...(conPremios ? { esperas: [] } : {}) },
-      );
+      const leer = async (red: string, hash: string): Promise<LecturaDelHistorial> => {
+        const lectura = await leerSello(red as NetworkName, hash);
+        if (!lectura.ok && lectura.limitado === true) marcarElLimiteDeLaRed(almacenDeLlaves, ahora());
+        return lectura;
+      };
+      const dicho = await comprobarConReintento({ comprobante, cuenta, red: p.red, contrato: p.campana.contrato, campana }, { leer, esperar: dormir, ahora });
+      recordarElSello(almacenDeLlaves, p.sala, huella, dicho, ahora());
+      return dicho;
     },
     recibir: () => p.ir(destinoDeRecibir(p.red)),
     ...(p.origen ? { enlaceDelPremio: () => enlaceParaMandar(p.red, (p.origen as () => string)()) } : {}),

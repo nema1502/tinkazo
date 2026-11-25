@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { campanaDeEjemplo } from "./ejemplo";
 import {
+  RETRASO_DE_LA_COMPROBACION_MS,
   almacenEnMemoria,
   cargarConUnReintento,
   depsConectadas,
@@ -104,6 +105,8 @@ function montar(
     /** El historial de la red y la espera de la comprobación del sello, de mentira. */
     leerSello?: PiezasDelCelular["leerSello"];
     esperar?: PiezasDelCelular["esperar"];
+    /** Lo que el navegador dice de la conexión (ahorro de datos, calidad). */
+    conexion?: PiezasDelCelular["conexion"];
     /** Cambios a la campaña de ejemplo (la promoción, el contrato). */
     campana?: Partial<Campana>;
   } = {},
@@ -148,6 +151,7 @@ function montar(
     ...(o.compartir ? { compartir: o.compartir } : {}),
     ...(o.leerSello ? { leerSello: o.leerSello } : {}),
     ...(o.esperar ? { esperar: o.esperar } : {}),
+    ...(o.conexion ? { conexion: o.conexion } : {}),
     bloquear,
     dep: { fetch: f, azar: () => o.azar ?? 0.5 },
     ...(o.entorno ? { entorno: o.entorno } : {}),
@@ -660,8 +664,8 @@ describe("el resto de las dependencias", () => {
     expect(dicho).toBe("esta");
     expect(leerSello).toHaveBeenCalledTimes(2);
     expect(leerSello).toHaveBeenCalledWith("testnet", "2".repeat(64));
-    // Primero el turno al azar de este celular (la mitad de 6 segundos), después la espera del reintento.
-    expect(esperas).toEqual([3_000, 8_000]);
+    // Primero el turno al azar de este celular (la mitad de la ventana), después la espera del reintento.
+    expect(esperas).toEqual([Math.round(0.5 * RETRASO_DE_LA_COMPROBACION_MS), 8_000]);
   });
 
   /** El comprobante de una lista de dos cuentas, para las pruebas de cuántas veces se lee la red. */
@@ -679,15 +683,19 @@ describe("el resto de las dependencias", () => {
   }
   const DE_LA_SALA = { sorteo: "7", ganadoras: [CUENTA], promo: null };
 
-  it("comprobar en una campaña con premios lee el sello una sola vez, aunque la red falle", async () => {
+  it("el turno al azar reparte los celulares en una ventana de al menos 30 segundos, porque cada uno baja el SDK de Stellar", () => {
+    expect(RETRASO_DE_LA_COMPROBACION_MS).toBeGreaterThanOrEqual(30_000);
+  });
+
+  it("comprobar en una campaña con premios no lee nada: su sello suma lecturas al servicio que usa quien organiza", async () => {
     const leerSello = vi.fn(async (): Promise<LecturaDelHistorial> => ({ ok: false, error: "red-caida" }));
     const esperas: number[] = [];
     const m = montar({}, { leerSello, esperar: async (ms) => void esperas.push(ms), campana: { promo: "41" } });
     const dicho = await m.deps.comprobar?.({ comprobante: await comprobanteDeDos(), cuenta: CUENTA, campana: { ...DE_LA_SALA, promo: "41" } });
     expect(dicho).toBeNull();
-    expect(leerSello).toHaveBeenCalledTimes(1);
-    // Solo el turno al azar del principio: ninguna espera de reintento.
-    expect(esperas).toHaveLength(1);
+    expect(leerSello).not.toHaveBeenCalled();
+    // Ni siquiera espera su turno: no hay nada que repartir.
+    expect(esperas).toEqual([]);
   });
 
   it("comprobar sin premios lee a lo sumo dos veces", async () => {
@@ -712,6 +720,138 @@ describe("el resto de las dependencias", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  /** Un comprobante y un historial que sí lo atestigua, para ver qué recuerda el celular. */
+  async function conSelloBueno() {
+    const rondaDelSello = roundAt(Date.now() / 1000) - 10;
+    const lista = [CUENTA, OTRA];
+    const comprobante = `/verificar.html#${await encodeProof({
+      v: 2,
+      names: lista,
+      round: rondaDelSello,
+      net: "testnet",
+      contract: `C${"A".repeat(55)}`,
+      id: "7",
+      signature: "0".repeat(96),
+      stx: "2".repeat(64),
+    })}`;
+    const sello = {
+      hash: "2".repeat(64),
+      hashInterior: "1".repeat(64),
+      contractId: `C${"A".repeat(55)}`,
+      organizer: `G${"D".repeat(55)}`,
+      listHash: bytesToHex(listHash([...lista])),
+      count: 2,
+      numWinners: 1,
+      round: rondaDelSello,
+      meta: "",
+      closedAt: 1,
+      ledger: 1,
+    };
+    return { comprobante, bueno: { ok: true, sello } as LecturaDelHistorial };
+  }
+
+  describe("la memoria y el freno de la comprobación", () => {
+    it("lo ya comprobado no se vuelve a leer al recargar: el celular lo recuerda y no espera turno", async () => {
+      const { comprobante, bueno } = await conSelloBueno();
+      const memoria = almacenFalso();
+      const primera = vi.fn(async () => bueno);
+      const a = montar({}, { memoria, leerSello: primera, esperar: async () => undefined });
+      expect(await a.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBe("esta");
+      expect(primera).toHaveBeenCalledTimes(1);
+      const segunda = vi.fn(async () => bueno);
+      const esperas: number[] = [];
+      const b = montar({}, { memoria, leerSello: segunda, esperar: async (ms) => void esperas.push(ms) });
+      expect(await b.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBe("esta");
+      expect(segunda).not.toHaveBeenCalled();
+      expect(esperas).toEqual([]);
+    });
+
+    it("lo recordado es de esa cuenta: otra cuenta en el mismo celular se comprueba por su lado", async () => {
+      const { comprobante, bueno } = await conSelloBueno();
+      const memoria = almacenFalso();
+      const a = montar({}, { memoria, leerSello: async () => bueno, esperar: async () => undefined });
+      await a.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA });
+      const lee = vi.fn(async () => bueno);
+      const b = montar({}, { memoria, leerSello: lee, esperar: async () => undefined });
+      expect(await b.deps.comprobar?.({ comprobante, cuenta: OTRA, campana: DE_LA_SALA })).toBe("esta");
+      expect(lee).toHaveBeenCalledTimes(1);
+    });
+
+    it("lo que no se pudo comprobar no se vuelve a pedir enseguida al recargar, pero sí pasado un rato", async () => {
+      const { comprobante, bueno } = await conSelloBueno();
+      const memoria = almacenFalso();
+      const cae = vi.fn(async (): Promise<LecturaDelHistorial> => ({ ok: false, error: "red-caida" }));
+      const a = montar({}, { memoria, leerSello: cae, esperar: async () => undefined });
+      expect(await a.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBeNull();
+      const lee = vi.fn(async () => bueno);
+      const b = montar({}, { memoria, leerSello: lee, esperar: async () => undefined });
+      expect(await b.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBeNull();
+      expect(lee).not.toHaveBeenCalled();
+      vi.setSystemTime(Date.now() + 11 * 60_000);
+      expect(await b.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBe("esta");
+      expect(lee).toHaveBeenCalledTimes(1);
+    });
+
+    it("si la red dijo que hay demasiados pedidos, las otras pestañas y las recargas de este celular no leen por un rato", async () => {
+      const { comprobante, bueno } = await conSelloBueno();
+      const memoria = almacenFalso();
+      const limitada = vi.fn(async (): Promise<LecturaDelHistorial> => ({ ok: false, error: "red-caida", limitado: true }));
+      const a = montar({}, { memoria, leerSello: limitada, esperar: async () => undefined });
+      expect(await a.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBeNull();
+      expect(limitada).toHaveBeenCalledTimes(1);
+      const lee = vi.fn(async () => bueno);
+      const esperas: number[] = [];
+      // Otra cuenta, otra pestaña: el freno es de la conexión, no de la cuenta.
+      const b = montar({}, { memoria, leerSello: lee, esperar: async (ms) => void esperas.push(ms) });
+      expect(await b.deps.comprobar?.({ comprobante, cuenta: OTRA, campana: DE_LA_SALA })).toBeNull();
+      expect(lee).not.toHaveBeenCalled();
+      expect(esperas).toEqual([]);
+      vi.setSystemTime(Date.now() + 6 * 60_000);
+      await b.deps.comprobar?.({ comprobante, cuenta: OTRA, campana: DE_LA_SALA });
+      expect(lee).toHaveBeenCalledTimes(1);
+    });
+
+    it("sin almacenamiento (el navegador lo bloquea) comprueba igual, y no falla si guardar lanza", async () => {
+      const { comprobante, bueno } = await conSelloBueno();
+      const roto = {
+        ...almacenFalso(),
+        getItem: () => {
+          throw new Error("bloqueado");
+        },
+        setItem: () => {
+          throw new Error("bloqueado");
+        },
+      } as unknown as Storage;
+      const lee = vi.fn(async () => bueno);
+      const m = montar({}, { memoria: roto, leerSello: lee, esperar: async () => undefined });
+      expect(await m.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBe("esta");
+    });
+  });
+
+  describe("la conexión del celular", () => {
+    it.each([
+      [{ saveData: true, effectiveType: "4g" }],
+      [{ effectiveType: "3g" }],
+      [{ effectiveType: "2g" }],
+      [{ effectiveType: "slow-2g" }],
+    ])("con %j no comprueba: no baja nada ni lee nada", async (conexion) => {
+      const { comprobante, bueno } = await conSelloBueno();
+      const lee = vi.fn(async () => bueno);
+      const esperas: number[] = [];
+      const m = montar({}, { leerSello: lee, esperar: async (ms) => void esperas.push(ms), conexion: () => conexion });
+      expect(await m.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBeNull();
+      expect(lee).not.toHaveBeenCalled();
+      expect(esperas).toEqual([]);
+    });
+
+    it.each([[{ effectiveType: "4g" }], [{}], [undefined]])("con %j sí comprueba", async (conexion) => {
+      const { comprobante, bueno } = await conSelloBueno();
+      const lee = vi.fn(async () => bueno);
+      const m = montar({}, { leerSello: lee, esperar: async () => undefined, conexion: () => conexion });
+      expect(await m.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: DE_LA_SALA })).toBe("esta");
+    });
   });
 
   it("comprobar con un comprobante ilegible no pide nada a la red", async () => {
