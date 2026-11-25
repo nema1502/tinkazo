@@ -53,8 +53,8 @@
         <div class="mas-lista" id="mas-lista">
           <a href="/juegos.html" data-i="navJuegos">Juegos</a>
           <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
-          <!-- Para quien arma la campaña de una empresa: se ve solo con las campañas abiertas (el atributo data-campanas de html, puesto al construir, y styles.css). En escritorio va en la fila y en el celular, dentro de Más. -->
-          <a href="/crear-campana.html" data-campana-enlace data-i="navEmpresas">Para empresas</a>
+          <!-- Para quien arma la campaña de una empresa: se ve solo con las campañas abiertas (el atributo data-campanas de html, puesto al construir, y styles.css). En escritorio va en la fila y en el celular, dentro de Más. Lleva los dos nombres y la hoja muestra uno: entre 1101 y 1439 px la fila de una línea no tiene lugar para el largo y dice Empresas, y en los demás anchos dice Para empresas. El que no se ve va con display none, así el lector de pantalla lee uno solo. -->
+          <a href="/crear-campana.html" data-campana-enlace><span class="nav-emp-l" data-i="navEmpresas">Para empresas</span><span class="nav-emp-c" data-i="navEmpresasC">Empresas</span></a>
         </div>
       </div>
     </nav>

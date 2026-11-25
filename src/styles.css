@@ -1839,11 +1839,20 @@
     .topnav a.nav-empresas-cel { display: inline-flex; }
     .topnav .mas-lista a[data-campana-enlace] { display: none; }
   }
-  /* En la fila quedan cuatro: Sortear, Mis sorteos, Juegos y Cómo funciona (8 de noviembre
-     de 2026; Seguridad y Precios bajaron al pie). Con las siete de antes, entre 1101 y
-     1279 px y con la cuenta abierta, se apretaban contra el nombre. Un poco menos de aire
-     en cada una alcanza. */
+  /* En la fila quedan cinco: Sortear, Mis sorteos, Juegos, Cómo funciona y Para empresas (la quinta se sumó el 25 de noviembre
+     de 2026; Seguridad y Precios bajaron al pie el 8 de noviembre). Con siete, entre 1101 y 1279 px y con la cuenta abierta,
+     se apretaban contra el nombre. Un poco menos de aire en cada una alcanza. */
   @media (min-width: 1101px) and (max-width: 1439px) { .topnav a { padding: 0 8px; } }
+  /* El enlace de las empresas lleva los dos nombres y se ve uno. Con cinco entradas, entre 1101 y 1439 px la fila de una línea no
+     deja lugar al grupo de la derecha (idioma, marca del modo y cuenta) si dice Para empresas: con la marca Oficial y la cuenta
+     abierta el grupo caía a una segunda fila, debajo del logo, el mismo defecto del 26 de octubre. Ahí dice Empresas. Por
+     debajo de 1101 px la fila va en su propia línea y desde 1440 px sobra lugar: dice Para empresas. El nombre que no se ve va con
+     display none, así el lector de pantalla lee uno solo. La fila del celular (nav-empresas-cel) tiene su propio nombre corto. */
+  .topnav a .nav-emp-c { display: none; }
+  @media (min-width: 1101px) and (max-width: 1439px) {
+    .topnav a .nav-emp-l { display: none; }
+    .topnav a .nav-emp-c { display: inline; }
+  }
   /* Con la cuenta (26 de octubre de 2026): la insignia de la red y el chip de la cuenta no entraban en la fila de 1240 px
      y la cuenta caía a una segunda fila, a la izquierda, debajo del logo: donde nadie la mira. Desde 1440 px la fila es más
      ancha y entra todo. */
