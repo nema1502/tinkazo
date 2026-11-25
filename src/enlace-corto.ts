@@ -627,16 +627,19 @@ export function tomarLogoEntrante(ruta: string): Logo | null {
 /* ---------------------------------------- de la vista en vivo a verificar.html */
 
 const DEL_VIVO = "tinkazo.corto-del-vivo";
+/** Lo que vale lo que deja la vista: el tiempo de ir de una página a la otra. Pasado esto, ya es de otra navegación. */
+const VIGENCIA_DEL_VIVO_MS = 60_000;
 
 /**
  * Quien mira un sorteo desde su celular entró por un enlace corto (`c.ts`) y, al pasar a la página del comprobante, esa
  * página no lo sabe: sin él, compartir desde ahí crearía un corto nuevo desde la conexión del salón, y con cientos de
  * celulares se gastaría el tope de altas por hora. Antes de irse, la vista deja el corto en `sessionStorage`, atado a la
- * ruta a la que va, igual que el logo (`dejarLogoEntrante`). No va a la red. Sin `sessionStorage`, no deja nada.
+ * ruta a la que va, igual que el logo (`dejarLogoEntrante`), y con la hora en que lo deja. No va a la red. Sin
+ * `sessionStorage`, no deja nada.
  */
 export function dejarCortoDelVivo(ruta: string, corto: string): void {
   try {
-    sessionStorage.setItem(DEL_VIVO, JSON.stringify({ r: ruta, c: corto }));
+    sessionStorage.setItem(DEL_VIVO, JSON.stringify({ r: ruta, c: corto, t: Date.now() }));
   } catch {
     /* sin almacenamiento, la página comparte como siempre */
   }
@@ -651,15 +654,19 @@ export function esCortoDe(corto: unknown, origen: string): corto is string {
 }
 
 /**
- * El corto que dejó la vista en vivo para esta ruta, si es para esta y es un corto de este mismo sitio. Se vuelve a
- * validar: lo que hay en `sessionStorage` lo puede tocar cualquiera. Cualquier otra cosa da null.
+ * El corto que dejó la vista en vivo para esta ruta, si es para esta, si lo dejó hace menos de un minuto y es un corto de
+ * este mismo sitio. Se entrega una sola vez: lo que se lee se retira, sea o no para esta ruta. Así una recarga, el mismo
+ * enlace pegado en la misma pestaña o un clic que abrió otra pestaña no lo heredan más tarde. Se vuelve a validar: lo que
+ * hay en `sessionStorage` lo puede tocar cualquiera. Cualquier otra cosa da null.
  */
 export function tomarCortoDelVivo(ruta: string, origen: string = location.origin): string | null {
   try {
     const raw = sessionStorage.getItem(DEL_VIVO);
     if (!raw) return null;
-    const j = JSON.parse(raw) as { r?: unknown; c?: unknown };
+    sessionStorage.removeItem(DEL_VIVO);
+    const j = JSON.parse(raw) as { r?: unknown; c?: unknown; t?: unknown };
     if (j.r !== ruta) return null;
+    if (typeof j.t !== "number" || Math.abs(Date.now() - j.t) > VIGENCIA_DEL_VIVO_MS) return null;
     return esCortoDe(j.c, origen) ? j.c : null;
   } catch {
     return null;

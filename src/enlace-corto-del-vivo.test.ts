@@ -87,4 +87,36 @@ describe("el corto de la vista en vivo hacia el comprobante", () => {
     tomarCortoDelVivo(RUTA, ORIGEN);
     expect(f).not.toHaveBeenCalled();
   });
+
+  it("se entrega una sola vez: después de tomarlo ya no queda en la pestaña", () => {
+    dejarCortoDelVivo(RUTA, CORTO);
+    expect(tomarCortoDelVivo(RUTA, ORIGEN)).toBe(CORTO);
+    expect(tomarCortoDelVivo(RUTA, ORIGEN)).toBeNull();
+    expect((sessionStorage as unknown as Almacen).m.size).toBe(0);
+  });
+
+  it("tomarlo para otra ruta también lo retira: una carga que no es la de la vista no lo hereda más tarde", () => {
+    dejarCortoDelVivo(RUTA, CORTO);
+    expect(tomarCortoDelVivo("/verificar.html#otraCosa", ORIGEN)).toBeNull();
+    expect(tomarCortoDelVivo(RUTA, ORIGEN)).toBeNull();
+  });
+
+  it("pasado un minuto ya no vale: un clic que abrió otra pestaña no deja un corto para siempre", () => {
+    vi.useFakeTimers();
+    try {
+      dejarCortoDelVivo(RUTA, CORTO);
+      vi.setSystemTime(Date.now() + 59_000);
+      expect(tomarCortoDelVivo(RUTA, ORIGEN)).toBe(CORTO);
+      dejarCortoDelVivo(RUTA, CORTO);
+      vi.setSystemTime(Date.now() + 61_000);
+      expect(tomarCortoDelVivo(RUTA, ORIGEN)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sin la hora de cuando se dejó, no vale", () => {
+    sessionStorage.setItem("tinkazo.corto-del-vivo", JSON.stringify({ r: RUTA, c: CORTO }));
+    expect(tomarCortoDelVivo(RUTA, ORIGEN)).toBeNull();
+  });
 });

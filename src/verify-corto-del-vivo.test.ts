@@ -42,7 +42,7 @@ async function tocarCompartir(): Promise<void> {
 
 describe("compartir desde la verificación", () => {
   it("con el corto de la vista en vivo, comparte ese y no crea otro", async () => {
-    sessionStorage.setItem("tinkazo.corto-del-vivo", JSON.stringify({ r: RUTA, c: CORTO }));
+    sessionStorage.setItem("tinkazo.corto-del-vivo", JSON.stringify({ r: RUTA, c: CORTO, t: Date.now() }));
     await tocarCompartir();
     expect(h.abrirSorteo).toHaveBeenCalledTimes(1);
     const [datos, lang, op] = h.abrirSorteo.mock.calls[0] as [{ enlace: string }, unknown, unknown];
@@ -52,7 +52,7 @@ describe("compartir desde la verificación", () => {
   });
 
   it("con el traspaso de otra ruta, comparte como siempre", async () => {
-    sessionStorage.setItem("tinkazo.corto-del-vivo", JSON.stringify({ r: "/verificar.html#otraCosa", c: CORTO }));
+    sessionStorage.setItem("tinkazo.corto-del-vivo", JSON.stringify({ r: "/verificar.html#otraCosa", c: CORTO, t: Date.now() }));
     await tocarCompartir();
     expect(h.abrirSorteo).toHaveBeenCalledTimes(1);
     const args = h.abrirSorteo.mock.calls[0] as unknown[];
@@ -64,5 +64,19 @@ describe("compartir desde la verificación", () => {
     await tocarCompartir();
     expect(h.abrirSorteo).toHaveBeenCalledTimes(1);
     expect((h.abrirSorteo.mock.calls[0] as unknown[]).length).toBe(1);
+  });
+
+  it("se usa una sola vez: la misma pestaña que carga la página de nuevo ya no hereda el corto", async () => {
+    sessionStorage.setItem("tinkazo.corto-del-vivo", JSON.stringify({ r: RUTA, c: CORTO, t: Date.now() }));
+    await tocarCompartir();
+    expect((h.abrirSorteo.mock.calls[0] as [{ enlace: string }])[0].enlace).toBe(CORTO);
+    // Recargar la página, o pegar el mismo enlace largo en la misma pestaña.
+    h.abrirSorteo.mockClear();
+    vi.resetModules();
+    await tocarCompartir();
+    expect(h.abrirSorteo).toHaveBeenCalledTimes(1);
+    const args = h.abrirSorteo.mock.calls[0] as unknown[];
+    expect((args[0] as { enlace: string }).enlace).not.toBe(CORTO);
+    expect(args).toHaveLength(1);
   });
 });
