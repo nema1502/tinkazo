@@ -21,15 +21,21 @@ import type { AnchorStep } from "./anchor";
  *
  * Reglas de este archivo:
  *
- * - **El resultado sale de la red.** Los ganadores y el número al azar salen de leer el contrato (`readDraw`) o del valor
- *   que devolvió la transacción ya confirmada, y nunca de lo que diga el servicio. El enlace a la transacción solo se
- *   muestra si lo que devolvió coincide con lo que dice el contrato para ESTE sorteo.
+ * - **El resultado sale de la red.** Los ganadores y el número al azar salen de leer el contrato (`readDraw`) o, si el
+ *   contrato no se deja leer, del valor que devolvió en la red la transacción que el servicio dijo pendiente para ESTE
+ *   sorteo y que ya está confirmada. Nunca de lo que diga el servicio. El enlace a la transacción solo se muestra para una
+ *   transacción que el servicio dijo pendiente para este sorteo en esta pestaña y cuyo resultado coincide con el contrato:
+ *   un número repetido puede ser el de otro sorteo con el mismo sello.
  * - **Nunca por los dos caminos a la vez.** Se pasa al camino de siempre (`camino-de-hoy`) solo cuando el servicio
  *   aseguró que no lo manda, cuando la red cerró su envío sin dejar el sorteo hecho, o cuando pasado un tope de reloj no
- *   hay una respuesta que se pueda comprobar y la red dice que el sorteo no está. Con la red sin poder leerse no se manda
- *   nada más: termina en `sin-confirmar`.
+ *   hay una respuesta que se pueda comprobar y la red dice que el sorteo no está. Un pedido que no contestó en su tope se
+ *   vuelve a pedir una vez más (el servicio no manda dos veces el mismo sello, y devuelve el mismo número): una cola larga
+ *   no es una falla. Con la red sin poder leerse no se manda nada más: se sigue mirando hasta lo que da el camino de
+ *   siempre (`TOPE_DE_LA_DUDA_SIN_RED_MS`) y recién entonces termina en `sin-confirmar`.
  * - **Ninguna espera sin tope.** Todo se mide por el reloj de pared, no por vueltas: una pestaña en segundo plano estira
- *   los temporizadores, y al volver se revisa la hora y se abandona lo que ya pasó de su tope.
+ *   los temporizadores, y al volver se revisa la hora y se abandona lo que ya pasó de su tope. La etapa de pedir dura como
+ *   mucho 20 segundos y la duda, con la red leyéndose, unos 8 más: eso es lo que la sala puede esperar de más antes de que
+ *   arranque el camino de siempre, al que `grabar-sorteo.ts` le descuenta lo gastado con un mínimo.
  * - **Sin textos nuevos.** Los pasos son solo `sending` y `confirmed`: con la cuenta de Google ninguno pide aprobar nada.
  *
  * La lógica es pura: lo que toca la red y la pantalla entra por `Fuentes`, y se prueba con un reloj manual.
@@ -37,20 +43,28 @@ import type { AnchorStep } from "./anchor";
 
 /** Lo más que dura la etapa de pedirle al servicio, desde la entrada, antes de que acepte. */
 export const TOPE_DEL_SERVICIO_MS = 20_000;
-/** Lo que se le da a cada pedido. Un pedido nuevo arranca solo si cabe entero antes de `TOPE_DEL_SERVICIO_MS`. */
+/** Lo que se le da a cada pedido. Un pedido tras una espera arranca solo si cabe entero antes de `TOPE_DEL_SERVICIO_MS`. */
 export const TOPE_DEL_PEDIDO_MS = 10_000;
+/** Tras un pedido que no contestó en su tope, otro arranca si queda al menos esto de la etapa, y se le da lo que quede. */
+export const TOPE_MINIMO_DEL_PEDIDO_MS = 5_000;
 /** Las esperas entre pedidos cuando el servicio dice que no mandó nada. */
 export const ESPERAS_DEL_SERVICIO_MS = [2000, 4000] as const;
-/** Cuánto se espera, desde que algo quedó incierto, antes de la lectura que decide. Cubre la cola del servicio. */
+/** Cuánto se espera, desde que algo quedó incierto, antes de la lectura que decide. Cubre lo que el servicio tarde en cerrar. */
 export const RESPIRO_DE_LA_DUDA_MS = 8_000;
-/** Lo más que dura la duda desde que algo quedó incierto. */
-export const TOPE_DE_LA_DUDA_MS = 20_000;
-/** Lo más que dura la duda desde la entrada. */
-export const TOPE_DE_LA_ENTRADA_MS = 30_000;
+/**
+ * Lo más que dura la duda desde la entrada cuando la red no deja leer el contrato: lo mismo que el camino de siempre
+ * (`PRESUPUESTO_DEL_SORTEO_MS`). Se sigue mirando sin mandar nada: el camino de siempre se recuperaba solo de un corte de
+ * la red de unos segundos, y esto también.
+ */
+export const TOPE_DE_LA_DUDA_SIN_RED_MS = 90_000;
 /** Cada cuánto se lee el sorteo mientras se duda. */
 export const LEER_CADA_MS = 3_000;
 /** Lo que se le da a cada lectura de la red. */
 export const TOPE_DE_LECTURA_MS = 5_000;
+/** Lo que se le da a cada lectura del contrato cuando la transacción ya entró: un celular lento tarda más y nada urge. */
+export const TOPE_DE_LECTURA_DEL_QUE_ENTRO_MS = 12_000;
+/** Lo que se sigue leyendo el contrato después de que la transacción entró, antes de rendirse. */
+export const TOPE_DE_LAS_LECTURAS_DEL_QUE_ENTRO_MS = 30_000;
 /** Lo que se le da a un número de transacción que el servicio dio por repetido para que la red lo conozca. */
 export const VISTO_SIN_RED_MS = 30_000;
 /** Cuánto se espera sin poder hablar con la red antes de rendirse (lo mismo que espera hoy un envío). */
@@ -61,7 +75,7 @@ export const HOLGURA_DE_RELOJES_S = 30;
 /** Cuánto se deja de lado al servicio en esta pestaña después de una falla suya. */
 export const DISYUNTOR_MS = 600_000;
 const ULTIMA_VUELTA_MS = 10_000;
-const LECTURAS_DEL_QUE_ENTRO = 3;
+const LECTURAS_VACIAS_DEL_QUE_ENTRO = 3;
 const ENTRE_LECTURAS_DEL_QUE_ENTRO_MS = 2_000;
 const YA_DICHO_POR_EL_SERVICIO_MS = 10_000;
 const RED_CONTESTANDO_MS = 5_000;
@@ -96,8 +110,18 @@ export function usaElSorteoDelServicio(q: QuienSortea): boolean {
 
 /* --------------------------------------------------------- lo que se recuerda en esta pestaña */
 
-/** Un número de transacción que el servicio dio: cuándo se vio por primera vez (hora de la red, en segundos) y si alguna vez llegó como pendiente. */
-const vistos = new Map<string, { primera: number; pendiente: boolean }>();
+/**
+ * Un número de transacción que el servicio dio: cuándo se vio por primera vez (hora del reloj de la ronda, en segundos),
+ * si alguna vez llegó como pendiente y para qué sorteo (`sorteo`, solo si llegó pendiente), y la hora de cierre del primer
+ * ledger que la red dijo conocer (`cierre`, en segundos): con esa se acota el vencimiento si el reloj del aparato anda atrás.
+ */
+interface Visto {
+  primera: number;
+  pendiente: boolean;
+  sorteo?: string;
+  cierre?: number;
+}
+const vistos = new Map<string, Visto>();
 /** Los sorteos que ya quedaron por el camino de siempre: no se le vuelve a pedir al servicio. */
 const marcados = new Set<string>();
 let disyuntorHasta = 0;
@@ -300,9 +324,9 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
   });
 
   /** Lee el sorteo en la red con su tope. Un error de lectura no lanza: avisa al RPC y se devuelve. */
-  const leer = async (hastaMs: number): Promise<Lectura> => {
+  const leer = async (hastaMs: number, topeMs: number = TOPE_DE_LECTURA_MS): Promise<Lectura> => {
     try {
-      return { ok: true, v: await conTope(f.leer(p.raffleId), Math.min(ahora() + TOPE_DE_LECTURA_MS, hastaMs)) };
+      return { ok: true, v: await conTope(f.leer(p.raffleId), Math.min(ahora() + topeMs, hastaMs)) };
     } catch (e) {
       f.alFallar(e);
       return { ok: false, error: e };
@@ -312,14 +336,14 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
   /** Lo que se hace con una respuesta que dejó todo incierto: mirar la red hasta saber. */
   const duda = async (): Promise<FinDelServicio> => {
     const t0 = ahora();
-    const fin = Math.min(t0 + TOPE_DE_LA_DUDA_MS, entrada + TOPE_DE_LA_ENTRADA_MS);
+    const fin = entrada + TOPE_DE_LA_DUDA_SIN_RED_MS;
     let ultimoError: unknown = new Error("sin-confirmar");
     for (let vuelta = 0; ; vuelta++) {
       // La primera lectura se hace siempre: si la pestaña volvió con el reloj adelantado, igual hay que mirar la red.
       const l = await leer(vuelta === 0 ? Number.POSITIVE_INFINITY : fin);
       if (l.ok && l.v) return listo(l.v, true);
       if (l.ok) {
-        // Limpio y vacío. El respiro cubre la cola del servicio: lo que mandó hace un instante todavía puede estar entrando.
+        // Limpio y vacío. El respiro cubre lo que el servicio tarde en cerrar lo que mandó hace un instante.
         if (ahora() >= t0 + RESPIRO_DE_LA_DUDA_MS) return caminoDeHoy({ marca: true, disyuntor: true });
       } else {
         ultimoError = l.error;
@@ -347,13 +371,15 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
 
   /** El servicio mandó el sorteo: se confirma en la red. `"otra-vez"` es el caso de un sello gemelo. */
   const confirmar = async (hash: string, pendienteAhora: boolean): Promise<FinDelServicio | "otra-vez"> => {
-    let visto = vistos.get(hash);
-    if (!visto) {
-      visto = { primera: f.horaDeLaRed(), pendiente: false };
-      vistos.set(hash, visto);
+    const visto: Visto = vistos.get(hash) ?? { primera: f.horaDeLaRed(), pendiente: false };
+    vistos.set(hash, visto);
+    if (pendienteAhora) {
+      visto.pendiente = true;
+      visto.sorteo = clave;
     }
-    if (pendienteAhora) visto.pendiente = true;
     const esPendiente = visto.pendiente;
+    // Solo una transacción que el servicio dijo pendiente para ESTE sorteo es seguro que es de este sorteo.
+    const esPropio = visto.pendiente && visto.sorteo === clave;
     const primera = visto.primera;
     alPaso("sending", hash);
     const venceEn = Math.floor(primera) + VENTANA_DEL_SERVICIO_S + HOLGURA_DE_RELOJES_S;
@@ -361,23 +387,36 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
     const consultar = async (): Promise<RespuestaConsulta> => {
       const c = await conTope(f.consultar(hash), ahora() + TOPE_DE_LECTURA_MS);
       ultimaRespuesta = ahora();
-      return c;
+      if (!Number.isFinite(c.cierre)) return c;
+      // El vencimiento se compara con la hora de cierre de la red: si el reloj del aparato anda atrás, `venceEn` queda
+      // antes de lo real y una transacción que sigue viva se daría por vencida. Se toma lo que dice la red, y se corre
+      // la hora de cierre que ve quien compara en lo mismo.
+      visto.cierre ??= c.cierre;
+      const corrido = Math.max(0, visto.cierre + VENTANA_DEL_SERVICIO_S + HOLGURA_DE_RELOJES_S - venceEn);
+      return corrido > 0 ? { ...c, cierre: c.cierre - corrido } : c;
     };
     const suelta = f.fijar();
     try {
-      /** Entró: el resultado sale del contrato para este sorteo, y el enlace solo si lo que devolvió coincide. */
+      /**
+       * Entró: el resultado sale del contrato para este sorteo, y el enlace solo si la transacción es de este sorteo y lo
+       * que devolvió coincide. Si el contrato no se deja leer y la transacción es de este sorteo, vale lo que devolvió en
+       * la red. Si no, se sigue leyendo un rato y no se manda nada más.
+       */
       const entro = async (valor: unknown): Promise<FinDelServicio | "otra-vez"> => {
-        let todasLimpias = true;
+        const hasta = ahora() + TOPE_DE_LAS_LECTURAS_DEL_QUE_ENTRO_MS;
+        let vacias = 0;
         let ultimoError: unknown = null;
-        for (let i = 0; i < LECTURAS_DEL_QUE_ENTRO; i++) {
-          const l = await leer(Number.POSITIVE_INFINITY);
+        for (;;) {
+          const l = await leer(Number.POSITIVE_INFINITY, TOPE_DE_LECTURA_DEL_QUE_ENTRO_MS);
           if (l.ok && l.v) {
             let coincide = false;
-            try {
-              const devuelto = await f.valorDe(valor);
-              coincide = !!devuelto && mismosNumeros(devuelto.winners, l.v.winners) && devuelto.randomness.toLowerCase() === l.v.randomness.toLowerCase();
-            } catch {
-              coincide = false;
+            if (esPropio) {
+              try {
+                const devuelto = await f.valorDe(valor);
+                coincide = !!devuelto && mismosNumeros(devuelto.winners, l.v.winners) && devuelto.randomness.toLowerCase() === l.v.randomness.toLowerCase();
+              } catch {
+                coincide = false;
+              }
             }
             if (coincide) {
               alPaso("confirmed", hash);
@@ -385,20 +424,36 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
             }
             return listo(l.v, true);
           }
-          if (!l.ok) {
-            todasLimpias = false;
+          if (l.ok) {
+            vacias++;
+          } else {
+            vacias = 0;
             ultimoError = l.error;
+            if (esPropio) {
+              let devuelto: Ganadores | null = null;
+              try {
+                devuelto = await f.valorDe(valor);
+              } catch {
+                devuelto = null;
+              }
+              if (devuelto) {
+                alPaso("confirmed", hash);
+                return listo(devuelto, false, hash);
+              }
+            }
           }
-          if (i < LECTURAS_DEL_QUE_ENTRO - 1) await esperar(ENTRE_LECTURAS_DEL_QUE_ENTRO_MS);
+          if (vacias >= LECTURAS_VACIAS_DEL_QUE_ENTRO) {
+            // Entró una transacción que no es de este sorteo (un sello gemelo, con la misma lista y la misma ronda): el
+            // servicio ya cerró la del gemelo y manda la de este número. Se pide una sola vez más.
+            if (!volvioAPedir) {
+              volvioAPedir = true;
+              return "otra-vez";
+            }
+            return caminoDeHoy({ marca: true });
+          }
+          if (ahora() >= hasta) return sinConfirmar(ultimoError, hash);
+          await esperar(l.ok ? ENTRE_LECTURAS_DEL_QUE_ENTRO_MS : LEER_CADA_MS);
         }
-        if (!todasLimpias) return sinConfirmar(ultimoError, hash);
-        // Entró una transacción que no es de este sorteo (un sello gemelo, con la misma lista y la misma ronda): el
-        // servicio ya cerró la del gemelo y manda la de este número. Se pide una sola vez más.
-        if (!volvioAPedir) {
-          volvioAPedir = true;
-          return "otra-vez";
-        }
-        return caminoDeHoy({ marca: true });
       };
 
       /** La red cerró el envío del servicio sin dejar este sorteo hecho, o no se sabe. */
@@ -449,9 +504,13 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
     while (siguiente === null) {
       const topePedido = Math.min(TOPE_DEL_PEDIDO_MS, hastaServicio - ahora());
       const ac = new AbortController();
+      let porTope = false;
       let r: RespuestaDelSorteo;
       try {
-        r = await conTope(f.pedir(p.raffleId, p.firma96, ac.signal), ahora() + topePedido, () => ac.abort());
+        r = await conTope(f.pedir(p.raffleId, p.firma96, ac.signal), ahora() + topePedido, () => {
+          porTope = true;
+          ac.abort();
+        });
       } catch {
         // Un corte, un tope o una respuesta que no se entiende: puede haber salido.
         r = { accion: "incierto" };
@@ -466,15 +525,22 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
         vez++;
         // Otro pedido tiene que caber entero: si no, el servicio aseguró que no mandó y se sigue por el camino de siempre.
         // Un servicio que no puede en 20 segundos se deja de lado un rato, para que el siguiente sorteo no pague la etapa.
-        if (ahora() + espera + TOPE_DEL_PEDIDO_MS > hastaServicio) siguiente = caminoDeHoy({ marca: true, disyuntor: true });
-        else await esperar(espera);
+        // Antes se mira el contrato una vez: una red ocupada o una secuencia a veces responden después de haber mandado.
+        if (ahora() + espera + TOPE_DEL_PEDIDO_MS > hastaServicio) {
+          const l = await leer(Number.POSITIVE_INFINITY);
+          siguiente = l.ok && l.v ? listo(l.v, true) : caminoDeHoy({ marca: true, disyuntor: true });
+        } else await esperar(espera);
       } else if (r.accion === "ya") {
         siguiente = await yaDicho();
       } else if (r.accion === "mandado") {
         f.olvidarElEstado();
         siguiente = await confirmar(r.hash, r.pendiente);
+      } else if (porTope && hastaServicio - ahora() >= TOPE_MINIMO_DEL_PEDIDO_MS) {
+        // El servicio no contestó en su tope: con varios sorteos sobre la misma ronda su cola puede tardar más, y eso no es
+        // una falla. Se vuelve a pedir: el servicio no manda dos veces el mismo sello y devuelve el mismo número.
+        vez++;
       } else {
-        // Después de un incierto no se le vuelve a pedir al servicio: lo que se corta en la etapa de envío podría duplicarse.
+        // Un corte, o un tope sin lugar para otro pedido: se mira la red hasta saber, sin mandar nada por el otro camino.
         siguiente = await duda();
       }
     }
