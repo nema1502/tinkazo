@@ -46,5 +46,6 @@ RESUMEN_CADA_HORAS = "24"
 # más cuentas que este umbral. 200 por hora, para que un evento de 150 personas no dé falsa alarma.
 CUENTAS_UMBRAL = "200"
 # El cupo del evento: el día que hay un evento abierto se pone el cupo de cuentas de ese evento, y ese cupo toma el lugar
-# del umbral mientras la variable tenga un valor. Con la variable vacía (lo normal fuera del evento), vale CUENTAS_UMBRAL.
+# del umbral mientras la variable tenga un valor, y no se suma: con 150 de cupo, una cuenta de más ya avisa. Para un evento de
+# 150 personas, dejarla vacía (vale CUENTAS_UMBRAL) o poner un cupo holgado. Con la variable vacía (lo normal fuera del evento), vale CUENTAS_UMBRAL.
 CUENTAS_EVENTO_CUPO = ""

@@ -329,7 +329,8 @@ export async function vuelta(env: Entorno, dep: Dependencias): Promise<Resultado
       ...umbralDeCuentas(env),
       recordado: { hora: m.cuentasAviso?.hora ?? null, motivos: m.cuentasAviso?.motivos ?? [] },
     });
-    if (!decisionCuentas.conDatos && bloqueDeCuentas !== null) registrar("error-cuentas", { conteo: "sin-leer" });
+    // Un bloque en null es que el portero no pudo contar (el proveedor de cuentas no contestó): el aviso quedaría mudo sin rastro.
+    if (!decisionCuentas.conDatos) registrar("error-cuentas", { conteo: bloqueDeCuentas === null ? "sin-conteo" : "sin-leer" });
     if (decisionCuentas.avisar.length > 0) {
       const horaDelConteo = decisionCuentas.hora ?? decisionCuentas.avisar[0]!.hora;
       m.cuentasAviso = {
