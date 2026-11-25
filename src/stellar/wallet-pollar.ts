@@ -4793,6 +4793,8 @@ export const pollarWallet = new PollarWallet();
 export function precargarSdk(): void {
   if (!pollarConfigured()) return;
   void cargaOpcional(import("@pollar/core"));
+  // El SDK de Stellar que usa el paso de leer la transacción de la activación: así su descarga no corre por el reloj.
+  void cargaOpcional(import("@stellar/stellar-sdk"));
 }
 
 /** Una wallet que envía sus propias transacciones. */

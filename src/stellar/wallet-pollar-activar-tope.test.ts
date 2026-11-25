@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Account, Keypair, Networks, Operation, type Transaction, TransactionBuilder } from "@stellar/stellar-sdk";
 import type { CosignRequest } from "@pollar/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -467,5 +469,14 @@ describe("el camino sano no cambia", () => {
     await avanzar(0);
     await expect(Promise.all([a, b])).resolves.toEqual(["activada", "activada"]);
     expect(vecesQue("relay")).toBe(1);
+  });
+});
+
+describe("la precarga", () => {
+  it("baja también el SDK de Stellar que usa el paso de leer la transacción, sin esperarlo", () => {
+    const fuente = readFileSync(resolve(process.cwd(), "src/stellar/wallet-pollar.ts"), "utf8");
+    const cuerpo = fuente.slice(fuente.indexOf("export function precargarSdk"), fuente.indexOf("export function precargarSdk") + 900);
+    expect(cuerpo).toContain('void cargaOpcional(import("@pollar/core"));');
+    expect(cuerpo).toContain('void cargaOpcional(import("@stellar/stellar-sdk"));');
   });
 });
