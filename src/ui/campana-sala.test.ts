@@ -16,7 +16,7 @@ vi.mock("../stellar/config", async (orig) => {
 });
 vi.mock("./qr", () => ({ pintarQr: async () => true, precargarQr: async () => undefined }));
 
-import { ponerPaso } from "../campana/puente";
+import { type PasoDelPuente, ponerPaso } from "../campana/puente";
 import { nadaSeAbreSolo } from "./cuenta-lista-flujo";
 import { CLAVE_EVENTOS_ORG, CLAVE_INTENTOS_ORG, CLAVE_ORG, guardarOrg, leerOrg } from "../sala/campana-org";
 import { montarPanelDeCampana } from "./campana-sala";
@@ -1093,8 +1093,11 @@ describe("una campaña de cada modo", () => {
     await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
     expect(texto(p, "#cpo-h")).toBe("El sorteo ya se hizo.");
     expect(principales(p)).toHaveLength(0);
+    // Con el sorteo hecho y sin saber que el resultado llegó a los celulares, antes pregunta.
     boton(p, "Elegir otro archivo").click();
-    expect(vistaDe(p)).toBe("elegir");
+    expect(vistaDe(p)).toBe("olvidar");
+    boton(p, "Sí, dejarla").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
     expect(m.borradas).toBe(0);
     expect(leerOrg(m.almacen, AHORA, "testnet", null)).toBeNull();
     m.sala.fase = "lista";
@@ -1110,7 +1113,9 @@ describe("una campaña de cada modo", () => {
     await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
     expect(texto(p, "#cpo-h")).toBe("La lista ya está sellada.");
     boton(p, "Elegir otro archivo").click();
-    expect(vistaDe(p)).toBe("elegir");
+    expect(vistaDe(p)).toBe("olvidar");
+    boton(p, "Sí, dejarla").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
   });
 
   it("dejar una campaña abierta pide confirmar y no borra la sala", async () => {
@@ -1380,6 +1385,29 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     expect(abrio).not.toHaveBeenCalled();
   });
 
+  it("si la pregunta de Armar otra campaña se abandona por otro camino, un Elegir otro archivo posterior no abre el selector solo", async () => {
+    const compartido = bus();
+    const a = mundo({ canal: compartido.canal });
+    const p = nuevoPanel(a);
+    await cerradaConDos(a, p);
+    const abrio = vi.spyOn($<HTMLInputElement>(p, "#cpo-archivo"), "click");
+    boton(p, "Armar otra campaña").click();
+    expect(vistaDe(p)).toBe("olvidar");
+    // Otra pestaña toma la campaña: la pregunta queda abandonada sin cancelarla ni confirmarla.
+    const b = mundo({ canal: compartido.canal, almacen: a.almacen });
+    b.sala.fase = "cerrada";
+    nuevoPanel(b);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("otra-pestana"));
+    a.sala.fase = "abierta";
+    boton(p, "Usar esta pestaña").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+    // Ahora deja la campaña por el camino de siempre.
+    boton(p, "Elegir otro archivo").click();
+    boton(p, "Sí, dejarla").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
+    expect(abrio).not.toHaveBeenCalled();
+  });
+
   it("con la lista sellada y un aviso pendiente a los celulares, dejar la campaña pregunta", async () => {
     const m = mundo();
     guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
@@ -1407,15 +1435,71 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
     expect(vistaDe(p)).toBe("olvidar");
   });
 
-  it("con los celulares ya avisados, dejar la campaña sigue siendo de un toque", async () => {
+  it("con la lista sellada, dejar la campaña pregunta en cualquier paso, también con los celulares avisados del sello", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
+    m.sala.fase = "sellada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
+    await suelta();
+    const pasos: PasoDelPuente[] = [
+      { paso: "avisada" },
+      { paso: "nada" },
+      { paso: "lista-sellada", soltable: false },
+      { paso: "sello-por-confirmar" },
+      { paso: "ganadoras", n: 2 },
+      { paso: "tarde" },
+      { paso: "lista-cambio" },
+      { paso: "otra-lista" },
+    ];
+    for (const paso of pasos) {
+      ponerPaso(paso);
+      boton(p, "Elegir otro archivo").click();
+      expect(vistaDe(p), paso.paso).toBe("olvidar");
+      boton(p, "Cancelar").click();
+      expect(vistaDe(p), paso.paso).toBe("sellada");
+    }
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("sellada");
+  });
+
+  it("con el sorteo hecho, dejar la campaña pregunta en cualquier paso salvo con el resultado ya avisado o la sala borrada", async () => {
     const m = mundo();
     guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
     m.sala.fase = "sorteada";
     const p = nuevoPanel(m);
     await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
     await suelta();
-    ponerPaso({ paso: "avisada" });
+    for (const paso of [{ paso: "avisada" }, { paso: "nada" }, { paso: "ganadoras", n: 1 }, { paso: "otro-sorteo" }] as const) {
+      ponerPaso(paso);
+      boton(p, "Elegir otro archivo").click();
+      expect(vistaDe(p), paso.paso).toBe("olvidar");
+      boton(p, "Cancelar").click();
+      expect(vistaDe(p), paso.paso).toBe("sorteada");
+    }
+  });
+
+  it("con el resultado ya avisado a todas, dejar la campaña sigue siendo de un toque", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+    m.sala.fase = "sorteada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+    await suelta();
+    ponerPaso({ paso: "resultado", filas: [{ cuenta: "GUNO", nombre: "Ana", avisada: true, alta: "esperando" }], otraBilletera: false });
     boton(p, "Elegir otro archivo").click();
     expect(vistaDe(p)).toBe("elegir");
   });
+
+  it("con la sala ya borrada y el sorteo hecho, no hay nada que mandar y deja la campaña de un toque", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+    m.sala.fase = "sorteada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+    await suelta();
+    ponerPaso({ paso: "sala-borrada" });
+    boton(p, "Elegir otro archivo").click();
+    expect(vistaDe(p)).toBe("elegir");
+  });
+
 });
