@@ -2925,6 +2925,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       const falta = avisoQueFalta(pasoDelPuente(), vistaAntes);
       if (falta === "sello") linea = tx("cpoOlvidarSello");
       if (falta === "resultado") linea = tx("cpoOlvidarResultado");
+      if (falta === "ganadora") linea = tx("cpoOlvidarGanadora");
     }
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? lineaDelPaso(pasoDelPuente()) : null;
     // Lo que la fila viva ya dice no se repite en la línea: la fila ocupa su lugar.
