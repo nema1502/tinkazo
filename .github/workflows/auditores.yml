@@ -30,6 +30,22 @@
 #     resultado se lee, pero no se toma como veredicto. Cuando uno pase varias corridas
 #     seguidas, se le saca la marca.
 #
+# Capturas de cualquier vista de cualquier rama. Con el dato `vistas` (una lista JSON, ver
+# `scripts/capturar-vistas.mjs`), la corrida NO audita: construye la rama pedida, saca las capturas
+# con un solo trabajo y las sube como el artefacto `capturas-vistas` (con un `informe.json`). Los
+# datos de entrada son tres, todos opcionales:
+#   - `vistas`: la lista de vistas, en JSON. Con este dato vacío, todo corre como siempre.
+#   - `rama`: la rama, la etiqueta o el commit del mismo repositorio que se construye y se
+#     captura. Vacío, la misma desde donde se lanzó la corrida.
+#   - `entorno`: variables de construcción del sitio, separadas por espacios, por ejemplo
+#     `VITE_CAMPANAS=1`. Solo nombres que empiezan con VITE_ y valores de letras, números y _ . : / -
+# El guion que saca las fotos es el de la rama desde donde se lanzó la corrida (la herramienta), y el
+# sitio que se fotografía es el de `rama`: dos copias del repositorio en la máquina. Ejemplo:
+#   gh workflow run auditores.yml --ref <rama-con-la-herramienta> -f rama=main #     -f entorno=VITE_CAMPANAS=1 -f vistas='[{"nombre":"portada","ruta":"/","ancho":1440,"alto":900,"tema":"light"}]'
+#   gh run download <id> -n capturas-vistas -D capturas
+# Los datos de entrada nunca se escriben dentro de un comando: llegan por variables de entorno y se
+# validan antes de construir nada. No usa ningún secreto y los permisos son de solo lectura.
+#
 # Para ver andar este archivo antes de que esté en la rama principal, se dispara también en
 # un pedido que lo cambie (el botón «Run workflow» solo aparece cuando el archivo ya está en
 # la rama por defecto). Las acciones van fijadas por SHA (ver el encabezado de ci.yml).
@@ -37,6 +53,22 @@ name: Auditores a pedido
 
 on:
   workflow_dispatch:
+    inputs:
+      vistas:
+        description: 'Capturas: lista JSON de vistas (ver scripts/capturar-vistas.mjs). Con esto, no corren los auditores.'
+        required: false
+        default: ''
+        type: string
+      rama:
+        description: 'Capturas: rama, etiqueta o commit a construir (vacío: la misma de la corrida)'
+        required: false
+        default: ''
+        type: string
+      entorno:
+        description: 'Capturas: variables de construcción separadas por espacios, por ejemplo VITE_CAMPANAS=1'
+        required: false
+        default: ''
+        type: string
   pull_request:
     paths:
       - .github/workflows/auditores.yml
@@ -45,15 +77,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Cada corrida de capturas tiene su propio grupo: dos pedidos de capturas desde la misma rama no se cancelan entre sí.
+  group: ${{ github.workflow }}-${{ github.ref }}${{ inputs.vistas != '' && format('-capturas-{0}', github.run_id) || '' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   construir:
     name: Construir el sitio
     # Un pedido que viene de una bifurcación no corre la matriz: son quince máquinas. El trabajo
-    # que audita depende de este, así que tampoco corre.
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    # que audita depende de este, así que tampoco corre. Con `vistas` tampoco: eso es una corrida de capturas.
+    if: ${{ inputs.vistas == '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -192,6 +225,58 @@ jobs:
         if: ${{ always() && matrix.navegador }}
         with:
           name: capturas-${{ matrix.id }}
+          path: capturas
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Capturas de las vistas pedidas (ver la cabecera). Solo con el dato `vistas`.
+  capturas:
+    name: Capturas de las vistas pedidas
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.vistas != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # La herramienta: el guion de capturas de la rama desde donde se lanzó la corrida.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: herramienta
+      # Los datos de entrada se validan antes de construir nada. Llegan por variables de entorno
+      # y no se escriben dentro del comando. Las variables válidas pasan a las del resto del trabajo.
+      - name: Validar los datos de entrada
+        env:
+          VISTAS_JSON: ${{ inputs.vistas }}
+          RAMA: ${{ inputs.rama }}
+          ENTORNO: ${{ inputs.entorno }}
+        run: node herramienta/scripts/capturar-vistas.mjs --validar --entorno-en "$GITHUB_ENV"
+      # El sitio a fotografiar: la rama pedida o, sin ella, la misma de la herramienta.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.rama || github.sha }}
+          path: sitio
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: sitio/pnpm-lock.yaml
+      - name: Instalar y construir el sitio
+        working-directory: sitio
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Servir el sitio y sacar las capturas
+        env:
+          VISTAS_JSON: ${{ inputs.vistas }}
+        run: |
+          (cd sitio && pnpm preview --port 4173 &)
+          npx wait-on@9.5.1 http://localhost:4173 --timeout 60000
+          node herramienta/scripts/capturar-vistas.mjs --base http://localhost:4173 --out capturas
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: ${{ always() }}
+        with:
+          name: capturas-vistas
           path: capturas
           if-no-files-found: ignore
           retention-days: 7
