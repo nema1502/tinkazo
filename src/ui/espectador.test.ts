@@ -952,8 +952,8 @@ describe("compartir el sorteo desde la vista en vivo", () => {
   });
 
   /** El camino de todos, hasta ver Lo que salió en la vista del espectador. */
-  const hastaElFin = async (): Promise<void> => {
-    abrir(datos());
+  const hastaElFin = async (op: OpcionesDeLaVista = {}): Promise<void> => {
+    abrir(datos(), op);
     await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
     (h.jugar.mock.calls[0]?.[0] as () => void)();
     // El show corre su duración y Lo que salió espera su margen (`horaDelFinal`), como en las pruebas del final.
@@ -1054,5 +1054,50 @@ describe("compartir el sorteo desde la vista en vivo", () => {
     dialogo().querySelector<HTMLButtonElement>("[data-cerrar]")?.click();
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(irA).toHaveBeenCalled();
+  });
+
+  it("si el archivo del diálogo no baja, lo dice con el tono del sitio y deja tocar de nuevo", async () => {
+    const real = (): Promise<typeof import("./compartir")> => import("./compartir");
+    const cargar = vi.fn(real).mockRejectedValueOnce(new Error("sin red"));
+    await hastaElFin({ cargarCompartir: cargar });
+    const boton = capa().querySelector<HTMLButtonElement>("[data-compartir]");
+    boton?.click();
+    await vi.advanceTimersByTimeAsync(0);
+    // Sin diálogo, pero con el motivo a la vista y el botón listo para otro toque.
+    expect(dialogo()).toBeFalsy();
+    const aviso = capa().querySelector<HTMLElement>("[data-compartir-aviso]");
+    expect(aviso?.textContent).toBe(T.es.espCompartirFallo);
+    expect(aviso?.getAttribute("role")).toBe("alert");
+    expect(boton?.disabled).toBe(false);
+    expect(boton?.getAttribute("aria-busy")).not.toBe("true");
+    // Y el segundo toque abre el diálogo y baja el aviso.
+    boton?.click();
+    await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+    expect(cargar).toHaveBeenCalledTimes(2);
+    expect(capa().querySelector<HTMLElement>("[data-compartir-aviso]")?.textContent).toBe("");
+  });
+
+  it("el aviso de que no bajó el archivo también sale en inglés", async () => {
+    abrirEspectador(datos(), "en", { desfase: async () => 0, irA, azar: () => 0, leer: async () => registro({ grabado: true }), cargarCompartir: () => Promise.reject(new Error("sin red")) });
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
+    (h.jugar.mock.calls[0]?.[0] as () => void)();
+    await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000 + 10_000);
+    capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(capa().querySelector("[data-compartir-aviso]")?.textContent).toBe(T.en.espCompartirFallo);
+  });
+
+  it("un segundo toque mientras se prepara no abre un segundo diálogo", async () => {
+    let soltar: (m: typeof import("./compartir")) => void = () => undefined;
+    const cargar = vi.fn(() => new Promise<typeof import("./compartir")>((r) => (soltar = r)));
+    await hastaElFin({ cargarCompartir: cargar });
+    const boton = capa().querySelector<HTMLButtonElement>("[data-compartir]");
+    boton?.click();
+    boton?.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cargar).toHaveBeenCalledTimes(1);
+    soltar(await import("./compartir"));
+    await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+    expect(document.querySelectorAll("dialog").length).toBe(1);
   });
 });

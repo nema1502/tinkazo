@@ -106,6 +106,8 @@ export interface OpcionesDeLaVista {
   releer?: typeof releerCorto;
   /** La referencia al enlace corto, si no es la del fragmento. */
   ref?: { id: string; clave: string; n: number } | null;
+  /** El archivo del diálogo de compartir (`compartir.ts`): en las pruebas, uno que falla o que se hace esperar. */
+  cargarCompartir?: () => Promise<typeof import("./compartir")>;
 }
 
 const PUNTOS = `<span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span>`;
@@ -176,7 +178,11 @@ async function enlaceDelComprobante(datos: DatosEspectador, d: NonNullable<(type
  * nada: recibe los datos de este sorteo tal como van —los ganadores ya revelados y nada de lo que falta— y el
  * mensaje y la foto salen del mismo camino de siempre (`abrirSorteo`). Al cerrar, la vista en vivo sigue como estaba.
  */
-async function compartirElSorteo(datos: DatosEspectador, d: NonNullable<(typeof app)["drawn"]>): Promise<void> {
+async function compartirElSorteo(
+  datos: DatosEspectador,
+  d: NonNullable<(typeof app)["drawn"]>,
+  cargar: () => Promise<typeof import("./compartir")>,
+): Promise<void> {
   const enlace = await enlaceDelComprobante(datos, d);
   // Los nombres como los manda la sala: la línea sellada sin su marca cuando la lista se lee por persona, y el
   // nombre del equipo cuando la lista es de equipos con etiqueta (`etiquetaDe`).
@@ -186,23 +192,23 @@ async function compartirElSorteo(datos: DatosEspectador, d: NonNullable<(typeof 
     return porPersona ? nombreDePersona(linea) : linea;
   });
   // El premio de un orden de turnos lo dice el modo (`turnMessage`); comparte el orden con el premio que tenga.
-  void import("./compartir").then((m) =>
-    m.abrirSorteo(
-      {
-        enlace,
-        ganadores,
-        total: datos.n.length,
-        personas: contarPersonas(datos.n, porPersona).personas,
-        ...(esListaDeEquipos(datos.n) ? { equipos: true } : {}),
-        premio: datos.z ?? "",
-        fecha: roundTime(datos.r),
-        numero: datos.i,
-        red: datos.net,
-        // La referencia pública para el contador, la misma que usa la sala: red, contrato, número (`src/contar.ts`).
-        ref: refDe({ net: datos.net, contract: datos.k, id: datos.i }),
-      },
-      getLang(),
-    ),
+  // Si el archivo no baja (sin red en el evento), el rechazo llega a quien llamó: él avisa y deja volver a tocar.
+  const m = await cargar();
+  m.abrirSorteo(
+    {
+      enlace,
+      ganadores,
+      total: datos.n.length,
+      personas: contarPersonas(datos.n, porPersona).personas,
+      ...(esListaDeEquipos(datos.n) ? { equipos: true } : {}),
+      premio: datos.z ?? "",
+      fecha: roundTime(datos.r),
+      numero: datos.i,
+      red: datos.net,
+      // La referencia pública para el contador, la misma que usa la sala: red, contrato, número (`src/contar.ts`).
+      ref: refDe({ net: datos.net, contract: datos.k, id: datos.i }),
+    },
+    getLang(),
   );
 }
 
@@ -367,7 +373,9 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
         `<div class="espectador-acc">` +
         `<button class="ghost" type="button" data-otra-vez>${esc(t("espVerDeNuevo"))}</button>` +
         `<a class="espectador-propio" href="/">${esc(t("espHacerElTuyo"))}</a>` +
-        `</div>`,
+        `</div>` +
+        // Si Compartir no pudo abrirse, acá se dice por qué. Vacío mientras todo anda.
+        `<p class="espectador-aviso" role="alert" data-compartir-aviso></p>`,
     );
     const otraVez = sigue?.querySelector<HTMLButtonElement>("[data-otra-vez]");
     otraVez?.addEventListener("click", () => {
@@ -380,9 +388,23 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     compartir.className = "ghost";
     compartir.setAttribute("data-compartir", "");
     compartir.textContent = t("cmpBtn");
+    const aviso = sigue?.querySelector<HTMLElement>("[data-compartir-aviso]");
+    let preparando = false;
     compartir.addEventListener("click", () => {
-      if (!app.drawn) return;
-      void compartirElSorteo(datos, app.drawn);
+      // Un segundo toque mientras se prepara no abre un segundo diálogo.
+      if (!app.drawn || preparando) return;
+      preparando = true;
+      compartir.setAttribute("aria-busy", "true");
+      if (aviso) aviso.textContent = "";
+      compartirElSorteo(datos, app.drawn, op.cargarCompartir ?? (() => import("./compartir")))
+        .catch(() => {
+          // El archivo no bajó o el diálogo no pudo armarse: se dice y el botón queda listo para otro toque.
+          if (aviso?.isConnected) aviso.textContent = t("espCompartirFallo");
+        })
+        .finally(() => {
+          preparando = false;
+          compartir.removeAttribute("aria-busy");
+        });
     });
     sigue?.querySelector<HTMLElement>(".espectador-acc")?.insertBefore(compartir, sigue.querySelector(".espectador-propio"));
     otraVez?.focus({ preventScroll: true });

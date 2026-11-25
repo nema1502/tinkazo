@@ -1124,6 +1124,7 @@ export const T: Record<Lang, Dict> = {
     espLectura: "Solo lectura: el sorteo lo maneja quien organiza.",
     // Los casos de No llegó (main): cuando el número del sorteo tarda o no coincide.
     espProbar: "Probar de nuevo",
+    espCompartirFallo: "No se pudo abrir Compartir. Revisá tu conexión y tocá Compartir otra vez.",
     espSinNumero: "Todavía no llegó el número del sorteo. El ganador va a ser el mismo. Tocá Probar de nuevo.",
     espSinNumeroOrden: "Todavía no llegó el número del sorteo. El orden va a ser el mismo. Tocá Probar de nuevo.",
     espTarda: "La sala todavía no guardó el sorteo. Lo vas a ver acá en cuanto quede guardado.",
@@ -4258,6 +4259,7 @@ export const T: Record<Lang, Dict> = {
     espVistaEspectador: "Live",
     espLectura: "Read-only: the organizer runs the draw.",
     espProbar: "Try again",
+    espCompartirFallo: "Sharing could not open. Check your connection and tap Share again.",
     espSinNumero: "The draw number hasn't arrived yet. The winner will be the same. Tap Try again.",
     espSinNumeroOrden: "The draw number hasn't arrived yet. The order will be the same. Tap Try again.",
     espTarda: "The room hasn't saved the draw yet. You'll see it here as soon as it's saved.",
