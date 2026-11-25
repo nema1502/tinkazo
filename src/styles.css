@@ -1660,6 +1660,8 @@
     /* Con cantidad impar, el último enlace ocupa las dos columnas: solo abajo a
        la izquierda se leía como un renglón suelto. */
     footer .pies a:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    /* Con las campañas cerradas Para empresas sigue en el marcado, escondido: cuenta como hijo y los visibles quedan impares. */
+    footer .pies:has(a[hidden]) a:last-child { grid-column: 1 / -1; }
   }
 
   /* ------------------------------------------------ la ventana de importar
@@ -1811,10 +1813,11 @@
      la fila lleva cuatro entradas y esta sobra. menu.ts lo sigue agregando siempre
      y acá se esconde, así el texto no se pierde. */
   @media (min-width: 761px) { .topnav .mas-lista a[href="/#como-se-usa"] { display: none; } }
-  /* Para empresas va solo en Más del celular, y solo con las campañas abiertas (el atributo hidden lo saca main.ts). En la
-     laptop la fila no tiene Más ni lugar para una quinta entrada: ahí la invitación es la del final de la portada. */
+  /* Para empresas va en la fila de escritorio y dentro de Más en el celular, y solo con las campañas abiertas (el atributo
+     hidden lo saca main.ts). Desde el 25 de noviembre de 2026 ya no se esconde en la laptop: era la entrada de quien arma una
+     campaña y casi siempre lo hace desde una compu. */
   .topnav .mas-lista a[data-campana-enlace][hidden] { display: none; }
-  @media (min-width: 761px) { .topnav .mas-lista a[data-campana-enlace] { display: none; } }
+  .pies a[hidden] { display: none; }
   /* En la fila quedan cuatro: Sortear, Mis sorteos, Juegos y Cómo funciona (8 de noviembre
      de 2026; Seguridad y Precios bajaron al pie). Con las siete de antes, entre 1101 y
      1279 px y con la cuenta abierta, se apretaban contra el nombre. Un poco menos de aire
