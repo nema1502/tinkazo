@@ -13,6 +13,11 @@
  * una dirección o una llave pública) tampoco se escribe nunca: la tabla dice solo `definida`
  * y acá solo se comprueba que exista.
  *
+ * Un corte del sitio no tiene que dar una falsa alarma: cada archivo que no baja se pide de
+ * nuevo dos veces antes de darlo por caído, los que de todos modos no bajan se nombran en el
+ * informe (nunca se saltean en silencio) y la lectura entera tiene un tope de 90 segundos, para
+ * fallar con su propio mensaje antes de que la corte el tope del trabajo que la corre.
+ *
  * Solo lee: no necesita cuenta ni llaves. Depende del sitio publicado, así que corre en la
  * vigilancia diaria y no en la revisión de cada pedido.
  *
@@ -27,7 +32,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { emitirJson } from "./lib/resumen.mjs";
-import { archivosDeLaPortada, comparar, leerTabla, referenciasRelativas, sacarVariables, TITULO_SECCION } from "./lib/banderas.mjs";
+import { bajarConReintentos, comparar, describirNoBajaron, leerDelSitio, leerTabla, TITULO_SECCION, TOPE_TOTAL_MS } from "./lib/banderas.mjs";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -39,6 +44,14 @@ const base = opcion("--base", "https://tinkazo.app").replace(/\/+$/, "");
 const doc = resolve(RAIZ, opcion("--doc", "docs/operacion.md"));
 /** Tope de archivos que se bajan: la portada nombra unos 70, y esto corta una cadena de enlaces sin fin. */
 const MAX_ARCHIVOS = 250;
+const limite = Date.now() + TOPE_TOTAL_MS;
+
+// Último recurso: si algo se colgara sin que lo corte ni el tiempo de cada archivo ni el tope de la lectura,
+// el guion termina igual y lo dice, antes de que lo corte el trabajo que lo corre.
+setTimeout(() => {
+  console.log(`\nRECHAZADO: la comprobación pasó de ${(TOPE_TOTAL_MS + 10_000) / 1000} segundos y se cortó`);
+  process.exit(1);
+}, TOPE_TOTAL_MS + 10_000).unref();
 
 const registro = [];
 let fallos = 0;
@@ -46,41 +59,6 @@ function check(ok, nombre, detalle = "") {
   registro.push({ name: nombre, ok, detail: detalle });
   if (!ok) fallos++;
   console.log(`${ok ? "ok   " : "FALLA"} ${nombre}${detalle ? `: ${detalle}` : ""}`);
-}
-
-async function bajar(url) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(30_000), headers: { "user-agent": "check-banderas" } });
-  if (!res.ok) throw new Error(`${res.status} en ${url}`);
-  return res.text();
-}
-
-/** Baja los archivos de código de la portada y devuelve las variables del primer objeto que se lee. */
-async function leerDelSitio() {
-  const html = await bajar(`${base}/`);
-  const cola = archivosDeLaPortada(html).map((ref) => new URL(ref, `${base}/`).href);
-  if (!cola.length) throw new Error("la portada no nombra ningún archivo de código");
-  const vistos = new Set();
-  const copias = [];
-  // Se miran todos los archivos que nombra la portada: son pocos y así se compara cada copia del objeto.
-  while (cola.length && vistos.size < MAX_ARCHIVOS) {
-    const url = cola.shift();
-    if (vistos.has(url)) continue;
-    vistos.add(url);
-    let codigo;
-    try {
-      codigo = await bajar(url);
-    } catch {
-      // Un archivo nombrado y que no baja no alcanza para dar por perdido el objeto: se sigue con el resto.
-      continue;
-    }
-    const v = sacarVariables(codigo);
-    if (v) copias.push(v);
-    // Si ya hay copia no hace falta seguir enlaces: los de la portada son lo que el navegador baja.
-    if (!copias.length) {
-      for (const rel of referenciasRelativas(codigo)) cola.push(new URL(rel, url).href);
-    }
-  }
-  return { copias, archivos: vistos.size };
 }
 
 const huella = (v) => JSON.stringify([...v.entries()].sort(([a], [b]) => (a < b ? -1 : 1)));
@@ -102,13 +80,28 @@ if (tabla.encontrada) {
 let sitio = null;
 if (tabla.encontrada && tabla.filas.length) {
   try {
-    sitio = await leerDelSitio();
+    sitio = await leerDelSitio({
+      base,
+      maxArchivos: MAX_ARCHIVOS,
+      limite,
+      bajar: (url) => bajarConReintentos(url, { limite }),
+    });
   } catch (e) {
-    check(false, `se pudo leer el sitio ${base}`, e.message);
+    check(false, `se pudo leer el sitio ${base}`, e instanceof Error ? e.message : "sin respuesta");
   }
 }
 if (sitio) {
-  check(sitio.copias.length > 0, "el código del sitio trae el objeto de variables", sitio.copias.length ? `en ${sitio.archivos} archivos mirados` : `no se encontró en ${sitio.archivos} archivos: puede haber cambiado el empaquetado y habría que enseñarle a esta comprobación dónde mirar`);
+  const cortes = describirNoBajaron(sitio.noBajaron);
+  const mirados = sitio.archivos + sitio.noBajaron.length;
+  if (sitio.sinTiempo) {
+    check(false, "la lectura del sitio terminó a tiempo", `se acabaron los ${TOPE_TOTAL_MS / 1000} segundos con ${sitio.archivos} archivos bajados. ${cortes}. Parece lentitud o un corte del sitio y no un cambio de las banderas`);
+  }
+  if (sitio.copias.length) {
+    check(true, "el código del sitio trae el objeto de variables", `en ${mirados} archivos mirados${cortes ? `. Ojo, ${cortes}` : ""}`);
+  } else if (!sitio.sinTiempo) {
+    const causa = cortes ? `Ojo, ${cortes}: puede ser un corte y no un cambio del empaquetado` : "puede haber cambiado el empaquetado y habría que enseñarle a esta comprobación dónde mirar";
+    check(false, "el código del sitio trae el objeto de variables", `no se encontró en ${mirados} archivos. ${causa}`);
+  }
   if (sitio.copias.length) {
     const distintas = new Set(sitio.copias.map(huella));
     check(distintas.size === 1, "las copias del objeto de variables coinciden entre sí", distintas.size === 1 ? "" : "el sitio trae dos conjuntos distintos de variables");

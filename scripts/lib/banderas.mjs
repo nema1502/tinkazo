@@ -2,8 +2,9 @@
  * Las piezas de scripts/check-banderas.mjs, sin red ni archivos para poder probarlas.
  *
  * El sitio se construye con variables VITE_ que quedan escritas en su código. Acá
- * viven tres cosas: leer la tabla de docs/operacion.md, sacar de un texto de código
- * ya empaquetado las variables que quedaron escritas, y comparar las dos.
+ * viven cuatro cosas: leer la tabla de docs/operacion.md, sacar de un texto de código
+ * ya empaquetado las variables que quedaron escritas, comparar las dos, y bajar el sitio
+ * con reintentos y un tope de tiempo (la red entra por parámetro, para probarlo sin ella).
  *
  * Regla de oro: el informe de la comparación nunca escribe el valor de una variable
  * reservada (la lista fija de RESERVADAS: montos, cuentas y llaves), diga lo que diga
@@ -216,6 +217,151 @@ export function referenciasRelativas(codigo) {
   let m;
   while ((m = re.exec(String(codigo)))) salida.add(m[1]);
   return [...salida];
+}
+
+/** Cuánto puede tardar en total la lectura del sitio: pasado esto el guion falla con su propio mensaje. */
+export const TOPE_TOTAL_MS = 90_000;
+/** Cuánto se espera a un solo archivo en cada intento. */
+export const TIEMPO_POR_INTENTO_MS = 15_000;
+/** Cuántas veces más se pide un archivo que no bajó, antes de darlo por caído. */
+export const REINTENTOS = 2;
+/** La espera corta entre un intento y el siguiente. */
+export const ESPERA_ENTRE_INTENTOS_MS = 1_500;
+/** Cuántos archivos se bajan a la vez. */
+export const SIMULTANEOS = 6;
+
+const dormirDeVerdad = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
+
+/** El error de una lectura que se quedó sin el tiempo total: el guion lo cuenta aparte de un corte del sitio. */
+export class SinTiempo extends Error {
+  constructor(mensaje = "se acabó el tiempo total de la lectura") {
+    super(mensaje);
+    this.name = "SinTiempo";
+    this.sinTiempo = true;
+  }
+}
+
+/**
+ * Baja un texto con reintentos: una respuesta que no es 2xx, un corte de red o un archivo que no termina
+ * de llegar se piden de nuevo (`reintentos` veces más, con una espera corta) antes de dar el archivo por caído.
+ * `limite` es la hora (en milisegundos, la de `ahora()`) en que se acaba el tiempo total: ningún intento ni
+ * ninguna espera pasan de ahí, y si ya pasó se lanza `SinTiempo`. El mensaje del error dice solo cuántos
+ * intentos se hicieron y qué respondió el sitio: nunca el contenido de lo que se bajó. Todo lo de afuera
+ * (`fetchFn`, `ahora`, `dormir`) se puede reemplazar para probarlo sin red.
+ */
+export async function bajarConReintentos(url, opciones = {}) {
+  const {
+    fetchFn = fetch,
+    reintentos = REINTENTOS,
+    esperaMs = ESPERA_ENTRE_INTENTOS_MS,
+    tiempoMs = TIEMPO_POR_INTENTO_MS,
+    limite = Infinity,
+    ahora = Date.now,
+    dormir = dormirDeVerdad,
+  } = opciones;
+  let motivo = "sin respuesta";
+  let intentos = 0;
+  for (let n = 0; n <= reintentos; n++) {
+    if (n > 0) {
+      const espera = Math.min(esperaMs, limite - ahora());
+      if (espera <= 0) throw new SinTiempo();
+      await dormir(espera);
+    }
+    const restante = limite - ahora();
+    if (restante <= 0) throw new SinTiempo();
+    intentos++;
+    try {
+      const res = await fetchFn(url, { signal: AbortSignal.timeout(Math.max(1, Math.min(tiempoMs, restante))), headers: { "user-agent": "check-banderas" } });
+      if (res.ok) return await res.text();
+      motivo = `el sitio contestó ${res.status}`;
+    } catch (e) {
+      motivo = e && (e.name === "TimeoutError" || e.name === "AbortError") ? "no terminó de bajar a tiempo" : "sin respuesta";
+    }
+  }
+  throw new Error(`${motivo}, en ${intentos} intentos`);
+}
+
+/** Corre `trabajo` sobre cada elemento, con a lo sumo `cuantos` a la vez. Devuelve los resultados en el orden de la lista. */
+async function enParalelo(lista, cuantos, trabajo) {
+  const resultados = new Array(lista.length);
+  let siguiente = 0;
+  const obrero = async () => {
+    while (siguiente < lista.length) {
+      const i = siguiente++;
+      resultados[i] = await trabajo(lista[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(cuantos, lista.length) }, obrero));
+  return resultados;
+}
+
+/** La ruta de un archivo sin su dirección completa ni sus parámetros: es lo que se nombra en un informe. */
+export function rutaCorta(url) {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return String(url).slice(0, 80);
+  }
+}
+
+/**
+ * Baja la portada y sus archivos de código y devuelve las copias del objeto de variables que encuentra.
+ * `bajar(url)` devuelve el texto de una dirección o lanza un error (el guion le pasa `bajarConReintentos`).
+ * Se bajan varios a la vez y todos los que nombra la portada se miran. Solo si ninguno trae el objeto
+ * se siguen los enlaces relativos que nombran, por rondas, hasta `maxArchivos`.
+ *
+ * Nada se saltea en silencio: cada archivo que no bajó queda en `noBajaron` con su ruta y su motivo, y
+ * `sinTiempo` dice si la lectura paró porque venció `limite`. La portada que no baja lanza el error.
+ * Devuelve `{ copias, archivos, noBajaron, sinTiempo }`, con `archivos` los que sí bajaron.
+ */
+export async function leerDelSitio({ base, bajar, maxArchivos = 250, simultaneos = SIMULTANEOS, limite = Infinity, ahora = Date.now }) {
+  const html = await bajar(`${base}/`);
+  let ronda = archivosDeLaPortada(html).map((ref) => new URL(ref, `${base}/`).href);
+  if (!ronda.length) throw new Error("la portada no nombra ningún archivo de código");
+  const vistos = new Set();
+  const copias = [];
+  const noBajaron = [];
+  let archivos = 0;
+  let sinTiempo = false;
+  while (ronda.length && vistos.size < maxArchivos && !sinTiempo) {
+    const lote = [];
+    for (const url of ronda) {
+      if (vistos.has(url) || vistos.size >= maxArchivos) continue;
+      vistos.add(url);
+      lote.push(url);
+    }
+    const hechos = await enParalelo(lote, simultaneos, async (url) => {
+      if (ahora() >= limite) return { url, motivo: "no hubo tiempo para pedirlo", tope: true };
+      try {
+        return { url, codigo: await bajar(url) };
+      } catch (e) {
+        return { url, motivo: e instanceof Error ? e.message : "sin respuesta", tope: Boolean(e && e.sinTiempo) };
+      }
+    });
+    const siguientes = [];
+    for (const h of hechos) {
+      if (h.motivo !== undefined) {
+        noBajaron.push({ ruta: rutaCorta(h.url), motivo: h.motivo });
+        if (h.tope) sinTiempo = true;
+        continue;
+      }
+      archivos++;
+      const v = sacarVariables(h.codigo);
+      if (v) copias.push(v);
+      else for (const rel of referenciasRelativas(h.codigo)) siguientes.push(new URL(rel, h.url).href);
+    }
+    ronda = copias.length ? [] : siguientes;
+  }
+  return { copias, archivos, noBajaron, sinTiempo };
+}
+
+/** Los archivos que no bajaron, dichos en una frase: hasta cinco nombres y cuántos más. Vacía si todos bajaron. */
+export function describirNoBajaron(noBajaron, nombres = 5) {
+  if (!noBajaron.length) return "";
+  const lista = noBajaron.slice(0, nombres).map((f) => f.ruta).join(", ");
+  const mas = noBajaron.length > nombres ? ` y ${noBajaron.length - nombres} más` : "";
+  const cuantos = noBajaron.length === 1 ? "no bajó 1 archivo de código" : `no bajaron ${noBajaron.length} archivos de código`;
+  return `${cuantos} (${lista}${mas}), último motivo: ${noBajaron[noBajaron.length - 1].motivo}`;
 }
 
 const valorTexto = (v) => (typeof v === "string" ? v : v === undefined || v === null ? "" : String(v)).slice(0, 40);
