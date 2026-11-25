@@ -52,7 +52,7 @@ export function enEnsayo(): boolean {
  */
 export const EVENTO_PRACTICA = "tinkazo:practica";
 function avisarCambioDePractica(): void {
-  if (typeof document !== "undefined") document.dispatchEvent(new Event(EVENTO_PRACTICA));
+  if (typeof document !== "undefined" && typeof document.dispatchEvent === "function") document.dispatchEvent(new Event(EVENTO_PRACTICA));
 }
 
 /** Entra al ensayo o sale de él, en esta pestaña. */
