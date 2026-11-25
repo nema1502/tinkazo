@@ -2092,8 +2092,12 @@ class PollarWallet implements SubmittingWallet {
    * La pantalla no espera la ventana entera: cuando la primera mirada vence sin respuesta se avisa por `cuandoTarda`
    * (una sola vez) y la cabecera se suelta como siempre, a los 8 segundos. La retoma sigue por detrás y, si el proveedor
    * contesta, devuelve la cuenta: quien llama decide si todavía la abre (`restorePollar` de `wallet-ui.ts`).
+   *
+   * Solo la retoma de la cabecera puede seguir por detrás sin tener a nadie esperando. Quien sí espera la respuesta
+   * (`asegurarLaSesion`, la cuenta recordada del registro de equipos, la sala de campaña) pasa `ventanaMs: LISTO_MS`:
+   * una sola mirada de 8 segundos, como siempre, sin ventana paciente y sin aviso.
    */
-  async restore(opciones: { cuandoTarda?: () => void } = {}): Promise<string | null> {
+  async restore(opciones: { cuandoTarda?: () => void; ventanaMs?: number } = {}): Promise<string | null> {
     let via: string | null = null;
     try {
       via = readIntent();
@@ -2107,7 +2111,7 @@ class PollarWallet implements SubmittingWallet {
     // Retomar la sesión son pedidos al servicio de cuentas (validarla, renovarla): un rechazo por límite queda anotado, así la
     // página del celular lo dice con la verdad. El mirador vive lo que vive el cliente.
     this.#sinMirarLimites ??= mirarLimites(client, (segundos) => this.anotarLimite(segundos));
-    const listo = await this.#esperarElListo(client, opciones.cuandoTarda);
+    const listo = await this.#esperarElListo(client, opciones.cuandoTarda, opciones.ventanaMs ?? VENTANA_RETOMA_MS);
     if (listo) this.#leidos.add(client);
     const wallet = client.getWallet();
     this.address = wallet?.address ?? null;
@@ -2128,12 +2132,12 @@ class PollarWallet implements SubmittingWallet {
    * con espera creciente. Cada vuelta se gana apenas el proveedor contesta, aunque el temporizador siga andando; el
    * temporizador solo acota. Si el kit falla, sale enseguida con falso, como siempre, sin avisar que tarda.
    */
-  async #esperarElListo(client: PollarClient, cuandoTarda?: () => void): Promise<boolean> {
+  async #esperarElListo(client: PollarClient, cuandoTarda: (() => void) | undefined, ventana: number): Promise<boolean> {
     const ready = client.ready().then(() => "listo" as const, () => "falla" as const);
     let gastado = 0;
     let pausa = LISTO_MS;
     for (;;) {
-      const ancho = Math.min(pausa, VENTANA_RETOMA_MS - gastado);
+      const ancho = Math.min(pausa, ventana - gastado);
       let reloj: ReturnType<typeof setTimeout> | undefined;
       const vence = new Promise<"vence">((r) => {
         reloj = setTimeout(() => r("vence"), ancho);
@@ -2142,7 +2146,7 @@ class PollarWallet implements SubmittingWallet {
       clearTimeout(reloj);
       if (veredicto === "listo") return true;
       if (veredicto === "falla") return false;
-      if (gastado === 0) {
+      if (gastado === 0 && ventana > ancho) {
         try {
           cuandoTarda?.();
         } catch {
@@ -2150,8 +2154,8 @@ class PollarWallet implements SubmittingWallet {
         }
       }
       gastado += ancho;
-      if (gastado >= VENTANA_RETOMA_MS) return false;
-      pausa = Math.min(pausa * 2, VENTANA_RETOMA_MS - gastado);
+      if (gastado >= ventana) return false;
+      pausa = Math.min(pausa * 2, ventana - gastado);
     }
   }
 
@@ -3946,7 +3950,8 @@ class PollarWallet implements SubmittingWallet {
       }
       this.soltarElCliente();
     }
-    const dir = await this.restore();
+    // Quien pide la sesión espera la respuesta: la primera mirada de 8 segundos y nada más. La paciencia es de la cabecera.
+    const dir = await this.restore({ ventanaMs: LISTO_MS });
     this.#mirarLaLlave();
     return dir;
   }

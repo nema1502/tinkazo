@@ -49,7 +49,10 @@ if (raiz) {
       cuentaDeLaSesion({
         tipo: loadSessionKind(network.name),
         hayPollar,
-        google: async () => (await import("./stellar/wallet-pollar")).pollarWallet.restore(),
+        google: async () => {
+          const m = await import("./stellar/wallet-pollar");
+          return m.pollarWallet.restore({ ventanaMs: m.LISTO_MS });
+        },
         freighter: async () => (await import("./stellar/wallet-lite")).freighterWallet.restore(),
         prueba: async () => (await import("./stellar/wallet")).guestWallet.restore(),
       }),

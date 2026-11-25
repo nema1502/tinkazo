@@ -298,6 +298,31 @@ describe("el retomo paciente de la sesión de Google (issue 89)", () => {
     expect(datos.get(MARCA)).toBe("google");
   });
 
+  it("asegurarLaSesion espera la primera mirada y no la ventana paciente: lo que la sigue no espera el doble ni el triple", async () => {
+    vi.useFakeTimers();
+    const datos = almacenDeLaSesion({ [MARCA]: "google" });
+    za.ready = "nunca";
+    const { pollarWallet, LISTO_MS } = await moduloDeLaSesion();
+    let fin: string | null | undefined;
+    void pollarWallet.asegurarLaSesion().then((v) => (fin = v), () => undefined);
+    await vi.advanceTimersByTimeAsync(LISTO_MS + 100);
+    expect(fin, "a los 8 segundos ya entregó, como la rama principal").toBeNull();
+    expect(datos.get(MARCA), "la marca queda: la próxima vez se vuelve a intentar").toBe("google");
+  });
+
+  it("restore con su propia ventana corta no pasa de ella ni avisa que tarda", async () => {
+    vi.useFakeTimers();
+    almacenDeLaSesion({ [MARCA]: "google" });
+    za.ready = "nunca";
+    const { pollarWallet, LISTO_MS } = await moduloDeLaSesion();
+    let avisos = 0;
+    let fin: string | null | undefined;
+    void pollarWallet.restore({ ventanaMs: LISTO_MS, cuandoTarda: () => void avisos++ }).then((v) => (fin = v), () => undefined);
+    await vi.advanceTimersByTimeAsync(LISTO_MS + 100);
+    expect(fin).toBeNull();
+    expect(avisos, "sin ventana paciente no hay nada que seguir por detrás").toBe(0);
+  });
+
   it("un aviso que falla no rompe la retoma", async () => {
     vi.useFakeTimers();
     almacenDeLaSesion({ [MARCA]: "google" });
