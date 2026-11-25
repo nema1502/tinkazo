@@ -48,10 +48,11 @@ export interface DatosEspectador {
   /** Los nombres de los equipos con cupón, de las cuentas de la lista: `[cuenta, nombre]`. */
   e?: [string, string][];
   /**
-   * 1 si esos nombres son de personas (una campaña de empresa) y no de equipos: quien mira los ve en la pantalla de la
-   * sala, pero ninguna foto ni mensaje que arme su celular los lleva (`espectador.ts`). Sin esta marca son de equipos.
+   * De quién son esos nombres: 1 si son de personas (una campaña de empresa) y 0 si son de equipos. Quien mira ve los
+   * dos en la pantalla de la sala, pero el celular solo comparte los de equipos (`espectador.ts`): sin esta marca (un
+   * enlace de una sala anterior) no se sabe de qué son y no se comparte ninguno.
    */
-  q?: 1;
+  q?: 0 | 1;
   /**
    * 1 si la sala sigue la línea de tiempo común (`arranque-del-show.ts`) y elige cuándo grabar con celulares mirando
    * (`puerta-de-la-grabacion.ts`): el celular juega a la par. Sin esto (una sala con el sitio de antes), el celular
@@ -129,7 +130,7 @@ export function datosDelEnlace(hash: string = location.hash): DatosEspectador | 
     if (z !== undefined && (typeof z !== "string" || z.length > 200)) return null;
     if (typeof i !== "string" || !ES_ID.test(i) || !contratoOficial(net, k)) return null;
     if (h !== undefined && h !== 1) return null;
-    if (q !== undefined && q !== 1) return null;
+    if (q !== undefined && q !== 0 && q !== 1) return null;
     const datos: DatosEspectador = { r: r as number, g: g as Game, p: p as Pace, w: w as number, n, net: net as NetworkName, k: k as string, i };
     if (z) datos.z = z;
     if (h === 1) datos.h = 1;
@@ -145,7 +146,7 @@ export function datosDelEnlace(hash: string = location.hash): DatosEspectador | 
       }
       if (pares.length) {
         datos.e = pares;
-        if (q === 1) datos.q = 1;
+        if (q === 0 || q === 1) datos.q = q;
       }
     }
     return datos;
@@ -200,7 +201,7 @@ export function datosDeLaEspera(f: Frozen, d: DeLaEspera): DatosEspectador | nul
   }) : [];
   if (equipos.length) {
     datos.e = equipos;
-    if (d.personas) datos.q = 1;
+    datos.q = d.personas ? 1 : 0;
   }
   return datos;
 }

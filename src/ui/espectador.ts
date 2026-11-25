@@ -140,12 +140,12 @@ function mismoSorteo(a: DatosEspectador, b: DatosEspectador): boolean {
 }
 
 /**
- * El enlace del comprobante del sorteo que este celular ya verificó: el mismo comprobante que arma la sala para su
- * resultado (`buildProof`, en `draw.ts`), con lo que acá es parte del enlace y de la cadena: la lista, la ronda, la
- * firma y el número del sorteo. La fecha del sello la pone el instante de la ronda: el teléfono no leyó cuándo se
- * selló, y la página de verificación dice la lista completa y su día igual. Sin los hashes de las transacciones
- * (`stx`/`dtx`), que son la pantalla del organizador al grabar: el enlace se verifica igual y el mensaje queda el
- * mismo que comparte la sala.
+ * El enlace del comprobante del sorteo que este celular ya verificó. Es el mismo comprobante que arma la sala para su
+ * resultado (el de `draw.ts`), con lo que este celular tiene: la lista, la ronda, la firma y el número del sorteo. La
+ * fecha del sello la pone el instante de la ronda, porque el celular no leyó cuándo se selló. No lleva los hashes de
+ * las transacciones (`stx` y `dtx`): solo los conoce la pantalla de quien organiza. Con el estado del contrato
+ * vivo el enlace se verifica igual. Cuando ese estado vence, solo el enlace de quien organiza se sigue verificando por
+ * el historial de la red.
  */
 async function enlaceDelComprobante(datos: DatosEspectador, d: NonNullable<(typeof app)["drawn"]>): Promise<string> {
   // Un orden de turnos sin sello no tiene comprobante; pero un espectador siempre mira un sorteo sellado: no pasa.
@@ -173,11 +173,14 @@ async function enlaceDelComprobante(datos: DatosEspectador, d: NonNullable<(type
   }
 }
 
+/** El oyente del cierre del diálogo de compartir que sigue vivo, si hay uno. */
+let alCerrarAnterior: ((e: Event) => void) | null = null;
+
 /**
- * Compartir lo que ya pasó (issue #247): mientras se mira en vivo, Lo que salió de la vista del espectador también
- * deja avisar al grupo. Abre el mismo diálogo de «Compartir el sorteo» que la sala (`compartir.ts`), sin cambiarle
- * nada: recibe los datos de este sorteo tal como van —los ganadores ya revelados y nada de lo que falta— y el
- * mensaje y la foto salen del mismo camino de siempre (`abrirSorteo`). Al cerrar, la vista en vivo sigue como estaba.
+ * Compartir lo que ya pasó: desde Lo que salió, quien mira también puede avisar a su grupo. Abre el mismo diálogo de
+ * Compartir el sorteo que la sala (`compartir.ts`), sin cambiarle nada. Recibe los ganadores ya revelados y nada de lo
+ * que falta, y el mensaje y la foto salen del mismo camino de siempre (`abrirSorteo`). Al cerrar, la vista en vivo sigue
+ * como estaba.
  */
 async function compartirElSorteo(
   datos: DatosEspectador,
@@ -189,10 +192,11 @@ async function compartirElSorteo(
   // Los nombres como los manda la sala: la línea sellada sin su marca cuando la lista se lee por persona, y el
   // nombre del equipo cuando la lista es de equipos con etiqueta (`etiquetaDe`).
   const porPersona = seCuentaPorPersona(datos.n, modesVisible());
-  // En una campaña de empresa los nombres son de personas: se ven en la pantalla de la sala, pero de este celular no
-  // sale ninguno. Lo que sale es la cuenta acortada, que es lo que dice el comprobante (la lista sellada son cuentas).
+  // Un nombre de persona se ve en la pantalla de la sala, pero de este celular no sale. Solo se comparte el nombre de
+  // un equipo cuando la sala lo marcó así (`q: 0`). Con etiquetas de personas o sin saber de qué son (un enlace de una
+  // sala anterior), sale la cuenta acortada, que es lo que dice el comprobante: la lista sellada son cuentas.
   const ganadores = d.winners.map((i) => {
-    if (datos.q) return cuentaCorta(datos.n[i] ?? "");
+    if (datos.e && datos.q !== 0) return cuentaCorta(datos.n[i] ?? "");
     const linea = etiquetaDe(datos.n[i] ?? "");
     return porPersona ? nombreDePersona(linea) : linea;
   });
@@ -218,15 +222,19 @@ async function compartirElSorteo(
     { corto: false },
   );
   // Al cerrarse el diálogo, el foco vuelve al botón que lo abrió. El navegador ya lo hace con un diálogo modal, pero si
-  // no (un teclado que quedó en el diálogo que se retiró), la vista no pierde el lugar: sigue en Compartir.
+  // no (un teclado que quedó en el diálogo que se retiró), la vista no pierde el lugar: sigue en Compartir. Un solo
+  // oyente a la vez: el de un toque anterior se retira antes de poner el nuevo.
+  if (alCerrarAnterior) document.removeEventListener("close", alCerrarAnterior, true);
   const alCerrar = (e: Event): void => {
     if (!(e.target instanceof HTMLDialogElement) || !e.target.classList.contains("cmp-dlg")) return;
     document.removeEventListener("close", alCerrar, true);
+    if (alCerrarAnterior === alCerrar) alCerrarAnterior = null;
     queueMicrotask(() => {
       const a = document.activeElement;
       if (volverA.isConnected && (!a || a === document.body)) volverA.focus({ preventScroll: true });
     });
   };
+  alCerrarAnterior = alCerrar;
   document.addEventListener("close", alCerrar, true);
 }
 
@@ -360,7 +368,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     // Mientras corre el show, Escape no cierra la vista (ni salta el juego: el show se mira entero).
     if (fase === "show" || fase === "numero" || fase === "grabando") return;
     // Con el diálogo de compartir abierto, Escape lo cierra a él: al cerrarse, la vista en vivo sigue como estaba.
-    if (document.querySelector("dialog[open]")) return;
+    if (document.querySelector("dialog.cmp-dlg[open]")) return;
     salir();
   };
   addEventListener("keydown", tecla);
@@ -399,8 +407,8 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     otraVez?.addEventListener("click", () => {
       void import("./draw").then((m) => m.verDeNuevo());
     });
-    // Compartir lo que ya pasó (issue #247): el mismo diálogo de «Compartir el sorteo» que la sala, reusado tal
-    // cual. Mientras la vista en vivo sigue abierta (aquí no sale de ella), su estado amanece igual al cerrarlo.
+    // Compartir lo que ya pasó: el mismo diálogo de Compartir el sorteo que la sala, reusado tal cual. La vista en vivo
+    // sigue abierta mientras tanto y amanece igual al cerrarlo.
     const compartir = document.createElement("button");
     compartir.type = "button";
     compartir.className = "ghost";
@@ -559,6 +567,9 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     datos.p = nuevos.p;
     if (nuevos.e) {
       datos.e = nuevos.e;
+      // La marca de quién es cada nombre va con los nombres: lo que se comparte se decide con ella.
+      if (nuevos.q === undefined) delete datos.q;
+      else datos.q = nuevos.q;
       ponerEtiquetas(new Map(nuevos.e), nuevos.q ? "personas" : "equipos");
     }
     forzarRitmo(datos.p);

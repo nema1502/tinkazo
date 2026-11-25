@@ -213,20 +213,28 @@ describe("el tamaño del enlace", () => {
     expect(datosDeLaEspera(libre, { ...base, contrato: CONTRATO_PRUEBA })).toBeNull();
   });
 
-  it("las etiquetas de personas (una campaña de empresa) viajan marcadas, y las de equipos no llevan marca", () => {
+  it("las etiquetas viajan siempre con su marca: 1 si son de personas (una campaña de empresa) y 0 si son de equipos", () => {
     const cuentas = ["G" + "A".repeat(55), "G" + "B".repeat(55)];
     const f = { names: cuentas, listHash: "ab", ts: 1, at: "", prize: "", round: 10, raffleId: 7n };
     const base = { juego: "race" as const, ritmo: "normal" as const, premios: 1, red: "testnet" as const, contrato: CONTRATO_PRUEBA, equipo: (c: string) => (c === cuentas[0] ? "Ana R." : "Beto S.") };
     const deEquipos = datosDeLaEspera(f, base);
     expect(deEquipos?.e).toHaveLength(2);
-    expect(deEquipos?.q).toBeUndefined();
+    expect(deEquipos?.q).toBe(0);
     const dePersonas = datosDeLaEspera(f, { ...base, personas: true });
     expect(dePersonas?.q).toBe(1);
-    // La marca hace el viaje entero por el fragmento y se lee igual.
+    // La marca hace el viaje entero por el fragmento y se lee igual, también el cero.
     expect(datosDelEnlace(new URL(enlaceEspectador(dePersonas as DatosEspectador, "https://tinkazo.app")).hash)?.q).toBe(1);
-    expect(datosDelEnlace(new URL(enlaceEspectador(deEquipos as DatosEspectador, "https://tinkazo.app")).hash)?.q).toBeUndefined();
+    expect(datosDelEnlace(new URL(enlaceEspectador(deEquipos as DatosEspectador, "https://tinkazo.app")).hash)?.q).toBe(0);
     // Sin etiquetas no hay nada que marcar.
     expect(datosDeLaEspera(f, { juego: "race", ritmo: "normal", premios: 1, red: "testnet", contrato: CONTRATO_PRUEBA, personas: true })?.q).toBeUndefined();
+  });
+
+  it("un enlace de una sala anterior, con etiquetas y sin marca, se lee sin marca: no se sabe de qué son", () => {
+    const cuentas = ["G" + "A".repeat(55), "G" + "B".repeat(55)];
+    const viejo = { ...datos(), n: cuentas, e: [[cuentas[0], "Ana R."]] } as unknown as DatosEspectador;
+    const leido = datosDelEnlace(new URL(enlaceEspectador(viejo, "https://tinkazo.app")).hash);
+    expect(leido?.e).toEqual([[cuentas[0], "Ana R."]]);
+    expect(leido?.q).toBeUndefined();
   });
 
   it("una marca que no es la que escribe la sala rompe el enlace: no se abre a medias", () => {

@@ -1013,7 +1013,7 @@ describe("compartir el sorteo desde la vista en vivo", () => {
 
   it("con quién ganó cada premio, el mensaje nombra a los que ya salieron y nada de lo que falta", async () => {
     // Un espectador de un sorteo con dos premios: la vista es la misma, con la lista de los dos. La cadena de prueba
-    // graba el sorteo con sus dos ganadores, para que el celular sa adelante a jugar.
+    // graba el sorteo con sus dos ganadores, para que el celular se adelante a jugar.
     abrir(datos({ z: "Vinos del valle", w: 2 }), { leer: async () => registro({ grabado: true, n: NOMBRES, numWinners: 2, winners: ganadores(NOMBRES, 2), meta: "Vinos del valle" }) });
     await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
     (h.jugar.mock.calls[0]?.[0] as () => void)();
@@ -1173,8 +1173,15 @@ describe("compartir el sorteo desde la vista en vivo", () => {
       expect(txt).toBe(esperado);
     });
 
-    it("con equipos de un evento sigue siendo el nombre del equipo, que la sala ya mostró a todos", async () => {
+    it("un enlace de una sala anterior, con etiquetas y sin marca, no lleva ningún nombre: no se sabe de qué son", async () => {
       const txt = await compartirYLeer({});
+      const gana = cuentas[ganadores(cuentas)[0] ?? 0] ?? "";
+      expect(txt).toContain(cuentaCorta(gana));
+      for (const [, nombre] of etiquetas) expect(txt).not.toContain(nombre);
+    });
+
+    it("con equipos de un evento sigue siendo el nombre del equipo, que la sala ya mostró a todos", async () => {
+      const txt = await compartirYLeer({ q: 0 });
       const gana = cuentas[ganadores(cuentas)[0] ?? 0] ?? "";
       const nombre = etiquetas.find(([c]) => c === gana)?.[1] ?? "";
       expect(txt).toContain(nombre);
