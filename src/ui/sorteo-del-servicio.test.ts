@@ -192,7 +192,7 @@ describe("el servicio manda y la red confirma", () => {
     expect(m.alFallar).toHaveBeenCalled();
     expect(m.pedir).toHaveBeenCalledTimes(1);
     expect(transcurrido()).toBeGreaterThanOrEqual(30_000);
-    expect(transcurrido()).toBeLessThanOrEqual(45_000);
+    expect(transcurrido()).toBeLessThanOrEqual(95_000);
   });
 
   it("PENDING y después FAILED: con el contrato sin el sorteo, camino de siempre", async () => {
@@ -206,30 +206,34 @@ describe("el servicio manda y la red confirma", () => {
     expect(await correr(sortear(m))).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
   });
 
-  it("PENDING que la red tarda en cerrar: la sala espera como mucho un minuto, termina sin confirmar con el enlace, sin el camino de siempre y sin avisar al RPC", async () => {
+  it("PENDING que la red tarda más de un minuto y el contrato sigue sin el sorteo: sigue el camino de siempre, una sola vez, sin avisar al RPC", async () => {
     const m = armar({ pedir: async () => mandado(H1), leer: async () => null });
     const r = await correr(sortear(m));
-    expect(pasoDe(r)).toBe("error");
-    expect((r as { error: Error & { txHash?: string } }).error.message).toBe("sin-confirmar");
-    expect((r as { error: { txHash?: string } }).error.txHash).toBe(H1);
+    expect(r).toEqual({ estado: "camino-de-hoy" });
     expect(transcurrido()).toBeGreaterThanOrEqual(55_000);
     expect(transcurrido()).toBeLessThanOrEqual(70_000);
     expect(m.pedir).toHaveBeenCalledTimes(1);
     expect(m.alFallar).not.toHaveBeenCalled();
   });
 
-  it("PENDING que tarda más de un minuto: al volver a apretar Guardar el servicio lo da por repetido y se sigue esperando el mismo envío hasta que entra", async () => {
-    const m = armar({ pedir: async () => mandado(H1) });
-    m.leer.mockResolvedValue(null);
-    expect(pasoDe(await correr(sortear(m)))).toBe("error");
-    const salida = Date.now();
-    const otro = armar({
-      pedir: async () => mandado(H1, false),
-      consultar: async () => (Date.now() - salida < 20_000 ? { status: "NOT_FOUND", cierre: Date.now() / 1000 } : { status: "SUCCESS", cierre: Date.now() / 1000, valor: "x" }),
-      leer: async () => GANADORES,
-    });
-    expect(await correr(sortear(otro))).toEqual({ estado: "listo", valor: { ...GANADORES, txHash: H1 }, yaEstaba: false });
-    expect(otro.pedir).toHaveBeenCalledTimes(1);
+  it("PENDING que tarda más de un minuto con la red mal de leer: no se manda nada más, se sigue mirando y se da por hecho cuando el contrato aparece", async () => {
+    const m = armar({ pedir: async () => mandado(H1), leer: async () => (Date.now() - T0 < 75_000 ? Promise.reject(new Error("rpc caído")) : GANADORES) });
+    const r = await correr(sortear(m));
+    expect(r).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
+    expect(transcurrido()).toBeGreaterThanOrEqual(75_000);
+    expect(transcurrido()).toBeLessThanOrEqual(90_000);
+    expect(m.pedir).toHaveBeenCalledTimes(1);
+  });
+
+  it("PENDING que tarda más de un minuto y el contrato nunca se deja leer: sin confirmar con el enlace a los noventa segundos, sin el camino de siempre", async () => {
+    const m = armar({ pedir: async () => mandado(H1), leer: async () => Promise.reject(new Error("rpc caído")) });
+    const r = await correr(sortear(m));
+    expect(pasoDe(r)).toBe("error");
+    expect((r as { error: Error & { txHash?: string } }).error.message).toBe("sin-confirmar");
+    expect((r as { error: { txHash?: string } }).error.txHash).toBe(H1);
+    expect(transcurrido()).toBeGreaterThanOrEqual(85_000);
+    expect(transcurrido()).toBeLessThanOrEqual(95_000);
+    expect(m.pedir).toHaveBeenCalledTimes(1);
   });
 
   it("PENDING que la red tarda en cerrar pero el contrato ya tiene el sorteo al vencer el tope: se da por hecho, sin enlace", async () => {
@@ -245,7 +249,7 @@ describe("el servicio manda y la red confirma", () => {
     expect(m.alFallar).toHaveBeenCalled();
     expect(m.pedir).toHaveBeenCalledTimes(1);
     expect(transcurrido()).toBeGreaterThanOrEqual(15_000);
-    expect(transcurrido()).toBeLessThanOrEqual(40_000);
+    expect(transcurrido()).toBeLessThanOrEqual(95_000);
   });
 
   it("hash fantasma: un repetido que la red, contestando, nunca encuentra. Entre 15 y 21 segundos y el camino de siempre", async () => {
@@ -446,14 +450,21 @@ describe("una cola larga en el servicio no es una falla", () => {
 });
 
 describe("el servicio dice que ya está, pero la red no se deja leer", () => {
-  it("ya y el contrato que no se deja leer en 10 segundos: sin confirmar y sin el camino de siempre ni marca", async () => {
+  it("ya y el contrato que no se deja leer: sigue mirando hasta los noventa segundos y termina sin confirmar, sin el camino de siempre ni marca", async () => {
     const m = armar({ pedir: async () => ({ accion: "ya" }), leer: async () => Promise.reject(new Error("rpc caído")) });
     const r = await correr(sortear(m));
     expect(pasoDe(r)).toBe("error");
     expect((r as { error: Error }).error.message).toBe("sin-confirmar");
     expect(m.pedir).toHaveBeenCalledTimes(1);
-    expect(transcurrido()).toBeLessThanOrEqual(12_000);
+    expect(transcurrido()).toBeGreaterThanOrEqual(85_000);
+    expect(transcurrido()).toBeLessThanOrEqual(95_000);
     expect(m.alFallar).toHaveBeenCalled();
+  });
+
+  it("ya, la red que se deja leer a los 40 segundos: se da por hecho sin mandar nada más", async () => {
+    const m = armar({ pedir: async () => ({ accion: "ya" }), leer: async () => (Date.now() - T0 < 40_000 ? Promise.reject(new Error("rpc caído")) : GANADORES) });
+    expect(await correr(sortear(m))).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
+    expect(m.pedir).toHaveBeenCalledTimes(1);
   });
 
   it("ya, un corte de la red y después el contrato limpio y vacío: se mira de nuevo y recién ahí camino de siempre", async () => {

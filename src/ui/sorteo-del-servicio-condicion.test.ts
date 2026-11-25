@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RespuestaDelSorteo } from "../stellar/sorteo-servidor-api";
-import { DISYUNTOR_CORTO_MS, DISYUNTOR_MS, type Fuentes, type FinDelServicio, fuentesDeVerdad, loTomaElServicio, reiniciarElServicio, sortearPorElServicio } from "./sorteo-del-servicio";
+import { DISYUNTOR_CORTO_MS, DISYUNTOR_MS, type Fuentes, type FinDelServicio, fuentesDeVerdad, loTomaElServicio, reiniciarElServicio, reservaDelServicioViva, sortearPorElServicio } from "./sorteo-del-servicio";
 
 /**
  * Cuándo toma el servicio un sorteo en esta pestaña, con la red principal, una cuenta de Google y la bandera prendida
@@ -280,5 +280,42 @@ describe("la última vuelta corta después de una red muda", () => {
     const r = await correr(fuentes({ consultar: caido, leer: caido }));
     expect(sinConfirmarCon(r)).toMatchObject({ message: "sin-confirmar", txHash: H1 });
     expect(loTomaElServicio(7n, false)).toBe(true);
+  });
+});
+
+describe("la reserva que el servicio puede tener viva", () => {
+  it("un envío del servicio que la red cerró sin dejar el sorteo: la reserva puede seguir viva, solo para ese sorteo", async () => {
+    const r = await correr(fuentes({ consultar: async () => ({ status: "FAILED", cierre: enSegundos() }) }));
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(reservaDelServicioViva(7n)).toBe(true);
+    expect(reservaDelServicioViva(8n)).toBe(false);
+  });
+
+  it("un pedido que no se sabe si salió, y después de la duda el camino de siempre: la reserva puede seguir viva", async () => {
+    const r = await correr(fuentes({ pedir: async () => ({ accion: "incierto" }) }));
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(reservaDelServicioViva(7n)).toBe(true);
+  });
+
+  it("un error del RPC del servicio que no se arregla: la reserva puede seguir viva", async () => {
+    const r = await correr(fuentes({ pedir: async () => ({ accion: "red-del-servicio" }) }));
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(reservaDelServicioViva(7n)).toBe(true);
+  });
+
+  it.each<[string, RespuestaDelSorteo]>([
+    ["un no del servicio antes de reservar", { accion: "hoy", marca: true, disyuntor: false, olvidar: false }],
+    ["la red ocupada, que devuelve la reserva", { accion: "espera", causa: "ocupada" }],
+    ["la ronda que no llega", { accion: "espera", causa: "ronda" }],
+  ])("%s: no hay reserva", async (_n, resp) => {
+    await correr(fuentes({ pedir: async () => resp }));
+    expect(reservaDelServicioViva(7n)).toBe(false);
+  });
+
+  it("la reserva se da por cerrada a los quince minutos", async () => {
+    await correr(fuentes({ pedir: async () => ({ accion: "incierto" }) }));
+    expect(reservaDelServicioViva(7n)).toBe(true);
+    expect(reservaDelServicioViva(7n, () => Date.now() + 14 * 60_000)).toBe(true);
+    expect(reservaDelServicioViva(7n, () => Date.now() + 16 * 60_000)).toBe(false);
   });
 });

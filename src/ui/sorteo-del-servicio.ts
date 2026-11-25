@@ -40,8 +40,14 @@ import type { AnchorStep } from "./anchor";
  *   mucho 20 segundos y la duda, con la red leyéndose, unos 8 más: eso es lo que la sala puede esperar de más antes de que
  *   arranque el camino de siempre, al que `grabar-sorteo.ts` le descuenta lo gastado con un mínimo. Un envío que el servicio
  *   mandó y la red tarda en cerrar se espera como mucho `TOPE_DE_LA_SALA_MS` desde la entrada (lo que vive hoy la
- *   transacción de una cuenta de Google): pasado eso termina en `sin-confirmar`, sin marca, y el botón Guardar vuelve a
- *   preguntar. El servicio devuelve el mismo número y se sigue esperando el mismo envío.
+ *   transacción de una cuenta de Google). Pasado eso, con la red contestando y el contrato sin el sorteo, se sigue por el
+ *   camino de siempre, que arma otra transacción con su comisión de ese momento y reintenta como hoy: la sala no pierde la
+ *   recuperación automática de la red ocupada. Si el envío del servicio entra después, uno de los dos falla con
+ *   `AlreadyDrawn`. Con la red sin poder leerse no se manda nada: se sigue mirando hasta `TOPE_DE_LA_DUDA_SIN_RED_MS` desde
+ *   la entrada y recién ahí termina en `sin-confirmar`, sin marca.
+ * - **Reserva del servicio.** Si el pedido salió y no se sabe cómo terminó, el servicio puede tener reservado ese sorteo en
+ *   el cupo de la cuenta unos catorce minutos (`reservaDelServicioViva`): quien sigue por el camino de siempre lo usa para no
+ *   dar por definitivo un tope de sorteos que es de esa reserva.
  * - **Sin textos nuevos.** Los pasos son solo `sending` y `confirmed`: con la cuenta de Google ninguno pide aprobar nada.
  *
  * La lógica es pura: lo que toca la red y la pantalla entra por `Fuentes`, y se prueba con un reloj manual.
@@ -138,6 +144,13 @@ interface Visto {
 const vistos = new Map<string, Visto>();
 /** Los sorteos que ya quedaron por el camino de siempre: no se le vuelve a pedir al servicio. */
 const marcados = new Set<string>();
+/**
+ * Los sorteos para los que el servicio pudo dejar una reserva en su cupo del mes sin saber si el envío llegó, y hasta
+ * cuándo. Esa reserva se cierra sola en unos catorce minutos, y mientras tanto cuenta como un sorteo más de la cuenta.
+ */
+const reservas = new Map<string, number>();
+/** Cuánto se da por viva una reserva del servicio de la que no se supo el final: un poco más de lo que tarda en cerrarla. */
+export const RESERVA_DEL_SERVICIO_MS = 15 * 60_000;
 let disyuntorHasta = 0;
 /** Deja de lado al servicio hasta `hasta`, sin acortar un tiempo que ya estaba corriendo. */
 const dejarDeLado = (hasta: number): void => {
@@ -148,7 +161,18 @@ const dejarDeLado = (hasta: number): void => {
 export function reiniciarElServicio(): void {
   vistos.clear();
   marcados.clear();
+  reservas.clear();
   disyuntorHasta = 0;
+}
+
+/**
+ * Si el servicio pudo dejar reservado un sorteo de esta cuenta sin que se sepa cómo terminó: quien sigue por el camino de
+ * siempre tiene que saber que un tope de sorteos del mes que se alcanza justo ahora puede ser de esa reserva y no del uso
+ * real. Pura.
+ */
+export function reservaDelServicioViva(raffleId: bigint, ahora: () => number = Date.now): boolean {
+  const hasta = reservas.get(claveDe(raffleId));
+  return hasta !== undefined && ahora() < hasta;
 }
 
 /** El sorteo en esta red y en este contrato: los números arrancan en 1 en cada contrato. */
@@ -398,6 +422,22 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
     }
   };
 
+  /**
+   * Un final sin confirmar no se da por perdido mientras quede lo que da el camino de siempre (`TOPE_DE_LA_DUDA_SIN_RED_MS`
+   * desde la entrada): el camino de siempre se recuperaba solo de una red lenta, y esto también. Solo se mira el contrato:
+   * no se manda nada.
+   */
+  const rematar = async (fin: FinDelServicio): Promise<FinDelServicio> => {
+    if (fin.estado !== "error" || !(fin.error instanceof Error) || fin.error.message !== "sin-confirmar") return fin;
+    const hasta = inicio + TOPE_DE_LA_DUDA_SIN_RED_MS;
+    while (ahora() + LEER_CADA_MS < hasta) {
+      await esperar(LEER_CADA_MS);
+      const l = await leer(hasta);
+      if (l.ok && l.v) return listo(l.v, true);
+    }
+    return fin;
+  };
+
   let volvioAPedir = false;
 
   /** El servicio mandó el sorteo: se confirma en la red. `"otra-vez"` es el caso de un sello gemelo. */
@@ -504,10 +544,14 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
           return sinSorteo();
         }
         if (esPendiente && ahora() >= hastaSala && ahora() - ultimaRespuesta <= RED_CONTESTANDO_MS) {
-          // No es un fallo de la red: el envío sigue vivo y tarda más de lo que la sala espera. Una última mirada al contrato y
-          // se termina sin confirmar, sin marca: el servicio devuelve el mismo número al volver a preguntar.
+          // No es un fallo de la red: el envío sigue vivo y tarda más de lo que la sala espera. Una última mirada al contrato.
+          // Hoy una transacción de una cuenta de Google vive un minuto y, vencida, se arma y se manda otra: con la red ocupada
+          // la sala tiene que recuperarse igual. Con la red contestando y el sorteo todavía sin estar, se sigue por el camino
+          // de siempre: el contrato acepta uno solo, y si el envío del servicio entra después, uno de los dos falla con
+          // `AlreadyDrawn` (cuesta una comisión y no cambia el resultado). Si el contrato no se deja leer, no se manda nada.
           const l = await leer(Number.POSITIVE_INFINITY);
-          return l.ok && l.v ? listo(l.v, true) : sinConfirmar(d.error, hash);
+          if (l.ok && l.v) return listo(l.v, true);
+          return l.ok ? caminoDeHoy({ marca: true }) : sinConfirmar(l.error, hash);
         }
         if (ultima) return sinConfirmar(d.error, hash);
         f.alFallar(d.error);
@@ -554,6 +598,8 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
         // Un corte, un tope o una respuesta que no se entiende: puede haber salido.
         r = { accion: "incierto" };
       }
+      // Si el pedido salió y no se sabe cómo terminó, el servicio puede tener reservado este sorteo en el cupo de la cuenta.
+      if (r.accion === "mandado" || r.accion === "red-del-servicio" || r.accion === "incierto") reservas.set(clave, ahora() + RESERVA_DEL_SERVICIO_MS);
       if (r.accion === "hoy") {
         if (r.olvidar) f.olvidarElEstado();
         siguiente = caminoDeHoy(r);
@@ -592,7 +638,7 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
         siguiente = await duda();
       }
     }
-    if (siguiente !== "otra-vez") return siguiente;
+    if (siguiente !== "otra-vez") return rematar(siguiente);
     // Otra etapa de pedir cabe solo si queda lugar en el minuto de la sala: la vuelta no reinicia el tope.
     if (hastaSala - ahora() < TOPE_DEL_PEDIDO_MS) return caminoDeHoy({ marca: true });
     entrada = ahora();
