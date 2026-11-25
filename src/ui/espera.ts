@@ -696,6 +696,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
       pintarNombre();
       // Con otro juego en el show, la presentación presenta con el gancho del juego nuevo.
       armarTeaser();
+      // Un juego sin captura deja las tarjetas sin imagen, y uno con captura las vuelve a alzar: se vuelve a medir que entre.
+      ajusta();
     }
   };
   document.addEventListener("tinkazo:cambio-con-qr", alCambiar);

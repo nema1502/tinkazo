@@ -1077,6 +1077,26 @@
     font-weight: 800; font-size: clamp(14px, 1.7vw, 24px); white-space: nowrap;
   }
   .espera-pie { font-size: clamp(14px, 1.5vw, 18px); color: var(--muted); max-width: 60ch; }
+  /* La presentación de la lista sellada durante la cuenta (games-teaser.ts): a lo sumo dos filas de tarjetas, así que con
+     150 personas el reloj y las cintas de nombres no salen de la pantalla. Lo que no entra se corta, sin barra. */
+  .espera-teaser-caja { max-width: 100%; }
+  .espera-teaser {
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; margin: 4px 0 2px;
+    max-height: 124px; overflow: hidden;
+  }
+  .espera-teaser-t { width: 100%; text-align: center; margin: 0; font-weight: 700; font-size: clamp(16px, 1.7vw, 22px); }
+  .espera-teaser-tarjeta {
+    display: inline-flex; align-items: center; gap: 7px; padding: 3px 14px 3px 4px;
+    border: 2px solid var(--ink); border-radius: 999px; background: var(--card); max-width: 100%;
+    font-size: clamp(14px, 1.4vw, 18px);
+  }
+  .espera-teaser-tarjeta .sel-img { display: block; width: 76px; height: 43px; object-fit: cover; border-radius: 6px; background: var(--field); flex-shrink: 0; }
+  .espera-teaser-tarjeta b { overflow-wrap: anywhere; }
+  .espera-teaser-mas { font-weight: 700; font-size: clamp(14px, 1.4vw, 18px); color: var(--muted); }
+  /* Una pantalla baja (un celular acostado, un zoom de 200 %): el reloj y los nombres primero, sin la presentación. */
+  @media (max-height: 560px) {
+    .espera-teaser-caja { display: none; }
+  }
   .espera-nadie { font-size: clamp(14px, 1.7vw, 22px); font-weight: 800; color: var(--ink); max-width: 46ch; text-wrap: balance; }
   .espera-ensayo {
     font-size: clamp(14px, 1.6vw, 22px); font-weight: 900; letter-spacing: 0.08em; max-width: 100%;

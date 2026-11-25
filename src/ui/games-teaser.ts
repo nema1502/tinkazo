@@ -30,26 +30,39 @@ import type { Game } from "../state";
  * aquellos que nacieron con la suya. Devuelve las dos rutas (tema oscuro y
  * tema claro) o nada.
  */
-function ganchoVisual(game: string): { oscura: string; clara: string } | null {
+function ganchoVisual(game: string): string | null {
   if (!SELECTOR.includes(game as Game)) return null;
   if (entradaDe(game)?.captura === false) return null;
-  return { oscura: `/juegos/selector/${game}.webp`, clara: `/juegos/selector/${game}-light.webp` };
+  // Una sola captura por tarjeta, la del tema con que se ve la sala. Las reglas que esconden la otra en styles.css
+  // valen solo dentro del selector de juegos, y la capa de la espera no está ahí: sin elegir, se pedían las dos
+  // por persona.
+  return temaOscuro() ? `/juegos/selector/${game}.webp` : `/juegos/selector/${game}-light.webp`;
 }
+
+/** El tema con que se ve la sala: el forzado de la página si lo hay, y si no, el del sistema (la misma regla del motor de los juegos). */
+function temaOscuro(): boolean {
+  const forzado = document.documentElement.dataset.theme;
+  if (forzado === "dark") return true;
+  if (forzado === "light") return false;
+  return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+/**
+ * Cuántas personas se presentan como mucho. Con 150 en la lista, una tarjeta por persona empujaba el reloj y las
+ * cintas fuera de la pantalla, que es lo primero que ve la sala: las demás se cuentan en una línea. La lista
+ * entera sigue visible en las cintas de abajo.
+ */
+export const TOPE_TARJETAS = 6;
 
 /**
  * Una tarjeta: el nombre de una persona, su lugar en la lista sellada y el
  * gancho visual del juego si lo hay.
  */
-function tarjeta(nombre: string, gancho: { oscura: string; clara: string } | null, lugar: number, total: number): string {
-  const imgs = gancho
-    ? `<img class="sel-img sel-osc" src="${gancho.oscura}" width="76" height="43" alt="" loading="lazy" decoding="async" />` +
-      `<img class="sel-img sel-cla" src="${gancho.clara}" width="76" height="43" alt="" loading="lazy" decoding="async" />`
-    : "";
+function tarjeta(nombre: string, gancho: string | null, lugar: number, total: number): string {
+  const imgs = gancho ? `<img class="sel-img" src="${gancho}" width="76" height="43" alt="" loading="lazy" decoding="async" />` : "";
   return (
-    // Sin hoja de estilos propia (esta superficie no toca `styles.css`): los
-    // colores los pone el texto de la capa en la que baja (`currentColor`) y
-    // el resto es forma.
-    `<span class="espera-teaser-tarjeta" role="listitem" data-nombre="${esc(nombre)}" style="display:inline-flex;align-items:center;gap:7px;padding:3px 14px 3px 4px;border:2px solid currentColor;border-radius:999px">` +
+    // El aspecto vive en styles.css (`.espera-teaser-tarjeta`), con los colores de la marca.
+    `<span class="espera-teaser-tarjeta" role="listitem" data-nombre="${esc(nombre)}">` +
     imgs +
     `<b>${esc(nombre)}</b>` +
     `<small>${esc(T[getLang()].espTeaserDe(lugar + 1, total))}</small>` +
@@ -72,10 +85,13 @@ export function presentarTeaser(caja: HTMLElement | null, juego: string, nombres
   if (!caja || nombres.length === 0) return;
   // El gancho visual: si el juego elegido no expone captura, la presentación va sin imagen y igual presenta a cada uno (S1, donde exista el gancho).
   const gancho = ganchoVisual(juego);
+  const resto = nombres.length - TOPE_TARJETAS;
   caja.innerHTML =
-    `<div class="espera-teaser" role="list" data-juego="${esc(juego)}" data-fuente="sellada" aria-label="${esc(t("espTeaserT"))}" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center;margin:4px 0 2px">` +
-    `<p class="espera-teaser-t" style="width:100%;text-align:center;margin:0;font-weight:700">${esc(t("espTeaserT"))}</p>` +
-    // Las tarjetas, en el orden sellado: nacen y mueren con la capa, que muere entera al nacer el número.
-    nombres.map((nombre, i) => tarjeta(nombre, gancho, i, nombres.length)).join("") +
+    `<div class="espera-teaser" role="list" data-juego="${esc(juego)}" data-fuente="sellada" aria-label="${esc(t("espTeaserT"))}">` +
+    `<p class="espera-teaser-t">${esc(t("espTeaserT"))}</p>` +
+    // Las tarjetas, en el orden sellado y hasta el tope: nacen y mueren con la capa, que muere entera al nacer el número.
+    nombres.slice(0, TOPE_TARJETAS).map((nombre, i) => tarjeta(nombre, gancho, i, nombres.length)).join("") +
+    // Las que no entran, contadas en una línea: la lista entera sigue en las cintas.
+    (resto > 0 ? `<span class="espera-teaser-mas" role="listitem">${esc(T[getLang()].espTeaserMas(resto))}</span>` : "") +
     `</div>`;
 }
