@@ -319,12 +319,16 @@ describe("la imagen de cada tarjeta no mueve nada si tarda o falla", () => {
     expect(css).toMatch(/\.espera-teaser-tarjeta \.sel-img\[data-fallo\]\s*\{[^}]*visibility:\s*hidden/);
   });
 
-  it("la imagen que ya había fallado no se vuelve a pedir al rearmar lo mismo", () => {
+  it("rearmar lo mismo no toca las tarjetas: la imagen que falló sigue siendo el mismo nodo y sigue escondida", () => {
     const c = caja();
     presentarTeaser(c, "race", ["Ana"]);
-    c.querySelector("img")?.dispatchEvent(new Event("error"));
+    const antes = c.querySelector("img");
+    antes?.dispatchEvent(new Event("error"));
     presentarTeaser(c, "race", ["Ana"]);
-    expect(c.querySelector("img")?.hasAttribute("data-fallo")).toBe(true);
+    const despues = c.querySelector("img");
+    expect(antes).not.toBeNull();
+    expect(despues).toBe(antes);
+    expect(despues?.hasAttribute("data-fallo")).toBe(true);
   });
 
   it("los juegos que salieron del selector y siguen abriendo con demo no tienen captura: la presentación sale sin imagen y sin errores", () => {
