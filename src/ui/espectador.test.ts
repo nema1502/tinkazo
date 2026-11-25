@@ -1043,6 +1043,40 @@ describe("compartir el sorteo desde la vista en vivo", () => {
     expect(h.verDeNuevo).toHaveBeenCalledTimes(1);
   });
 
+  it("un diálogo que no es el de compartir no se traga la salida con Escape", async () => {
+    await hastaElFin();
+    const otro = document.createElement("dialog");
+    otro.setAttribute("open", "");
+    document.body.appendChild(otro);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(irA).toHaveBeenCalled();
+  });
+
+  it("tocar Compartir otra vez deja un solo oyente del cierre, no uno por toque", async () => {
+    await hastaElFin();
+    const puestos: EventListenerOrEventListenerObject[] = [];
+    const quitados: EventListenerOrEventListenerObject[] = [];
+    const agregar = document.addEventListener.bind(document);
+    const quitar = document.removeEventListener.bind(document);
+    vi.spyOn(document, "addEventListener").mockImplementation((tipo: string, f: EventListenerOrEventListenerObject, o?: boolean | AddEventListenerOptions) => {
+      if (tipo === "close") puestos.push(f);
+      agregar(tipo, f, o);
+    });
+    vi.spyOn(document, "removeEventListener").mockImplementation((tipo: string, f: EventListenerOrEventListenerObject, o?: boolean | EventListenerOptions) => {
+      if (tipo === "close") quitados.push(f);
+      quitar(tipo, f, o);
+    });
+    const boton = capa().querySelector<HTMLButtonElement>("[data-compartir]");
+    boton?.click();
+    await vi.waitFor(() => expect(puestos).toHaveLength(1));
+    await vi.advanceTimersByTimeAsync(0);
+    boton?.click();
+    await vi.waitFor(() => expect(puestos).toHaveLength(2));
+    // El del primer toque se retiró antes de poner el segundo.
+    expect(quitados).toContain(puestos[0]);
+    vi.restoreAllMocks();
+  });
+
   it("con el diálogo abierto, Escape lo cierra a él: no se sale de la vista en vivo", async () => {
     await hastaElFin();
     capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
