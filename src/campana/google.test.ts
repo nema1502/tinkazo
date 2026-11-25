@@ -23,7 +23,7 @@ const gis = () => ({ initialize: vi.fn(), renderButton: vi.fn() });
 beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
-  delete (window as Ventana).google;
+  delete (window as unknown as Ventana).google;
 });
 
 afterEach(() => {
@@ -42,7 +42,7 @@ describe("cargarElGuionDeGoogle", () => {
     expect(guiones[0]?.src).toBe(URL_DEL_GUION_DE_GOOGLE);
     expect(URL_DEL_GUION_DE_GOOGLE).toBe("https://accounts.google.com/gsi/client");
     expect(guiones[0]?.async).toBe(true);
-    (window as Ventana).google = { accounts: { id: api } };
+    (window as unknown as Ventana).google = { accounts: { id: api } };
     guiones[0]?.dispatchEvent(new Event("load"));
     expect(await a).toBe(api);
     expect(await b).toBe(api);
@@ -52,7 +52,7 @@ describe("cargarElGuionDeGoogle", () => {
     const guiones = guionFalso();
     const { cargarElGuionDeGoogle } = await import("./google");
     const api = gis();
-    (window as Ventana).google = { accounts: { id: api } };
+    (window as unknown as Ventana).google = { accounts: { id: api } };
     expect(await cargarElGuionDeGoogle()).toBe(api);
     expect(guiones).toHaveLength(0);
   });
@@ -66,7 +66,7 @@ describe("cargarElGuionDeGoogle", () => {
     await caida;
     const segunda = cargarElGuionDeGoogle();
     expect(guiones).toHaveLength(2);
-    (window as Ventana).google = { accounts: { id: gis() } };
+    (window as unknown as Ventana).google = { accounts: { id: gis() } };
     guiones[1]?.dispatchEvent(new Event("load"));
     await expect(segunda).resolves.toBeDefined();
   });
