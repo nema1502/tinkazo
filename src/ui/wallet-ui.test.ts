@@ -46,6 +46,11 @@ function pestaña(): void {
   });
   vi.stubGlobal("document", { prerendering: false });
   vi.stubGlobal("sessionStorage", almacen);
+  // La cuenta conectada con la red sale con `fetch` (mira si el servicio la entiende): acá lo acepta todo.
+  vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+    enviados.push(String(init.body));
+    return { status: 204, ok: true };
+  });
 }
 
 const leidos = (): unknown[] => enviados.map((x) => JSON.parse(x));
