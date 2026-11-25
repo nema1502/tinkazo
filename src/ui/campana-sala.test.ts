@@ -16,6 +16,7 @@ vi.mock("../stellar/config", async (orig) => {
 });
 vi.mock("./qr", () => ({ pintarQr: async () => true, precargarQr: async () => undefined }));
 
+import { ponerPaso } from "../campana/puente";
 import { nadaSeAbreSolo } from "./cuenta-lista-flujo";
 import { CLAVE_EVENTOS_ORG, CLAVE_INTENTOS_ORG, CLAVE_ORG, guardarOrg, leerOrg } from "../sala/campana-org";
 import { montarPanelDeCampana } from "./campana-sala";
@@ -25,6 +26,7 @@ import {
   SALA,
   TOKEN,
   type Mundo,
+  type Panel,
   abrirInscripcion,
   alta,
   archivoDe,
@@ -785,24 +787,6 @@ describe("cerrar la lista", () => {
     expect(principales(p)).toHaveLength(0);
   });
 
-  it("desde cerrada, Armar otra campaña olvida la campaña y deja elegir el archivo de la siguiente", async () => {
-    const m = mundo();
-    const p = nuevoPanel(m);
-    await abrirInscripcion(m, p);
-    await alta(m, 1, "Ana");
-    await alta(m, 2, "Nora");
-    await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
-    boton(p, "Cerrar la lista").click();
-    await confirmarCierre(m, p, "Cerrar con 2 personas");
-    await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
-    expect(botones(p).map((b) => b.textContent)).toContain("Armar otra campaña");
-    expect(botones(p).map((b) => b.textContent)).not.toContain("Elegir otro archivo");
-    boton(p, "Armar otra campaña").click();
-    expect(vistaDe(p)).toBe("elegir");
-    expect(m.almacen.getItem(CLAVE_ORG)).toBeNull();
-    expect(boton(p, "Elegir el archivo")).toBeTruthy();
-  });
-
   it("con 150 personas anotándose, un toque en Cerrar la lista no cierra: pide confirmar", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
@@ -1334,5 +1318,104 @@ describe("lo demás del panel", () => {
     p.pintar();
     expect(boton(p, "Choose the file")).toBeTruthy();
     expect(texto(p, "#cpo-h")).toBe("Company campaign");
+  });
+});
+
+describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", () => {
+  async function cerradaConDos(m: Mundo, p: Panel): Promise<void> {
+    await abrirInscripcion(m, p);
+    await alta(m, 1, "Ana");
+    await alta(m, 2, "Nora");
+    await vi.waitFor(() => expect(filasDe(p)).toHaveLength(2));
+    boton(p, "Cerrar la lista").click();
+    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+  }
+
+  afterEach(() => ponerPaso({ paso: "nada" }));
+
+  it("con la lista cerrada, un toque en Armar otra campaña pregunta y no olvida la sala", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await cerradaConDos(m, p);
+    boton(p, "Armar otra campaña").click();
+    // Un toque de más no deja a todas las personas sin su resultado: antes pregunta.
+    expect(vistaDe(p)).toBe("olvidar");
+    expect(texto(p, "#cpo-h")).toBe("¿Dejar esta campaña?");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Sí, dejarla"]);
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("cerrada");
+    // Cancelar la deja como estaba.
+    boton(p, "Cancelar").click();
+    expect(vistaDe(p)).toBe("cerrada");
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("cerrada");
+    expect(botones(p).map((b) => b.textContent)).toContain("Armar otra campaña");
+  });
+
+  it("al confirmar, olvida la campaña y abre el selector de archivo de la siguiente", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await cerradaConDos(m, p);
+    const abrio = vi.spyOn($<HTMLInputElement>(p, "#cpo-archivo"), "click");
+    boton(p, "Armar otra campaña").click();
+    expect(abrio).not.toHaveBeenCalled();
+    boton(p, "Sí, dejarla").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
+    expect(m.almacen.getItem(CLAVE_ORG)).toBeNull();
+    expect(abrio).toHaveBeenCalledTimes(1);
+  });
+
+  it("si cancela, un Elegir el archivo posterior no abre el selector por la pregunta anterior", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await cerradaConDos(m, p);
+    const abrio = vi.spyOn($<HTMLInputElement>(p, "#cpo-archivo"), "click");
+    boton(p, "Armar otra campaña").click();
+    boton(p, "Cancelar").click();
+    // Deja la campaña por el otro camino de siempre: el selector no se abre solo.
+    boton(p, "Volver a abrir la lista").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+    boton(p, "Elegir otro archivo").click();
+    boton(p, "Sí, dejarla").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
+    expect(abrio).not.toHaveBeenCalled();
+  });
+
+  it("con la lista sellada y un aviso pendiente a los celulares, dejar la campaña pregunta", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sellada" });
+    m.sala.fase = "sellada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sellada"));
+    await suelta();
+    ponerPaso({ paso: "no-avisamos" });
+    boton(p, "Elegir otro archivo").click();
+    expect(vistaDe(p)).toBe("olvidar");
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("sellada");
+    boton(p, "Cancelar").click();
+    expect(vistaDe(p)).toBe("sellada");
+  });
+
+  it("con el sorteo hecho y el resultado todavía por mandar, también pregunta", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+    m.sala.fase = "sorteada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+    await suelta();
+    ponerPaso({ paso: "boton-resultado" });
+    boton(p, "Elegir otro archivo").click();
+    expect(vistaDe(p)).toBe("olvidar");
+  });
+
+  it("con los celulares ya avisados, dejar la campaña sigue siendo de un toque", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+    m.sala.fase = "sorteada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+    await suelta();
+    ponerPaso({ paso: "avisada" });
+    boton(p, "Elegir otro archivo").click();
+    expect(vistaDe(p)).toBe("elegir");
   });
 });

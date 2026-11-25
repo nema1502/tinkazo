@@ -39,6 +39,29 @@ export type PasoDelPuente =
   | { paso: "mandando" | "boton-resultado" | "guardar-sorteo" }
   | { paso: "resultado"; filas: FilaDeGanadora[]; otraBilletera: boolean };
 
+/** Los pasos en que el panel todavía le debe algo a los celulares: avisar el sello, mandar el resultado o comprobar que llegaron. */
+const PASOS_CON_AVISO_POR_HACER: ReadonlySet<PasoDelPuente["paso"]> = new Set([
+  "avisando",
+  "no-avisamos",
+  "comprobando",
+  "no-comprobo",
+  "aviso-roto",
+  "boton-avisar",
+  "boton-resultado",
+  "mandando",
+  "guardar-sorteo",
+  "sorteo-pendiente",
+]);
+
+/**
+ * ¿Le falta al panel avisarle algo a los celulares? Si es así, dejar la campaña ahora los dejaría sin su sello o sin su
+ * resultado: con el resultado a la vista, mientras quede alguna ganadora sin avisar.
+ */
+export function avisosPendientes(p: PasoDelPuente): boolean {
+  if (p.paso === "resultado") return p.filas.some((f) => !f.avisada);
+  return PASOS_CON_AVISO_POR_HACER.has(p.paso);
+}
+
 /** Lo que el panel puede pedirle a quien tiene la lógica de cada paso. Cada módulo registra la suya. */
 export interface AccionesDelPuente {
   reintentarPaso?: () => void;

@@ -3,6 +3,7 @@ import { campanasActivo } from "../campana/bandera";
 import {
   accionesDelPuente,
   alCambiarElPuente,
+  avisosPendientes,
   botonDelPaso,
   lineaDelPaso,
   pasoDelPuente,
@@ -653,6 +654,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   /** Mientras se cierra y se lee la lista desde esta pantalla: no es "retomada", no hace falta tocar Pasar la lista. */
   let cerrandoAhora = false;
   let entroAConfirmar = 0;
+  /** La pregunta de dejar la campaña salió de Armar otra campaña: al confirmar, además se abre el selector de archivo. */
+  let armandoOtra = false;
   let ultimoEnlace = "";
   let pararDespertar: (() => void) | null = null;
   let dejarElPuente: (() => void) | null = null;
@@ -2509,6 +2512,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     ponerPaso({ paso: "nada" });
     ponerRechazo(null);
     vista = "elegir";
+    armandoOtra = false;
     mensaje = clave ? tx(clave) : "";
     pintar();
   }
@@ -2521,7 +2525,17 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pintar();
   }
 
+  /**
+   * Armar otra campaña desde la lista cerrada: con la lista cerrada o con avisos pendientes a los celulares, un toque de más
+   * dejaría a todas las personas sin su resultado, así que antes pregunta. Al confirmar se abre el selector de la siguiente.
+   */
+  function armarOtra(): void {
+    armandoOtra = true;
+    pedirOlvidar();
+  }
+
   function cancelarOlvidar(): void {
+    armandoOtra = false;
     vista = vistaAntes;
     // Con la pregunta abierta el pase no se renueva: si venció ahí no quedó nada programado y hay que retomarlo.
     if (conPase()) {
@@ -2542,7 +2556,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       if (s !== sala) return;
       if (!hecho) return aviso(tx("cpoSinConexion"));
     }
+    const abrirElSelector = armandoOtra;
     olvidar();
+    if (abrirElSelector) elegir();
   }
 
   /* --- el dibujo --- */
@@ -2741,8 +2757,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       else if (retomada && !leyendoLaLista) botones.push(principal(tx("cpoPasar"), () => void (sala && leerListaCompleta(sala))));
       botones.push(boton(tx("cpoGrande"), "ghost", (b) => grande.abrir(b)));
       if (!listaTrabada()) botones.push(boton(tx("cpoReabrir"), "enlace", () => void reabrir(), trabajando));
-      // Armar otra campaña en el mismo lugar: olvida esta y abre el selector de archivo de la siguiente.
-      botones.push(boton(tx("cpoOtra"), "enlace", () => { olvidar(); elegir(); }));
+      // Armar otra campaña en el mismo lugar. La lista cerrada todavía tiene que llegar al sorteo: antes de olvidarla pregunta.
+      botones.push(boton(tx("cpoOtra"), "enlace", () => armarOtra()));
     } else if (vista === "sellada" || vista === "sorteada") {
       const delBoton = principalDelPaso();
       if (delBoton) botones.push(delBoton);
@@ -2753,7 +2769,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         if (g) botones.push(principal(fmt("cpoAvisarA", { nombre: g.nombre }), () => accionesDelPuente().avisarA?.(g.cuenta)));
       }
       // Los celulares todavía leen el resultado: la sala no se borra, solo se deja de recordar en esta compu.
-      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => olvidar()));
+      // Con un aviso pendiente a los celulares no se deja de un toque: la pregunta de siempre.
+      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (avisosPendientes(pasoDelPuente()) ? pedirOlvidar() : olvidar())));
     } else if (vista === "sin-red") {
       botones.push(principal(tx("cpoReintentar"), () => reintentar?.()));
       botones.push(otroArchivo());
