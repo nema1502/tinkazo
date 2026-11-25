@@ -1,0 +1,130 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { roundTime } from "../protocol/quicknet";
+
+/**
+ * La grabación del sorteo con el servicio de comisiones prendido (`grabar-sorteo.ts` y `sorteo-del-servicio.ts`): el
+ * servicio manda y la red confirma, o el servicio asegura que no lo manda y sigue el camino de siempre. Lo que decide
+ * cada paso del servicio se prueba en `sorteo-del-servicio.test.ts`: acá, cómo lo usa la grabación.
+ */
+
+const h = vi.hoisted(() => ({
+  drawOnChain: vi.fn(),
+  readDraw: vi.fn(),
+  loToma: vi.fn(),
+  sortearPorElServicio: vi.fn(),
+}));
+vi.mock("./anchor", () => ({
+  drawOnChain: (...a: unknown[]) => h.drawOnChain(...a),
+  readDraw: (...a: unknown[]) => h.readDraw(...a),
+}));
+vi.mock("../protocol/drand", () => ({ decompressG1: (s: string) => `96:${s}` }));
+vi.mock("../stellar/errores", async (orig) => ({ ...(await orig<typeof import("../stellar/errores")>()), errorKey: () => "rpcDown" }));
+vi.mock("../stellar/alta-config", async (orig) => ({ ...(await orig<typeof import("../stellar/alta-config")>()), sorteoPorServidor: () => true }));
+vi.mock("./sorteo-del-servicio", () => ({
+  loTomaElServicio: (...a: unknown[]) => h.loToma(...a),
+  sortearPorElServicio: (...a: unknown[]) => h.sortearPorElServicio(...a),
+}));
+
+const R = 32254977;
+const base = { raffleId: 7n, round: R, signature: "ab".repeat(48), esperados: [4, 11, 3], ahora: () => (roundTime(R) + 60) * 1000, dormir: async () => undefined };
+const GANADORES = { winners: [4, 11, 3], randomness: "00ff" };
+const HASH = "cd".repeat(32);
+
+beforeEach(() => {
+  vi.resetModules();
+  h.drawOnChain.mockReset();
+  h.readDraw.mockReset().mockResolvedValue(null);
+  h.loToma.mockReset().mockReturnValue(true);
+  h.sortearPorElServicio.mockReset();
+  vi.stubEnv("VITE_SORTEO_SERVIDOR", "1");
+});
+afterEach(() => vi.unstubAllEnvs());
+
+describe("el servicio manda el sorteo", () => {
+  it("guardado con el enlace, sin pasar por el camino de siempre", async () => {
+    h.sortearPorElServicio.mockResolvedValue({ estado: "listo", valor: { ...GANADORES, txHash: HASH }, yaEstaba: false });
+    const alPaso = vi.fn();
+    const alReintentar = vi.fn();
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    const fin = await grabarElSorteo({ ...base, alPaso, alReintentar });
+    expect(fin).toEqual({ estado: "guardado", txHash: HASH, yaEstaba: false });
+    expect(h.drawOnChain).not.toHaveBeenCalled();
+    expect(alReintentar).not.toHaveBeenCalled();
+    expect(h.sortearPorElServicio).toHaveBeenCalledTimes(1);
+    const pedido = h.sortearPorElServicio.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(pedido.raffleId).toBe(7n);
+    expect(pedido.firma96).toBe(`96:${"ab".repeat(48)}`);
+    expect(pedido.alPaso).toBe(alPaso);
+    expect(pedido.ahora).toBe(base.ahora);
+    expect(h.loToma).toHaveBeenCalledWith(7n, false, base.ahora);
+  });
+
+  it("sin el enlace si ya estaba hecho", async () => {
+    h.sortearPorElServicio.mockResolvedValue({ estado: "listo", valor: GANADORES, yaEstaba: true });
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    expect(await grabarElSorteo(base)).toEqual({ estado: "guardado", yaEstaba: true });
+  });
+
+  it("si el contrato dice otros ganadores que los que vio la sala, no coincide", async () => {
+    h.sortearPorElServicio.mockResolvedValue({ estado: "listo", valor: { winners: [4, 3, 11], randomness: "00ff", txHash: HASH }, yaEstaba: false });
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    expect(await grabarElSorteo(base)).toEqual({ estado: "no-coincide", esperados: [4, 11, 3], grabados: [4, 3, 11] });
+  });
+
+  it("un no que se muestra vuelve como fallo, sin el camino de siempre", async () => {
+    const error = new Error("sin-confirmar");
+    h.sortearPorElServicio.mockResolvedValue({ estado: "error", error });
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    expect(await grabarElSorteo(base)).toEqual({ estado: "fallo", error });
+    expect(h.drawOnChain).not.toHaveBeenCalled();
+  });
+
+  it("el show y Mis sorteos a la vez mandan un solo pedido al servicio", async () => {
+    let soltar: (v: unknown) => void = () => undefined;
+    h.sortearPorElServicio.mockReturnValue(new Promise((r) => (soltar = r)));
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    const delShow = grabarElSorteo(base);
+    await vi.waitFor(() => expect(h.sortearPorElServicio).toHaveBeenCalledTimes(1));
+    const deMisSorteos = grabarElSorteo(base);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(h.sortearPorElServicio).toHaveBeenCalledTimes(1);
+    soltar({ estado: "listo", valor: { ...GANADORES, txHash: HASH }, yaEstaba: false });
+    const guardado = { estado: "guardado", txHash: HASH, yaEstaba: false };
+    expect(await delShow).toEqual(guardado);
+    expect(await deMisSorteos).toEqual(guardado);
+  });
+});
+
+describe("el servicio asegura que no lo manda", () => {
+  it("sigue el camino de siempre, una vez, con los argumentos de siempre y su presupuesto entero", async () => {
+    h.sortearPorElServicio.mockResolvedValue({ estado: "camino-de-hoy" });
+    h.drawOnChain.mockResolvedValue({ ...GANADORES, txHash: HASH });
+    const alPaso = vi.fn();
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    const fin = await grabarElSorteo({ ...base, alPaso });
+    expect(fin).toEqual({ estado: "guardado", txHash: HASH, yaEstaba: false });
+    expect(h.sortearPorElServicio).toHaveBeenCalledTimes(1);
+    expect(h.drawOnChain).toHaveBeenCalledTimes(1);
+    expect(h.drawOnChain).toHaveBeenCalledWith(7n, `96:${"ab".repeat(48)}`, alPaso, { pagarConMiCuenta: false });
+  });
+
+  it("y si falla, conserva sus cinco intentos", async () => {
+    h.sortearPorElServicio.mockResolvedValue({ estado: "camino-de-hoy" });
+    const e = new Error("la red no contestó");
+    h.drawOnChain.mockRejectedValue(e);
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    expect(await grabarElSorteo(base)).toEqual({ estado: "fallo", error: e });
+    expect(h.drawOnChain).toHaveBeenCalledTimes(5);
+    expect(h.sortearPorElServicio).toHaveBeenCalledTimes(1);
+  });
+
+  it("si la condición dice que no (billetera propia, demo, sorteo marcado), ni se le pregunta", async () => {
+    h.loToma.mockReturnValue(false);
+    h.drawOnChain.mockResolvedValue({ ...GANADORES, txHash: HASH });
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    await grabarElSorteo({ ...base, pagarConMiCuenta: true });
+    expect(h.loToma).toHaveBeenCalledWith(7n, true, base.ahora);
+    expect(h.sortearPorElServicio).not.toHaveBeenCalled();
+    expect(h.drawOnChain).toHaveBeenCalledTimes(1);
+  });
+});

@@ -90,6 +90,23 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
   const falta = msHasta(arranqueDelShow(p.round).grabable, (p.ahora ?? ahoraDeLaRondaMs)());
   if (falta > 0) await dormir(falta);
   const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable }] = await Promise.all([import("../protocol/drand"), import("./sorteo-seguro")]);
+  // Apagado en el build, la condición es una constante falsa y todo este bloque desaparece: el camino de siempre, sin
+  // cargar nada de más. Prendido, el servicio de comisiones manda el sorteo de una cuenta de Google en la red principal
+  // (`sorteo-del-servicio.ts`) y, si asegura que no lo manda, sigue el camino de abajo con su presupuesto entero.
+  if (import.meta.env.VITE_SORTEO_SERVIDOR === "1") {
+    const [{ sorteoPorServidor }, servicio] = await Promise.all([import("../stellar/alta-config"), import("./sorteo-del-servicio")]);
+    if (sorteoPorServidor() && servicio.loTomaElServicio(p.raffleId, !!p.pagarConMiCuenta, p.ahora)) {
+      const r = await servicio.sortearPorElServicio({
+        raffleId: p.raffleId,
+        firma96: decompressG1(p.signature),
+        ...(p.alPaso ? { alPaso: p.alPaso } : {}),
+        ...(p.ahora ? { ahora: p.ahora } : {}),
+        dormir,
+      });
+      if (r.estado === "listo") return comparar(p.esperados, r.valor, r.yaEstaba);
+      if (r.estado === "error") return { estado: "fallo", error: r.error };
+    }
+  }
   const fin = await sortearConReintentos<{ winners: number[]; randomness: string; txHash?: string }>({
     intentar: () => drawOnChain(p.raffleId, decompressG1(p.signature), p.alPaso ?? (() => undefined), { pagarConMiCuenta: !!p.pagarConMiCuenta }),
     yaEsta: () => readDraw(p.raffleId),
@@ -99,7 +116,12 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
     dormir,
   });
   if (!fin.ok) return { estado: "fallo", error: fin.error };
-  const grabados = [...fin.valor.winners];
-  if (!mismosGanadores(p.esperados, grabados)) return { estado: "no-coincide", esperados: [...p.esperados], grabados };
-  return { estado: "guardado", ...(fin.valor.txHash ? { txHash: fin.valor.txHash } : {}), yaEstaba: fin.yaEstaba };
+  return comparar(p.esperados, fin.valor, fin.yaEstaba);
+}
+
+/** Compara los ganadores que dice el contrato con los que la sala ya vio. */
+function comparar(esperados: readonly number[], valor: { winners: readonly number[]; txHash?: string }, yaEstaba: boolean): FinDeLaGrabacion {
+  const grabados = [...valor.winners];
+  if (!mismosGanadores(esperados, grabados)) return { estado: "no-coincide", esperados: [...esperados], grabados };
+  return { estado: "guardado", ...(valor.txHash ? { txHash: valor.txHash } : {}), yaEstaba };
 }
