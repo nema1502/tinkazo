@@ -1688,6 +1688,7 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
   describe("la pregunta dice qué se pierden los celulares", () => {
     const SELLO = "Los celulares todavía no recibieron el aviso de la lista sellada. Si la dejás, no lo van a ver.";
     const RESULTADO = "Los celulares todavía no recibieron su resultado. Si la dejás, no lo van a ver.";
+    const GANADORA = "Alguna ganadora todavía no recibió su aviso. Si dejás la campaña, no se va a enterar desde su celular.";
 
     it("con el sello sin avisar, dice que los celulares no van a ver la lista sellada", async () => {
       const m = mundo();
@@ -1723,7 +1724,7 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
       expect(texto(p, "#cpo-linea")).toBe(RESULTADO);
     });
 
-    it("con el sorteo hecho y alguien sin avisar, dice que falta el resultado y en inglés también", async () => {
+    it("con el sorteo hecho y el resultado todavía por mandar, dice que falta el resultado y en inglés también", async () => {
       const m = mundo();
       guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
       m.sala.fase = "sorteada";
@@ -1736,6 +1737,23 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
       m.idioma = "en";
       p.pintar();
       expect(texto(p, "#cpo-linea")).toBe("The phones have not received their result yet. If you leave, they will not see it.");
+    });
+
+    it("con el resultado ya en la sala y una ganadora sin avisar, dice que falta avisarle a ella y no que falta el resultado", async () => {
+      const m = mundo();
+      guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+      m.sala.fase = "sorteada";
+      const p = nuevoPanel(m);
+      await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+      await suelta();
+      ponerPaso({ paso: "resultado", filas: [{ cuenta: "GUNO", nombre: "Ana", avisada: false, alta: "esperando" }], otraBilletera: false });
+      boton(p, "Elegir otro archivo").click();
+      expect(vistaDe(p)).toBe("olvidar");
+      expect(texto(p, "#cpo-linea")).toBe(GANADORA);
+      expect(texto(p, "#cpo-linea")).not.toContain("resultado");
+      m.idioma = "en";
+      p.pintar();
+      expect(texto(p, "#cpo-linea")).toBe("A winner has not been notified yet. If you leave the campaign, they will not find out from their phone.");
     });
 
     it("si el aviso cambia con la pregunta abierta, la línea sigue al aviso", async () => {
