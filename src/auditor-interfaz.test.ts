@@ -17,8 +17,8 @@ describe("el auditor de interfaz acompaña a la línea de Entrar para sellar", (
   });
 
   it("el diccionario empieza igual en los dos idiomas", () => {
-    expect(T.es.sellarSinCuenta.startsWith(comienzos?.[1] ?? "?")).toBe(true);
-    expect(T.en.sellarSinCuenta.startsWith(comienzos?.[2] ?? "?")).toBe(true);
+    expect(String(T.es.sellarSinCuenta).startsWith(comienzos?.[1] ?? "?")).toBe(true);
+    expect(String(T.en.sellarSinCuenta).startsWith(comienzos?.[2] ?? "?")).toBe(true);
   });
 
   it("la comprobación usa ese comienzo y no la frase entera de antes", () => {
