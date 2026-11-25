@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listHash } from "../protocol/canonical";
-import { huellaDeLlave, leerTextoDeCampana, listaDeLaCampana } from "../../workers/sala/src/campana";
+import { huellaDeLlave, leerTextoDeCampana, listaDeLaCampana, salDeCampana } from "../../workers/sala/src/campana";
+import type { Ejecutar, ValorSql } from "../../workers/sala/src/registro";
 import { leerParaActivar } from "../../workers/sala/src/activar";
 import { lineaDePersona } from "../../workers/sala/src/linea-persona";
 import { HORA_DE_LA_PRUEBA, montarMundoDeActivar } from "./activar-mundo";
@@ -195,7 +196,8 @@ describe("una sala de personas que ya existe, con los interruptores apagados", (
     const sala = (await creada.json()) as SalaDeCampana;
     const abierta = await mundo.pedir(ruta(sala, "/campana/fase"), { metodo: "PUT", cuerpo: { fase: "abierta" }, cabeceras: auth(sala) });
     expect(abierta.status).toBe(204);
-    const sal = String(mundo.ejecutar(`sala:${sala.id}`, "SELECT v FROM sala WHERE k = 'sal-campana'")[0]?.v);
+    // La sal de la campaña nace con la primera persona: acá se pide la misma que usaría la sala.
+    const sal = salDeCampana(((consulta: string, ...parametros: ValorSql[]) => mundo.ejecutar(`sala:${sala.id}`, consulta, ...parametros)) as unknown as Ejecutar);
     const lineas: string[] = [];
     for (let n = 1; n <= 4; n++) {
       const linea = await lineaDePersona(sal, `google:usuario${n}`);
@@ -275,7 +277,8 @@ describe("avisar con la línea de una persona", () => {
   });
 
   it("en una sala que no existe contesta lo mismo, con los interruptores como estén", async () => {
-    for (const extra of [{}, { DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE }]) {
+    const interruptores: Record<string, string>[] = [{}, { DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE }];
+    for (const extra of interruptores) {
       const mundo = await montarMundo(extra);
       const nueva = { id: "AbCdEf12", token: "x".repeat(20) };
       const linea = await respuesta(mundo, nueva, LINEA);
