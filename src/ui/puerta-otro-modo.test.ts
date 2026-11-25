@@ -70,7 +70,7 @@ vi.mock("./freeze", () => ({ refreshFreezeLabel: () => undefined }));
 vi.mock("./anchor", () => ({ precalentarSello: () => undefined }));
 vi.mock("./participants", () => ({ guardarBorrador: () => undefined }));
 vi.mock("../ensayo-modo", () => ({ enPractica: () => false, sinGrabar: () => false }));
-vi.mock("../contar", () => ({ contarEntrada: () => undefined, tomarEntrada: () => undefined }));
+vi.mock("../contar", () => ({ contarEntrada: () => undefined, contarUnaVez: () => undefined, origenActual: () => "home", tomarEntrada: () => undefined }));
 vi.mock("./modo-ui", () => ({ pasarAModo: (...a: unknown[]) => h.pasar(...a), abrirHojaDeModo: () => undefined }));
 // El plan B del ingreso ya elegido (`sin-cuenta.ts` lo dice por su marca), solo en la prueba que lo pide: un `vi.doMock`
 // quedaba puesto para las pruebas que venían después.
