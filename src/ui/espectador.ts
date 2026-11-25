@@ -3,7 +3,8 @@ import { getLang, setLang, t, T, type Lang } from "../i18n";
 import { app, avatar, conCuenta, forzarRitmo, paceSeconds, type Beacon } from "../state";
 import { setSoloMirar } from "../solo-mirar";
 import { beep, note } from "../sound";
-import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime } from "../protocol/quicknet";
+import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime, roundUrl } from "../protocol/quicknet";
+import { PROOF_VERSION, proofUrl, type Proof } from "../protocol/proof";
 import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { listHash } from "../protocol/canonical";
@@ -22,11 +23,13 @@ import {
   type DatosParticipante,
   type RondaViva,
 } from "../sala/participante";
-import { etiquetaConCuenta, ponerEtiquetas } from "../equipos/etiquetas";
-import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
+import { etiquetaConCuenta, etiquetaDe, esListaDeEquipos, ponerEtiquetas } from "../equipos/etiquetas";
+import { contar as contarPersonas, nombreDePersona, seCuentaPorPersona } from "../participaciones";
+import { refDe } from "../contar";
+import { cuentaCorta } from "../equipos/modelo";
 import { hayModoOficial } from "../stellar/config";
-import { modesVisible } from "../modos/bandera";
-import { isTurnOrder } from "../modos/turnos";
+import { modesVisible, withMode } from "../modos/bandera";
+import { isTurnOrder, modoDelComprobante, ordenSinComprobante } from "../modos/turnos";
 import { isSecretSanta } from "../modos/amigo";
 import { PLAZO_DEL_RELAY_MS, conPlazo } from "../pedido-con-plazo";
 import { desfaseDelReloj } from "./espectador-reloj";
@@ -104,6 +107,8 @@ export interface OpcionesDeLaVista {
   releer?: typeof releerCorto;
   /** La referencia al enlace corto, si no es la del fragmento. */
   ref?: { id: string; clave: string; n: number } | null;
+  /** El archivo del diálogo de compartir (`compartir.ts`): en las pruebas, uno que falla o que se hace esperar. */
+  cargarCompartir?: () => Promise<typeof import("./compartir")>;
 }
 
 const PUNTOS = `<span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span>`;
@@ -135,6 +140,105 @@ function mismoSorteo(a: DatosEspectador, b: DatosEspectador): boolean {
 }
 
 /**
+ * El enlace del comprobante del sorteo que este celular ya verificó. Es el mismo comprobante que arma la sala para su
+ * resultado (el de `draw.ts`), con lo que este celular tiene: la lista, la ronda, la firma y el número del sorteo. La
+ * fecha del sello la pone el instante de la ronda, porque el celular no leyó cuándo se selló. No lleva los hashes de
+ * las transacciones (`stx` y `dtx`): solo los conoce la pantalla de quien organiza. Con el estado del contrato
+ * vivo el enlace se verifica igual. Cuando ese estado vence, solo el enlace de quien organiza se sigue verificando por
+ * el historial de la red.
+ */
+async function enlaceDelComprobante(datos: DatosEspectador, d: NonNullable<(typeof app)["drawn"]>): Promise<string> {
+  // Un orden de turnos sin sello no tiene comprobante; pero un espectador siempre mira un sorteo sellado: no pasa.
+  if (ordenSinComprobante(datos.n.length, d.winners.length, datos.z ?? "", false)) return "";
+  const proof: Proof = {
+    v: PROOF_VERSION,
+    names: datos.n,
+    round: datos.r,
+    sealedAt: roundTime(datos.r),
+    ...(datos.z ? { prize: datos.z } : {}),
+    // La firma va siempre, como en la sala: con ella la matemática se puede rehacer aunque el RPC no conteste.
+    signature: d.beacon.signature,
+    // La red, el contrato y el número viajan en el enlace del espectador, y la cadena ya confirmó que el sorteo
+    // grabado con este número es el mismo que este celular calculó (`esperarElGrabado`): van al comprobante.
+    net: datos.net,
+    contract: datos.k,
+    id: datos.i,
+  };
+  try {
+    // Sin los modos a la vista el enlace queda como siempre, también el de un orden de turnos.
+    return withMode(await proofUrl(proof), modoDelComprobante(datos.n, d.winners.length, datos.z ?? "", modesVisible()));
+  } catch {
+    // Sin comprobante, el QR al menos lleva a la ronda del faro, como en la sala.
+    return roundUrl(datos.r);
+  }
+}
+
+/** El oyente del cierre del diálogo de compartir que sigue vivo, si hay uno. */
+let alCerrarAnterior: ((e: Event) => void) | null = null;
+
+/**
+ * Compartir lo que ya pasó: desde Lo que salió, quien mira también puede avisar a su grupo. Abre el mismo diálogo de
+ * Compartir el sorteo que la sala (`compartir.ts`), sin cambiarle nada. Recibe los ganadores ya revelados y nada de lo
+ * que falta, y el mensaje y la foto salen del mismo camino de siempre (`abrirSorteo`). Al cerrar, la vista en vivo sigue
+ * como estaba.
+ */
+async function compartirElSorteo(
+  datos: DatosEspectador,
+  d: NonNullable<(typeof app)["drawn"]>,
+  cargar: () => Promise<typeof import("./compartir")>,
+  volverA: HTMLElement,
+): Promise<void> {
+  const enlace = await enlaceDelComprobante(datos, d);
+  // Los nombres como los manda la sala: la línea sellada sin su marca cuando la lista se lee por persona, y el
+  // nombre del equipo cuando la lista es de equipos con etiqueta (`etiquetaDe`).
+  const porPersona = seCuentaPorPersona(datos.n, modesVisible());
+  // Un nombre de persona se ve en la pantalla de la sala, pero de este celular no sale. Solo se comparte el nombre de
+  // un equipo cuando la sala lo marcó así (`q: 0`). Con etiquetas de personas o sin saber de qué son (un enlace de una
+  // sala anterior), sale la cuenta acortada, que es lo que dice el comprobante: la lista sellada son cuentas.
+  const ganadores = d.winners.map((i) => {
+    if (datos.e && datos.q !== 0) return cuentaCorta(datos.n[i] ?? "");
+    const linea = etiquetaDe(datos.n[i] ?? "");
+    return porPersona ? nombreDePersona(linea) : linea;
+  });
+  // El premio de un orden de turnos lo dice el modo (`turnMessage`); comparte el orden con el premio que tenga.
+  // Si el archivo no baja (sin red en el evento), el rechazo llega a quien llamó: él avisa y deja volver a tocar.
+  const m = await cargar();
+  m.abrirSorteo(
+    {
+      enlace,
+      ganadores,
+      total: datos.n.length,
+      personas: contarPersonas(datos.n, porPersona).personas,
+      ...(esListaDeEquipos(datos.n) ? { equipos: true } : {}),
+      premio: datos.z ?? "",
+      fecha: roundTime(datos.r),
+      numero: datos.i,
+      red: datos.net,
+      // La referencia pública para el contador, la misma que usa la sala: red, contrato, número (`src/contar.ts`).
+      ref: refDe({ net: datos.net, contract: datos.k, id: datos.i }),
+    },
+    getLang(),
+    // Nada sale de este celular hacia el servicio de enlaces cortos: el enlace va completo, el que este celular ya tiene.
+    { corto: false },
+  );
+  // Al cerrarse el diálogo, el foco vuelve al botón que lo abrió. El navegador ya lo hace con un diálogo modal, pero si
+  // no (un teclado que quedó en el diálogo que se retiró), la vista no pierde el lugar: sigue en Compartir. Un solo
+  // oyente a la vez: el de un toque anterior se retira antes de poner el nuevo.
+  if (alCerrarAnterior) document.removeEventListener("close", alCerrarAnterior, true);
+  const alCerrar = (e: Event): void => {
+    if (!(e.target instanceof HTMLDialogElement) || !e.target.classList.contains("cmp-dlg")) return;
+    document.removeEventListener("close", alCerrar, true);
+    if (alCerrarAnterior === alCerrar) alCerrarAnterior = null;
+    queueMicrotask(() => {
+      const a = document.activeElement;
+      if (volverA.isConnected && (!a || a === document.body)) volverA.focus({ preventScroll: true });
+    });
+  };
+  alCerrarAnterior = alCerrar;
+  document.addEventListener("close", alCerrar, true);
+}
+
+/**
  * Abre la vista de espectador. Si la ronda ya nació (alguien que llega tarde, o que recarga), el show sale enseguida.
  * Devuelve si la abrió: un enlace que no nombra un sorteo de un contrato oficial dice que llegó roto.
  */
@@ -163,7 +267,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
   setSoloMirar(true);
   document.getElementById("st-skip")?.setAttribute("hidden", "");
   // Los equipos con cupón se ven por su nombre, como en la sala: la lista sellada son cuentas.
-  if (datos.e) ponerEtiquetas(new Map(datos.e));
+  if (datos.e) ponerEtiquetas(new Map(datos.e), datos.q ? "personas" : "equipos");
   const sorteo: SorteoDelEnlace = {
     contrato,
     id: datos.i,
@@ -260,8 +364,12 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     (op.irA ?? ((url: string) => location.assign(url)))(location.pathname);
   };
   const tecla = (e: KeyboardEvent): void => {
+    if (e.key !== "Escape") return;
     // Mientras corre el show, Escape no cierra la vista (ni salta el juego: el show se mira entero).
-    if (e.key === "Escape" && fase !== "show" && fase !== "numero" && fase !== "grabando") salir();
+    if (fase === "show" || fase === "numero" || fase === "grabando") return;
+    // Con el diálogo de compartir abierto, Escape lo cierra a él: al cerrarse, la vista en vivo sigue como estaba.
+    if (document.querySelector("dialog.cmp-dlg[open]")) return;
+    salir();
   };
   addEventListener("keydown", tecla);
 
@@ -291,12 +399,40 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
         `<div class="espectador-acc">` +
         `<button class="ghost" type="button" data-otra-vez>${esc(t("espVerDeNuevo"))}</button>` +
         `<a class="espectador-propio" href="/">${esc(t("espHacerElTuyo"))}</a>` +
-        `</div>`,
+        `</div>` +
+        // Si Compartir no pudo abrirse, acá se dice por qué. Vacío mientras todo anda.
+        `<p class="espectador-aviso" role="alert" data-compartir-aviso></p>`,
     );
     const otraVez = sigue?.querySelector<HTMLButtonElement>("[data-otra-vez]");
     otraVez?.addEventListener("click", () => {
       void import("./draw").then((m) => m.verDeNuevo());
     });
+    // Compartir lo que ya pasó: el mismo diálogo de Compartir el sorteo que la sala, reusado tal cual. La vista en vivo
+    // sigue abierta mientras tanto y amanece igual al cerrarlo.
+    const compartir = document.createElement("button");
+    compartir.type = "button";
+    compartir.className = "ghost";
+    compartir.setAttribute("data-compartir", "");
+    compartir.textContent = t("cmpBtn");
+    const aviso = sigue?.querySelector<HTMLElement>("[data-compartir-aviso]");
+    let preparando = false;
+    compartir.addEventListener("click", () => {
+      // Un segundo toque mientras se prepara no abre un segundo diálogo.
+      if (!app.drawn || preparando) return;
+      preparando = true;
+      compartir.setAttribute("aria-busy", "true");
+      if (aviso) aviso.textContent = "";
+      compartirElSorteo(datos, app.drawn, op.cargarCompartir ?? (() => import("./compartir")), compartir)
+        .catch(() => {
+          // El archivo no bajó o el diálogo no pudo armarse: se dice y el botón queda listo para otro toque.
+          if (aviso?.isConnected) aviso.textContent = t("espCompartirFallo");
+        })
+        .finally(() => {
+          preparando = false;
+          compartir.removeAttribute("aria-busy");
+        });
+    });
+    sigue?.querySelector<HTMLElement>(".espectador-acc")?.insertBefore(compartir, sigue.querySelector(".espectador-propio"));
     otraVez?.focus({ preventScroll: true });
   };
 
@@ -431,7 +567,10 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     datos.p = nuevos.p;
     if (nuevos.e) {
       datos.e = nuevos.e;
-      ponerEtiquetas(new Map(nuevos.e));
+      // La marca de quién es cada nombre va con los nombres: lo que se comparte se decide con ella.
+      if (nuevos.q === undefined) delete datos.q;
+      else datos.q = nuevos.q;
+      ponerEtiquetas(new Map(nuevos.e), nuevos.q ? "personas" : "equipos");
     }
     forzarRitmo(datos.p);
     app.game = datos.g;

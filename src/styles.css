@@ -1127,6 +1127,8 @@
   .espectador-sigue { font-size: clamp(16px, 1.8vw, 22px); font-weight: 700; color: var(--ink2); max-width: 36ch; text-wrap: balance; margin-top: 6px; }
   .espectador-acc { display: flex; flex-wrap: wrap; gap: 10px 18px; justify-content: center; align-items: center; margin-top: 6px; }
   .espectador-acc button { min-height: 48px; font-size: 16px; }
+  .espectador-aviso { font-size: 16px; font-weight: 700; color: var(--ink2); max-width: 36ch; text-wrap: balance; margin-top: 8px; }
+  .espectador-aviso:empty { display: none; }
   .espectador-propio { display: inline-flex; align-items: center; min-height: 44px; font-size: 16px; font-weight: 700; color: var(--ink); }
   /* La vista de espectador: la misma espera, con el rótulo que dice que nadie la maneja desde acá. */
   .espectador .sticker { background: var(--teal); }

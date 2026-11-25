@@ -48,6 +48,12 @@ export interface DatosEspectador {
   /** Los nombres de los equipos con cupón, de las cuentas de la lista: `[cuenta, nombre]`. */
   e?: [string, string][];
   /**
+   * De quién son esos nombres: 1 si son de personas (una campaña de empresa) y 0 si son de equipos. Quien mira ve los
+   * dos en la pantalla de la sala, pero el celular solo comparte los de equipos (`espectador.ts`): sin esta marca (un
+   * enlace de una sala anterior) no se sabe de qué son y no se comparte ninguno.
+   */
+  q?: 0 | 1;
+  /**
    * 1 si la sala sigue la línea de tiempo común (`arranque-del-show.ts`) y elige cuándo grabar con celulares mirando
    * (`puerta-de-la-grabacion.ts`): el celular juega a la par. Sin esto (una sala con el sitio de antes), el celular
    * espera lo grabado como antes.
@@ -114,7 +120,7 @@ export function datosDelEnlace(hash: string = location.hash): DatosEspectador | 
   try {
     const j = JSON.parse(deB64url(m[1])) as Partial<DatosEspectador> & { v?: unknown };
     if (j.v !== VERSION) return null;
-    const { r, g, p, w, z, n, net, k, i, e, h } = j;
+    const { r, g, p, w, z, n, net, k, i, e, h, q } = j;
     if (!Number.isSafeInteger(r) || (r as number) < 1) return null;
     if (typeof g !== "string" || !ES_JUEGO.test(g)) return null;
     // Sin `Object.hasOwn`: hay navegadores en uso que no lo traen.
@@ -124,6 +130,7 @@ export function datosDelEnlace(hash: string = location.hash): DatosEspectador | 
     if (z !== undefined && (typeof z !== "string" || z.length > 200)) return null;
     if (typeof i !== "string" || !ES_ID.test(i) || !contratoOficial(net, k)) return null;
     if (h !== undefined && h !== 1) return null;
+    if (q !== undefined && q !== 0 && q !== 1) return null;
     const datos: DatosEspectador = { r: r as number, g: g as Game, p: p as Pace, w: w as number, n, net: net as NetworkName, k: k as string, i };
     if (z) datos.z = z;
     if (h === 1) datos.h = 1;
@@ -137,7 +144,10 @@ export function datosDelEnlace(hash: string = location.hash): DatosEspectador | 
         if (typeof cuenta !== "string" || typeof nombre !== "string" || !deLaLista.has(cuenta) || !nombre.trim()) return null;
         pares.push([cuenta, nombre.trim().slice(0, 60)]);
       }
-      if (pares.length) datos.e = pares;
+      if (pares.length) {
+        datos.e = pares;
+        if (q === 0 || q === 1) datos.q = q;
+      }
     }
     return datos;
   } catch {
@@ -161,6 +171,8 @@ export interface DeLaEspera {
   contrato: string | null;
   /** El nombre del equipo de una cuenta, si este navegador lo conoce (`equipos/etiquetas.ts`). */
   equipo?: (cuenta: string) => string | undefined;
+  /** Si esos nombres son de personas (los de una campaña de empresa) y no de equipos. */
+  personas?: boolean;
 }
 
 /**
@@ -187,7 +199,10 @@ export function datosDeLaEspera(f: Frozen, d: DeLaEspera): DatosEspectador | nul
     const nombre = d.equipo?.(c);
     return nombre ? [[c, nombre]] : [];
   }) : [];
-  if (equipos.length) datos.e = equipos;
+  if (equipos.length) {
+    datos.e = equipos;
+    datos.q = d.personas ? 1 : 0;
+  }
   return datos;
 }
 
