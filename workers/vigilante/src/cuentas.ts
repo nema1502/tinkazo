@@ -87,6 +87,27 @@ export interface RecordadoDeCuentas {
   motivos: string[];
 }
 
+const HORA_MS = 3_600_000;
+
+/**
+ * Cuántas cuentas hubo en la última hora corrida, a partir del conteo por horas de reloj. El conteo viene partido por
+ * horas fijas, y una oleada repartida entre dos de ellas (190 a las 9:50 y 190 a las 10:05) no pasaría nunca del umbral
+ * en ninguna. Con la hora de reloj de la vuelta, a las cuentas de la hora que corre se les suma la parte de la hora
+ * anterior que todavía cae dentro de los últimos 60 minutos, repartida pareja. Sin la hora de la vuelta, o si la hora
+ * anterior no viene pegada a la de ahora, vale la hora de ahora sola. Nunca suma más que lo que hubo en las dos.
+ */
+function enLaUltimaHora(porHora: ConteoDeHora[], campo: "nuevas" | "activaciones", ahoraMs: number | undefined): number {
+  const actual = porHora[porHora.length - 1]!;
+  const anterior = porHora[porHora.length - 2];
+  if (ahoraMs === undefined || anterior === undefined) return actual[campo];
+  const desdeActual = Date.parse(actual.hora);
+  if (Date.parse(anterior.hora) !== desdeActual - HORA_MS) return actual[campo];
+  const corrido = ahoraMs - desdeActual;
+  if (!Number.isFinite(corrido)) return actual[campo];
+  const queda = 1 - Math.min(1, Math.max(0, corrido / HORA_MS));
+  return actual[campo] + Math.round(anterior[campo] * queda);
+}
+
 export interface OrdenDeCuentas {
   /** El bloque `cuentas` del estado, o lo que haya en ese lugar. */
   cuentas: unknown;
@@ -99,6 +120,8 @@ export interface OrdenDeCuentas {
    */
   conActivaciones?: boolean;
   recordado: RecordadoDeCuentas;
+  /** La hora de la vuelta en ms, para contar la última hora corrida y no solo la hora de reloj. Sin ella, la hora de reloj sola. */
+  ahoraMs?: number;
 }
 
 /**
@@ -116,11 +139,13 @@ export function vigilarCuentas(o: OrdenDeCuentas): { avisar: DesbordeDeCuentas[]
   // Una página llena (`completo: false`) es un piso: la lista de movimientos se corta en `MAX_MOVIMIENTOS`, y con un
   // umbral de ese mismo tamaño no se lo podría pasar nunca. Ahí llegar al umbral ya cuenta.
   const pasa = (n: number): boolean => (cuentas.completo ? n > umbral : n >= umbral);
-  if (pasa(bin.nuevas) && !(yaEnEstaHora && o.recordado.motivos.includes("cuentas-nuevas"))) {
-    avisar.push({ motivo: "cuentas-nuevas", hubo: bin.nuevas, umbral, hora: bin.hora });
+  const nuevas = enLaUltimaHora(cuentas.porHora, "nuevas", o.ahoraMs);
+  if (pasa(nuevas) && !(yaEnEstaHora && o.recordado.motivos.includes("cuentas-nuevas"))) {
+    avisar.push({ motivo: "cuentas-nuevas", hubo: nuevas, umbral, hora: bin.hora });
   }
-  if (o.conActivaciones === true && pasa(bin.activaciones) && !(yaEnEstaHora && o.recordado.motivos.includes("activaciones"))) {
-    avisar.push({ motivo: "activaciones", hubo: bin.activaciones, umbral, hora: bin.hora });
+  const activaciones = enLaUltimaHora(cuentas.porHora, "activaciones", o.ahoraMs);
+  if (o.conActivaciones === true && pasa(activaciones) && !(yaEnEstaHora && o.recordado.motivos.includes("activaciones"))) {
+    avisar.push({ motivo: "activaciones", hubo: activaciones, umbral, hora: bin.hora });
   }
   return { avisar, conDatos: true, completo: cuentas.completo, hora: bin.hora };
 }
