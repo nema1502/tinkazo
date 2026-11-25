@@ -237,7 +237,7 @@ interface EstadoInterno {
   avisado: boolean;
   motivoSalida: MotivoDeSalida;
   festejoGrandeHecho: boolean;
-  /** Lo que la comprobación propia del sello dijo de este comprobante, y de cuál fue. Es `null` si no pudo comprobar. */
+  /** Lo que la comprobación propia del sello dijo de este comprobante y de esta cuenta, y de cuáles fue (`claveDelSello`). Es `null` si no pudo comprobar. */
   sello: ComprobacionDelSello;
   selloDe: string | null;
   comprobandoSello: boolean;
@@ -321,7 +321,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     comprobandoSello: false,
   };
   let desmontado = false;
-  /** De qué comprobante es la comprobación del sello que está en vuelo, y el pedido que llegó mientras tanto. */
+  /** De qué comprobante y de qué cuenta es la comprobación del sello que está en vuelo (`claveDelSello`), y el pedido que llegó mientras tanto. */
   let comprobandoDe: string | null = null;
   let pedidoDelSello: {
     resultado: { sorteo?: string | null; ganadoras: string[]; comprobante: string | null };
@@ -1094,10 +1094,15 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     void comprobarElSello(resultado, cuenta);
   }
 
+  /** Qué comprobación es: la del comprobante y la de la cuenta. Otra cuenta en el mismo celular es otra comprobación. */
+  const claveDelSello = (comprobante: string, cuenta: string): string => `${comprobante}
+${cuenta}`;
+
   /**
-   * La comprobación propia del sello, una sola vez por comprobante y sin esperarla: la pantalla del resultado ya está a la
-   * vista y el festejo corre. Cuando la respuesta llega, la línea se suma en su lugar sin repintar nada. Lo que no se pudo
-   * comprobar no se dice, y lo que dice otro comprobante que el de ahora tampoco.
+   * La comprobación propia del sello, una sola vez por comprobante y por cuenta, y sin esperarla: la pantalla del resultado ya
+   * está a la vista y el festejo corre. Cuando la respuesta llega, la línea se suma en su lugar sin repintar nada. Lo que no se
+   * pudo comprobar no se dice, y lo que dice otro comprobante o otra cuenta que la de ahora tampoco: en un celular compartido,
+   * lo que se leyó de una persona no se le pega a la que entra después.
    */
   async function comprobarElSello(
     resultado: { sorteo?: string | null; ganadoras: string[]; comprobante: string | null },
@@ -1105,14 +1110,16 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   ): Promise<void> {
     const comprobar = deps.comprobar;
     const comprobante = resultado.comprobante;
-    if (desmontado || !comprobar || !comprobante || !cuenta || estado.selloDe === comprobante) return;
+    if (desmontado || !comprobar || !comprobante || !cuenta) return;
+    const clave = claveDelSello(comprobante, cuenta);
+    if (estado.selloDe === clave) return;
     if (estado.comprobandoSello) {
-      // Otro comprobante llegó mientras se comprobaba el anterior: queda pedido y se comprueba cuando aquella termine.
-      if (comprobante !== comprobandoDe) pedidoDelSello = { resultado, cuenta };
+      // Otro comprobante u otra cuenta llegó mientras se comprobaba la anterior: queda pedido y se comprueba cuando aquella termine.
+      if (clave !== comprobandoDe) pedidoDelSello = { resultado, cuenta };
       return;
     }
     estado.comprobandoSello = true;
-    comprobandoDe = comprobante;
+    comprobandoDe = clave;
     let dicho: ComprobacionDelSello = null;
     try {
       dicho = await comprobar({
@@ -1128,20 +1135,21 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     const siguiente = pedidoDelSello;
     pedidoDelSello = null;
     if (desmontado) return;
-    if (estado.comprobante === comprobante) {
+    if (estado.comprobante === comprobante && cuentaDeLaPagina() === cuenta) {
       estado.sello = dicho;
-      estado.selloDe = comprobante;
+      estado.selloDe = clave;
       if (estado.pantalla === "gano" || estado.pantalla === "otra") ponerElSello(raiz, deps, dicho);
     }
-    // El comprobante vigente es otro que el que se acaba de comprobar: se comprueba ahora, para que no quede sin línea.
-    if (siguiente && siguiente.resultado.comprobante === estado.comprobante) {
+    // Lo vigente es otro comprobante u otra cuenta que lo que se acaba de comprobar: se comprueba ahora, para que no quede sin línea.
+    if (siguiente && siguiente.resultado.comprobante === estado.comprobante && siguiente.cuenta === cuentaDeLaPagina()) {
       void comprobarElSello(siguiente.resultado, siguiente.cuenta);
     }
   }
 
-  /** Lo que se dice de la comprobación en una pantalla que se pinta de nuevo: nada si es de otro comprobante o no comprobó. */
+  /** Lo que se dice de la comprobación en una pantalla que se pinta de nuevo: nada si es de otro comprobante o de otra cuenta, o si no comprobó. */
   function selloComprobado(): ComprobacionDelSello {
-    return estado.comprobante !== null && estado.comprobante === estado.selloDe ? estado.sello : null;
+    const cuenta = cuentaDeLaPagina();
+    return estado.comprobante !== null && cuenta !== null && claveDelSello(estado.comprobante, cuenta) === estado.selloDe ? estado.sello : null;
   }
 
   async function aplicarPropio(propio: EstadoPropio): Promise<void> {

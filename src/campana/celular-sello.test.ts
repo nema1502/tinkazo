@@ -7,7 +7,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLang } from "../idioma";
 import type { DepsDelCelular } from "./celular";
-import { AHORA, CUENTA, OTRA_CUENTA, SESION, pasar, prepararCelular, propio } from "./celular-falso";
+import { AHORA, CUENTA, OTRA_CUENTA, SESION, lectura, lecturasDe, pasar, prepararCelular, propio } from "./celular-falso";
+import { guardarMemoria } from "./memoria";
 import { TEXTOS_CAMPANA } from "./textos";
 
 type Respuesta = "esta" | null;
@@ -50,6 +51,7 @@ async function conResultado(o: { gano: boolean; cambios?: Partial<DepsDelCelular
 
 beforeAll(async () => {
   await import("./premio");
+  await import("./recordada");
 });
 
 beforeEach(() => {
@@ -231,6 +233,87 @@ describe("cuando no se pudo comprobar, la pantalla no dice nada", () => {
     });
     expect(lineaDelSello(mundo.raiz)).toBeNull();
     expect(mundo.raiz.querySelector("#cmp-estado h1")?.textContent).toBe(es.cpGanaste);
+  });
+});
+
+describe("un celular compartido: lo que se comprobó de una cuenta no se le pega a la que entra después", () => {
+  /** Ana ganó y la página la recordaba. Al tocar Recibir se ve que la sesión de ahora es de Beto, que no ganó y entra a su resultado. */
+  async function deAnaAUnaCuentaNueva() {
+    const datos = new Map<string, string>();
+    const memoria = {
+      get length() { return datos.size; },
+      clear: () => datos.clear(),
+      getItem: (c: string) => datos.get(c) ?? null,
+      key: (n: number) => [...datos.keys()][n] ?? null,
+      removeItem: (c: string) => void datos.delete(c),
+      setItem: (c: string, v: string) => void datos.set(c, v),
+    } as Storage;
+    guardarMemoria(memoria, "evento-ejemplo", { cuenta: CUENTA, fase: "sorteada", resultado: "gano", comprobante: null, guardado: AHORA });
+    let esBeto = false;
+    const entregas: ((r: Respuesta) => void)[] = [];
+    const comprobar = vi.fn<Comprobar>(() => new Promise<Respuesta>((resolver) => { entregas.push(resolver); }));
+    const mundo = await prepararCelular({
+      memoria,
+      sesion: async () => ({ cuenta: OTRA_CUENTA, nombre: "Beto" }),
+      yo: async () => ({ ...propio("sorteada"), gano: !esBeto }),
+      resultado: async () => ({ sorteo: "7", ganadoras: [CUENTA], comprobante: COMPROBANTE }),
+      cuenta: {
+        leer: lecturasDe(lectura("lista")),
+        laSesionEs: async () => {
+          esBeto = true;
+          return "otra";
+        },
+      },
+      comprobar,
+    }, true);
+    await vi.dynamicImportSettled();
+    await pasar(50);
+    const cambiar = async (): Promise<void> => {
+      mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
+      await pasar(100);
+      await vi.dynamicImportSettled();
+      await pasar(50);
+    };
+    return { mundo, comprobar, entregas, cambiar };
+  }
+
+  it("la comprobación de la cuenta anterior que llega tarde no pinta nada para la cuenta nueva, y a la nueva se la comprueba aparte", async () => {
+    const { mundo, comprobar, entregas, cambiar } = await deAnaAUnaCuentaNueva();
+    expect(comprobar).toHaveBeenCalledTimes(1);
+    expect(comprobar.mock.calls[0]?.[0].cuenta).toBe(CUENTA);
+    await cambiar();
+    expect(mundo.raiz.querySelector("#cmp-estado h1")?.textContent).toBe(es.cpOtraPersona);
+    entregas[0]?.("esta");
+    await pasar(0);
+    expect(lineaDelSello(mundo.raiz)).toBeNull();
+    expect(comprobar).toHaveBeenCalledTimes(2);
+    expect(comprobar.mock.calls[1]?.[0].cuenta).toBe(OTRA_CUENTA);
+    entregas[1]?.(null);
+    await pasar(0);
+    expect(lineaDelSello(mundo.raiz)).toBeNull();
+  });
+
+  it("lo que se comprobó de la cuenta nueva sí se dice", async () => {
+    const { mundo, comprobar, entregas, cambiar } = await deAnaAUnaCuentaNueva();
+    await cambiar();
+    entregas[0]?.("esta");
+    await pasar(0);
+    entregas[1]?.("esta");
+    await pasar(0);
+    expect(comprobar).toHaveBeenCalledTimes(2);
+    expect(lineaDelSello(mundo.raiz)).toBe(es.cpMiSelloEsta);
+  });
+
+  it("una comprobación ya hecha de una cuenta no se le muestra a la otra al repintar", async () => {
+    const { mundo, comprobar, entregas, cambiar } = await deAnaAUnaCuentaNueva();
+    entregas[0]?.("esta");
+    await pasar(0);
+    expect(lineaDelSello(mundo.raiz)).toBe(es.cpMiSelloEsta);
+    await cambiar();
+    expect(comprobar).toHaveBeenCalledTimes(2);
+    expect(comprobar.mock.calls[1]?.[0].cuenta).toBe(OTRA_CUENTA);
+    mundo.vista.pintar();
+    expect(lineaDelSello(mundo.raiz)).toBeNull();
   });
 });
 
