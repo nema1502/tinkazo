@@ -267,6 +267,14 @@ describe("la portada en el celular y en la laptop", () => {
     expect(css).toMatch(/\.puerta \.puerta-a::after \{ content: ""; position: absolute; inset: 0; \}/);
   });
 
+  it("en escritorio el botón de la puerta no se mueve al pasar el mouse: la tarjeta entera es su área", () => {
+    // Un botón con transform se vuelve el bloque contenedor de su ::after y el área clicable se achica al botón: parpadeo.
+    // La regla va al nivel de arriba (dos espacios de sangría, fuera de cualquier @media) y gana en especificidad a button.ghost:hover.
+    const m = css.match(/^ {2}\.puerta \.puerta-a:hover:not\(:disabled\), \.puerta a\.puerta-a:hover \{([^}]*)\}/m);
+    expect(m, "falta la regla que quita el transform del botón de la puerta").not.toBeNull();
+    expect(m![1]).toMatch(/transform: none/);
+  });
+
   it("lado a lado la imagen es baja y los botones entran en la primera pantalla", () => {
     expect(css).toMatch(/\.puerta-media \{[^}]*aspect-ratio: 21 \/ 9/);
   });
