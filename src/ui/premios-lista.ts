@@ -29,9 +29,26 @@ export interface OpcionesDeLaLista {
   idioma: "es" | "en";
 }
 
-/** El texto de la fecha límite de un premio: el renglón del estado lleva la fecha y nada más. */
-const textoDelEstado = (estado: EstadoVistoDelPremio, fecha: (hastaMs: number) => string, hastaMs: number): TextoDeLaLista =>
-  estado === "por-recibir" ? { clave: "prEstadoPorRecibir", vars: { fecha: fecha(hastaMs) } } : { clave: estado === "recibido" ? "prEstadoRecibido" : "prEstadoVolvio" };
+const CLAVE_DEL_ESTADO: Record<Exclude<EstadoVistoDelPremio, "por-recibir">, string> = {
+  recibido: "prEstadoRecibido",
+  volvio: "prEstadoVolvio",
+  vencido: "prEstadoVencido",
+  "sin-confirmar": "prEstadoSinConfirmar",
+};
+
+/**
+ * El texto del estado de un premio. Por recibir lleva la fecha límite y nada más. Sin una fecha que se pueda escribir
+ * (no es un número finito, o quien la escribe falla) no se inventa ninguna: el renglón dice que falta confirmar.
+ */
+function textoDelEstado(estado: EstadoVistoDelPremio, fecha: (hastaMs: number) => string, hastaMs: number | null): TextoDeLaLista {
+  if (estado !== "por-recibir") return { clave: CLAVE_DEL_ESTADO[estado] };
+  if (hastaMs === null || !Number.isFinite(hastaMs)) return { clave: CLAVE_DEL_ESTADO["sin-confirmar"] };
+  try {
+    return { clave: "prEstadoPorRecibir", vars: { fecha: fecha(hastaMs) } };
+  } catch {
+    return { clave: CLAVE_DEL_ESTADO["sin-confirmar"] };
+  }
+}
 
 /** El monto, como lo ve la pantalla: las unidades mínimas del activo, con el punto decimal del idioma. */
 export const montoLegible = (unidades: string, idioma: "es" | "en"): string | null => {
@@ -56,7 +73,7 @@ export function filasDeLosPremios(o: OpcionesDeLaLista): { filas: FilaDeLosPremi
   if (!o.premios.ok) return { filas: [] };
   return {
     filas: o.premios.premios.map((p) => ({
-      texto: textoDelEstado(p.estado, o.fecha, p.hastaMs ?? 0),
+      texto: textoDelEstado(p.estado, o.fecha, p.hastaMs),
       monto: p.monto === null ? null : montoLegible(p.monto, o.idioma),
     })),
   };
