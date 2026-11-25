@@ -48,10 +48,24 @@ export type PasoDelPuente =
  * ganadoras avisadas o cuando la sala ya fue borrada, que no tiene a quién mandarle nada.
  */
 export function avisosPendientes(p: PasoDelPuente, sorteoHecho: boolean): boolean {
-  if (!sorteoHecho) return true;
-  if (p.paso === "sala-borrada") return false;
-  if (p.paso === "resultado") return p.filas.some((f) => !f.avisada);
-  return true;
+  return avisoQueFalta(p, sorteoHecho) !== null;
+}
+
+/** Qué se pierden los celulares si se deja la campaña ahora: el aviso de la lista sellada o su resultado. */
+export type AvisoQueFalta = "sello" | "resultado";
+
+/** Pasos en los que el sello ya llegó a los celulares y lo que falta, con el sorteo sin hacer, es el resultado. */
+const DESPUES_DEL_SELLO: ReadonlySet<PasoDelPuente["paso"]> = new Set(["avisada", "sorteo-pendiente", "boton-resultado", "mandando", "guardar-sorteo"]);
+
+/**
+ * Lo que el panel todavía le debe a los celulares, o `null` si no les debe nada. Es la misma regla que `avisosPendientes`:
+ * una sola decide si se pregunta antes de dejar la campaña y qué dice la pregunta.
+ */
+export function avisoQueFalta(p: PasoDelPuente, sorteoHecho: boolean): AvisoQueFalta | null {
+  if (!sorteoHecho) return DESPUES_DEL_SELLO.has(p.paso) ? "resultado" : "sello";
+  if (p.paso === "sala-borrada") return null;
+  if (p.paso === "resultado") return p.filas.some((f) => !f.avisada) ? "resultado" : null;
+  return "resultado";
 }
 
 /** Lo que el panel puede pedirle a quien tiene la lógica de cada paso. Cada módulo registra la suya. */

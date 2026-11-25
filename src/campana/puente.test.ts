@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type FilaDeGanadora, type PasoDelPuente, avisosPendientes, lineaDelPaso } from "./puente";
+import { type FilaDeGanadora, type PasoDelPuente, avisoQueFalta, avisosPendientes, lineaDelPaso } from "./puente";
 
 /** La línea de apoyo bajo las ganadoras: la de los celulares, o la de avisarle a Tinkazo cuando alguien no puede recibir. */
 const fila = (alta: FilaDeGanadora["alta"]): FilaDeGanadora => ({ cuenta: "GUNO", nombre: "Una", avisada: false, alta });
@@ -66,5 +66,40 @@ describe("los avisos que el panel todavía le debe a los celulares", () => {
     expect(sorteada({ paso: "resultado", filas: [una], otraBilletera: false })).toBe(false);
     // Con la lista sellada el resultado todavía no salió: nada de lo que diga el paso lo da por mandado.
     expect(sellada({ paso: "resultado", filas: [una], otraBilletera: false })).toBe(true);
+  });
+});
+
+describe("cuál de los dos avisos le falta a los celulares", () => {
+  const una = { ...fila("esperando"), avisada: true };
+
+  it("con la lista sellada y el sorteo sin hacer, falta el sello mientras no se haya avisado", () => {
+    const pasos: PasoDelPuente[] = [
+      { paso: "nada" },
+      { paso: "leyendo" },
+      { paso: "lista-sellada", soltable: false },
+      { paso: "boton-avisar" },
+      { paso: "avisando" },
+      { paso: "no-avisamos" },
+      { paso: "comprobando" },
+      { paso: "no-comprobo" },
+    ];
+    for (const p of pasos) expect(avisoQueFalta(p, false), p.paso).toBe("sello");
+  });
+
+  it("con el sello ya avisado y el sorteo sin hacer, lo que falta es el resultado", () => {
+    expect(avisoQueFalta({ paso: "avisada" }, false)).toBe("resultado");
+    expect(avisoQueFalta({ paso: "sorteo-pendiente" }, false)).toBe("resultado");
+  });
+
+  it("con el sorteo hecho, falta el resultado, salvo con la sala borrada o todas avisadas", () => {
+    expect(avisoQueFalta({ paso: "boton-resultado" }, true)).toBe("resultado");
+    expect(avisoQueFalta({ paso: "resultado", filas: [fila("esperando"), una], otraBilletera: false }, true)).toBe("resultado");
+    expect(avisoQueFalta({ paso: "resultado", filas: [una], otraBilletera: false }, true)).toBeNull();
+    expect(avisoQueFalta({ paso: "sala-borrada" }, true)).toBeNull();
+  });
+
+  it("es la misma regla que decide si se pregunta", () => {
+    const pasos: PasoDelPuente[] = [{ paso: "nada" }, { paso: "avisada" }, { paso: "sala-borrada" }, { paso: "resultado", filas: [una], otraBilletera: false }];
+    for (const hecho of [false, true]) for (const p of pasos) expect(avisosPendientes(p, hecho), `${p.paso} ${hecho}`).toBe(avisoQueFalta(p, hecho) !== null);
   });
 });

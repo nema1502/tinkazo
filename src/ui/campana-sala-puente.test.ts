@@ -322,7 +322,7 @@ describe("volver a abrir y dejar la campaña", () => {
     m.deps.alOlvidar = olvidar;
     const p = nuevoPanel(m);
     await cerrarConDos(m, p);
-    boton(p, "Armar otra campaña").click();
+    boton(p, "Elegir otro archivo").click();
     boton(p, "Sí, dejarla").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
     expect(olvidar).toHaveBeenCalledTimes(1);
