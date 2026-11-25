@@ -242,8 +242,8 @@ const CATALOGO: Record<string, Entrada> = {
   "vigilante-sin-clave": {
     asunto: () => "Al vigilante le falta la clave del portero",
     gravedad: () => 88,
-    frase: () => "El vigilante no puede entrar al portero: no tiene la clave de operar o el portero ya no la acepta. Mientras tanto no mira nada.",
-    hacer: () => "Cargá de nuevo la clave de operar del portero en el vigilante: wrangler secret put PORTERO_ADMIN_TOKEN (pasos en el README del vigilante).",
+    frase: () => "El vigilante no puede entrar al portero: no tiene la clave o el portero ya no la acepta. Mientras tanto no mira nada.",
+    hacer: () => "Si se cargó la clave de solo lectura en el vigilante antes que en el portero, borrá PORTERO_TOKEN_LECTURA del vigilante (wrangler secret delete PORTERO_TOKEN_LECTURA) y vuelve a usar la de operar. Si no, cargá de nuevo la clave de operar: wrangler secret put PORTERO_ADMIN_TOKEN (pasos en el README del vigilante y en la hoja de operación, en qué orden se carga).",
   },
 };
 
