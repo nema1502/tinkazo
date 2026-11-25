@@ -41,6 +41,8 @@ export interface MemoriaDeLlaves {
   llaves: Map<string, CryptoKey>;
   vence: number;
   pedidas: number;
+  /** La hora del último pedido que falló, o `null` si el último salió bien o todavía no hubo ninguno. */
+  fallo: number | null;
   /** El pedido que está en vuelo: varios tokens a la vez comparten uno solo. */
   enCurso: Promise<boolean> | null;
 }
@@ -59,7 +61,7 @@ export interface OpcionesDeIdentidad {
 }
 
 export function crearMemoriaDeLlaves(): MemoriaDeLlaves {
-  return { llaves: new Map(), vence: 0, pedidas: 0, enCurso: null };
+  return { llaves: new Map(), vence: 0, pedidas: 0, fallo: null, enCurso: null };
 }
 
 const memoriaDelWorker = crearMemoriaDeLlaves();
@@ -76,6 +78,11 @@ const RECUERDO_MAXIMO_MS = 24 * 3_600_000;
  * en cada intento.
  */
 const ESPERA_ENTRE_PEDIDOS_MS = 30_000;
+/**
+ * Si Google no contesta, tampoco se le pide en cada token. Con llaves vigentes rige la espera larga: quien trae una llave
+ * conocida no se entera. Sin llaves se espera poco, porque nadie entra mientras tanto.
+ */
+const ESPERA_TRAS_FALLO_SIN_LLAVES_MS = 3_000;
 const MAX_LARGO_TOKEN = 6_000;
 
 const EMISORES = new Set(["accounts.google.com", "https://accounts.google.com"]);
@@ -157,13 +164,18 @@ async function pedirLlaves(memoria: MemoriaDeLlaves, pedir: PedirLlaves, ahora: 
     // Si el corte gana, el pedido que quedó atrás no puede dejar un rechazo sin atrapar.
     leer.catch(() => null);
     const leidas = await Promise.race([leer, corte]);
-    if (leidas === null) return false;
+    if (leidas === null) {
+      memoria.fallo = ahora();
+      return false;
+    }
     // La memoria se cambia de una vez y solo con un pedido entero: nunca llaves nuevas con la caducidad de otras.
     memoria.llaves = leidas.llaves;
     memoria.pedidas = ahora();
     memoria.vence = memoria.pedidas + leidas.recuerdo;
+    memoria.fallo = null;
     return true;
   } catch {
+    memoria.fallo = ahora();
     return false;
   } finally {
     if (reloj !== undefined) clearTimeout(reloj);
@@ -178,12 +190,17 @@ async function pedirLlaves(memoria: MemoriaDeLlaves, pedir: PedirLlaves, ahora: 
  * de otra conexión da un rechazo para todos, y el siguiente intento lo repite.
  */
 async function llaveDe(kid: string, memoria: MemoriaDeLlaves, pedir: PedirLlaves, ahora: () => number, tiempoMaxMs: number): Promise<CryptoKey | null | "no-disponible"> {
-  const vigente = memoria.llaves.size > 0 && ahora() < memoria.vence;
+  const hora = ahora();
+  const vigente = memoria.llaves.size > 0 && hora < memoria.vence;
   if (vigente) {
     const hay = memoria.llaves.get(kid);
     if (hay) return hay;
-    // Google pudo rotar sus llaves: se piden otra vez, pero no antes de la espera entre pedidos.
-    if (ahora() - memoria.pedidas < ESPERA_ENTRE_PEDIDOS_MS) return null;
+    // Google pudo rotar sus llaves: se piden otra vez, pero no antes de la espera entre pedidos, cuente el último pedido
+    // como bueno o como fallido.
+    if (hora - memoria.pedidas < ESPERA_ENTRE_PEDIDOS_MS) return null;
+    if (memoria.fallo !== null && hora - memoria.fallo < ESPERA_ENTRE_PEDIDOS_MS) return null;
+  } else if (memoria.enCurso === null && memoria.fallo !== null && hora - memoria.fallo < ESPERA_TRAS_FALLO_SIN_LLAVES_MS) {
+    return "no-disponible";
   }
   if (memoria.enCurso === null) {
     const pedido = pedirLlaves(memoria, pedir, ahora, tiempoMaxMs).finally(() => {

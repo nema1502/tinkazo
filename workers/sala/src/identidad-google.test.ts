@@ -426,7 +426,7 @@ describe("cuando las llaves no están disponibles", () => {
     expect(Date.now() - t0).toBeLessThan(2000);
   });
 
-  it("un pedido que falló no se recuerda: el siguiente lo intenta de nuevo", async () => {
+  it("un pedido que falló no se recuerda: pasada la espera corta, el siguiente lo intenta de nuevo", async () => {
     const b = banco();
     let fallar = true;
     const pedir = async (url: string, init: { signal: AbortSignal }): Promise<RespuestaDeLlaves> => {
@@ -437,7 +437,51 @@ describe("cuando las llaves no están disponibles", () => {
     const t = await firmar();
     expect(await verificarIdentidadDeGoogle(t, o)).toEqual(motivo);
     fallar = false;
+    b.reloj.ms += 5_000;
     expect((await verificarIdentidadDeGoogle(t, o)).ok).toBe(true);
+  });
+
+  it("con Google caído y sin llaves, los tokens no hacen un pedido cada uno: uno cada pocos segundos", async () => {
+    const b = banco();
+    let pedidos = 0;
+    const o = { ...b.opciones, pedir: async (): Promise<RespuestaDeLlaves> => { pedidos++; throw new Error("sin red"); } };
+    const t = await firmar();
+    for (let i = 0; i < 20; i++) expect(await verificarIdentidadDeGoogle(t, o)).toEqual(motivo);
+    expect(pedidos).toBe(1);
+    b.reloj.ms += 5_000;
+    expect(await verificarIdentidadDeGoogle(t, o)).toEqual(motivo);
+    expect(pedidos).toBe(2);
+  });
+
+  it("con llaves vigentes y Google caído, las llaves inventadas no hacen un pedido cada una", async () => {
+    const b = banco([google]);
+    await verificarIdentidadDeGoogle(await firmar(), b.opciones);
+    b.reloj.ms += 60_000;
+    let pedidos = 0;
+    const falla = async (): Promise<RespuestaDeLlaves> => { pedidos++; return { ok: false, status: 500, headers: { get: () => null }, json: async () => ({}) }; };
+    const o = { ...b.opciones, pedir: falla };
+    const raro = await nuevoPar("llave-que-no-existe");
+    for (let i = 0; i < 20; i++) await verificarIdentidadDeGoogle(await firmar({ par: raro, payload: { exp: b.reloj.ms / 1000 + 100 } }), o);
+    expect(pedidos).toBe(1);
+    // Quien trae una llave conocida sigue entrando, sin pedir nada.
+    expect((await verificarIdentidadDeGoogle(await firmar({ payload: { exp: b.reloj.ms / 1000 + 100 } }), o)).ok).toBe(true);
+    expect(pedidos).toBe(1);
+    // Pasada la espera larga se vuelve a intentar, una vez.
+    b.reloj.ms += 31_000;
+    for (let i = 0; i < 20; i++) await verificarIdentidadDeGoogle(await firmar({ par: raro, payload: { exp: b.reloj.ms / 1000 + 100 } }), o);
+    expect(pedidos).toBe(2);
+  });
+
+  it("si Google vuelve, un fallo anterior no frena a la siguiente rotación", async () => {
+    const b = banco([google]);
+    await verificarIdentidadDeGoogle(await firmar(), b.opciones);
+    b.reloj.ms += 60_000;
+    const caida = { ...b.opciones, pedir: async (): Promise<RespuestaDeLlaves> => { throw new Error("sin red"); } };
+    const nuevo = await firmar({ par: google2, payload: { exp: b.reloj.ms / 1000 + 100 } });
+    expect(await verificarIdentidadDeGoogle(nuevo, caida)).toEqual(motivo);
+    b.publicar([google, google2]);
+    b.reloj.ms += 31_000;
+    expect((await verificarIdentidadDeGoogle(await firmar({ par: google2, payload: { exp: b.reloj.ms / 1000 + 100 } }), b.opciones)).ok).toBe(true);
   });
 
   it("si las llaves ya recordadas no sirven y Google no contesta, no se acepta nada", async () => {
