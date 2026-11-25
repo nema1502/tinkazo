@@ -1,5 +1,6 @@
 import "../campana/campana-sala.css";
 import { campanasActivo } from "../campana/bandera";
+import { esLineaDePersona } from "../campana/forma-persona";
 import {
   accionesDelPuente,
   alCambiarElPuente,
@@ -435,6 +436,8 @@ const TEXTO_DEL_MOTIVO: Record<MotivoDeSalida, string> = {
   pidio: "cpoPidio",
   otro: "cpoOtro",
 };
+/** El texto de cada motivo: con una persona anotada (sin cuenta) quien sale repetida es una persona y no una cuenta. */
+const textoDelMotivo = (m: MotivoDeSalida, persona: boolean): string => (persona && m === "repetida" ? "cpoRepetidaPersona" : TEXTO_DEL_MOTIVO[m]);
 
 const QUINCE_MIN = 15 * 60_000;
 /** Lo más lejos que la sala acepta un cierre: doce horas desde ahora. */
@@ -2998,6 +3001,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // Quien ganó y todavía no sabe: avisarle es lo que sigue, y es el botón principal del panel, que va arriba de la lista
     // (pintarAcciones): su fila no lo repite. Las demás quedan con su botón de apoyo.
     const primeraPorAvisar = paso.filas.findIndex((g) => !g.avisada);
+    const enMano = paso.enMano === true;
     const filasDeGanadoras = paso.filas.map((g, i) => {
       const li = document.createElement("li");
       li.className = "cpo-fila";
@@ -3008,10 +3012,21 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       if (g.avisada) {
         const dicho = document.createElement("p");
         dicho.className = "cpo-salio";
-        dicho.textContent = tx("cpoAvisada");
+        // En mano el panel no sabe si el celular se enteró: solo que quien organiza lo marcó.
+        dicho.textContent = tx(enMano ? "cpoMarcadaAvisada" : "cpoAvisada");
         li.append(dicho);
       } else {
         if (i !== primeraPorAvisar) li.append(boton(fmt("cpoAvisarA", { nombre: g.nombre }), "ghost", () => accionesDelPuente().avisarA?.(g.cuenta)));
+      }
+      if (enMano) {
+        // Sin servicio del acceso no hay nada que preparar ni que recibir: de la fila sale solo el código, si se tiene.
+        if (g.codigo !== undefined) {
+          const codigo = document.createElement("span");
+          codigo.className = "cpo-marca";
+          codigo.textContent = fmt("cpoCodigoDeEntrega", { codigo: g.codigo });
+          li.append(codigo);
+        }
+        return li;
       }
       if (g.alta !== "esperando" && g.alta.estado === "puede") {
         const marca = document.createElement("span");
@@ -3027,6 +3042,14 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       }
       return li;
     });
+    // Faltan códigos y se pueden volver a pedir: el enlace, al final. Sin quien los pida (todavía no se piden) no aparece.
+    const verCodigos = accionesDelPuente().verCodigos;
+    if (enMano && verCodigos && paso.filas.some((g) => g.codigo === undefined)) {
+      const li = document.createElement("li");
+      li.className = "cpo-fila";
+      li.append(boton(tx("cpoVerCodigos"), "enlace", () => verCodigos()));
+      filasDeGanadoras.push(li);
+    }
     ganadorasEl.replaceChildren(...filasDeGanadoras);
   }
 
@@ -3155,7 +3178,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const motivoEnVuelo = pendientes.get(f.n)?.motivo ?? enviando.get(f.n);
     if (motivoEnVuelo) {
       const dicho = (f.revisar ? persona : f.nombre ?? persona);
-      const motivo = tx(TEXTO_DEL_MOTIVO[motivoEnVuelo]).toLocaleLowerCase(deps.idioma());
+      const motivo = tx(textoDelMotivo(motivoEnVuelo, esLineaDePersona(f.cuenta))).toLocaleLowerCase(deps.idioma());
       const p = document.createElement("p");
       p.className = "cpo-salio";
       p.textContent = fmt("cpoSalio", { nombre: dicho, motivo });
@@ -3180,7 +3203,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       p.textContent = tx("cpoPorQue");
       motivos.append(p);
       for (const m of MOTIVOS) {
-        const b = botonDeFila(TEXTO_DEL_MOTIVO[m], "motivo", f.n, "ghost");
+        const b = botonDeFila(textoDelMotivo(m, esLineaDePersona(f.cuenta)), "motivo", f.n, "ghost");
         b.dataset.motivo = m;
         motivos.append(b);
       }
