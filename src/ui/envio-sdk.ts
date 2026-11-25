@@ -77,7 +77,7 @@ function leerEnvio(r: { status: string; errorResult?: unknown }): RespuestaEnvio
 }
 
 /** Lo que importa de la respuesta de `getTransaction` del SDK. */
-function leerConsulta(c: { status: string; latestLedgerCloseTime?: number | string; returnValue?: unknown }): RespuestaConsulta {
+export function leerConsulta(c: { status: string; latestLedgerCloseTime?: number | string; returnValue?: unknown }): RespuestaConsulta {
   return { status: c.status, cierre: Number(c.latestLedgerCloseTime), ...(c.returnValue !== undefined ? { valor: c.returnValue } : {}) };
 }
 
