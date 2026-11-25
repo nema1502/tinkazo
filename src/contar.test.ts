@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ERRORES, ERRORES_DEL_PORTERO, validarConteo } from "../workers/enlaces/src/conteo";
+import { ERRORES, ERRORES_DEL_PORTERO, ORIGENES, validarConteo } from "../workers/enlaces/src/conteo";
 import { T } from "./i18n";
 import deployments from "./stellar/deployments.json";
 import {
@@ -488,6 +488,28 @@ describe("los términos dicen lo que hace el contador", () => {
     // Lo que se cuenta sigue siendo anónimo: la promesa de que nunca se guarda la cuenta ni la hora no se toca.
     expect(String(T.es.tmMore2)).toMatch(/Nunca nombres, la lista, tu cuenta ni la hora/);
     expect(String(T.en.tmMore2)).toMatch(/Never names, the list, your account or the time/);
+  });
+
+  it("los términos nombran cada origen que el contador acepta, la tarjeta de un cupón incluida", () => {
+    // Un origen nuevo en la lista cerrada se nombra acá, en inglés y en terminos.html en el mismo cambio.
+    const nombres: Record<(typeof ORIGENES)[number], [RegExp, RegExp]> = {
+      home: [/la portada/, /the home page/],
+      aula: [/el aula/, /the classroom/],
+      meetup: [/un encuentro/, /a meetup/],
+      ruleta: [/la ruleta/, /the wheel/],
+      eventos: [/los eventos/, /events/],
+      proof: [/el comprobante/, /someone else's proof/],
+      video: [/el video de otra persona/, /someone else's proof or video/],
+      tarjeta: [/la tarjeta de un cupón/, /a coupon card/],
+    };
+    expect(Object.keys(nombres).sort()).toEqual([...ORIGENES].sort());
+    const html = readFileSync("terminos.html", "utf8").replace(/\s+/g, " ");
+    for (const o of ORIGENES) {
+      const [es, en] = nombres[o];
+      expect(String(T.es.tmMore2), `es ${o}`).toMatch(es);
+      expect(String(T.en.tmMore2), `en ${o}`).toMatch(en);
+      expect(html, `html ${o}`).toMatch(es);
+    }
   });
 
   it("cada paso que los términos nombran tiene quien lo cuente en el sitio", () => {
