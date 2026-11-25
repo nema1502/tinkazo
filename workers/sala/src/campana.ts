@@ -68,6 +68,11 @@ export interface CampanaFirmada {
   premios: number;
   /** La cuenta que tiene que sellar, si la campaña la nombra. Sin ella, el sello de cualquier cuenta sirve. */
   organizadora: string | null;
+  /**
+   * Cómo se anota la gente: solo viene con el valor `persona` (se anotan con Google, sin billetera, y la lista sella una línea
+   * por persona). Una campaña sin este campo, o con `cuenta`, es la de siempre y el lector no agrega nada a su lectura.
+   */
+  identidad?: "persona";
 }
 export type LecturaFirmada = ({ ok: true } & CampanaFirmada) | { ok: false; motivo: "forma" | "firma" | "vencida" };
 
@@ -108,8 +113,20 @@ export function leerTextoDeCampana(texto: string, ahora: number): LecturaDelText
   if (!Array.isArray(premios) || premios.length < 1 || premios.length > 10) return forma("premios");
   if (premios.some((premio) => typeof premio !== "string" || !ES_PREMIO.test(premio))) return forma("premios");
   if (organizadora !== null && !esCuentaValida(organizadora)) return forma("organizadora");
+  // Ausente o `cuenta` es el modo de siempre. `persona` es el modo sin billetera. Cualquier otro valor no se firma ni se acepta.
+  const identidad = c.identidad;
+  if (identidad !== undefined && identidad !== "cuenta" && identidad !== "persona") return forma("identidad");
   if (cierraMs <= ahora) return { ok: false, motivo: "vencida", campo: "cierra_ms" };
-  return { ok: true, evento, red, cierraMs, sorteoMs, premios: premios.length, organizadora };
+  return {
+    ok: true,
+    evento,
+    red,
+    cierraMs,
+    sorteoMs,
+    premios: premios.length,
+    organizadora,
+    ...(identidad === "persona" ? { identidad: "persona" as const } : {}),
+  };
 }
 
 /** Lo más largo que se guarda del nombre de la empresa en la lista de Tus campañas. */
@@ -247,6 +264,14 @@ export function listaDeLaCampana(cuentas: readonly string[]): string[] {
 export function listaDeLaSala(sql: Ejecutar): string[] {
   const filas = sql<{ cuenta: string }>("SELECT cuenta FROM equipos");
   return listaDeLaCampana(filas.map((fila) => fila.cuenta));
+}
+
+/**
+ * Si la sala es de una campaña de personas: la clave `identidad` se escribe solo al crearla con ese modo. Una sala sin la clave,
+ * y cualquiera anterior a este modo, es de cuentas.
+ */
+export function esCampanaDePersonas(sql: Ejecutar): boolean {
+  return sql<{ v: string }>("SELECT v FROM sala WHERE k = 'identidad'")[0]?.v === "persona";
 }
 
 export type MotivoDeSelloRechazado =
@@ -1164,4 +1189,16 @@ export function estadoDeCelular(sql: Ejecutar, cuenta: string, llave: string): E
   }
   if (sql("SELECT cuenta FROM campana_avisos WHERE cuenta = ?", cuenta)[0]) estado.avisado = true;
   return estado;
+}
+
+/**
+ * Lo que ve un celular de sí mismo en una campaña de personas, con la huella de su llave sola: no tiene cuenta que mandar. La
+ * sala busca la línea que ese celular anotó (o la que quitó) y contesta lo mismo que `estadoDeCelular`. Una llave que no es de
+ * nadie ve solo lo público y `anotada: false`, igual que una llave ajena en una campaña de cuentas. Si la misma llave aparece en
+ * varias filas (una sola compu usada por varias personas) vale la última que se anotó.
+ */
+export function estadoDeCelularPorLlave(sql: Ejecutar, llave: string): EstadoDeCelular {
+  const equipo = sql<{ cuenta: string }>("SELECT cuenta FROM equipos WHERE llave = ? ORDER BY n DESC LIMIT 1", llave)[0];
+  const salida = sql<{ cuenta: string }>("SELECT cuenta FROM campana_quitadas WHERE llave = ? LIMIT 1", llave)[0];
+  return estadoDeCelular(sql, equipo?.cuenta ?? salida?.cuenta ?? "", llave);
 }
