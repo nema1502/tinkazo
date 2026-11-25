@@ -159,15 +159,15 @@ describe("music.ts usa el margen", () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(new URL("./music.ts", import.meta.url), "utf8");
     expect(src).not.toMatch(/s\.ctx\.currentTime \+ 0\.22/);
-    expect(src).toMatch(/s\.margen = margenMusica\(s\.margen, intervalo\);/);
-    expect(src).toMatch(/while \(s\.next < s\.ctx\.currentTime \+ horizonteDeMusica\(s\.margen, intervalo\)\)/);
+    expect(src).toMatch(/s\.margen = escondida \? MARGEN_BASE : margenMusica\(s\.margen, intervalo\);/);
+    expect(src).toMatch(/while \(s\.next < s\.ctx\.currentTime \+ \(escondida \? s\.margen : horizonteDeMusica\(s\.margen, intervalo\)\)\)/);
     expect(src).toMatch(/const espera = \(at - s\.ctx\.currentTime - Math\.max\(0\.15, s\.margen\)\) \* 1000;/);
   });
 
   it("el tick mide cuánto frenó el procesador y con gracia el horizonte llega hasta el próximo tick", async () => {
     const src = readFileSync(new URL("./music.ts", import.meta.url), "utf8");
     expect(src).toMatch(/const intervalo = ahora - s\.ultimoTick;/);
-    expect(src).toMatch(/s\.gracia = nivelDeGracia\(s\.gracia, intervalo\);/);
+    expect(src).toMatch(/s\.gracia = escondida \? 0 : nivelDeGracia\(s\.gracia, intervalo\);/);
     expect(src).toMatch(/horizonteDeMusica\(s\.margen, intervalo\)/);
   });
 });

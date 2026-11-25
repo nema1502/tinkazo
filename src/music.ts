@@ -629,13 +629,13 @@ function tick(): void {
   }
   const ahora = performance.now();
   const intervalo = ahora - s.ultimoTick;
-  // El margen sigue al reloj, con la pestaña escondida también: los temporizadores escondidos bajan a uno por segundo y el
-  // horizonte de gracia (abajo) los cubre, así que la música escondida suena entera y a la vuelta no queda rota (S1).
-  s.margen = margenMusica(s.margen, intervalo);
-  // Cuánto frenó el procesador (o la batería, con la pestaña escondida): sube al toque y baja de a poco. Con gracia
-  // suenan menos capas — baja con gracia a algo más simple — y el horizonte de programación llega hasta el próximo tick:
-  // nunca un silencio, nunca rota (S1).
-  s.gracia = nivelDeGracia(s.gracia, intervalo);
+  const escondida = document.hidden;
+  // Con la pestaña escondida el show está frenado: la música sigue saltando en silencio como desde el 2 de noviembre,
+  // sin agrandar el margen por los temporizadores de uno por segundo.
+  s.margen = escondida ? MARGEN_BASE : margenMusica(s.margen, intervalo);
+  // Cuánto frenó el procesador: sube al toque y baja de a poco. Con gracia suenan menos capas y el horizonte de
+  // programación llega hasta el próximo tick. Escondida no cuenta: el tropiezo es del navegador, no del equipo.
+  s.gracia = escondida ? 0 : nivelDeGracia(s.gracia, intervalo);
   s.ultimoTick = ahora;
   // La tensión sube de a poco aunque el relator no diga nada: el piso crece
   // con el tiempo, así que la música siempre va de menos a más.
@@ -664,7 +664,7 @@ function tick(): void {
     s.step++;
   }
 
-  while (s.next < s.ctx.currentTime + horizonteDeMusica(s.margen, intervalo)) {
+  while (s.next < s.ctx.currentTime + (escondida ? s.margen : horizonteDeMusica(s.margen, intervalo))) {
     const sixteenth = beatLength(s) / 4;
     // Durante el corte de una sorpresa no suena nada.
     if (s.style === "chovena") playStepChovena(s, s.next, s.step);
