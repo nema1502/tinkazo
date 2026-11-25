@@ -119,9 +119,8 @@ describe("el tick baja con gracia cuando el procesador frenó, sin cortar nunca 
   it("el tick mide el intervalo, sigue el margen, mide el freno y programa hasta el horizonte de gracia", async () => {
     const src = readFileSync(resolve(process.cwd(), "src/music.ts"), "utf8");
     expect(src).toMatch(/const intervalo = ahora - s\.ultimoTick;/);
-    expect(src).toMatch(/s\.margen = margenMusica\(s\.margen, intervalo\);/);
-    expect(src).not.toMatch(/document\.hidden \? MARGEN_BASE/);
-    expect(src).toMatch(/s\.gracia = nivelDeGracia\(s\.gracia, intervalo\);/);
+    expect(src).toMatch(/s\.margen = escondida \? MARGEN_BASE : margenMusica\(s\.margen, intervalo\);/);
+    expect(src).toMatch(/s\.gracia = escondida \? 0 : nivelDeGracia\(s\.gracia, intervalo\);/);
     expect(src).toMatch(/horizonteDeMusica\(s\.margen, intervalo\)/);
   });
 
