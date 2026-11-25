@@ -504,7 +504,8 @@ describe("volver a la pestaña", () => {
     expect(cf.activarCuenta).not.toHaveBeenCalled();
     expect(alerta()).toContain(t("clErrSinPedido"));
     expect(principal().textContent).toBe(t("clProbarDeNuevo"));
-    // Lo vota la persona, con su toque.
+    // Lo vota la persona, con su toque (pasada la guarda que ignora un toque recién cambiada la pantalla).
+    await pasa();
     principal().click();
     await pasa(2_500);
     expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
