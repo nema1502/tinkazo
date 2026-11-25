@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listHash } from "../protocol/canonical";
-import { huellaDeLlave, leerTextoDeCampana, listaDeLaCampana, salDeCampana } from "../../workers/sala/src/campana";
+import { huellaDeLlave, huellaDePersona, leerTextoDeCampana, listaDeLaCampana, salDeCampana } from "../../workers/sala/src/campana";
 import type { Ejecutar, ValorSql } from "../../workers/sala/src/registro";
 import { leerParaActivar } from "../../workers/sala/src/activar";
 import { lineaDePersona } from "../../workers/sala/src/linea-persona";
@@ -197,12 +197,14 @@ describe("una sala de personas que ya existe, con los interruptores apagados", (
     const abierta = await mundo.pedir(ruta(sala, "/campana/fase"), { metodo: "PUT", cuerpo: { fase: "abierta" }, cabeceras: auth(sala) });
     expect(abierta.status).toBe(204);
     // La sal de la campaña nace con la primera persona: acá se pide la misma que usaría la sala.
-    const sal = salDeCampana(((consulta: string, ...parametros: ValorSql[]) => mundo.ejecutar(`sala:${sala.id}`, consulta, ...parametros)) as unknown as Ejecutar);
+    const sql = ((consulta: string, ...parametros: ValorSql[]) => mundo.ejecutar(`sala:${sala.id}`, consulta, ...parametros)) as unknown as Ejecutar;
+    const sal = salDeCampana(sql);
     const lineas: string[] = [];
     for (let n = 1; n <= 4; n++) {
       const linea = await lineaDePersona(sal, `google:usuario${n}`);
       lineas.push(linea);
       mundo.ejecutar(`sala:${sala.id}`, "INSERT INTO equipos (cuenta, d, estado, v, llave) VALUES (?, 'x', 'aceptado', ?, ?)", linea, n, await huellaDeLlave(llaveDe(n)));
+      mundo.ejecutar(`sala:${sala.id}`, "INSERT INTO personas (persona, cuenta) VALUES (?, ?)", await huellaDePersona(sql, `google:usuario${n}`), linea);
     }
     apagar(mundo);
     return { mundo, sala, lineas };
