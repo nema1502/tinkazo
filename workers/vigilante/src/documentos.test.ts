@@ -299,7 +299,9 @@ describe("lo que la revisión lee del portero, tal como lo manda", () => {
     // El bloque cuentas (issue 177): del mismo juego de movimientos, contado por lectura-cuentas.ts, para que el
     // vigilante avise las rondas de cuentas por hora. Que no haya movimientos es null, no cero.
     expect(rutas).toContain('import { contarCuentasPorHora } from "./lectura-cuentas";');
-    expect(vigilancia).toContain("cuentas: mov.ok ? contarCuentasPorHora(mov.movimientos, desde, this.reloj()) : null,");
+    expect(vigilancia).toContain("cuentas: mov.ok ? this.cuentasPorHora(mov.movimientos, desde) : null,");
+    // Y el conteo nunca hace fallar la vigilancia: lo que lo lanza queda en null, con el reloj de la puerta.
+    expect(rutas).toMatch(/private cuentasPorHora\([^)]*\)[^{]*\{\s*try \{\s*return contarCuentasPorHora\(movimientos, desde, this\.reloj\(\)\);\s*\} catch \{\s*return null;/u);
     expect(leer("workers/patrocinio/src/compras.ts")).toContain("firmas(desde: number): { compras: number; pagosConSaldo: number } {");
     // Las dos partes llegan a /v1/patrocinio/estado junto con lo de servicio.ts.
     const index = leer("workers/patrocinio/src/index.ts");

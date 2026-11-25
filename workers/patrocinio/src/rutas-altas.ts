@@ -641,11 +641,20 @@ export class PuertaAltas {
       firmas: { cobradas: cobradas?.firmas ?? null, explicadas, ...e, ...q, completo: cobradas?.completo ?? null, desde },
       // Las cuentas nuevas y las activaciones por hora (issue 177), del mismo juego de movimientos que ya se pide y con
       // el reloj de la puerta: con ellas el vigilante avisa las rondas de cuentas que pasan el umbral. Sin el juego, null.
-      cuentas: mov.ok ? contarCuentasPorHora(mov.movimientos, desde, this.reloj()) : null,
+      cuentas: mov.ok ? this.cuentasPorHora(mov.movimientos, desde) : null,
       // Aparte de `firmas`, y solo con los pagos prendidos o con alguno en el día: sin ellos, la vigilancia es la de siempre.
       ...(pagosPrendidos(cfg) || pg.premios + pg.retiros > 0 ? { firmasPagos: pg } : {}),
       patrocinioPollar: patrocinio,
     };
+  }
+
+  /** El conteo de cuentas nuevas por hora, o null si no se pudo contar: la vigilancia nunca falla por este conteo. */
+  private cuentasPorHora(movimientos: unknown, desde: number): ReturnType<typeof contarCuentasPorHora> | null {
+    try {
+      return contarCuentasPorHora(movimientos, desde, this.reloj());
+    } catch {
+      return null;
+    }
   }
 
   /** Las firmas de premios y retiros de las últimas 24 horas. Sin las tablas, o si no se pueden leer, cero: nunca hace fallar la vigilancia. */
