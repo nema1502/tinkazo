@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { asuntoDeClave, mensajeDeAlerta } from "./mensaje";
+import { asuntoDeClave, mensajeDeAlerta, mensajeDeCuentas } from "./mensaje";
 import { estadoBien } from "./mundo-falso";
 
 const raiz = fileURLToPath(new URL("../../../", import.meta.url));
@@ -168,6 +168,31 @@ describe("la hoja de operación", () => {
       expect(asunto, clave).not.toBeNull();
       expect(seccion, clave).toContain(`| **${asunto}** |`);
     }
+  });
+
+  it("las filas del aviso de cuentas nuevas dicen qué paso frena la creación de cuentas y que pausar las altas no lo hace", () => {
+    for (const asunto of ["Muchas cuentas nuevas en una hora", "Muchas activaciones en una hora", "Muchas cuentas nuevas y activaciones en una hora"]) {
+      const fila = seccion.split("
+").find((l) => l.startsWith(`| **${asunto}** |`));
+      expect(fila, asunto).toBeDefined();
+      expect(fila, asunto).toContain("Pausar las altas del portero no frena esto");
+      expect(fila, asunto).toContain("panel de Pollar");
+      expect(fila, asunto).toContain("quien mantiene el proyecto");
+    }
+    // Los asuntos de las filas son los que de verdad salen.
+    const aviso = (desbordados: Parameters<typeof mensajeDeCuentas>[0]["desbordados"]) =>
+      mensajeDeCuentas({ desbordados }, { estado: estadoBien(), ahora: new Date(0), portero: "https://pm.tinkazo.app" }).asunto;
+    expect(aviso([{ motivo: "cuentas-nuevas", hubo: 250, umbral: 200 }])).toBe("Muchas cuentas nuevas en una hora");
+    expect(aviso([{ motivo: "activaciones", hubo: 250, umbral: 200 }])).toBe("Muchas activaciones en una hora");
+    expect(aviso([{ motivo: "cuentas-nuevas", hubo: 250, umbral: 200 }, { motivo: "activaciones", hubo: 250, umbral: 200 }])).toBe("Muchas cuentas nuevas y activaciones en una hora");
+  });
+
+  it("la fila de las cuentas que no se cuentan habla de la consulta de uso y no de la lista de movimientos", () => {
+    const fila = seccion.split("
+").find((l) => l.startsWith("| **No se están contando las cuentas nuevas** |"));
+    expect(fila).toBeDefined();
+    expect(fila).not.toMatch(/movimientos/);
+    expect(fila).toMatch(/consulta de uso/);
   });
 
   it("la fila del arreglo y del recordatorio están explicadas", () => {

@@ -459,18 +459,26 @@ export interface DatosDeCuentas {
   desbordados: Array<{ motivo: "cuentas-nuevas" | "activaciones"; hubo: number; umbral: number }>;
 }
 
+/**
+ * Lo que sirve y lo que no cuando se abren muchas cuentas. Pausar las altas del portero frena el canje de cupones y el alta de quien
+ * ganó, pero las cuentas las crea Pollar cuando alguien entra con Google, antes de pasar por el portero: esa pausa no las frena.
+ * El único corte está en el panel de Pollar, frena también a quien entra de verdad y lo decide quien mantiene el proyecto.
+ */
+const HACER_CUENTAS =
+  "Pausar las altas del portero no frena esto, porque las cuentas las crea Pollar cuando alguien entra, no el portero. Si no es una ola de gente de un evento, avisá a quien mantiene el proyecto: el único corte está en el panel de Pollar y frena también a quien entra de verdad. Los pasos están en docs/operacion.md, en Qué hacer con cada aviso.";
+
 /** El aviso por las cuentas nuevas y las activaciones por hora (issue 177): un correo por oleada y por motivo. */
 export function mensajeDeCuentas(a: DatosDeCuentas, c: Contexto): Mensaje {
   const CADA_UNO: Record<DatosDeCuentas["desbordados"][number]["motivo"], { asunto: string; frase: (d: DatosDeCuentas["desbordados"][number]) => string; hacer: string }> = {
     "cuentas-nuevas": {
       asunto: "Muchas cuentas nuevas en una hora",
       frase: (d) => `Se abrieron ${miles(d.hubo)} cuentas nuevas en una hora, más que el umbral de ${miles(d.umbral)}. Alguien podría estar creando cuentas con un guion, sin pasar por el stand.`,
-      hacer: "Pausá las altas de cuentas nuevas (docs/operacion.md) y mirá en el registro del portero qué cuenta se abrió en esa hora. Los pasos están en la hoja de operación.",
+      hacer: `${HACER_CUENTAS} Mirá en el panel de Pollar qué cuentas se abrieron en esa hora y cuántos créditos bajaron.`,
     },
     activaciones: {
       asunto: "Muchas activaciones en una hora",
       frase: (d) => `Hubo ${miles(d.hubo)} activaciones de cuentas en una hora, más que el umbral de ${miles(d.umbral)}. Alguien podría estar activando cuentas con un guion.`,
-      hacer: "Pausá las altas de cuentas nuevas (docs/operacion.md) y mirá en el registro del portero qué cuenta se activó en esa hora. Los pasos están en la hoja de operación.",
+      hacer: `${HACER_CUENTAS} Mirá en el panel de Pollar qué cuentas se activaron en esa hora y cuántos créditos bajaron.`,
     },
   };
   const asunto = a.desbordados.length === 2 ? "Muchas cuentas nuevas y activaciones en una hora" : CADA_UNO[a.desbordados[0]?.motivo ?? "cuentas-nuevas"].asunto;
