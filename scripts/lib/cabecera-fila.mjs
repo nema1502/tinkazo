@@ -23,8 +23,13 @@ export const AIRE_MINIMO_PX = 16;
 export const LETRA_ANCHA = '"DejaVu Sans", Verdana, sans-serif';
 export const LETRA_MONO_ANCHA = '"DejaVu Sans Mono", "Courier New", monospace';
 
-/** Los anchos de escritorio que mira el auditor, en el modo Oficial (la dirección lleva ?red=oficial). */
-export const ANCHOS_CABECERA = [1101, 1280];
+/**
+ * Los anchos de escritorio que mira el auditor, en el modo Oficial (la dirección lleva ?red=oficial). Son los cuatro saltos de la
+ * cabecera: 1101 px es el más angosto de la fila de una línea (el chip de la cuenta es solo la cara), 1200 px suma el nombre de
+ * pila de a ocho letras, 1280 px lo deja de a trece y 1440 px, donde el enlace vuelve a decir Para empresas y el chip trae la
+ * frase entera de la vía. Cada uno es el caso más ancho de su tramo.
+ */
+export const ANCHOS_CABECERA = [1101, 1200, 1280, 1440];
 
 /**
  * Lo que se mide en la página. Las campañas se fuerzan abiertas (el atributo data-campanas del elemento html, que decide la
@@ -68,6 +73,108 @@ export const FORZAR_LETRA_ANCHA = `(() => {
   }
   return todos.length;
 })()`;
+
+/**
+ * La cuenta abierta, que es la de quien organiza y la más ancha. Sin una sesión de verdad (en modo Oficial no hay forma de abrirla
+ * sin Google) se reemplaza el chip de Entrar por el de adentro, con el mismo marcado que dibuja src/ui/cuenta-chip.ts (la cara con
+ * su letra y su visto, el nombre de pila y la frase de la vía) y un nombre de pila largo. Las frases son las de cuentaViaGoogle y
+ * cuentaViaGoogleC de src/i18n.ts. Devuelve verdadero si encontró el chip para cambiarlo. Es una estimación del ancho, no una
+ * sesión: la medida con una cuenta de verdad la hace scripts/audit-flujo.mjs.
+ */
+const VIA_GOOGLE = { es: ["Entraste con Google", "Google"], en: ["Signed in with Google", "Google"] };
+export function cuentaAbiertaJs(idioma) {
+  const [larga, corta] = VIA_GOOGLE[idioma] ?? VIA_GOOGLE.es;
+  const marcado =
+    '<span class="cc-cara"><span class="hello-face cc-letra" aria-hidden="true">M</span>' +
+    '<i class="cc-ok" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 6.4l2.3 2.3 4.9-5"/></svg></i></span>' +
+    '<span class="cc-txt"><b class="cc-nombre">Maximiliano</b><small class="cc-via"><span class="cc-via-l">' + larga + '</span><span class="cc-via-c">' + corta + '</span></small></span>';
+  return `(() => {
+  const viejo = document.querySelector('#wallet-box .cuenta-chip');
+  if (!viejo) return false;
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'cuenta-chip dentro hello mini';
+  chip.dataset.estado = 'dentro';
+  chip.innerHTML = ${JSON.stringify(marcado)};
+  viejo.replaceWith(chip);
+  return true;
+})()`;
+}
+
+/** Cuántos píxeles de la pantalla tiene que dejar libres la flecha de Más en el celular. La fila deja 16 px de margen a cada lado. */
+export const AIRE_BORDE_CELULAR_PX = 8;
+
+/**
+ * Los anchos del celular que mira el auditor: 412 px es el corte donde entra Empresas en la fila, 414 px el del iPhone grande
+ * y 461 y 521 px los dos primeros anchos donde el relleno de las entradas cambia (de 7 a 11 px, y de 5 a 11 px): son los más
+ * apretados de cada tramo.
+ */
+export const ANCHOS_CELULAR = [412, 414, 461, 521];
+
+/** La letra del sistema agrandada: Android deja elegir el 110 %, el 120 % y más, y es común en quien lee de cerca. */
+export const ESCALA_LETRA_SISTEMA = 1.2;
+
+/**
+ * Se evalúa en la página: agranda la letra de la fila de enlaces al 120 % (16 px a 19,2 px) con prioridad, sin cambiar de
+ * familia. Es la letra del sistema agrandada y no la letra ancha: son dos peores casos distintos, y el auditor mira los dos.
+ */
+export const AGRANDAR_LETRA = `(() => {
+  const s = document.createElement('style');
+  s.textContent = 'header .topnav a, header .topnav .mas-btn { font-size: 19.2px !important; }';
+  document.head.appendChild(s);
+  return true;
+})()`;
+
+/**
+ * Lo que se mide de la fila del celular, con las campañas forzadas abiertas (la fila lleva cuatro entradas): el ancho de la
+ * pantalla y lo que se recorre, las cajas de la fila, del botón de Más y de Empresas, y si Empresas está achicada con puntos
+ * suspensivos (su contenido es más ancho que ella).
+ */
+export const SONDA_FILA_CELULAR = `JSON.stringify((() => {
+  document.documentElement.setAttribute('data-campanas', '1');
+  const caja = (el) => {
+    if (!el || el.getClientRects().length === 0) return null;
+    const r = el.getBoundingClientRect();
+    return { arriba: r.top, abajo: r.bottom, izquierda: r.left, derecha: r.right };
+  };
+  const empresas = document.querySelector('header .topnav a.nav-empresas-cel');
+  const visibles = [...document.querySelectorAll('header .topnav > a, header .topnav .mas-btn')].filter((a) => a.getClientRects().length > 0);
+  return {
+    ancho: document.documentElement.clientWidth,
+    scrollAncho: document.documentElement.scrollWidth,
+    nav: caja(document.querySelector('header .topnav')),
+    mas: caja(document.querySelector('header .topnav .mas-btn')),
+    empresas: caja(empresas),
+    empresasCortada: empresas ? empresas.scrollWidth > empresas.clientWidth : null,
+    entradas: visibles.length,
+  };
+})())`;
+
+/**
+ * Evalúa la fila del celular. Falla, con el motivo en claro, si falta la medida o el botón de Más, si Empresas no está en la fila
+ * (no se midió el caso de las cuatro entradas), si la página se recorre de costado o si la flecha de Más queda a menos de
+ * "aire" píxeles del borde de la pantalla. Empresas puede estar achicada con puntos suspensivos: es lo que la fila hace
+ * cuando no hay lugar, y se dice en el detalle.
+ * @returns {{ ok: boolean, detalle: string }}
+ */
+export function evaluarFilaCelular(m, aire = AIRE_BORDE_CELULAR_PX) {
+  if (!m || !m.mas) return { ok: false, detalle: "no se encontró el botón de Más en la fila del celular" };
+  if (!m.empresas) {
+    return { ok: false, detalle: `Empresas no está en la fila con ${m.ancho} px de ancho (${m.entradas} entradas a la vista): no se midió el caso de las cuatro entradas` };
+  }
+  if (m.scrollAncho > m.ancho + 1) {
+    return { ok: false, detalle: `la página se recorre de costado: mide ${m.scrollAncho} px de ancho con una pantalla de ${m.ancho} px` };
+  }
+  const aSobra = Math.round(m.ancho - m.mas.derecha);
+  if (aSobra < aire) {
+    return {
+      ok: false,
+      detalle: `Más termina a ${aSobra} px del borde con ${m.ancho} px de ancho (el mínimo es de ${aire} px): la flecha queda pegada o fuera de la pantalla`,
+    };
+  }
+  const estado = m.empresasCortada ? "Empresas achicada con puntos suspensivos" : "Empresas entera";
+  return { ok: true, detalle: `Más termina a ${aSobra} px del borde con ${m.ancho} px de ancho, ${estado} (${m.entradas} entradas)` };
+}
 
 const centro = (c) => (c.arriba + c.abajo) / 2;
 
