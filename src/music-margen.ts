@@ -88,3 +88,30 @@ export function horizonteDeMusica(margen: number, intervaloMs: number): number {
   if (!Number.isFinite(intervaloMs) || intervaloMs <= 0 || intervaloMs <= FRENO_MS) return margen;
   return Math.min(MARGEN_GRACIA_MAX, Math.max(margen, 1.2 * (intervaloMs / 1000) + 0.08));
 }
+
+/**
+ * Lo que recuerda la música entre un tick y el siguiente para decidir la gracia: cuánto frenó el procesador, cuántos
+ * ticks seguidos llegaron tarde y si el último tick fue con la pestaña escondida.
+ */
+export interface EstadoDeGracia {
+  gracia: number;
+  lentos: number;
+  veniaEscondida: boolean;
+}
+
+export const GRACIA_EN_REPOSO: Readonly<EstadoDeGracia> = { gracia: 0, lentos: 0, veniaEscondida: false };
+
+/**
+ * La gracia después de un tick, con el adelgazado prendido. Tres cuidados para no castigar a un equipo sano:
+ * un solo tick tarde (una pausa de la memoria, un cuadro pesado) es un tropiezo y no baja nada, la gracia empieza con
+ * el segundo seguido y desde ahí sigue a cada tick, y el primer tick que se ve al volver de la pestaña escondida
+ * no mide el equipo, porque su intervalo es de la pestaña y no del procesador. Escondida no cuenta nada.
+ * Devuelve también el intervalo que tiene que usar el margen (al volver de escondida, uno sano).
+ */
+export function seguirLaGracia(e: EstadoDeGracia, intervaloMs: number, escondida: boolean): EstadoDeGracia & { intervalo: number } {
+  if (escondida) return { gracia: 0, lentos: 0, veniaEscondida: true, intervalo: intervaloMs };
+  if (e.veniaEscondida) return { gracia: 0, lentos: 0, veniaEscondida: false, intervalo: Math.min(intervaloMs, FRENO_MS) };
+  const lentos = intervaloMs > FRENO_MS ? e.lentos + 1 : 0;
+  const tropiezo = lentos === 1 && e.gracia === 0;
+  return { gracia: nivelDeGracia(e.gracia, tropiezo ? FRENO_MS : intervaloMs), lentos, veniaEscondida: false, intervalo: intervaloMs };
+}

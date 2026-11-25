@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MARGEN_BASE, MARGEN_GRACIA_MAX, MARGEN_MAX, FRENO_MS, adelgazadoPrendido, horizonteDeMusica, margenMusica, nivelDeGracia, prenderAdelgazado } from "./music-margen";
+import { GRACIA_EN_REPOSO, MARGEN_BASE, MARGEN_GRACIA_MAX, MARGEN_MAX, FRENO_MS, adelgazadoPrendido, horizonteDeMusica, margenMusica, nivelDeGracia, prenderAdelgazado, seguirLaGracia, type EstadoDeGracia } from "./music-margen";
 
 /** Ticks del temporizador a estos intervalos (ms): devuelve el margen después de cada uno. */
 function correr(intervalos: number[], margen = MARGEN_BASE): number[] {
@@ -134,12 +134,12 @@ describe("el freno del procesador y la pestaña escondida", () => {
     expect(silencioConGracia([...Array(40).fill(160)])).toBe(0);
   });
 
-  it("procesador frenado 8× (320 ms): el traspiso apenas y después nada", () => {
+  it("procesador frenado 8× (320 ms): un tropiezo apenas y después nada", () => {
     expect(silencioConGracia([...Array(40).fill(320)])).toBeLessThan(0.2);
     expect(silencioConGracia([...Array(30).fill(320)], 320)).toBe(0);
   });
 
-  it("procesador frenado 16× (640 ms): el traspiso y después suena entera", () => {
+  it("procesador frenado 16× (640 ms): un tropiezo y después suena entera", () => {
     expect(silencioConGracia([...Array(40).fill(640)])).toBeLessThan(0.5);
     expect(silencioConGracia([...Array(30).fill(640)], 640)).toBe(0);
   });
@@ -152,7 +152,7 @@ describe("el freno del procesador y la pestaña escondida", () => {
   it("red lenta: un tirón largo y los que siguen, sin cortar a la mitad del show", () => {
     // Hoy, con el tope de 1 s, cada tirón deja medio segundo callado.
     expect(silencioConGracia([1500, 1200, 900, 800], 1500)).toBe(0);
-    // La única hendija es la primera del tirón, que nadie puede prever.
+    // El único hueco es el primero del tirón, que nadie puede prever.
     expect(silencioConGracia([...Array(40).fill(40), 1500, 1200, 900, 800, ...Array(60).fill(40)])).toBeLessThan(1.4);
   });
 });
@@ -181,5 +181,55 @@ describe("el interruptor del adelgazado", () => {
     expect(adelgazadoPrendido("?musicagracia=1")).toBe(false);
     prenderAdelgazado(null);
     expect(adelgazadoPrendido("?musicagracia=1")).toBe(true);
+  });
+});
+
+describe("la gracia no castiga a un equipo sano por un tropiezo", () => {
+  /** Los ticks de un show, uno tras otro, con el estado que va quedando. */
+  function correr(ticks: { ms: number; escondida?: boolean }[]): (EstadoDeGracia & { intervalo: number })[] {
+    let e: EstadoDeGracia = GRACIA_EN_REPOSO;
+    return ticks.map((t) => {
+      const r = seguirLaGracia(e, t.ms, t.escondida ?? false);
+      e = r;
+      return r;
+    });
+  }
+  const sanos = (n: number): { ms: number }[] => Array.from({ length: n }, () => ({ ms: 40 }));
+
+  it("un solo tick tarde, aunque sea de un segundo, no baja las capas", () => {
+    for (const ms of [200, 400, 700, 1500]) expect(correr([...sanos(5), { ms }, ...sanos(5)]).map((r) => r.gracia), `${ms} ms`).toEqual(Array(11).fill(0));
+  });
+
+  it("dos ticks tarde seguidos sí: la gracia sube con el segundo y sigue a cada tick", () => {
+    const r = correr([...sanos(5), { ms: 400 }, { ms: 400 }, { ms: 400 }]);
+    expect(r.map((x) => x.gracia).slice(5)).toEqual([0, 1, 1]);
+  });
+
+  it("después de dos tarde, la gracia baja de a poco cuando el equipo vuelve", () => {
+    const r = correr([{ ms: 400 }, { ms: 400 }, ...sanos(3)]);
+    expect(r[1]!.gracia).toBe(1);
+    expect(r[2]!.gracia).toBeLessThan(1);
+    expect(r[2]!.gracia).toBeGreaterThan(0.9);
+  });
+
+  it("un tropiezo suelto después de otro tropiezo, con ticks sanos en el medio, tampoco cuenta", () => {
+    expect(correr([{ ms: 400 }, ...sanos(2), { ms: 400 }, ...sanos(2)]).every((r) => r.gracia === 0)).toBe(true);
+  });
+
+  it("escondida no cuenta, y el primer tick que se ve al volver no mide el equipo", () => {
+    const r = correr([...sanos(3), { ms: 1000, escondida: true }, { ms: 1000, escondida: true }, { ms: 1000 }, { ms: 40 }]);
+    expect(r.map((x) => x.gracia)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    // El margen no ve el segundo entero de la pestaña escondida sino un intervalo sano.
+    expect(r[5]!.intervalo).toBe(FRENO_MS);
+    expect(r[6]!.intervalo).toBe(40);
+  });
+
+  it("con la pestaña escondida el intervalo se deja como viene: el margen no lo mira", () => {
+    expect(seguirLaGracia(GRACIA_EN_REPOSO, 1000, true).intervalo).toBe(1000);
+  });
+
+  it("al volver de escondida, dos ticks tarde seguidos sí bajan las capas: el equipo está frenado de verdad", () => {
+    const r = correr([{ ms: 1000, escondida: true }, { ms: 1000 }, { ms: 400 }, { ms: 400 }]);
+    expect(r.map((x) => x.gracia)).toEqual([0, 0, 0, 1]);
   });
 });

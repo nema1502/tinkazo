@@ -10,10 +10,12 @@ import {
   SEMILLA_DE_LA_ESCUCHA,
   nivelDelShow,
   perfilDeIdentidad,
+  tocarMusicaEn,
   IDENTIDADES_DEL_SELECTOR,
   type IdentidadDelJuego,
 } from "./music";
 import { ACORDES, type AcordeId } from "./sonidos/carrera";
+import { contextoDeMentira } from "./music-traza";
 
 /**
  * Las capas del show por juego: la identidad de cada juego es un mapa puro de datos que la página de
@@ -149,5 +151,39 @@ describe("los comentarios de la música dicen cosas con sentido", () => {
       const src = readFileSync(resolve(process.cwd(), archivo), "utf8");
       expect(src, archivo).not.toMatch(/\((?:[ST]\d)(?:, [ST]\d| a [ST]\d)*\)/);
     }
+  });
+});
+
+describe("la pieza de la escucha corta la música en el golpe, como el show en vivo", () => {
+  /** Las horas de arranque de todo lo que la pieza programó. */
+  function arranques(hastaGolpe?: number): number[] {
+    const c = contextoDeMentira();
+    tocarMusicaEn(c.ctx, c.ctx.destination, {
+      seed: SEMILLA_DE_LA_ESCUCHA,
+      perfil: perfilDeIdentidad(IDENTIDADES["race"] as IdentidadDelJuego),
+      segundos: 10,
+      nivel: () => 0.9,
+      ...(hastaGolpe === undefined ? {} : { hastaGolpe }),
+    });
+    const horas: number[] = [];
+    for (const e of c.eventos) {
+      const m = /^\S+#\d+ start (-?[\d.]+)/.exec(e);
+      if (m) horas.push(Number(m[1]));
+    }
+    return horas;
+  }
+
+  it("sin golpe la música sigue hasta el final de la pieza", () => {
+    expect(Math.max(...arranques())).toBeGreaterThan(9);
+  });
+
+  it("con golpe, nada del secuenciador arranca después de él: el remate y el festejo se arman aparte", () => {
+    const horas = arranques(6);
+    expect(horas.length).toBeGreaterThan(0);
+    expect(Math.max(...horas)).toBeLessThan(6.3);
+  });
+
+  it("con el golpe en el segundo cero no suena nada de la música", () => {
+    expect(arranques(0)).toHaveLength(0);
   });
 });

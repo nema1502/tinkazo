@@ -1,7 +1,7 @@
 import { audio, destinoDeMezcla, isMuted } from "./sound";
 import { anotarGolpe } from "./state";
 import { camaDeMusica } from "./sonidos/banco";
-import { MARGEN_BASE, adelgazadoPrendido, horizonteDeMusica, margenMusica, nivelDeGracia } from "./music-margen";
+import { MARGEN_BASE, adelgazadoPrendido, horizonteDeMusica, margenMusica, seguirLaGracia } from "./music-margen";
 import { ACORDES, curvaDeTecho, PERFIL_BASE, VUELTAS_PENTATONICAS, type AcordeId, type Golpe, type PerfilMusica } from "./sonidos/carrera";
 import { bomboYBajoChico, festejoPropio, golpePropio, perfilDeMusica } from "./sonidos/carrera-eleccion";
 import { permitirPistas, pistaArrancar, pistaCallar, pistaParar, pistaRemata, pistaRetener, pistaSuena, pistaTension } from "./sonidos/pistas-enganche";
@@ -206,6 +206,10 @@ interface Session {
   adelgazar: boolean;
   /** La hora de la página (`performance.now`) del último tick. */
   ultimoTick: number;
+  /** Cuántos ticks seguidos llegaron tarde. Con el adelgazado, uno solo es un tropiezo y no baja las capas. */
+  lentos: number;
+  /** El último tick fue con la pestaña escondida: el primero que se ve al volver no mide el equipo. */
+  veniaEscondida: boolean;
   /** La semilla con que arrancó: pedirla otra vez con la misma no la reinicia. */
   seed: number;
   /** Qué toca: el andino de siempre, o la chovena del juego cruceño. */
@@ -382,6 +386,8 @@ function armarSesion(
     gracia: 0,
     adelgazar: adelgazadoPrendido(),
     ultimoTick: performance.now(),
+    lentos: 0,
+    veniaEscondida: false,
     seed,
     style,
     hold: false,
@@ -473,7 +479,10 @@ export function musicCue(heat: number): void {
   if (!s || s.won) return;
   if (heat >= 0.99) {
     s.won = true;
-    const at = Math.max(s.next, s.ctx.currentTime + 0.03);
+    // Con el adelgazado, un equipo frenado deja lo programado hasta dos segundos por delante: el golpe no espera a
+    // todo eso, entra a lo sumo en el margen de siempre (un segundo) y lo que queda programado detrás pasa a ser fondo.
+    const tope = s.adelgazar ? s.ctx.currentTime + s.margen : Infinity;
+    const at = Math.max(Math.min(s.next, tope), s.ctx.currentTime + 0.03);
     // Si el juego la dejó cortada (el silencio de antes del ganador, o el
     // corte de la chovena), el remate la vuelve a abrir. Con la pista sonando,
     // el bus de osciladores no se toca: el golpe y el festejo son de la pista.
@@ -631,14 +640,20 @@ function tick(): void {
     return;
   }
   const ahora = performance.now();
-  const intervalo = ahora - s.ultimoTick;
+  let intervalo = ahora - s.ultimoTick;
   const escondida = document.hidden;
+  // Con el adelgazado prendido, el procesador frenado baja las capas y adelanta lo programado hasta el próximo tick.
+  // Un tropiezo suelto y la vuelta de la pestaña escondida no cuentan como equipo frenado (`seguirLaGracia`).
+  if (s.adelgazar) {
+    const g = seguirLaGracia({ gracia: s.gracia, lentos: s.lentos, veniaEscondida: s.veniaEscondida }, intervalo, escondida);
+    s.gracia = g.gracia;
+    s.lentos = g.lentos;
+    s.veniaEscondida = g.veniaEscondida;
+    intervalo = g.intervalo;
+  } else s.gracia = 0;
   // Con la pestaña escondida el show está frenado: la música sigue saltando en silencio como desde el 2 de noviembre,
   // sin agrandar el margen por los temporizadores de uno por segundo.
   s.margen = escondida ? MARGEN_BASE : margenMusica(s.margen, intervalo, s.adelgazar);
-  // Con el adelgazado prendido, el procesador frenado baja las capas y adelanta lo programado hasta el próximo tick.
-  // Escondida no cuenta: el tropiezo es del navegador, no del equipo.
-  s.gracia = s.adelgazar && !escondida ? nivelDeGracia(s.gracia, intervalo) : 0;
   s.ultimoTick = ahora;
   // La tensión sube de a poco aunque el relator no diga nada: el piso crece
   // con el tiempo, así que la música siempre va de menos a más.
@@ -843,6 +858,11 @@ export interface PedidoMusica {
   nivel: (t: number) => number;
   /** Desde qué segundo suena solo el bombo, si lo hay. */
   soloBomboDesde?: number;
+  /**
+   * El segundo del golpe del ganador, si el tramo lo trae: la música se corta ahí, como en el show en vivo, donde la
+   * música calla en el golpe y lo que sigue es el remate y el festejo, que se arman aparte.
+   */
+  hastaGolpe?: number;
   /** La mezcla del bombo y del bajo: `true` para la de parlante chico, `false` para la de hoy. Sin decirlo, la de la sesión (ver `armarSesion`). */
   parlanteChico?: boolean;
 }
@@ -856,7 +876,8 @@ export function tocarMusicaEn(ctx: BaseAudioContext, destino: AudioNode, o: Pedi
   const s = armarSesion(ctx, destino, o.seed, "andino", o.perfil, 0, o.perfil?.trim ?? 1, o.parlanteChico);
   s.next = 0.05;
   s.started = 0;
-  while (s.next < o.segundos) {
+  const fin = Math.min(o.segundos, o.hastaGolpe ?? Infinity);
+  while (s.next < fin) {
     s.level = o.nivel(s.next);
     if (o.soloBomboDesde !== undefined && s.next >= o.soloBomboDesde && s.soloBombo < 0) s.soloBombo = s.next;
     const sixteenth = beatLength(s) / 4;
