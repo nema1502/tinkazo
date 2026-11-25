@@ -50,7 +50,7 @@ import { iniciarLogo } from "./ui/logo-ui";
 import { iniciarLogoEnElEstadio } from "./ui/logo-sorteo";
 import { iniciarVer3D } from "./ui/ver3d";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
-import { campanasActivo } from "./campana/bandera";
+import { campanasActivo, mostrarEnlacesDeCampana } from "./campana/bandera";
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
 const INGRESAR = MARCA_INGRESAR;
 
@@ -640,7 +640,7 @@ if (location.hash.startsWith("#participante=")) {
 }
 // Las campañas de empresas (detrás de VITE_CAMPANAS): la entrada de quien ganó y la pestaña que deja la ventana de Google.
 if (campanasActivo()) {
-  // El enlace de la portada a armar la campaña de una empresa se ve solo con las campañas abiertas.
-  for (const enlace of document.querySelectorAll<HTMLElement>("[data-campana-enlace]")) enlace.hidden = false;
+  // Los enlaces a armar la campaña de una empresa (la cabecera, la puerta de la portada y el pie) se ven solo con las campañas abiertas.
+  mostrarEnlacesDeCampana(document);
   void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);
 }
