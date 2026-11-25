@@ -913,7 +913,7 @@ export const SEMILLA_DE_LA_ESCUCHA = 0x0a110a;
 /**
  * La identidad musical de un juego, en datos: lo que la página de escucha (`src/ui/escucha.ts`) toca con
  * el secuenciador de siempre para poder elegir juego por juego, y nada más. En el show de producción no prende
- * nada nuevo: eso lo decide el dueño escuchando. El formato es el mismo perfil de la música de la carrera
+ * nada nuevo: eso se decide escuchando. El formato es el mismo perfil de la música de la carrera
  * (`PerfilMusica`), que es el que el secuenciador ya sabe tocar capa por capa; los ritmos y los instrumentos de
  * cuerpo (charango, zampoña, quena, bombo, guitarra; huayño, caporal, taquirari, cueca…) van como etiquetas de
  * intención, solo texto: no hay samples ni voces nuevas, las hacen los sintetizadores que ya hay.
@@ -949,7 +949,7 @@ export interface IdentidadDelJuego {
 const vueltas = (de: number, a: number): readonly (readonly AcordeId[])[] => VUELTAS_PENTATONICAS.slice(de, a);
 
 /**
- * Los diez juegos del selector de hoy, en el orden del selector (`index.html`): los que el dueño elige escuchando. Van
+ * Los diez juegos del selector de hoy, en el orden del selector (`index.html`): los que se eligen escuchando. Van
  * primero en `IDENTIDADES`. Después siguen los que salieron del selector y abren con `?demo=`.
  */
 export const IDENTIDADES_DEL_SELECTOR: readonly string[] = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro", "guajojo", "toborochi"];
@@ -957,7 +957,7 @@ export const IDENTIDADES_DEL_SELECTOR: readonly string[] = ["race", "sapo", "tro
 /**
  * La identidad de cada juego: el mismo huayño de banda con distinta cara. La carrera lleva el huayño del altiplano
  * al frente; la ruleta, la chovena cruceña que ya tiene su estilo; la tómbola y los demás, virando la caja, las
- * palmas y la zampoña. Mientras el dueño no elija escuchando, en el show suena lo de siempre: esto es
+ * palmas y la zampoña. Mientras nadie elija escuchando, en el show suena lo de siempre: esto es
  * la candidata, no la puesta en producción.
  */
 export const IDENTIDADES: Readonly<Record<string, IdentidadDelJuego>> = {
@@ -985,7 +985,7 @@ export const IDENTIDADES: Readonly<Record<string, IdentidadDelJuego>> = {
 /**
  * El perfil que las confía al secuenciador: la misma forma que toca `playStepCarrera`, sin el arreglo "legado"
  * (así se oye la identidad, no el arreglo de hoy) y con el volumen medido de la base, pendiente de recalibrar por
- * candidata cuando las escoja el dueño.
+ * candidata cuando se las escoja escuchando.
  */
 export function perfilDeIdentidad(i: IdentidadDelJuego): PerfilMusica {
   return {
