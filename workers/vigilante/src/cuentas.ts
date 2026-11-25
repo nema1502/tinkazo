@@ -2,15 +2,15 @@
  * El aviso por las cuentas nuevas y las activaciones por hora (issue 177). El número no lo cuenta el vigilante:
  * el portero lo cuenta desde los movimientos de los créditos de Pollar (`billing/credits`, ver `lectura-cuentas.ts`) y lo
  * manda en el bloque `cuentas` de `/estado`, como manda todas sus cifras. Acá vive lo que le toca al vigilante: el
- * umbral configurable (fuera de un evento, `CUENTAS_UMBRAL`, 60 por hora si no está; el día de un evento, el cupo del
+ * umbral configurable (fuera de un evento, `CUENTAS_UMBRAL`, 200 por hora si no está, para que un evento de 150 personas no dé falsa alarma; el día de un evento, el cupo del
  * evento en `CUENTAS_EVENTO_CUPO` toma su lugar mientras esté puesto) y la cadencia del aviso: un solo correo por
  * hora y por motivo, armado con el patrón de los avisos de `mensaje.ts`.
  */
 import type { ConteoDeHora } from "../../../workers/patrocinio/src/lectura-cuentas";
 import type { Entorno } from "./vuelta";
 
-/** El umbral de cuentas por hora de siempre: el ejemplo del issue. */
-export const CUENTAS_UMBRAL_POR_DEFECTO = 60;
+/** El umbral de cuentas por hora de siempre: por encima de lo que abre un evento de 150 personas en una hora. */
+export const CUENTAS_UMBRAL_POR_DEFECTO = 200;
 
 /** Los dos motivos del aviso: abrir cuentas y activarlas. */
 export const MOTIVOS_CUENTAS = ["cuentas-nuevas", "activaciones"] as const;

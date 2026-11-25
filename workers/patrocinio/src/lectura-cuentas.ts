@@ -6,9 +6,9 @@
  *
  * Módulo puro y el reloj entra como argumento, para que las pruebas no toquen hora ni red.
  *
- * Por confirmar con Pollar: el evento exacto de cada cobro. Los dos que se cuentan son los medidos en la vigilancia de
- * firmas (el 10 de noviembre): `wallet.created:STELLAR:COSIGNED` al crear la cuenta y `account.active:monthly` al
- * activarla. Se cuenta por el comienzo del evento, con el resto del sufijo libre, para que un cambio de la parte del
+ * Los nombres de los cobros: `wallet.created:STELLAR:COSIGNED` al crear la cuenta nueva está confirmado contra una lectura
+ * real de los movimientos (igual que `cosign.signature:STELLAR` para las firmas, que cuenta `vigilancia.ts`).
+ * `account.active:monthly` al activarla se tomó de la misma vigilancia y sigue por confirmar con Pollar. Se cuenta por el comienzo del evento, con el resto del sufijo libre, para que un cambio de la parte del
  * final (la red, el plan) no deje de contar. Un cobro que no se entiende no cuenta, y lo que no es un cobro tampoco.
  */
 import { MAX_MOVIMIENTOS } from "./vigilancia";
