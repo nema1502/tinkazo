@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { T } from "./i18n";
+import { T, setLang } from "./i18n";
 
 /**
  * La entrada de las empresas a la vista (25 de noviembre de 2026). Antes era un enlace chico al final de la portada y, en
@@ -23,7 +23,7 @@ describe("Para empresas en la cabecera y en el pie", () => {
         expect(enlace, donde).toContain("data-campana-enlace");
         expect(enlace, donde).not.toMatch(/\bhidden\b/);
       }
-      expect(enlaces.some((e) => e.includes('data-i="navEmpresas"')), donde).toBe(true);
+      expect(trozo, donde).toContain('data-i="navEmpresas"');
     }
   });
 
@@ -93,5 +93,51 @@ describe("Empresas en la fila de la cabecera del celular", () => {
     // El enlace de adentro de Más solo se esconde en ese tramo: por debajo de 412 px se ve y desde 761 px la lista no es un menú.
     expect(css.match(/\.topnav \.mas-lista a\[data-campana-enlace\] \{ display: none; \}/g)?.length).toBe(1);
     expect(css).not.toMatch(/min-width: 375px\) and \(max-width: 760px/);
+  });
+});
+
+describe("el enlace de escritorio dice Empresas de 1101 a 1439 px y Para empresas en los demás anchos", () => {
+  const enlace = (): HTMLAnchorElement => {
+    document.body.innerHTML = html.slice(html.indexOf("<body>") + 6, html.indexOf("</body>"));
+    return document.querySelector<HTMLAnchorElement>('header .mas-lista a[href="/crear-campana.html"]') as HTMLAnchorElement;
+  };
+
+  it("lleva los dos nombres adentro, cada uno con su clave, y el enlace queda marcado y a la vista", () => {
+    const a = enlace();
+    expect(a.hasAttribute("data-campana-enlace")).toBe(true);
+    expect(a.hasAttribute("hidden")).toBe(false);
+    // El texto vive en los dos hijos: el enlace no lleva data-i, o setLang le borraría los hijos.
+    expect(a.hasAttribute("data-i")).toBe(false);
+    expect(a.querySelector(".nav-emp-l")?.getAttribute("data-i")).toBe("navEmpresas");
+    expect(a.querySelector(".nav-emp-c")?.getAttribute("data-i")).toBe("navEmpresasC");
+    expect(a.children).toHaveLength(2);
+  });
+
+  it("los dos nombres se traducen: Para empresas y Empresas, For companies y Companies", () => {
+    const a = enlace();
+    setLang("es");
+    expect(a.querySelector(".nav-emp-l")?.textContent).toBe("Para empresas");
+    expect(a.querySelector(".nav-emp-c")?.textContent).toBe("Empresas");
+    setLang("en");
+    expect(a.querySelector(".nav-emp-l")?.textContent).toBe("For companies");
+    expect(a.querySelector(".nav-emp-c")?.textContent).toBe("Companies");
+    setLang("es");
+    expect(a.querySelector(".nav-emp-l")?.textContent).toBe("Para empresas");
+  });
+
+  it("la hoja esconde el corto por defecto y, de 1101 a 1439 px, esconde el largo y muestra el corto, con display none", () => {
+    expect(css).toMatch(/\.topnav a \.nav-emp-c \{ display: none; \}/);
+    const bloque = css.match(/@media \(min-width: 1101px\) and \(max-width: 1439px\) \{\s*\.topnav a \.nav-emp-l \{ display: none; \}\s*\.topnav a \.nav-emp-c \{ display: inline; \}\s*\}/);
+    expect(bloque).not.toBeNull();
+    // Ninguna otra regla cambia cuál se ve, ni reordena la fila.
+    expect(css.match(/\.nav-emp-l \{/g)?.length).toBe(1);
+    expect(css.match(/\.nav-emp-c \{/g)?.length).toBe(2);
+  });
+
+  it("el orden de la fila no cambia: Sortear, Mis sorteos, Empresas corto del celular, Más y adentro Juegos, Cómo funciona y Para empresas", () => {
+    const h = html.slice(html.indexOf("<header>"), html.indexOf("</header>"));
+    const orden = ['data-i="navSortear"', 'data-i="navMis"', "nav-empresas-cel", 'data-i="navJuegos"', 'data-i="navComo"', 'class="nav-emp-l"'].map((m) => h.indexOf(m));
+    expect(orden.every((n) => n > -1), String(orden)).toBe(true);
+    expect([...orden].sort((a, b) => a - b)).toEqual(orden);
   });
 });
