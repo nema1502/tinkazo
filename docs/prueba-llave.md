@@ -97,7 +97,9 @@ El sitio dice en varias cadenas y pruebas que la red de prueba se borra el 16 de
 
 ## Fecha de la última corrida buena
 
-Todavía no hubo una corrida buena del recorrido entero contra la red de prueba con el paso de otro aparato. Se anotan acá, a mano, con la fecha, las tres corridas buenas que hacen falta para que esos pasos cuenten en el código de salida.
+Las corridas buenas del recorrido entero contra la red de prueba, con el paso de otro aparato, se anotan acá a mano. Hacen falta tres para que esos pasos cuenten en el código de salida.
+
+1. 25 de noviembre de 2026. Salió con 0. La otra llave entró por el historial y por el RPC, las dos al ledger de la creación de la cuenta, con un solo desbloqueo cada una. Desde el otro aparato se selló una lista y una llave sin cuenta llegó a la pantalla de que no hay cuenta. Ningún pedido fue a un índice ajeno.
 
 ## Lo que no entra
 
