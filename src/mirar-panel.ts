@@ -165,8 +165,7 @@ function medir(raiz: HTMLElement): void {
     `boton: ${cuadro(boton)}`,
     `panel: ${cuadro(padre)}`,
     `padre-display ${padre ? getComputedStyle(padre).display : ""} rows ${padre ? getComputedStyle(padre).gridTemplateRows : ""}`,
-  ].join("
-");
+  ].join(String.fromCharCode(10));
   document.body.append(salida);
 }
 
