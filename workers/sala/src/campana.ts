@@ -641,7 +641,7 @@ export function antesDeVerificar(
   const fase = sql<{ v: string }>("SELECT v FROM sala WHERE k = 'fase'")[0]?.v;
   if (fase !== "abierta") return { ok: false, motivo: "cerrada" };
   // Entre las horas de la campaña: la fase puede seguir «abierta» después de la hora de cierre (nadie la cambió, o la
-  // la pantalla se quedó sin quien la maneje). Pasada la hora de cierre, el alta no entra y no pregunta nada a nadie.
+  // pantalla se quedó sin quien la maneje). Pasada la hora de cierre, el alta no entra y no pregunta nada a nadie.
   const cierra = Number(sql<{ v: string }>("SELECT v FROM sala WHERE k = 'cierra'")[0]?.v ?? 0);
   if (Number.isSafeInteger(cierra) && cierra > 0 && a.ahora >= cierra) return { ok: false, motivo: "cerrada" };
   if (!a.paseVale) return { ok: false, motivo: "pase" };

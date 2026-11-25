@@ -13,7 +13,7 @@ vi.mock("cloudflare:workers", async () => await import("./cloudflare-falso"));
 /**
  * La alta de campaña cuenta en la vigilancia de firmas como activación explicada (issue #168): cada alta nueva es la que
  * costó la sesión de Google, así que explica una firma. Lo que queda anotado son solo cifras: esta prueba mira lo que la
- * sala Contestó de sus conteos, y la prueba del módulo (workers/sala/src/vigilancia-campana.test.ts) mira lo que se
+ * sala contesta de sus conteos, y la prueba del módulo (workers/sala/src/vigilancia-campana.test.ts) mira lo que se
  * guarda de verdad.
  */
 const AHORA = Date.UTC(2026, 10, 21, 15, 0, 0);

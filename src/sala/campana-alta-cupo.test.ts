@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
   CAMPANA_MAX,
+  ENVIOS_CAMPANA_POR_CONEXION,
   VENTANA_CAMPANA_MS,
   anotarPersona,
   crearTablasDeCampana,
@@ -122,5 +123,30 @@ describe("ninguna conexión frena por altas nuevas: en un evento todas salen por
       siempre,
     );
     expect(deMas).toEqual({ ok: false, motivo: "llena" });
+  });
+});
+
+describe("el tope de envíos por conexión sigue como estaba", () => {
+  const conEnvios = (envios: number) => {
+    const { sql } = nuevaSala();
+    sql(
+      "INSERT INTO ritmo (grupo, ventana, altas, envios) VALUES (?, ?, ?, ?)",
+      "conexion-1",
+      Math.floor(T0 / VENTANA_CAMPANA_MS),
+      0,
+      envios,
+    );
+    return sql;
+  };
+
+  it("con un envío menos que el tope todavía anota", () => {
+    expect(anotarPersona(conEnvios(ENVIOS_CAMPANA_POR_CONEXION - 1), alta(), siempre).ok).toBe(true);
+  });
+
+  it("con el tope cumplido contesta cupo-conexion y no anota", () => {
+    const sql = conEnvios(ENVIOS_CAMPANA_POR_CONEXION);
+    const r = anotarPersona(sql, alta(), siempre);
+    expect(r).toMatchObject({ ok: false, motivo: "cupo-conexion" });
+    expect(sql<{ n: number }>("SELECT COUNT(*) AS n FROM equipos")[0]?.n).toBe(0);
   });
 });
