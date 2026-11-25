@@ -659,9 +659,12 @@ export function antesDeVerificar(
 
 /**
  * Anota una sesión que el proveedor rechazó. La ficha siempre suma. La conexión suma solo la primera vez que se ve esa
- * ficha: repetirla no cuesta otra llamada al proveedor, y una sola persona no puede dejar sin tope a las demás.
+ * ficha: repetirla no cuesta otra llamada al proveedor, y una sola persona no puede dejar sin tope a las demás. Con
+ * `contarConexion` en falso solo suma la ficha: es el caso de la sesión que el proveedor ya dio por buena y todavía
+ * espera su cuenta, que no es un rechazo de la conexión (300 personas con cuenta nueva detrás de la misma wifi no pueden
+ * llenarlo solas) y sigue frenada por su propio tope de la ficha.
  */
-export function contarRechazo(sql: Ejecutar, grupo: string, ficha: string, ahora: number): void {
+export function contarRechazo(sql: Ejecutar, grupo: string, ficha: string, ahora: number, contarConexion = true): void {
   const ventana = Math.floor(ahora / VENTANA_CAMPANA_MS);
   const vista = sql<{ n: number }>("SELECT n FROM campana_rechazos_ficha WHERE ficha = ? AND ventana = ?", ficha, ventana)[0];
   sql(
@@ -670,7 +673,7 @@ export function contarRechazo(sql: Ejecutar, grupo: string, ficha: string, ahora
     ficha,
     ventana,
   );
-  if (vista !== undefined) return;
+  if (vista !== undefined || !contarConexion) return;
   sql(
     "INSERT INTO campana_rechazos (grupo, ventana, n) VALUES (?, ?, 1) " +
       "ON CONFLICT(grupo, ventana) DO UPDATE SET n = n + 1",

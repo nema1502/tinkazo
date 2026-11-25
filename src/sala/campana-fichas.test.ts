@@ -141,6 +141,39 @@ describe("el tope de rechazos por ficha y por conexión", () => {
     expect(antesDeVerificar(sql, { ...datos, reconocida: true }).ok).toBe(false);
   });
 
+  it("un rechazo sin contar la conexión suma a la ficha y deja la conexión como estaba", () => {
+    const sql = nuevaSala();
+    contarRechazo(sql, "conexion-1", "ficha-espera", T0, false);
+    contarRechazo(sql, "conexion-1", "ficha-espera", T0, false);
+    expect(sql<{ n: number }>("SELECT n FROM campana_rechazos_ficha WHERE ficha = 'ficha-espera'")[0]?.n).toBe(2);
+    expect(sql("SELECT * FROM campana_rechazos")).toEqual([]);
+  });
+
+  it("300 fichas que esperan su cuenta no frenan a la persona 301", () => {
+    const sql = nuevaSala();
+    for (let i = 0; i < RECHAZOS_POR_CONEXION; i++) contarRechazo(sql, "conexion-1", `espera-${i}`, T0, false);
+    expect(topeDeConexion(sql, "conexion-1", T0)).toEqual({ ok: true });
+    const nueva = { grupo: "conexion-1", ficha: "espera-300", paseVale: true, ahora: T0 };
+    expect(antesDeVerificar(sql, nueva)).toEqual({ ok: true });
+    // La que sigue esperando su cuenta vuelve a pasar en su segundo pedido.
+    expect(antesDeVerificar(sql, { ...nueva, ficha: "espera-0" })).toEqual({ ok: true });
+  });
+
+  it("la ficha que espera su cuenta se frena a la sexta, y la conexión sigue libre", () => {
+    const sql = nuevaSala();
+    for (let i = 0; i < RECHAZOS_POR_FICHA; i++) contarRechazo(sql, "conexion-1", "ficha-espera", T0, false);
+    const dato = { grupo: "conexion-1", ficha: "ficha-espera", paseVale: true, ahora: T0 };
+    expect(antesDeVerificar(sql, dato)).toEqual({ ok: false, motivo: "rechazos", esperaS: VENTANA_CAMPANA_MS / 1000 });
+    expect(topeDeConexion(sql, "conexion-1", T0)).toEqual({ ok: true });
+    expect(antesDeVerificar(sql, { ...dato, ficha: "otra" })).toEqual({ ok: true });
+  });
+
+  it("los rechazos de verdad siguen sumando a la conexión como antes", () => {
+    const sql = nuevaSala();
+    for (let i = 0; i < RECHAZOS_POR_CONEXION; i++) contarRechazo(sql, "conexion-1", `mala-${i}`, T0);
+    expect(topeDeConexion(sql, "conexion-1", T0).ok).toBe(false);
+  });
+
   it("topeDeConexion mira solo la conexión", () => {
     const sql = nuevaSala();
     for (let i = 0; i < RECHAZOS_POR_CONEXION; i++) contarRechazo(sql, "conexion-1", `ficha-${i}`, T0);
