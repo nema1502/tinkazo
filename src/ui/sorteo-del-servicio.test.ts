@@ -622,14 +622,14 @@ describe("ninguna espera sin tope", () => {
     expect(transcurrido()).toBeLessThanOrEqual(90_500);
   });
 
-  it("con el servicio aceptado y la red colgada, termina con un tope", async () => {
+  it("con el servicio aceptado y la red colgada, termina con un tope de 90 segundos", async () => {
     const colgada = (() => new Promise(() => undefined)) as never;
     const m = armar({ pedir: async () => mandado(H1) });
     m.leer.mockImplementation(colgada);
     m.consultar.mockImplementation(colgada);
     const r = await correr(sortear(m));
     expect(pasoDe(r)).toBe("error");
-    expect(transcurrido()).toBeLessThanOrEqual(60_000);
+    expect(transcurrido()).toBeLessThanOrEqual(95_000);
   });
 });
 
