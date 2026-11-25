@@ -11,7 +11,14 @@ export interface EntornoDePersonas {
   VITE_GOOGLE_CLIENT_ID?: unknown;
 }
 
-const ENTORNO_DEL_BUILD = (): EntornoDePersonas => import.meta.env as EntornoDePersonas;
+/**
+ * Cada variable se lee por su nombre: así el armado reemplaza solo esas dos y no mete en la página el objeto entero con todas
+ * las variables del sitio.
+ */
+const ENTORNO_DEL_BUILD = (): EntornoDePersonas => ({
+  VITE_ANOTARSE_SIN_BILLETERA: import.meta.env.VITE_ANOTARSE_SIN_BILLETERA,
+  VITE_GOOGLE_CLIENT_ID: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+});
 
 /** Si el sitio se construyó con el interruptor en 1. Solo ese valor exacto lo prende. */
 export function anotarseSinBilleteraActivo(entorno: EntornoDePersonas = ENTORNO_DEL_BUILD()): boolean {

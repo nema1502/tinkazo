@@ -1,7 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { anotarseSinBilleteraActivo, clienteDeGoogleDelSitio } from "./persona-bandera";
 
 describe("las banderas de anotarse sin billetera", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("sin pasarle nada leen las dos variables de construcción por su nombre", () => {
+    expect(anotarseSinBilleteraActivo()).toBe(false);
+    expect(clienteDeGoogleDelSitio()).toBeNull();
+    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
+    vi.stubEnv("VITE_GOOGLE_CLIENT_ID", "cliente.apps.example.org");
+    expect(anotarseSinBilleteraActivo()).toBe(true);
+    expect(clienteDeGoogleDelSitio()).toBe("cliente.apps.example.org");
+  });
+
   it("nacen apagadas", () => {
     expect(anotarseSinBilleteraActivo({})).toBe(false);
     expect(clienteDeGoogleDelSitio({})).toBeNull();
