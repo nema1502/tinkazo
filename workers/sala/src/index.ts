@@ -1029,6 +1029,10 @@ export class Sala extends DurableObject<Env> {
         "INSERT INTO sala (k, v) VALUES ('cierra', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
         String(cierre),
       );
+    } else if (fase === "abierta" && Number.isSafeInteger(cierre) && cierre > 0 && cierre <= Date.now()) {
+      // Sin hora nueva y con la que había ya vencida, el alta contesta «cerrada» a todos: la sala no puede quedar abierta
+      // para quien organiza y cerrada para los demás. Se rechaza y quien organiza tiene que poner una hora que valga.
+      return { ok: false, motivo: "forma" };
     }
     this.ctx.storage.sql.exec(
       "INSERT INTO sala (k, v) VALUES ('fase', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
