@@ -925,7 +925,7 @@ describe("la vista del participante", () => {
   });
 });
 
-/* ------------------------------------------------------------ compartir en vivo (issue #247) */
+/* ------------------------------------------------------------ compartir en vivo */
 
 describe("compartir el sorteo desde la vista en vivo", () => {
   const dialogo = (): HTMLDialogElement => document.querySelector("dialog") as HTMLDialogElement;
