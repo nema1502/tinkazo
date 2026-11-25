@@ -31,6 +31,7 @@ export const TEXTOS_ESCUCHA = {
     sinAudio: "Este navegador no tiene audio: escuchalo en un celular, una tablet o el parlante del proyector.",
     preparando: "Armando la pieza…",
     notaSemilla: "La pieza sale de una semilla fija: la misma candidata suena igual cada vez que se escucha.",
+    fueraDelSelector: "Juegos que salieron del selector y siguen abriendo con ?demo=",
   },
   en: {
     titulo: "Listening page",
@@ -53,6 +54,7 @@ export const TEXTOS_ESCUCHA = {
     sinAudio: "This browser has no audio: try it on a phone, a tablet or the projector speaker.",
     preparando: "Building the piece…",
     notaSemilla: "The piece comes from a fixed seed: the same candidate sounds the same every time.",
+    fueraDelSelector: "Games that left the selector and still open with ?demo=",
   },
 } as const;
 
@@ -70,23 +72,27 @@ export const idiomaDeLaEscucha = (search: string = typeof location === "undefine
  * (`Game`, en `src/state.ts`); su llave u orden lo pone `IDENTIDADES` en music.ts.
  */
 export const NOMBRES_ESCUCHA: Readonly<Record<string, { es: string; en: string }>> = {
+  // Los diez del selector, con el nombre con que el selector los muestra.
   race: { es: "Carrera de llamas", en: "Llama race" },
-  stellar: { es: "Carrera estelar", en: "Stellar race" },
-  wheel: { es: "La rueda", en: "The wheel" },
-  ledger: { es: "El libro", en: "The ledger" },
-  rockets: { es: "Cohetes", en: "Rockets" },
-  pasanaku: { es: "Pasanaku", en: "Pasanaku" },
-  teleferico: { es: "Teleférico", en: "Cable car" },
-  tombola: { es: "Tómbola", en: "Tombola" },
-  trompo: { es: "Trompo", en: "Spinning top" },
-  totora: { es: "Totora", en: "Totora" },
-  pinata: { es: "Piñata", en: "Piñata" },
-  oruro: { es: "Oruro", en: "Oruro" },
-  luz: { es: "La luz", en: "The light" },
-  sapo: { es: "El sapo", en: "The frog" },
-  quien: { es: "Quién era", en: "Who was it" },
+  sapo: { es: "Sapo", en: "Sapo" },
+  trompo: { es: "Trompo", en: "Spinning tops" },
   chovena: { es: "Chovena", en: "Chovena" },
-  trueque: { es: "Trueque", en: "Barter" },
+  pinata: { es: "Piñata", en: "Piñata" },
+  wheel: { es: "Ruleta", en: "Wheel" },
+  teleferico: { es: "Teleférico", en: "Cable car" },
+  oruro: { es: "La Entrada", en: "La Entrada" },
+  guajojo: { es: "Guajojó", en: "Guajojó" },
+  toborochi: { es: "El Toborochi", en: "The Toborochi" },
+  // Los que salieron del selector y siguen abriendo con ?demo=.
+  stellar: { es: "Constelación Stellar", en: "Stellar Constellation" },
+  ledger: { es: "Cierre de Libro", en: "Ledger Close" },
+  rockets: { es: "Carrera de cohetes", en: "Rocket race" },
+  pasanaku: { es: "Aguayo", en: "Aguayo" },
+  tombola: { es: "Tómbola", en: "Ball drum" },
+  totora: { es: "Balsas de totora", en: "Reed boats" },
+  luz: { es: "Luz roja, luz verde", en: "Red light, green light" },
+  quien: { es: "De pie", en: "Stand up" },
+  trueque: { es: "El Trueque", en: "El Trueque" },
 };
 
 /** El nombre de un juego en el idioma dado; si el id no tiene nombre, el id. */

@@ -1,6 +1,7 @@
 import {
   CAPAS_SHOW,
   IDENTIDADES,
+  IDENTIDADES_DEL_SELECTOR,
   MOVIMIENTO_DEL_SHOW,
   SEGUNDO_DEL_GOLPE,
   SEMILLA_DE_LA_ESCUCHA,
@@ -173,7 +174,16 @@ export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
   encabezado.innerHTML = `<h1>${t("titulo")}</h1><p>${t("subtitulo")}</p><p class="nota">${t("notaSemilla")}</p><p class="nota">${t("etiquetaTexto")}</p><p class="aviso-sin-audio">${t("sinAudio")}</p>`;
   raiz.append(encabezado);
 
+  let ponerTitulo = true;
   for (const id of Object.values(IDENTIDADES)) {
+    // Los diez del selector van primero. Los que salieron de él, abajo y con su título.
+    if (ponerTitulo && !IDENTIDADES_DEL_SELECTOR.includes(id.juego)) {
+      ponerTitulo = false;
+      const titulo = doc.createElement("p");
+      titulo.className = "grupo";
+      titulo.textContent = t("fueraDelSelector");
+      raiz.append(titulo);
+    }
     const nombre = nombreDeJuego(id.juego, o.lang);
     const tarjeta = doc.createElement("section");
     tarjeta.className = "tarjeta";
