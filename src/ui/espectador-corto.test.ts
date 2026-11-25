@@ -29,9 +29,10 @@ class Almacen {
 }
 
 /** Un servicio de mentira que sirve un contenido cifrado, como lo hace el de enlaces. */
-async function servicioConContenido(u: string): Promise<typeof fetch> {
+async function servicioConContenido(u: string, cambia = false): Promise<typeof fetch> {
   const bytes = await cifrar(JSON.stringify({ v: 1, u }), new Uint8Array(16));
-  return (async () => new Response(new Uint8Array(bytes), { status: 200 })) as typeof fetch;
+  const headers = cambia ? { "X-Enlace-Cambia": "1" } : undefined;
+  return (async () => new Response(new Uint8Array(bytes), { status: 200, ...(headers ? { headers } : {}) })) as typeof fetch;
 }
 
 beforeEach(() => {
