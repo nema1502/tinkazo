@@ -48,7 +48,8 @@ export function leerAltaDePersona(estado: number, cuerpo: unknown): Lectura {
     // La lectura compartida pide una cuenta: acá no hay ninguna y quien llama no la usa.
     return { tipo: "listo", cuenta: "", ya };
   }
-  if (estado === 503 && error === "personas-apagadas") return { tipo: "final", motivo: "apagada" };
+  // Apagado, o con el identificador de Google de la sala distinto del del sitio: en los dos casos esperar no lo arregla.
+  if (estado === 503 && (error === "personas-apagadas" || error === "personas-configuracion")) return { tipo: "final", motivo: "apagada" };
   return leerAlta(estado, cuerpo);
 }
 

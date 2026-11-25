@@ -273,19 +273,24 @@ enlace simbólico o una junction.
 
 Quien solo se anota en una campaña no necesita una billetera. Una campaña lo pide con `"identidad": "persona"` en su texto
 firmado. Sin el campo, o con `"cuenta"`, la campaña es la de siempre y ninguna ruta cambia. Cualquier otro valor no se firma ni
-se acepta (`400 forma`).
+se acepta (`400 forma`): así un error de tipeo no convierte en silencio una campaña de personas en una de cuentas.
 
 Nacen apagadas. Hacen falta dos variables en `wrangler.toml`: `DIFERIDA` en `"1"` y un `GOOGLE_CLIENT_ID` (el identificador de
 cliente de Google de Tinkazo, que es público). Si falta una, crear una campaña de personas da `503 personas-apagadas`, activarla
-al pagar da `400 forma` con el campo `identidad`, y el alta y la consulta propia de una ya creada dan `503 personas-apagadas`.
+al pagar da `400 forma` con el campo `identidad`, y el alta de una ya creada da `503 personas-apagadas`. La consulta propia sigue
+andando (es de solo lectura): apagar el modo en pleno evento no deja a quien ya se anotó sin saber si ganó.
 La sala guarda el modo en la clave `identidad` de la sala, solo en esas campañas.
 
 - **El alta** es `POST /v1/sala/<id>/campana/alta` con `{"google","d","llave","p"?}`. `google` es el token de identidad que
   entrega el botón de Google, y la sala lo verifica sola con `identidad-google.ts`: firma contra las llaves públicas de Google,
   emisor, audiencia igual al `GOOGLE_CLIENT_ID`, caducidad y correo verificado. No le pregunta nada al proveedor de cuentas y
   nunca contesta `sin-billetera`. Valen los mismos topes, el mismo pase del QR, el mismo cupo, la misma fase y el mismo cierre por
-  hora que en una campaña de cuentas. Un token rechazado da `401 sesion` (y suma a los rechazos de la ficha y de la conexión),
-  Google sin contestar da `502 google` y no suma. La respuesta es `201 {"anotada":true}` o, si la misma cuenta de Google ya
+  hora que en una campaña de cuentas. Un token rechazado da `401 sesion` y suma solo a los rechazos de su ficha: la verificación es
+  local y no cuesta una llamada, así que los rechazos nunca suman al tope de la conexión, que es de todo el salón detrás de la
+  misma red. Un token bien firmado por Google pero hecho para otra aplicación (el `GOOGLE_CLIENT_ID` de la sala no es el del
+  sitio) da `503 personas-configuracion`, no suma a ningún tope y el celular dice que el sorteo no abre desde ahí. Google sin
+  contestar da `502 google` y no suma. Si Google no contesta, las llaves ya recordadas siguen sirviendo hasta seis horas después
+  de su vencimiento. La respuesta es `201 {"anotada":true}` o, si la misma cuenta de Google ya
   estaba, `200 {"anotada":true,"ya":true}`: no lleva la línea de la persona ni nada que la identifique.
 - **Una entrada por persona.** La misma cuenta de Google no se anota dos veces en la misma campaña, tampoco desde otro celular:
   la sala la reconoce por su línea, el celular nuevo pasa a ser el suyo y recibe `ya`.
@@ -296,7 +301,11 @@ La sala guarda el modo en la clave `identidad` de la sala, solo en esas campaña
   y la sala solo acepta una línea en una campaña de personas.
 - **Saber si estoy anotada.** El celular no tiene cuenta que mandar: `POST campana/yo` con `{"llave"}` sola. La sala busca la fila
   que anotó esa llave y contesta lo mismo que con una cuenta y su llave. Quien no tiene la llave de una fila no ve nada de esa
-  fila. En una campaña de cuentas, un pedido sin `cuenta` sigue siendo `400 forma`.
+  fila. En una campaña de cuentas, un pedido sin `cuenta` sigue siendo `400 forma`. En una sala que no existe (cerrada o vencida)
+  el alta y la consulta propia dan `404 no-existe`, como las rutas de cuentas.
+- **Comprobación antes de un evento.** `GET /v1/personas/estado` contesta `{"prendido","cliente"}`: si las dos variables están
+  puestas y cuál es el `GOOGLE_CLIENT_ID` de la sala. Tiene que ser el mismo que `VITE_GOOGLE_CLIENT_ID` del sitio: si no, nadie
+  entra. El identificador es público.
 - **Lo que no se guarda.** Ni el correo, ni el identificador de Google, ni el token quedan en una tabla, en una respuesta pública
   o en el registro: del token solo sale la línea, que viene de un HMAC con la sal de la sala. El registro lleva el motivo de un
   rechazo (`google-rechazado`), nunca el token.

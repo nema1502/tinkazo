@@ -68,6 +68,10 @@ describe("leerAltaDePersona: lo que contesta la sala", () => {
     expect(leerAltaDePersona(503, { error: "personas-apagadas" })).toEqual({ tipo: "final", motivo: "apagada" });
   });
 
+  it("el identificador de Google mal puesto en la sala tampoco se arregla esperando: dice que no abre desde acá", () => {
+    expect(leerAltaDePersona(503, { error: "personas-configuracion" })).toEqual({ tipo: "final", motivo: "apagada" });
+  });
+
   it("lo demás se lee como el alta de siempre", () => {
     expect(leerAltaDePersona(401, { error: "sesion" })).toEqual({ tipo: "final", motivo: "sesion" });
     expect(leerAltaDePersona(409, { error: "pase" })).toEqual({ tipo: "final", motivo: "pase" });
@@ -109,6 +113,12 @@ describe("anotarPersonaEnCampana", () => {
   it("un token rechazado termina enseguida, sin repetir", async () => {
     const { resultado, llamadas } = await alta([error(401, "sesion")]);
     expect(resultado).toEqual({ ok: false, motivo: "sesion" });
+    expect(llamadas).toHaveLength(1);
+  });
+
+  it("el identificador mal puesto termina enseguida, sin repetir", async () => {
+    const { resultado, llamadas } = await alta([error(503, "personas-configuracion")]);
+    expect(resultado).toEqual({ ok: false, motivo: "apagada" });
     expect(llamadas).toHaveLength(1);
   });
 

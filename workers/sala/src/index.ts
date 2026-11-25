@@ -59,9 +59,12 @@
  *   POST   /v1/sala/<id>/campana/yo        JSON {"llave"}: lo mismo, para una campaña de personas. El celular no tiene cuenta que mandar y la
  *                                           sala busca su fila por la llave. En una campaña de cuentas es un 400 forma, como siempre
  *
+ *   GET    /v1/personas/estado             contesta 200 {"prendido","cliente"}: si las campañas de personas están prendidas y con qué identificador de
+ *                                           Google (público). Sirve para comprobar antes de un evento que es el mismo que el del sitio.
+ *
  * Las campañas de personas (anotarse sin billetera) nacen apagadas: hacen falta la variable DIFERIDA en "1" y un GOOGLE_CLIENT_ID.
- * Sin ellas, crear una campaña con "identidad": "persona" da 503 {"error":"personas-apagadas"} y el alta y la consulta propia de una
- * ya creada dan lo mismo. La lista que se sella lleva una línea de persona por fila donde una campaña de cuentas lleva una cuenta, y
+ * Sin ellas, crear una campaña con "identidad": "persona" da 503 {"error":"personas-apagadas"} y el alta de una ya creada da lo
+ * mismo. La consulta propia sigue andando, porque solo lee. La lista que se sella lleva una línea de persona por fila donde una campaña de cuentas lleva una cuenta, y
  * quitar, cerrar, sellar y el resultado andan igual. El aviso por correo a quien gana no se manda en esas campañas: la línea no dice
  * a quién escribir y la sala no guarda ningún dato que lo diga.
  *
@@ -713,8 +716,11 @@ export class Sala extends DurableObject<Env> {
 
   /** Si es una campaña de personas (anotarse sin billetera). Una sala sin la clave es de cuentas. */
   private esDePersonas(): boolean {
-    return esCampanaDePersonas(this.sql);
+    // Nunca cambia en la vida de la sala: se lee una vez (la creación y el borrado la sueltan) y no en cada lectura del estado.
+    if (this.personasRecordado === null) this.personasRecordado = esCampanaDePersonas(this.sql);
+    return this.personasRecordado;
   }
+  private personasRecordado: boolean | null = null;
 
   /** La red queda dentro del texto firmado: no la puede cambiar un pedido posterior. */
   private red(): "mainnet" | "testnet" | null {
@@ -768,6 +774,7 @@ export class Sala extends DurableObject<Env> {
     if (c.identidad === "persona") {
       this.ctx.storage.sql.exec("INSERT INTO sala (k, v) VALUES ('identidad', 'persona')");
     }
+    this.personasRecordado = null;
     await this.ctx.storage.setAlarm(ahora + vida);
     return true;
   }
@@ -974,13 +981,24 @@ export class Sala extends DurableObject<Env> {
   }
 
   /**
-   * Las dos primeras comprobaciones de toda ruta propia de las campañas de personas, antes de gastar nada: tiene que ser una
-   * sala de campaña de personas y la sala tiene que tenerlas prendidas. Una sala que no existe o que es de cuentas contesta
-   * `forma`, lo mismo que contesta hoy un pedido que no trae lo que esa campaña espera.
+   * Las dos primeras comprobaciones de toda ruta que anota a las campañas de personas, antes de gastar nada: tiene que ser una
+   * sala de campaña de personas y la sala tiene que tenerlas prendidas.
    */
-  private sinPersonas(): { ok: false; motivo: "forma" | "personas-apagadas" } | null {
-    if (!this.dato("huella") || !this.esCampana() || !this.esDePersonas()) return { ok: false, motivo: "forma" };
+  private sinPersonas(): { ok: false; motivo: "no-existe" | "forma" | "personas-apagadas" } | null {
+    const no = this.sinSalaDePersonas();
+    if (no) return no;
     if (!personasPrendido(this.env)) return { ok: false, motivo: "personas-apagadas" };
+    return null;
+  }
+
+  /**
+   * Lo que piden las rutas de personas aunque el modo se haya apagado después: que la sala exista y sea de personas. Una sala que
+   * no existe (cerrada, vencida o nunca creada) o que no es de campaña contesta `no-existe`, como las rutas de cuentas, y el celular
+   * la da por terminada. Una sala de cuentas contesta `forma`: la llave sola no le dice nada.
+   */
+  private sinSalaDePersonas(): { ok: false; motivo: "no-existe" | "forma" } | null {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    if (!this.esDePersonas()) return { ok: false, motivo: "forma" };
     return null;
   }
 
@@ -1087,7 +1105,8 @@ export class Sala extends DurableObject<Env> {
   /** Marca el aviso para una ganadora de una campaña de personas, por su línea. */
   async avisarGanadoraDePersona(token: string, linea: string): Promise<Resultado> {
     // Antes que el token, como la forma de una cuenta en una campaña de cuentas: la línea solo vale donde hay líneas.
-    if (!this.dato("huella") || !this.esCampana() || !this.esDePersonas()) return { ok: false, motivo: "forma" };
+    const no = this.sinSalaDePersonas();
+    if (no) return no;
     if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
     return avisarEnCampana(this.sql, linea);
   }
@@ -1097,7 +1116,8 @@ export class Sala extends DurableObject<Env> {
    * dice más que lo que dice hoy con una cuenta y su llave: quien no tiene la llave de una fila no ve nada de esa fila.
    */
   async estadoDePersona(llave: string): Promise<Resultado<EstadoDeCelular>> {
-    const no = this.sinPersonas();
+    // Es de solo lectura: con el modo apagado después de crear la campaña, quien ya se anotó sigue viendo su estado.
+    const no = this.sinSalaDePersonas();
     if (no) return no;
     const huella = await huellaDeLlave(llave);
     return { ok: true, ...estadoDeCelularPorLlave(this.sql, huella) };
@@ -1485,6 +1505,7 @@ export class Sala extends DurableObject<Env> {
     }
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
+    this.personasRecordado = null;
   }
 
   /** Al vencer la vida de la sala no queda nada: 10 h en una sala común y 24 h en una campaña. */
@@ -1741,6 +1762,7 @@ const MOTIVOS: Record<string, number> = {
   "no-gano": 400,
   "sin-billetera": 409,
   "personas-apagadas": 503,
+  "personas-configuracion": 503,
   google: 502,
   rechazos: 429,
   sesion: 401,
@@ -1814,7 +1836,12 @@ async function altaDePersona(
     if (quien.motivo === "llaves-no-disponibles") return falla({ motivo: "google" }, h);
     // Solo el motivo, de una lista fija: nunca el token ni nada de la persona.
     registrar("google-rechazado", { motivo: quien.motivo });
-    await sala.rechazo(ip, google);
+    // Un token de Google bien firmado pero hecho para otra aplicación: el identificador de la sala y el del sitio no son el mismo.
+    // Es un error nuestro, no de la persona: no se cuenta en ningún tope y el celular lo lee como que no abre desde acá.
+    if (quien.motivo === "audiencia") return falla({ motivo: "personas-configuracion" }, h);
+    // La verificación es local y no cuesta una llamada: el rechazo frena a quien repite esa ficha, y nunca suma al tope de la
+    // conexión, que es de todo el salón detrás de la misma red.
+    await sala.rechazo(ip, google, false);
     return falla({ motivo: "sesion" }, h);
   }
   const vence = venceDelToken(google, Date.now());
@@ -1947,6 +1974,15 @@ export default {
         registrar,
       });
       return json(r.cuerpo, r.estado, r.esperaS === undefined ? h : { ...h, "Retry-After": String(r.esperaS) });
+    }
+
+    // Para comprobar antes de un evento que las campañas de personas están prendidas y que la sala y el sitio hablan del mismo
+    // identificador de Google: si no coinciden, nadie entra. El identificador es público, el mismo que lleva la página del sitio.
+    if (partes[0] === "v1" && partes[1] === "personas" && partes[2] === "estado" && partes.length === 3) {
+      const h = cors(origen, "GET, OPTIONS");
+      if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
+      if (req.method !== "GET") return json({ error: "no-existe" }, 404, h);
+      return json({ prendido: personasPrendido(env), cliente: clienteDeGoogle(env) }, 200, h);
     }
 
     if (partes[0] === "v1" && partes[1] === "sala") {

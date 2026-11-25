@@ -416,6 +416,23 @@ describe("el modo cuenta responde igual que la rama principal", () => {
     expect(Object.keys(ahora).sort()).toEqual(Object.keys(base).sort());
   }, 120_000);
 
+  it("con los interruptores de personas prendidos, que es como queda producción, una campaña de cuentas responde lo mismo", async () => {
+    if (process.env.GRABAR_PARIDAD === "1") return;
+    const prendidos = { DIFERIDA: "1", GOOGLE_CLIENT_ID: "cliente-de-prueba.apps.example.org" };
+    const base = JSON.parse(readFileSync(BASE, "utf8")) as Record<string, string[]>;
+    const ahora: Record<string, string[]> = {
+      sinPase: await recorrido(await montarMundo(prendidos), false),
+      conPase: await recorrido(await montarMundo({ ...prendidos, PASE: "1" }), true),
+      correo: await recorridoDelCorreo(await montarMundo({ ...prendidos, CORREO_GANADORAS: "1", CORREO_DE: "sorteos@example.org" })),
+    };
+    for (const recorrida of Object.keys(base)) {
+      const antes = base[recorrida] as string[];
+      const ahoraDe = ahora[recorrida] ?? [];
+      expect(ahoraDe.length, `${recorrida}: cantidad de pasos`).toBe(antes.length);
+      antes.forEach((linea, i) => expect(ahoraDe[i], `${recorrida}, paso ${i}`).toBe(linea));
+    }
+  }, 120_000);
+
   it("el recorrido grabado tiene de verdad respuestas de todas las rutas", () => {
     if (process.env.GRABAR_PARIDAD === "1") return;
     const base = JSON.parse(readFileSync(BASE, "utf8")) as Record<string, string[]>;

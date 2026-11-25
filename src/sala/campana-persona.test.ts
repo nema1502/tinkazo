@@ -209,6 +209,28 @@ describe("los interruptores", () => {
     expect(lineas.filter((l) => /^\s*GOOGLE_CLIENT_ID\s*=/.test(l))).toEqual(['GOOGLE_CLIENT_ID = ""']);
   });
 
+  it("antes de un evento se puede preguntar a la sala si está prendida y con qué identificador de Google, que es público", async () => {
+    const apagada = await montarMundo();
+    const a = await apagada.pedir("/v1/personas/estado");
+    expect(a.status).toBe(200);
+    expect(await a.json()).toEqual({ prendido: false, cliente: "" });
+    const { mundo } = await montarPersonas();
+    const p = await mundo.pedir("/v1/personas/estado");
+    expect(await p.json()).toEqual({ prendido: true, cliente: CLIENTE });
+    expect((await mundo.pedir("/v1/personas/estado", { metodo: "POST", cuerpo: {} })).status).toBe(404);
+    expect((await mundo.pedir("/v1/personas/estado", { metodo: "OPTIONS" })).status).toBe(204);
+  });
+
+  it("el estado público de una campaña de cuentas no hace una lectura de más para decir que es de cuentas", async () => {
+    const { mundo } = await montarPersonas();
+    const cuentas = await campanaAbierta(mundo, AHORA, { evento: "feria-de-cuentas" });
+    const objeto = mundo.sala(cuentas.id) as unknown as { ctx: { storage: { sql: { exec: (...a: unknown[]) => unknown } } } };
+    const exec = vi.spyOn(objeto.ctx.storage.sql, "exec");
+    for (let i = 0; i < 5; i++) expect((await mundo.pedir(ruta(cuentas, "/campana/estado"))).status).toBe(200);
+    const lecturas = exec.mock.calls.filter((c) => String(c[0]).includes("k = 'identidad'"));
+    expect(lecturas.length).toBeLessThanOrEqual(1);
+  });
+
   it("el vencimiento de un token sale de su propio campo, y sin él no se recuerda", async () => {
     const t = await tokenDeGoogle(1);
     expect(venceDelToken(t, AHORA)).toBe(AHORA + 3_000_000);
@@ -347,7 +369,6 @@ describe("el alta de una persona con Google", () => {
     const buenoSinFirma = (await tokenDeGoogle(1)).split(".").slice(0, 2).join(".");
     const [h, c] = (await tokenDeGoogle(1)).split(".") as [string, string, string];
     const casos: [string, string, number][] = [
-      ["otro cliente", await tokenDeGoogle(1, { payload: { aud: "otro-cliente.apps.example.org" } }), 401],
       ["otro emisor", await tokenDeGoogle(1, { payload: { iss: "https://otro.example.org" } }), 401],
       ["correo sin verificar", await tokenDeGoogle(1, { payload: { email_verified: false } }), 401],
       ["firmado por otra llave", await tokenDeGoogle(1, { par: intrusa }), 401],
@@ -407,7 +428,7 @@ describe("el alta de una persona con Google", () => {
   });
 
   it("una ficha mala repetida se frena sin volver a verificar", async () => {
-    const malo = await tokenDeGoogle(1, { payload: { aud: "otro" } });
+    const malo = await tokenDeGoogle(1, { payload: { email_verified: false } });
     const estados: number[] = [];
     for (let i = 0; i < 7; i++) estados.push((await altaGoogle(mundo, sala, malo)).status);
     expect(estados.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
@@ -450,15 +471,16 @@ describe("el alta de una persona con Google", () => {
     expect(await r.json()).toEqual({ error: "llena" });
   });
 
-  it("con el interruptor apagado después de crear la campaña, ni el alta ni la consulta propia andan", async () => {
+  it("con el interruptor apagado después de crear la campaña no entra nadie nuevo, pero quien ya se anotó sigue viendo su estado", async () => {
     expect((await altaGoogle(mundo, sala, await tokenDeGoogle(1))).status).toBe(201);
     mundo.env.DIFERIDA = "0";
     const alta = await altaGoogle(mundo, sala, await tokenDeGoogle(2), { llave: llaveDe(2) });
     expect(alta.status).toBe(503);
     expect(await alta.json()).toEqual({ error: "personas-apagadas" });
+    // La consulta propia es de solo lectura: apagar el modo en pleno evento no deja a nadie sin saber si ganó.
     const yo = await yoPorLlave(mundo, sala, llaveDe(1));
-    expect(yo.status).toBe(503);
-    expect(await yo.json()).toEqual({ error: "personas-apagadas" });
+    expect(yo.status).toBe(200);
+    expect(await yo.json()).toMatchObject({ anotada: true });
     expect(filas(mundo, sala)).toHaveLength(1);
     // Lo que no es de las personas sigue como siempre: el estado público.
     expect((await mundo.pedir(ruta(sala, "/campana/estado"))).status).toBe(200);
@@ -481,10 +503,47 @@ describe("el alta de una persona con Google", () => {
     expect(await r.json()).toEqual({ error: "forma" });
     expect(filas(mundo, cuentas)).toEqual([]);
     expect(falso.pedidos).toBe(0);
-    // Y una sala que no existe contesta lo mismo que una de cuentas.
+    // Una sala que no existe (cerrada, vencida o nunca creada) contesta lo mismo que una de cuentas: no existe, y el celular sale por ahí.
     const nada = await mundo.pedir("/v1/sala/AbCdEf12/campana/alta", { cuerpo: { google: await tokenDeGoogle(1), d: "A".repeat(60), llave: llaveDe(1) } });
-    expect(nada.status).toBe(400);
+    expect(nada.status).toBe(404);
+    expect(await nada.json()).toEqual({ error: "no-existe" });
   });
+
+  it("una sala que se cerró deja de existir también para el alta de personas", async () => {
+    const cerrada = await mundo.pedir(`/v1/sala/${sala.id}`, { metodo: "DELETE", cabeceras: auth(sala) });
+    expect(cerrada.status).toBe(204);
+    const r = await altaGoogle(mundo, sala, await tokenDeGoogle(1));
+    expect(r.status).toBe(404);
+    expect(await r.json()).toEqual({ error: "no-existe" });
+  });
+
+  it("un token de otra aplicación de Google es un error de configuración nuestro: no es un rechazo de la persona y no cuenta en ningún tope", async () => {
+    const ajeno = await tokenDeGoogle(1, { payload: { aud: "otro-cliente.apps.example.org" } });
+    for (let i = 0; i < 12; i++) {
+      const r = await altaGoogle(mundo, sala, ajeno);
+      expect(r.status).toBe(503);
+      expect(await r.json()).toEqual({ error: "personas-configuracion" });
+    }
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM campana_rechazos_ficha")).toEqual([{ c: 0 }]);
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM campana_rechazos")).toEqual([{ c: 0 }]);
+    // Queda dicho en el registro, con el motivo fijo, para quien opera.
+    expect(consola.mock.calls.map((c) => String(c[0])).join("\n")).toContain('"motivo":"audiencia"');
+    // Y con el identificador bien puesto la persona entra, ya sin ficha gastada.
+    expect((await altaGoogle(mundo, sala, await tokenDeGoogle(1))).status).toBe(201);
+  });
+
+  it("quien manda cientos de tokens malos no deja afuera a los demás de la misma conexión", async () => {
+    // Todo el salón sale por una dirección. La verificación es local y no cuesta nada: los rechazos frenan a quien los manda (su ficha), nunca a otros.
+    for (let n = 100; n < 410; n++) {
+      const r = await altaGoogle(mundo, sala, await tokenDeGoogle(n, { payload: { email_verified: false } }), { llave: llaveDe(n) });
+      expect(r.status).toBe(401);
+    }
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM campana_rechazos")).toEqual([{ c: 0 }]);
+    for (let n = 1; n <= 3; n++) {
+      const r = await altaGoogle(mundo, sala, await tokenDeGoogle(n), { llave: llaveDe(n) });
+      expect(r.status, `persona ${n}`).toBe(201);
+    }
+  }, 60_000);
 
   it("nada que identifique a la persona queda guardado, se contesta o se escribe en un registro", async () => {
     const dicho: string[] = [];
@@ -560,7 +619,15 @@ describe("la consulta propia con la llave sola", () => {
     const r = await yoPorLlave(mundo, cuentas, llaveDe(1));
     expect(r.status).toBe(400);
     expect(await r.json()).toEqual({ error: "forma" });
-    expect((await yoPorLlave(mundo, { id: "AbCdEf12", token: "x" }, llaveDe(1))).status).toBe(400);
+  });
+
+  it("en una sala que no existe o se cerró, la consulta propia dice que no existe y el celular la da por terminada", async () => {
+    const nada = await yoPorLlave(mundo, { id: "AbCdEf12", token: "x" }, llaveDe(1));
+    expect(nada.status).toBe(404);
+    expect(await nada.json()).toEqual({ error: "no-existe" });
+    const cerrada = await mundo.pedir(`/v1/sala/${sala.id}`, { metodo: "DELETE", cabeceras: auth(sala) });
+    expect(cerrada.status).toBe(204);
+    expect((await yoPorLlave(mundo, sala, llaveDe(1))).status).toBe(404);
   });
 
   it("con una cuenta y su llave, el camino de siempre sigue contestando", async () => {
