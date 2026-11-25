@@ -6,7 +6,8 @@ import "./pagina";
 import "./version-nueva";
 import { $, esc } from "./dom";
 import { pintarLeyenda } from "./ui/leyenda";
-import { htmlDeLosGanadores } from "./ui/ganadores-de-la-verificacion";
+import { htmlDeLosGanadores, lugarDeLaLista } from "./ui/ganadores-de-la-verificacion";
+import { esListaDePersonas } from "./campana/forma-de-lista";
 import { alCopiarOrden, htmlDeTurnos } from "./ui/lista-de-turnos";
 import { isTurnOrder } from "./modos/turnos";
 import { getLang, onLangChange, texto as t, textos } from "./idioma";
@@ -366,8 +367,10 @@ export function pintarComprobaciones(proof: Proof, r: Revision): void {
     const sinSello = r.ancla.tipo === "oficial" && !sello && !delHistorial;
     // Un orden de turnos no tiene ganador: lo que se rehizo es el orden. Solo lo decide lo sellado
     // (`isTurnOrder`): el parámetro del enlace por sí solo no convierte un sorteo común en un orden.
-    const turnos = isTurnOrder(r.nombres.length, r.ganadores.length, proof.prize ?? "");
-    set(turnos ? "vCheckOrden" : "vCheckWinner", bien ? (sinSello ? "pending" : "ok") : "bad", r.ganadores.map((i) => r.nombres[i]).join(", "));
+    const deLugares = esListaDePersonas(r.nombres);
+    const turnos = !deLugares && isTurnOrder(r.nombres.length, r.ganadores.length, proof.prize ?? "");
+    // Una lista de personas no muestra ninguna línea: cada ganadora es su lugar en la lista.
+    set(turnos ? "vCheckOrden" : "vCheckWinner", bien ? (sinSello ? "pending" : "ok") : "bad", r.ganadores.map((i) => (deLugares ? lugarDeLaLista(i) : r.nombres[i])).join(", "));
   }
 
   // Sin registro externo, la cuenta cierra pero la lista no está atestiguada.
@@ -771,6 +774,8 @@ export function renderList(proof: Proof): void {
   // siempre: un nombre como «Grupo (1/2)» puede ser solo un nombre.
   const reparto = repartoParaVerificacion(names);
   const { personas, participaciones } = contarPersonas(names, reparto);
+  // Una lista toda de líneas de persona se explica sola: cada línea es una persona anotada. Las demás listas no llevan el renglón.
+  $("v-personas").style.display = esListaDePersonas(names) ? "" : "none";
   $("v-count").textContent =
     personas === participaciones
       ? `${names.length} ${t("kEntries")}`
@@ -838,7 +843,9 @@ export function renderResult(
   // Un orden de turnos (ganan tantas personas como hay en la lista y el nombre empieza con «Turnos») se muestra con la misma
   // lista que la herramienta: «Turno 1 ... Turno N», y no una tarjeta por persona con «Se lleva» (con 300 son decenas de miles
   // de píxeles). El comprobante es el de siempre: se reconoce por la cantidad y el nombre que ya trae.
-  const turnos = isTurnOrder(names.length, winners.length, premio);
+  // Una lista de personas nunca es un orden de turnos: las tarjetas dicen el lugar de cada ganadora.
+  const deLugares = esListaDePersonas(names);
+  const turnos = !deLugares && isTurnOrder(names.length, winners.length, premio);
   const encabezado = document.getElementById("v-result-t");
   if (encabezado) {
     encabezado.dataset.i = turnos ? "turnsResultTitle" : "vResult";
@@ -849,7 +856,7 @@ export function renderResult(
   // solo cuando la lista sellada se cuenta por persona en esta página. Si no, cada línea tal cual se selló.
   const reparto = repartoParaVerificacion(names);
   // Las tarjetas nombran a la persona, sin la marca de la línea sellada, cuando la lista cierra como reparto.
-  const mostrar = (linea: string): string => (reparto && cierraComoReparto(names) ? nombreDePersona(linea) : linea);
+  const mostrar = (linea: string, i: number): string => (deLugares ? lugarDeLaLista(i) : reparto && cierraComoReparto(names) ? nombreDePersona(linea) : linea);
   $("v-winners").innerHTML = turnos
     ? htmlDeTurnos(names, winners, { titulo: false, sinSufijos: reparto })
     : htmlDeLosGanadores(names, winners, premio, avatar, reparto);
@@ -865,7 +872,7 @@ export function renderResult(
   compartir.onclick = () =>
     abrirSorteo({
       enlace: enlaceVerificado,
-      ganadores: winners.map((i) => mostrar(names[i] ?? "")),
+      ganadores: winners.map((i) => mostrar(names[i] ?? "", i)),
       total: names.length,
       // Con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas: cuando la lista
       // sellada agrupa por persona en esta página, nunca por el parámetro del enlace solo.

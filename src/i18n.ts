@@ -3634,6 +3634,9 @@ export const T: Record<Lang, Dict> = {
     sortearPropio: "Sortear pagando con mi cuenta",
     sorteoMasTarde: "Tu sorteo queda en Mis sorteos: podés retomarlo desde ahí más tarde.",
     txCubriendo: "Estamos cubriendo el costo de la red por vos…",
+    // Las campañas de personas: el comprobante de una lista de líneas de persona.
+    vListaDePersonas: "Cada línea es una persona anotada, escrita de forma que no dice quién es.",
+    vLugarDeLaLista: "Lugar {n} de la lista",
   },
   en: {
     badge: 'Draw for your <span class="rotating" data-words="meetup|class|event|workshop|talk|conference">meetup</span>',
@@ -6723,6 +6726,9 @@ export const T: Record<Lang, Dict> = {
     sortearPropio: "Draw paying with my account",
     sorteoMasTarde: "Your draw stays in My draws: you can pick it up from there later.",
     txCubriendo: "We're covering the network cost for you…",
+    // People campaigns: the receipt of a list of person lines.
+    vListaDePersonas: "Each line is a person who signed up, written so it doesn't say who they are.",
+    vLugarDeLaLista: "Spot {n} on the list",
   },
 };
 

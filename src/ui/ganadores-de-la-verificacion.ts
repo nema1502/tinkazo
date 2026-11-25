@@ -1,4 +1,5 @@
 import { esc } from "../dom";
+import { esListaDePersonas } from "../campana/forma-de-lista";
 import { texto as t } from "../idioma";
 import { isTurnOrder } from "../modos/turnos";
 import { cierraComoReparto, nombreDePersona, salieronVariasVeces } from "../participaciones";
@@ -14,9 +15,18 @@ import { htmlDeTurnos } from "./lista-de-turnos";
  * son decenas de miles de píxeles, y «Se lleva» no es lo que dice un orden. El comprobante no cambia de forma: el orden se
  * reconoce por la cantidad y el nombre que ya trae.
  *
+ * Una lista de personas (toda de líneas de persona, de una campaña de personas) no nombra a nadie: cada ganadora dice
+ * «Lugar n de la lista», el lugar en la lista sellada que cualquiera recalcula, y nunca la línea. Con una lista de cuentas
+ * o de nombres, todo sigue como siempre.
+ *
  * Vive aparte, sin `state.ts` ni `i18n.ts` (la página de verificación no los carga): la cara de cada persona la pasa quien llama.
  * Para probar sin cargar toda la página.
  */
+/** Cómo se nombra a quien ganó en una lista de personas: su lugar en la lista sellada, que empieza en 1. */
+export function lugarDeLaLista(indice: number): string {
+  return t("vLugarDeLaLista").replace("{n}", String(indice + 1));
+}
+
 export function htmlDeLosGanadores(
   names: readonly string[],
   winners: readonly number[],
@@ -24,14 +34,16 @@ export function htmlDeLosGanadores(
   avatar: (nombre: string, px: number) => string,
   porPersona = false,
 ): string {
+  // Una lista de personas se nombra siempre por el lugar, también si fuera un orden de turnos.
+  const porLugar = esListaDePersonas(names);
   // Sin título: el encabezado de la página (`#v-result-t`) ya dice «El orden de los turnos».
-  if (isTurnOrder(names.length, winners.length, premio)) return htmlDeTurnos(names, winners, { titulo: false, sinSufijos: porPersona });
+  if (!porLugar && isTurnOrder(names.length, winners.length, premio)) return htmlDeTurnos(names, winners, { titulo: false, sinSufijos: porPersona });
   // Con reparto que cierra, la tarjeta nombra a la persona, sin la marca de la línea sellada, como el resultado.
   const lecturaPorPersona = porPersona && cierraComoReparto(names);
-  const mostrar = (linea: string): string => (lecturaPorPersona ? nombreDePersona(linea) : linea);
+  const mostrar = (linea: string, i: number): string => (porLugar ? lugarDeLaLista(i) : lecturaPorPersona ? nombreDePersona(linea) : linea);
   const tarjetas = winners
     .map((i) => {
-      const name = mostrar(names[i] ?? "");
+      const name = mostrar(names[i] ?? "", i);
       return `<div class="winner-card">
         <img src="${avatar(name, 128)}" alt="" />
         <div>
