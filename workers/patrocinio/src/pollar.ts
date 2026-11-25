@@ -185,18 +185,26 @@ function viaDe(contenido: Record<string, unknown>): "google" | "otra" | null {
 /** Lo más largo que se conserva del valor de la vía que mandó el proveedor. */
 const LARGO_VIA_CRUDA = 32;
 
+/** La marca que cierra un valor al que se le perdió algo al sanearlo. No está en lo permitido: nadie la puede mandar. */
+const MARCA_DE_PERDIDA = "~";
+
 /**
- * El valor de la vía, listo para escribirlo en el registro del servicio y para nada más: minúsculas, solo letras, números,
- * punto, guion, guion bajo y dos puntos (lo demás se descarta: espacios, arroba, barras, invisibles), cortado a 32. Una
- * marca fija cuando el campo falta (`sin-campo`), no es texto (`no-es-texto`) o no deja nada (`vacio`). Sirve para ver qué
- * mandó el proveedor si la sala rechaza a todos, sin que un dato de la persona pueda colarse. Nunca sale en una respuesta
- * ni se guarda.
+ * El valor de la vía, listo para escribirlo en el registro del servicio y para nada más. Parte de lo mismo que compara
+ * `viaDe` (sin espacios al principio ni al final y en minúsculas) y deja solo letras, números, punto, guion, guion bajo y dos
+ * puntos, cortado a 32. Si al sanear se perdió algo (un carácter invisible, un espacio de en medio, un signo, o lo que pasaba
+ * del tope), el valor termina con `~`, que cuenta dentro de los 32. Así el registro dice exactamente `google` cuando la sala
+ * decide Google, y `google~` cuando mandaron algo que se parece pero la sala rechaza. Una marca fija cuando el campo falta
+ * (`sin-campo`), no es texto (`no-es-texto`) o viene vacío (`vacio`). Sirve para ver qué mandó el proveedor si la sala
+ * rechaza a todos, sin que un dato de la persona pueda colarse. Nunca sale en una respuesta ni se guarda.
  */
 export function sanearVia(x: unknown): string {
   if (x === undefined || x === null) return "sin-campo";
   if (typeof x !== "string") return "no-es-texto";
-  const v = x.toLowerCase().replace(/[^a-z0-9._:-]/g, "").slice(0, LARGO_VIA_CRUDA);
-  return v === "" ? "vacio" : v;
+  const base = x.trim().toLowerCase();
+  if (base === "") return "vacio";
+  const limpio = base.replace(/[^a-z0-9._:-]/g, "");
+  if (limpio === base && limpio.length <= LARGO_VIA_CRUDA) return limpio;
+  return limpio.slice(0, LARGO_VIA_CRUDA - MARCA_DE_PERDIDA.length) + MARCA_DE_PERDIDA;
 }
 
 /** Una G de Stellar con su suma de control, o null. */
