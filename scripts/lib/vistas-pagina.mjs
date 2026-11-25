@@ -73,6 +73,129 @@ export async function evidenciaDelFallo(page, fotografiar, archivo, ms = FALLO.e
   return r;
 }
 
+/** Desplazar: cuánto espera a que el elemento se dibuje antes de rendirse. */
+export const DESPLAZAR = { esperaMs: 10_000 };
+
+/**
+ * Lleva `selector` al centro de la pantalla, pero solo si de verdad se dibuja: un elemento que está en la
+ * página con `display: none` (como la caja del resultado antes de que haya resultado) no se puede desplazar,
+ * y hacerlo sin avisar daba una foto equivocada. `esperarVisible(page, selector, ms)` lanza si no se ve a tiempo.
+ */
+export async function desplazar(page, selector, esperarVisible) {
+  await esperarVisible(page, selector, DESPLAZAR.esperaMs);
+  await page.eval(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: 'center', behavior: 'instant' })`);
+}
+
+/** Antes de la foto: cuánto se espera a las imágenes, cuántas pantallas se recorren y cada cuánto. */
+export const IMAGENES = { esperaMs: 10_000, pantallasMax: 90, pasoMs: 120 };
+
+/**
+ * El guion que corre en la página antes de la foto. Con la página entera la recorre de a una pantalla (las
+ * imágenes diferidas solo se piden al acercarse) y vuelve arriba. Después espera, hasta `esperaMs`, a que todas
+ * las imágenes que se dibujan estén completas (las de toda la página, o las de la pantalla si la foto es de una
+ * sola) y a las tipografías, y devuelve cuántas había y cuántas quedaron sin completar. Las que no se dibujan
+ * (escondidas por el tema, por ejemplo) no se esperan: el navegador no las pide nunca.
+ */
+export function guionDeImagenes(entera, { esperaMs = IMAGENES.esperaMs, pasoMs = IMAGENES.pasoMs } = {}) {
+  return `(async () => {
+  const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+  const entera = ${entera ? "true" : "false"};
+  if (entera) {
+    for (let i = 0; i < ${IMAGENES.pantallasMax}; i++) {
+      window.scrollBy({ top: window.innerHeight, left: 0, behavior: 'instant' });
+      await dormir(${Number(pasoMs)});
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) break;
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }
+  const dibujadas = () => [...document.images].filter((i) => {
+    if (!i.getClientRects().length) return false;
+    if (entera) return true;
+    const r = i.getBoundingClientRect();
+    return r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
+  });
+  const fin = Date.now() + ${Number(esperaMs)};
+  while (dibujadas().some((i) => !i.complete) && Date.now() < fin) await dormir(100);
+  await Promise.race([document.fonts.ready, dormir(5000)]);
+  const lista = dibujadas();
+  return JSON.stringify({ imagenes: lista.length, sinCompletar: lista.filter((i) => !i.complete).length });
+})()`;
+}
+
+/** Deja la página lista para la foto (ver `guionDeImagenes`). Devuelve `{ imagenes, sinCompletar }`. */
+export async function prepararFoto(page, entera, opciones) {
+  const d = JSON.parse(await page.eval(guionDeImagenes(entera, opciones)));
+  return { imagenes: d.imagenes, sinCompletar: d.sinCompletar };
+}
+
+/**
+ * El guion que se inyecta en cada documento de la pestaña para que no se abra una ventana nueva hacia otro
+ * sitio. La pestaña principal ya no puede salir del sitio servido (el dominio Fetch, abajo), pero un enlace
+ * con `target="_blank"` abre otra pestaña, que es otro objetivo del navegador y no pasa por ese corte. El
+ * guion frena, en la fase de captura, el clic en un enlace http o https de otro origen que abre ventana nueva
+ * (con el destino propio, el de la etiqueta base o uno con nombre), un `window.open` a otro origen y un
+ * formulario que manda a otro origen en ventana nueva, y avisa con la función `tinkazoFuera` (sin consulta
+ * ni fragmento). Es código fijo del guion: nada de lo que llega de la lista de vistas se mezcla en él, salvo
+ * el origen servido, que entra como texto JSON.
+ */
+export function guionContraVentanasNuevas(origen) {
+  return `(() => {
+  const ORIGEN = ${JSON.stringify(origen)};
+  const EN_ESTA = ['', '_self', '_top', '_parent'];
+  const fuera = (dir) => {
+    try {
+      const u = new URL(dir, document.baseURI);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+      return u.origin === ORIGEN ? null : u.origin + u.pathname;
+    } catch (e) {
+      return null;
+    }
+  };
+  const avisar = (anotada) => {
+    try {
+      if (typeof window.tinkazoFuera === 'function') window.tinkazoFuera(anotada);
+    } catch (e) {}
+  };
+  const texto = (x) => String((x && typeof x === 'object' && 'baseVal' in x ? x.baseVal : x) || '');
+  const deLaBase = () => {
+    const b = document.querySelector('base[target]');
+    return b ? String(b.target || '') : '';
+  };
+  window.addEventListener('click', (ev) => {
+    const a = ev.target && typeof ev.target.closest === 'function' ? ev.target.closest('a[href], area[href]') : null;
+    if (!a) return;
+    if (EN_ESTA.includes(texto(a.target) || deLaBase())) return;
+    const anotada = fuera(texto(a.href));
+    if (!anotada) return;
+    ev.preventDefault();
+    if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+    avisar(anotada);
+  }, true);
+  window.addEventListener('submit', (ev) => {
+    const f = ev.target;
+    if (!f || typeof f.getAttribute !== 'function') return;
+    const s = ev.submitter;
+    const destino = (s && s.formTarget) || texto(f.target) || deLaBase();
+    if (EN_ESTA.includes(destino)) return;
+    const accion = (s && s.getAttribute && s.getAttribute('formaction')) || f.getAttribute('action') || '';
+    const anotada = fuera(accion);
+    if (!anotada) return;
+    ev.preventDefault();
+    avisar(anotada);
+  }, true);
+  const abrir = window.open;
+  window.open = function (...args) {
+    const dir = args[0];
+    const anotada = dir === undefined || dir === null || dir === '' ? null : fuera(String(dir));
+    if (anotada) {
+      avisar(anotada);
+      return null;
+    }
+    return abrir.apply(this, args);
+  };
+})()`;
+}
+
 /**
  * Que la pestaña no salga del sitio servido. Un clic en un enlace externo hacía que la máquina visitara
  * ese sitio antes de que el guion lo notara. Con el dominio Fetch del protocolo se pausan solo las
@@ -92,6 +215,11 @@ export async function cortarFueraDelOrigen(page, base) {
     try {
       m = JSON.parse(ev.data);
     } catch {
+      return;
+    }
+    // Una ventana nueva hacia otro sitio, frenada por el guion de cada documento (ver `guionContraVentanasNuevas`).
+    if (m.method === "Runtime.bindingCalled" && m.params?.name === "tinkazoFuera") {
+      fuera.push(String(m.params.payload).slice(0, 300));
       return;
     }
     if (m.method !== "Fetch.requestPaused") return;
@@ -124,6 +252,10 @@ export async function cortarFueraDelOrigen(page, base) {
     }
   });
   await page.send("Fetch.enable", { patterns: [{ resourceType: "Document", requestStage: "Request" }] });
+  // Las ventanas nuevas (target="_blank", window.open) son otro objetivo del navegador y el corte de arriba no las ve:
+  // el guion las frena antes de que se abran y avisa por el binding (que se pide antes, para que el guion lo encuentre).
+  await page.send("Runtime.addBinding", { name: "tinkazoFuera" });
+  await page.send("Page.addScriptToEvaluateOnNewDocument", { source: guionContraVentanasNuevas(origen) });
   return {
     fuera,
     revisar() {

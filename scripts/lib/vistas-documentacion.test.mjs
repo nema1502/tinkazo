@@ -54,6 +54,26 @@ describe("las recetas de la cabecera del guion", () => {
     expect(con150.pasos).toEqual(base.pasos);
     expect(con150.pausaMs).toBe(base.pausaMs);
   });
+
+  it("el resultado de la demostración espera al ganador y recién después desplaza la caja", () => {
+    const r = recetas.find((x) => x.nombre === "resultado-demo");
+    expect(r.pasos).toEqual([
+      { accion: "esperar", selector: ".winner-name" },
+      { accion: "pausa", ms: 1500 },
+      { accion: "desplazar", selector: "#winner-box" },
+    ]);
+    expect(r.esperar).toBeUndefined();
+  });
+
+  it("ninguna receta desplaza sin haber esperado antes algo de la página", () => {
+    for (const r of recetas) {
+      const pasos = r.pasos ?? [];
+      pasos.forEach((p, i) => {
+        if (p.accion !== "desplazar") return;
+        expect(pasos.slice(0, i).some((q) => q.accion === "esperar" || q.accion === "clicHasta"), r.nombre).toBe(true);
+      });
+    }
+  });
 });
 
 describe("el ejemplo del comentario del flujo de auditores", () => {
