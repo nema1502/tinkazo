@@ -373,7 +373,7 @@ describe("la cadena del regalo", () => {
     expect(srv.reclamar).toHaveBeenCalledTimes(1);
   });
 
-  it("un pedido que se ve en la última lectura, aunque termine pasado el tope, cuenta como encontrado", async () => {
+  it("un pedido que aparece en una lectura que empezó dentro del tiempo y termina pasado el tope cuenta como encontrado", async () => {
     const srv = servidorFalso(true);
     const cf = cuentaFalsa();
     await abrir(srv, cf);

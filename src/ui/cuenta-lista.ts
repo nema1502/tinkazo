@@ -1768,9 +1768,10 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   /**
    * Después del canje, con la cuenta que se abre en el momento: el pedido de crear la cuenta, cada 2 segundos y hasta
    * `PEDIDO_TOPE_MS` medidos con la hora (no contando vueltas), sin pedirle a la billetera que relea de verdad (el kit ya la
-   * mira solo), salvo al volver a la pestaña. Con la pestaña congelada, al volver se lee en el acto. Un pedido que se ve en
-   * la última lectura cuenta como «hay», aunque la lectura haya terminado pasado el tope. «sin-lectura»: ninguna lectura
-   * contestó.
+   * mira solo), salvo al volver a la pestaña. Con la pestaña congelada, al volver se lee en el acto. «hay» si el pedido
+   * aparece en una lectura que empezó dentro del tiempo, aunque termine un poco después: una lectura que empieza pasado el
+   * tope no vota, porque el toque que la pidió es de hace rato, y se dice que falta para que la persona toque «Probar de
+   * nuevo». «sin-lectura»: ninguna lectura contestó.
    */
   async function esperarPedido(): Promise<"hay" | "lista" | "no" | "sin-lectura"> {
     const hasta = Date.now() + PEDIDO_TOPE_MS;
@@ -1778,6 +1779,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     for (let i = 0; ; i++) {
       const despertada = i > 0 ? await pausa(PEDIDO_CADA_MS) : false;
       let e: EstadoOficial | null = null;
+      const empezo = Date.now();
       try {
         // Sin pedirle a Pollar que relea la billetera, como siempre: solo al volver a la pestaña se le pide de verdad.
         const resto = hasta - Date.now();
@@ -1791,7 +1793,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         leyo = true;
         st.est = e;
         if (e.activacion === "lista") return "lista";
-        if (e.activacion === "falta") return "hay";
+        if (e.activacion === "falta") return empezo < hasta ? "hay" : "no";
       }
       if (Date.now() >= hasta) return leyo ? "no" : "sin-lectura";
     }
