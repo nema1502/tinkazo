@@ -67,3 +67,23 @@ export const TOPE_TOKEN_MS = 8_000;
  * total es el más largo entre el tope pedido y esta ventana. Un vencimiento nunca toca la marca de la sesión.
  */
 export const VENTANA_TOKEN_MS = 20_000;
+
+/**
+ * Cuánto sigue mirando al proveedor el retomo de la cuenta después de la primera mirada: la ventana paciente (issue 89).
+ * Con la red cargada de un stand, la `ready()` del kit puede contestar a los 10 o 12 segundos, y devolver
+ * "no hay cuenta" al primer vencido dejaba a quien ya entró con la página sin sesión, aunque la marca siguiera.
+ *
+ * Espera creciente: la primera espera es `LISTO_MS`, cada vuelta repite el doble de la anterior sin pasar de lo que
+ * queda de la ventana, y en cada vuelta se gana apenas el proveedor contesta (la carrera con su `ready()` se resuelve
+ * sola, sin que la gane el temporizador). Mientras espera, la marca no se toca: solo el chequeo del final, con el kit ya
+ * listo y sin sesión, la puede olvidar, como antes. Si el proveedor sigue afuera después de la ventana, `restore`
+ * devuelve `null` con la marca en pie: la próxima recarga lo vuelve a intentar y la página queda con su salida clara.
+ */
+export const VENTANA_RETOMA_MS = 30_000;
+
+/**
+ * Hasta cuándo la cabecera dice "Retomando tu cuenta…" antes de cortar por si algo queda colgado. Tiene que ser más
+ * largo que la ventana de la retoma, con margen para bajar el SDK del proveedor antes de que empiece: si cortara antes,
+ * la cabecera ofrecería Entrar con la sesión todavía en camino. Termina apenas la retoma termina, mucho antes que esto.
+ */
+export const FUSIBLE_DE_RETOMA_MS = VENTANA_RETOMA_MS + 10_000;

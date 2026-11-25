@@ -11,7 +11,7 @@ import {
   urlForMode,
   type NetworkName,
 } from "../stellar/config";
-import { hasPollarKey, leerMarcaPollar } from "../stellar/pollar-config";
+import { FUSIBLE_DE_RETOMA_MS, hasPollarKey, leerMarcaPollar } from "../stellar/pollar-config";
 import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
 import { precalentarSello } from "./anchor";
@@ -420,8 +420,8 @@ export function initWalletUI(): void {
     terminarDeRetomar();
   };
   void Promise.allSettled(ventanaDeGoogle ? [] : [restorePollar(), restoreSession()]).then(fin);
-  // Por si algo queda colgado: nunca más de 12 s diciendo que se retoma.
-  setTimeout(fin, 12_000);
+  // Por si algo queda colgado: el fusible es más largo que la ventana de la retoma (30 s) para no ofrecer Entrar con la sesión en camino.
+  setTimeout(fin, FUSIBLE_DE_RETOMA_MS);
   // Llegó de Practicar en Prueba (modo-ui.ts): la marca se consume ahora, una sola vez, y al terminar de retomar entra con
   // la cuenta de prueba sin abrir la ventana. Si volvió una sesión guardada, entra con esa.
   if (tomarMarcaDePractica()) void retomaTerminada.then(() => entrarAPracticar());
