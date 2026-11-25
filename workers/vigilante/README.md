@@ -36,7 +36,7 @@ A diferencia del registro de GitHub (público), el correo dice qué pasa, los cr
 
 Un guion puede crear o activar muchas cuentas sin pasar por el stand: con el QR del evento a la vista, el equipo tiene que enterarse en minutos, no al otro día (issue 177). El conteo lo hace el portero, que es quien lee los movimientos de los créditos de Pollar (`workers/patrocinio/src/lectura-cuentas.ts`), y lo manda en el bloque `cuentas` de `/estado`; el vigilante decide y manda el correo. La hora la marca el propio conteo, así que el reloj del vigilante no decide nada.
 
-El umbral son las dos variables de la tabla de abajo: `CUENTAS_UMBRAL` (60 por hora, el ejemplo del issue) fuera de un evento, y el cupo del evento en `CUENTAS_EVENTO_CUPO` el día del evento, que toma el lugar del umbral mientras esté puesta. Un valor raro vuelve al de siempre. Cada correo nombra qué pasó, la cifra de la hora y qué hacer (pausar las altas); con los dos motivos arriba, un solo correo nombra los dos.
+El umbral son las dos variables de la tabla de abajo: `CUENTAS_UMBRAL` (200 por hora, para que un evento de 150 personas no dé falsa alarma) fuera de un evento, y el cupo del evento en `CUENTAS_EVENTO_CUPO` el día del evento, que toma el lugar del umbral mientras esté puesta. Un valor raro vuelve al de siempre. Cada correo nombra qué pasó, la cifra de la hora y qué hacer (pausar las altas); con los dos motivos arriba, un solo correo nombra los dos.
 
 ## El resumen del día
 
@@ -91,7 +91,7 @@ Lo demás es `404`, y un método que no corresponde, `405`. Ninguna ruta manda c
 | `PORTERO_URL` | variable | `https://pm.tinkazo.app` |
 | `CORREO_USUARIO`, `CORREO_DOMINIO` | variables | Desde qué dirección sale el correo (`avisos` en `tinkazo.app`). La dirección entera no se escribe en el repositorio |
 | `RESUMEN_CADA_HORAS` | variable | `24` por defecto |
-| `CUENTAS_UMBRAL` | variable | El umbral por hora del aviso de cuentas nuevas y activaciones (issue 177). `60` por defecto |
+| `CUENTAS_UMBRAL` | variable | El umbral por hora del aviso de cuentas nuevas y activaciones (issue 177). `200` por defecto |
 | `CUENTAS_EVENTO_CUPO` | variable | El cupo de cuentas del evento: con la variable puesta, ese cupo toma el lugar del umbral. Vacía, no hay evento y vale el umbral de siempre |
 | `MEMORIA` | KV | Se crea con `npx wrangler@4 kv namespace create MEMORIA` |
 | `CORREO` | `send_email` | El binding de correo de Cloudflare |

@@ -18,8 +18,9 @@ function bloqueCuentas(movimientos: unknown[], desde: number, ahora: number): Re
 }
 
 describe("umbralDeCuentas: el umbral configurable de la vuelta", () => {
-  it("por defecto es 60 por hora, como el ejemplo del issue, y con el evento abierto es su cupo", () => {
-    expect(umbralDeCuentas({})).toEqual({ base: 60, cupoEvento: null });
+  it("por defecto es 200 por hora, que un evento de 150 personas no alcanza, y con el evento abierto es su cupo", () => {
+    expect(CUENTAS_UMBRAL_POR_DEFECTO).toBe(200);
+    expect(umbralDeCuentas({})).toEqual({ base: 200, cupoEvento: null });
     expect(umbralDeCuentas({ CUENTAS_UMBRAL: "120", CUENTAS_EVENTO_CUPO: "300" })).toEqual({ base: 120, cupoEvento: 300 });
   });
 
@@ -134,7 +135,7 @@ describe("la vuelta con el conteo del portero: debajo de todo, un aviso y ni uno
   const ahora = T0 + MINUTO;
 
   it("arriba del umbral manda un correo, dentro de la misma hora no repite y en la hora siguiente vuelve a avisar", async () => {
-    const m = mundoFalso({ estado: estadoBien({ cuentas: bloqueCuentas(conMovimientosArriba(61), desde, ahora) }) });
+    const m = mundoFalso({ estado: estadoBien({ cuentas: bloqueCuentas(conMovimientosArriba(201), desde, ahora) }) });
     const r = await m.vuelta();
     expect(m.correo.enviados).toHaveLength(1);
     expect(m.correo.enviados[0]?.subject).toBe("Muchas cuentas nuevas en una hora");
@@ -147,14 +148,20 @@ describe("la vuelta con el conteo del portero: debajo de todo, un aviso y ni uno
     m.portero.estado = estadoBien({
       cuentas: {
         porHora: [
-          { hora: iso(T0), nuevas: 61, activaciones: 0 },
-          { hora: iso(T0 + HORA), nuevas: 65, activaciones: 0 },
+          { hora: iso(T0), nuevas: 201, activaciones: 0 },
+          { hora: iso(T0 + HORA), nuevas: 205, activaciones: 0 },
         ],
         completo: true,
       },
     });
     await m.vueltaEn(60);
     expect(m.correo.enviados).toHaveLength(2);
+  });
+
+  it("un evento de 150 personas que se anotan en la hora no dispara el aviso con el umbral de siempre", async () => {
+    const m = mundoFalso({ estado: estadoBien({ cuentas: bloqueCuentas(conMovimientosArriba(150), desde, ahora) }) });
+    await m.vuelta();
+    expect(m.correo.enviados).toEqual([]);
   });
 
   it("debajo del umbral no manda nada", async () => {
@@ -164,7 +171,7 @@ describe("la vuelta con el conteo del portero: debajo de todo, un aviso y ni uno
   });
 
   it("con el cupo del evento puesto, el umbral es el cupo y no el de siempre", async () => {
-    const m = mundoFalso({ env: { CUENTAS_EVENTO_CUPO: "100" }, estado: estadoBien({ cuentas: bloqueCuentas(conMovimientosArriba(61), desde, ahora) }) });
+    const m = mundoFalso({ env: { CUENTAS_EVENTO_CUPO: "300" }, estado: estadoBien({ cuentas: bloqueCuentas(conMovimientosArriba(201), desde, ahora) }) });
     await m.vuelta();
     expect(m.correo.enviados).toEqual([]);
   });
