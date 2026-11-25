@@ -1,4 +1,4 @@
-> **English:** to report a security issue, email hola@tinkazo.app with the subject "Security", or use the "Report a vulnerability" button in this repository's Security tab if you see it. Please do not open a public issue. In scope are the draw contract (`tinkazo-raffle`), the protocol, the site, the services in `workers/` and the code in this repository. We do not offer cash bounties and we do not commit to response times. Known and accepted risks are in [docs/threat-model.en.md](docs/threat-model.en.md).
+> **English:** to report a security issue, email hola@tinkazo.app with the subject "Security". Please do not open a public issue. In scope are the draw contract (`tinkazo-raffle`), the protocol, the site, the services in `workers/` and the code in this repository. We do not offer cash bounties and we do not commit to response times. Known and accepted risks are in [docs/threat-model.en.md](docs/threat-model.en.md).
 
 # Política de seguridad
 
@@ -6,7 +6,7 @@ Si encontraste una falla en Tinkazo, gracias por avisarnos antes de contarla.
 
 ## Cómo avisar
 
-Escribí a **hola@tinkazo.app** con el asunto "Seguridad". Si en la pestaña Seguridad de este repositorio ves el botón **Reportar una vulnerabilidad**, también podés usarlo: el aviso queda en privado entre vos y quienes mantienen el proyecto.
+Escribí a **hola@tinkazo.app** con el asunto "Seguridad".
 
 No abras un issue ni un pedido público con el detalle: ahí lo ve cualquiera antes de que esté arreglado.
 
@@ -29,9 +29,9 @@ Contanos qué encontraste, los pasos para reproducirlo (la dirección del contra
 
 ## Qué podés esperar de nosotros
 
-Leemos cada aviso y te escribimos para decirte si lo consideramos una vulnerabilidad. Somos un equipo chico y no fijamos plazos. Si no tuviste respuesta, volvé a escribir.
+Intentamos leer cada aviso y responder, pero no podemos asegurarlo. Somos un equipo chico y no fijamos plazos. Si no tuviste respuesta, volvé a escribir.
 
-El contrato no se puede actualizar. Si la falla está en el contrato desplegado, el arreglo es un contrato nuevo en otra dirección, con aviso en el sitio, y puede llevar más tiempo. Te mantenemos al tanto.
+El contrato no se puede actualizar. Si la falla está en el contrato desplegado, el arreglo es un contrato nuevo en otra dirección, con aviso en el sitio, y puede llevar más tiempo. Si podemos, te avisamos del avance.
 
 No ofrecemos recompensas en dinero. Cuando publiquemos el arreglo podemos nombrarte como quien lo encontró, si lo querés.
 
