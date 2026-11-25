@@ -149,6 +149,26 @@ describe("SECURITY.md", () => {
   });
 });
 
+describe("textos públicos de gobierno", () => {
+  const formularios = archivosDeFormularios().map((n) => ({ archivo: n, texto: leer(`.github/ISSUE_TEMPLATE/${n}`) }));
+  const todos = [
+    { archivo: "CONTRIBUTING.md", texto: contribuir },
+    { archivo: "SECURITY.md", texto: seguridad },
+    { archivo: ".github/pull_request_template.md", texto: plantilla },
+    ...formularios,
+  ];
+
+  it("ninguno promete cuánto tarda la atención", () => {
+    const promesas = /\b(más rápido|a la brevedad|en menos de \d+|en \d+ (horas|días|semanas)|dentro de \d+ )/i;
+    expect(todos.filter((t) => promesas.test(t.texto)).map((t) => t.archivo)).toEqual([]);
+  });
+
+  it("ninguno usa palabras que el proyecto evita en lo visible", () => {
+    const evitadas = /\b(plata|rifa|rifas|lotería|apuesta|apuestas)\b/i;
+    expect(todos.filter((t) => evitadas.test(t.texto)).map((t) => t.archivo)).toEqual([]);
+  });
+});
+
 /** Un campo de un formulario de issue, con lo que la prueba necesita mirar. */
 type Campo = { type: string; id?: string; label?: string; value?: string; opciones: string[] };
 type Formulario = { archivo: string; error?: string; claves: Record<string, string>; labels: string[]; campos: Campo[] };
