@@ -92,7 +92,8 @@ describe("la cabecera mientras la sesión guardada vuelve", () => {
     expect(puerta()).toContain(t("gateRetomando"));
     await vi.advanceTimersByTimeAsync(2_000);
     expect(ui.estadoDeLaCuenta().estado).toBe("fuera");
-    expect(puerta()).not.toContain(t("gateRetomando"));
+    // La puerta escondida deja su último texto: lo que cuenta es que no se ve.
+    expect(puertaVisible()).toBe(false);
   });
 
   it("cuando la sesión llega, aunque sea después del fusible, queda adentro y la puerta se va", async () => {

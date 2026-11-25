@@ -105,6 +105,18 @@ afterEach(async () => {
   await new Promise((r) => setTimeout(r, 0));
 });
 
+/**
+ * Adelanta el reloj y deja que terminen los módulos que la cabecera baja por detrás (`import()`), que no dependen del
+ * reloj de mentira: sin esto, lo que pasa después de bajarlos se mira antes de tiempo.
+ */
+async function asentar(ms: number): Promise<void> {
+  await vi.advanceTimersByTimeAsync(ms);
+  for (let i = 0; i < 3; i++) {
+    await vi.dynamicImportSettled();
+    await vi.advanceTimersByTimeAsync(0);
+  }
+}
+
 const puerta = (): string => document.getElementById("gate")?.textContent ?? "";
 const puertaVisible = (): boolean => document.getElementById("gate")?.style.display !== "none";
 
@@ -123,14 +135,15 @@ describe("la pantalla se comporta como siempre y la paciencia corre por detrás"
 
   it("a los 7 segundos retoma y a los 9 ya no: ofrece Entrar, y a los 21 la cuenta se abre sola", async () => {
     const { ui, t } = await abrir();
-    await vi.advanceTimersByTimeAsync(7_000);
+    await asentar(7_000);
     expect(ui.estadoDeLaCuenta().estado).toBe("retomando");
     expect(puerta()).toContain(t("gateRetomando"));
-    await vi.advanceTimersByTimeAsync(2_000);
+    await asentar(2_000);
     expect(ui.estadoDeLaCuenta().estado, "pasada la primera mirada la cabecera ofrece Entrar").toBe("fuera");
-    expect(puerta()).not.toContain(t("gateRetomando"));
+    // La puerta escondida deja su último texto: lo que cuenta es que no se ve.
+    expect(puertaVisible()).toBe(false);
     expect(ui.currentSession()).toBeNull();
-    await vi.advanceTimersByTimeAsync(12_000);
+    await asentar(12_000);
     expect(ui.currentSession()?.address, "la retoma paciente abrió la cuenta sin que nadie toque nada").toBe(DIR);
     expect(ui.estadoDeLaCuenta().estado).toBe("dentro");
     expect(puertaVisible()).toBe(false);
@@ -140,16 +153,16 @@ describe("la pantalla se comporta como siempre y la paciencia corre por detrás"
     h.avisa = false;
     h.tarda = 10 * FUSIBLE_DE_RETOMA_MS;
     const { ui } = await abrir();
-    await vi.advanceTimersByTimeAsync(FUSIBLE_DE_RETOMA_MS - 500);
+    await asentar(FUSIBLE_DE_RETOMA_MS - 500);
     expect(ui.estadoDeLaCuenta().estado).toBe("retomando");
-    await vi.advanceTimersByTimeAsync(1_000);
+    await asentar(1_000);
     expect(ui.estadoDeLaCuenta().estado).toBe("fuera");
   });
 
   it("una sesión que vuelve a tiempo se abre sin pasar por Entrar", async () => {
     h.tarda = 2_000;
     const { ui } = await abrir();
-    await vi.advanceTimersByTimeAsync(2_500);
+    await asentar(2_500);
     expect(ui.currentSession()?.address).toBe(DIR);
     expect(h.conexiones).toBe(0);
   });
@@ -158,12 +171,14 @@ describe("la pantalla se comporta como siempre y la paciencia corre por detrás"
 describe("la retoma tardía contra una entrada nueva", () => {
   it("si la persona ya entró de nuevo cuando la retoma llega, gana la sesión que ya está y no se abre nada dos veces", async () => {
     const { ui } = await abrir();
-    await vi.advanceTimersByTimeAsync(9_000);
+    await asentar(9_000);
     expect(ui.estadoDeLaCuenta().estado).toBe("fuera");
-    await ui.entrar();
+    const entro = ui.entrar();
+    await asentar(10);
+    await entro;
     expect(ui.currentSession()?.address).toBe(OTRA);
     expect(h.activaciones).toBe(1);
-    await vi.advanceTimersByTimeAsync(15_000);
+    await asentar(15_000);
     expect(ui.currentSession()?.address, "la retoma tardía no pisa la sesión nueva").toBe(OTRA);
     expect(h.activaciones, "y no activa la billetera otra vez").toBe(1);
   });
@@ -171,24 +186,26 @@ describe("la retoma tardía contra una entrada nueva", () => {
   it("si la ventana de Google sigue abierta cuando la retoma llega, la retoma se descarta y la entrada termina sola", async () => {
     h.conectaTarda = 30_000;
     const { ui } = await abrir();
-    await vi.advanceTimersByTimeAsync(9_000);
+    await asentar(9_000);
     void ui.entrar();
-    await vi.advanceTimersByTimeAsync(12_000);
+    await asentar(1_100);
+    expect(h.conexiones).toBe(1);
+    await asentar(12_000);
     expect(ui.estadoDeLaCuenta().estado, "la retoma llegó pero la entrada sigue en curso").toBe("conectando");
     expect(ui.currentSession()).toBeNull();
     expect(h.activaciones).toBe(0);
-    await vi.advanceTimersByTimeAsync(20_000);
+    await asentar(30_000);
     expect(ui.currentSession()?.address).toBe(OTRA);
     expect(h.activaciones).toBe(1);
   });
 
   it("la retoma tardía que abre la cuenta apaga el pedido de entrar que la puerta tenía puesto", async () => {
     const { ui, t } = await abrir();
-    await vi.advanceTimersByTimeAsync(2_000);
+    await asentar(2_000);
     ui.pedirEntrar();
-    await vi.advanceTimersByTimeAsync(7_000);
+    await asentar(7_000);
     expect(puerta()).toContain(t("cuentaPideGoogle"));
-    await vi.advanceTimersByTimeAsync(12_000);
+    await asentar(12_000);
     expect(ui.currentSession()?.address).toBe(DIR);
     expect(puertaVisible()).toBe(false);
   });
@@ -197,38 +214,38 @@ describe("la retoma tardía contra una entrada nueva", () => {
 describe("Entrar no espera la retoma entera", () => {
   it("con la retoma en camino, Entrar sigue a Google al segundo con el toque vivo", async () => {
     const { ui } = await abrir();
-    await vi.advanceTimersByTimeAsync(2_000);
+    await asentar(2_000);
     expect(ui.estadoDeLaCuenta().estado).toBe("retomando");
     void ui.entrar();
-    await vi.advanceTimersByTimeAsync(900);
+    await asentar(900);
     expect(h.conexiones, "antes del segundo todavía espera").toBe(0);
-    await vi.advanceTimersByTimeAsync(300);
+    await asentar(300);
     expect(h.conexiones, "al segundo abre Google, no a los 8 ni a los 30").toBe(1);
   });
 
   it("si la retoma termina dentro de ese segundo, Entrar no abre Google", async () => {
     h.tarda = 2_500;
     const { ui } = await abrir();
-    await vi.advanceTimersByTimeAsync(2_000);
+    await asentar(2_000);
     void ui.entrar();
-    await vi.advanceTimersByTimeAsync(2_000);
+    await asentar(2_000);
     expect(ui.currentSession()?.address).toBe(DIR);
     expect(h.conexiones).toBe(0);
   });
 
   it("el pedido de entrar sigue al segundo, y cuando la retoma se suelta la puerta ofrece Entrar con el foco", async () => {
     const { ui, t } = await abrir();
-    await vi.advanceTimersByTimeAsync(2_000);
+    await asentar(2_000);
     ui.pedirEntrar();
-    await vi.advanceTimersByTimeAsync(1_200);
+    await asentar(1_200);
     expect(puerta(), "mientras la retoma sigue, la puerta lo dice").toContain(t("gateRetomando"));
-    await vi.advanceTimersByTimeAsync(6_000);
+    await asentar(6_000);
     expect(puerta()).toContain(t("cuentaPideGoogle"));
     expect(document.activeElement?.closest("#gate"), "el foco queda en el botón de la puerta").not.toBeNull();
   });
 
   it("Entrar y el pedido de entrar esperan con un solo tope corto, no con la promesa entera de la retoma", () => {
-    const ui = readFileSync(new URL("./wallet-ui.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+    const ui = readFileSync("src/ui/wallet-ui.ts", "utf8").replace(/\r\n/g, "\n");
     expect(ui).toMatch(/ESPERA_DE_ENTRAR_MS\s*=\s*1_000/);
     // La única espera a la promesa de la retoma es la que lleva su tope.
     const esperas = ui.match(/await retomaTerminada/g) ?? [];
