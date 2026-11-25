@@ -88,11 +88,47 @@ describe("Empresas en la fila de la cabecera del celular", () => {
   it("de 412 a 760 px se ve en la fila y sale de Más, y por debajo de 412 px sigue dentro de Más", () => {
     expect(css).toMatch(/\.topnav a\.nav-empresas-cel \{ display: none; \}/);
     const bloque = css.match(/@media \(min-width: 412px\) and \(max-width: 760px\) \{([^}]*\{[^}]*\}[^}]*\{[^}]*\})\s*\}/)?.[1] ?? "";
-    expect(bloque).toMatch(/\.topnav a\.nav-empresas-cel \{ display: inline-flex; \}/);
+    expect(bloque).toMatch(/\.topnav a\.nav-empresas-cel \{ display: block;/);
     expect(bloque).toMatch(/\.topnav \.mas-lista a\[data-campana-enlace\] \{ display: none; \}/);
     // El enlace de adentro de Más solo se esconde en ese tramo: por debajo de 412 px se ve y desde 761 px la lista no es un menú.
     expect(css.match(/\.topnav \.mas-lista a\[data-campana-enlace\] \{ display: none; \}/g)?.length).toBe(1);
     expect(css).not.toMatch(/min-width: 375px\) and \(max-width: 760px/);
+  });
+});
+
+describe("la fila del celular aguanta la letra agrandada", () => {
+  const bloque412 = css.match(/@media \(min-width: 412px\) and \(max-width: 760px\) \{([^}]*\{[^}]*\}[^}]*\{[^}]*\})\s*\}/)?.[1] ?? "";
+  const regla = bloque412.match(/\.topnav a\.nav-empresas-cel \{([^}]*)\}/)?.[1] ?? "";
+
+  it("Empresas es lo único que cede si no hay lugar: se achica con puntos suspensivos y no empuja a Más fuera de la pantalla", () => {
+    expect(regla).toMatch(/flex: 0 1 auto/);
+    expect(regla).toMatch(/min-width: 44px/);
+    expect(regla).toMatch(/overflow: hidden/);
+    expect(regla).toMatch(/text-overflow: ellipsis/);
+    // Un renglón de 41 px más los 3 px del borde de abajo son los 44 px de siempre.
+    expect(regla).toMatch(/line-height: 41px/);
+    // Ninguna otra entrada de la fila se achica ni se corta.
+    expect(css).not.toMatch(/\.topnav a:not\(\.nav-empresas-cel\)[^{]*\{[^}]*overflow/);
+  });
+
+  it("de 412 a 520 px, con las campañas abiertas, la fila aprieta el relleno de sus cuatro entradas para ganar unos veinte píxeles", () => {
+    const m = css.match(/@media \(min-width: 412px\) and \(max-width: 520px\) \{([\s\S]*?)\r?\n  \}/);
+    expect(m, "falta el tramo de 412 a 520 px").not.toBeNull();
+    const cuerpo = m?.[1] ?? "";
+    // Solo con las campañas abiertas: cerradas, la fila lleva tres entradas y queda como en la rama principal.
+    expect(cuerpo).toMatch(/html\[data-campanas="1"\] header \.topnav a/);
+    expect(cuerpo).toMatch(/html\[data-campanas="true"\] header \.topnav a/);
+    expect(cuerpo).toMatch(/header \.topnav \.mas-btn[^{]*\{[^}]*padding-inline: 5px/);
+    expect(cuerpo).toMatch(/header \.topnav a\.nav-app[^{]*\{[^}]*margin-right: 4px/);
+    // Los blancos de toque no bajan de 44 px de alto, y de ancho el más angosto sigue sobre los 44 px (Sortear mide más de 60).
+    expect(cuerpo).not.toMatch(/min-height: (?:[0-3]\d|4[0-3])px/);
+  });
+
+  it("el tramo apretado no toca la cabecera de las páginas ni la fila sin campañas", () => {
+    const m = css.match(/@media \(min-width: 412px\) and \(max-width: 520px\) \{([\s\S]*?)\r?\n  \}/);
+    const selectores = (m?.[1] ?? "").match(/[^{}]+(?=\{)/g) ?? [];
+    expect(selectores.length).toBeGreaterThan(0);
+    for (const s of selectores) expect(s, s).toMatch(/html\[data-campanas="(?:1|true)"\]/);
   });
 });
 

@@ -1843,9 +1843,20 @@
      Por debajo de 412 px la fila no tiene lugar y sigue dentro de Más: la fila no hace salto de línea ni desborda, y con una letra
      más ancha que la de un teléfono (la de las máquinas de GitHub) Más quedaba cortado contra el borde a 375 px y su flecha a 390, y a 400 px la flecha quedaba a 7 px del borde. */
   .topnav a.nav-empresas-cel { display: none; }
+  /* Con la letra del sistema agrandada (un teléfono con el texto al 110 % o más) cuatro entradas no entran en 380 px. Empresas
+     es la única que cede: se achica con puntos suspensivos hasta 44 px y Más, con su flecha, nunca se corre del borde. Para que
+     funcione el puntos suspensivos es un bloque de un renglón de 41 px (más los 3 px del borde de abajo, los 44 de siempre). */
   @media (min-width: 412px) and (max-width: 760px) {
-    .topnav a.nav-empresas-cel { display: inline-flex; }
+    .topnav a.nav-empresas-cel { display: block; line-height: 41px; flex: 0 1 auto; min-width: 44px; overflow: hidden; text-overflow: ellipsis; }
     .topnav .mas-lista a[data-campana-enlace] { display: none; }
+  }
+  /* Y de 412 a 520 px, con las campañas abiertas, la fila aprieta el relleno de sus cuatro entradas y el aire junto a Sortear: unos
+     veinte píxeles que, en los celulares de 412 y 414 px, son la diferencia entre entrar con la letra del sistema al 120 % o no.
+     Cerradas las campañas la fila lleva tres entradas y queda como era. */
+  @media (min-width: 412px) and (max-width: 520px) {
+    html[data-campanas="1"] header .topnav a, html[data-campanas="true"] header .topnav a,
+    html[data-campanas="1"] header .topnav .mas-btn, html[data-campanas="true"] header .topnav .mas-btn { padding-inline: 5px; }
+    html[data-campanas="1"] header .topnav a.nav-app, html[data-campanas="true"] header .topnav a.nav-app { margin-right: 4px; }
   }
   /* En la fila quedan cinco: Sortear, Mis sorteos, Juegos, Cómo funciona y Para empresas (la quinta se sumó el 25 de noviembre
      de 2026; Seguridad y Precios bajaron al pie el 8 de noviembre). Con siete, entre 1101 y 1279 px y con la cuenta abierta,
