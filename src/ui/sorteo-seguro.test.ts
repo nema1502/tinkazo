@@ -29,6 +29,25 @@ describe("sortearConReintentos: el sorteo reintenta", () => {
     expect(r.dormir.mock.calls.map((c) => c[0])).toEqual([...ESPERAS_DEL_SORTEO_MS]);
   });
 
+  it("con lo ya gastado en otro camino, deja de esperar antes: se descuenta del presupuesto", async () => {
+    const r = reloj();
+    const intentar = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const fin = await sortearConReintentos({ intentar, yaEsta: async () => null, reintentable, yaGastadoMs: 90_000 - 7000, ...r });
+    expect(fin.ok).toBe(false);
+    // 2 s y 4 s caben en 7 s, los 8 s siguientes ya no.
+    expect(intentar).toHaveBeenCalledTimes(3);
+    expect(r.dormir.mock.calls.map((c) => c[0])).toEqual([2000, 4000]);
+  });
+
+  it("sin presupuesto igual hace un intento", async () => {
+    const r = reloj();
+    const intentar = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const fin = await sortearConReintentos({ intentar, yaEsta: async () => null, reintentable, yaGastadoMs: 120_000, ...r });
+    expect(fin.ok).toBe(false);
+    expect(intentar).toHaveBeenCalledTimes(1);
+    expect(r.dormir).not.toHaveBeenCalled();
+  });
+
   it("la red ocupada, la ronda que la cadena todavía no ve y lo que no se sabe también se reintentan", async () => {
     for (const error of [new Error("Sending the transaction to the network failed!\n{\"status\": \"TRY_AGAIN_LATER\"}"), new Error("Transaction simulation failed: \"HostError: Error(Contract, #7)\""), new Error("tx-FAILED"), new Error("sin-confirmar"), { code: -32603, message: "internal error" }]) {
       const r = reloj();
