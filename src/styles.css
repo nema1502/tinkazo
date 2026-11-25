@@ -2177,6 +2177,9 @@
   .puerta .puerta-a { min-height: 44px; margin-top: 2px; display: inline-flex; align-items: center; justify-content: center; text-align: center; width: 100%; }
   /* La tarjeta entera es el enlace: el área de toque del botón se estira a toda la tarjeta, así tocar la imagen también funciona. */
   .puerta .puerta-a::after { content: ""; position: absolute; inset: 0; }
+  /* El botón no se mueve al pasar el mouse: con transform sería el bloque contenedor de su ::after y la tarjeta entera dejaría de ser
+     el área de toque (parpadeo). El realce de la puerta lo da .puerta:hover. */
+  .puerta .puerta-a:hover:not(:disabled), .puerta a.puerta-a:hover { transform: none; box-shadow: var(--sh-sm); }
   .puerta:has(.puerta-a:focus-visible) { outline: 3px solid var(--purple-ink); outline-offset: 3px; }
   .puerta-ico { display: none; }
 
