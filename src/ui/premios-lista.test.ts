@@ -34,6 +34,24 @@ describe("la lista de Tus premios", () => {
     });
   });
 
+  it("un premio vencido o sin confirmar tiene su propio texto, sin fecha", () => {
+    expect(lista({ ok: true, premios: [{ puesto: 0, monto: "100000000", estado: "vencido", hastaMs: null }] })).toEqual({
+      filas: [{ texto: { clave: "prEstadoVencido" }, monto: "10" }],
+    });
+    expect(lista({ ok: true, premios: [{ puesto: 0, monto: "100000000", estado: "sin-confirmar", hastaMs: null }] })).toEqual({
+      filas: [{ texto: { clave: "prEstadoSinConfirmar" }, monto: "10" }],
+    });
+  });
+
+  it("un plazo que no se puede escribir no se inventa: ni la fecha de 1970 ni una pantalla rota", () => {
+    // La fecha de verdad (Intl) lanza con un número que no es finito: la lista no puede romperse por eso.
+    const conIntl = (premios: VistaDeLosPremios) => filasDeLosPremios({ premios, idioma: "es", fecha: (ms) => new Intl.DateTimeFormat("es").format(ms) });
+    for (const hastaMs of [Number.NaN, Number.POSITIVE_INFINITY, null, 8.64e15 + 1]) {
+      const r = conIntl({ ok: true, premios: [{ puesto: 0, monto: "5000000", estado: "por-recibir", hastaMs }] });
+      expect(r, String(hastaMs)).toEqual({ filas: [{ texto: { clave: "prEstadoSinConfirmar" }, monto: "0,5" }] });
+    }
+  });
+
   it("varios premios en el orden en que la promoción los guarda", () => {
     const r = lista({
       ok: true,
