@@ -427,6 +427,7 @@ export default defineConfig({
         confirmar: resolve(__dirname, "confirmar.html"),
         c: resolve(__dirname, "c.html"),
         terminos: resolve(__dirname, "terminos.html"),
+        escucha: resolve(__dirname, "escucha.html"),
       },
     },
   },

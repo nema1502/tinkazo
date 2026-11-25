@@ -799,7 +799,7 @@ function playStepCarrera(s: Session, t: number, step: number): void {
   // Las palmas de la gente, en el dos.
   if (c.palmas > 0 && L > 0.5 && s.gracia < 0.75 && inBar === 4) clap(s, t, c.palmas);
 
-  // La zampoña: el motivo de la ronda, repartido entre dos cañas que se contestan. La octava de arriba solo si cabe en el parlante — y con gracia, cae con el beat.
+  // La zampoña: el motivo de la ronda, repartido entre dos cañas que se contestan. La octava de arriba solo si cabe en el parlante, y con gracia cae con el beat.
   if (c.zampona > 0 && L > p.zamponaDesde) {
     const i = step % s.motif.length;
     const d = s.motif[i] as number;
@@ -883,7 +883,7 @@ export const CAPAS_SHOW: readonly CapaShow[] = ["espera", "tension", "remate", "
 
 /**
  * Cuánto dura cada capa en la pieza que se escucha para elegir. La espera y la tensión son la forma entera
- * que se pide: un comienzo, un desarrollo y un final, sin delatar nunca el resultado — la capa del ganador entra
+ * que se pide: un comienzo, un desarrollo y un final, sin delatar nunca el resultado. La capa del ganador entra
  * solo cuando el show lo dice (`musicCue` con tensión 1), nunca antes, pase lo que pase en la animación.
  */
 export const MOVIMIENTO_DEL_SHOW: Readonly<Record<CapaShow, number>> = { espera: 8, tension: 14, remate: 6, festejo: 4 } as const;
@@ -896,7 +896,7 @@ export const HORA_DEL_SOLO_BOMBO = SEGUNDO_DEL_GOLPE - 3;
 
 /**
  * La tensión (de 0 a 1) que pide el relator en el instante `t` de la pieza del show: la espera quedita, la tensión
- * que crece, el pico del ganador, y después del golpe silencio — el remate y el festejo son otra pieza.
+ * que crece, el pico del ganador, y después del golpe silencio, porque el remate y el festejo son otra pieza.
  * Es la misma curva que en vivo componen la espera y `musicCue`; por eso la toca la página de escucha.
  */
 export function nivelDelShow(t: number): number {
@@ -912,7 +912,7 @@ export const SEMILLA_DE_LA_ESCUCHA = 0x0a110a;
 
 /**
  * La identidad musical de un juego, en datos: lo que la página de escucha (`src/ui/escucha.ts`) toca con
- * el secuenciador de siempre para poder elegir juego por juego, y nada más — en el show de producción no prende
+ * el secuenciador de siempre para poder elegir juego por juego, y nada más. En el show de producción no prende
  * nada nuevo: eso lo decide el dueño escuchando. El formato es el mismo perfil de la música de la carrera
  * (`PerfilMusica`), que es el que el secuenciador ya sabe tocar capa por capa; los ritmos y los instrumentos de
  * cuerpo (charango, zampoña, quena, bombo, guitarra; huayño, caporal, taquirari, cueca…) van como etiquetas de

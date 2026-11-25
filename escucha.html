@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Página de escucha</title>
+<meta name="robots" content="noindex, nofollow" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
+<!--
+  La página de escucha de la música: las candidatas por juego se eligen acá, con oídos, y ninguna se prende
+  en el sitio sin esa elección. Está aparte del selector, sin ningún enlace desde el sitio, fuera del mapa
+  del sitio y con noindex. Se abre con ?escucha=1 (y ?lang=en para el inglés), en el sitio construido y en
+  la vista previa, para escucharla en el celular, en la tablet y en el parlante del proyector.
+-->
+<style>
+  :root {
+    --fondo: #fff6e9;
+    --texto: #171126;
+    --borde: #d9c9b0;
+    --suave: #f1e3cc;
+    --boton: #e6d3b4;
+    --aviso: #7a4a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --fondo: #171126;
+      --texto: #fff6e9;
+      --borde: #3a2f52;
+      --suave: #2a2140;
+      --boton: #3a2f52;
+      --aviso: #ffd9a0;
+    }
+  }
+  :root[data-theme="dark"] {
+    --fondo: #171126;
+    --texto: #fff6e9;
+    --borde: #3a2f52;
+    --suave: #2a2140;
+    --boton: #3a2f52;
+    --aviso: #ffd9a0;
+  }
+  body { margin: 0; font-family: system-ui, sans-serif; background: var(--fondo); color: var(--texto); }
+  main { max-width: 40rem; margin: 0 auto; padding: 1rem; }
+  .apagada { margin: 4rem auto; text-align: center; opacity: 0.8; }
+  h1 { font-size: 1.4rem; }
+  .nota, .aviso-sin-audio { font-size: 0.8rem; opacity: 0.8; }
+  .aviso-sin-audio { color: var(--aviso); opacity: 1; }
+  .nota a { color: inherit; }
+  .grupo { font-size: 1rem; margin: 2rem 0 0; opacity: 0.8; }
+  .tarjeta { border: 1px solid var(--borde); border-radius: 12px; padding: 0.8rem 1rem; margin: 1rem 0; }
+  .tarjeta h2 { margin: 0.2rem 0; font-size: 1.1rem; }
+  .datos { font-size: 0.85rem; opacity: 0.85; }
+  .chip { display: inline-block; background: var(--suave); border-radius: 999px; padding: 0.05rem 0.6rem; margin: 0 0.2rem; }
+  .capas { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
+  .capas button { background: var(--boton); border: 0; color: var(--texto); border-radius: 8px; padding: 0.6rem 0.8rem; min-height: 44px; cursor: pointer; }
+  .ruleta { display: flex; align-items: center; gap: 0.5rem; }
+  .ruleta button { background: var(--suave); border: 1px solid var(--borde); color: var(--texto); border-radius: 8px; padding: 0.6rem 0.8rem; min-height: 44px; cursor: pointer; }
+  .votos { font-variant-numeric: tabular-nums; opacity: 0.9; }
+</style>
+</head>
+<body>
+<main>
+  <div id="escucha"></div>
+</main>
+<script type="module" src="/src/ui/escucha.ts"></script>
+</body>
+</html>

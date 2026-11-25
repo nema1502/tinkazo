@@ -39,6 +39,15 @@
       ]
     },
     {
+      "source": "/escucha.html",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        }
+      ]
+    },
+    {
       "source": "/c/(.*)",
       "headers": [
         {

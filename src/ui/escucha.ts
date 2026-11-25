@@ -161,6 +161,7 @@ export interface OpcionesEscucha {
 /** Arma la página entera en el documento. Es lo único que hace `escucha.ts` al cargar. */
 export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
   doc.title = texto(o.lang, "titulo");
+  doc.documentElement.lang = o.lang;
   const raiz = doc.getElementById("escucha");
   if (!raiz) return;
   const t = (clave: Parameters<typeof texto>[1]): string => texto(o.lang, clave);
@@ -173,6 +174,15 @@ export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
   const encabezado = doc.createElement("header");
   encabezado.innerHTML = `<h1>${t("titulo")}</h1><p>${t("subtitulo")}</p><p class="nota">${t("notaSemilla")}</p><p class="nota">${t("etiquetaTexto")}</p><p class="aviso-sin-audio">${t("sinAudio")}</p>`;
   raiz.append(encabezado);
+  // El adelgazado de capas nace apagado: desde acá se abre un show de prueba con él prendido para escucharlo.
+  const prueba = doc.createElement("p");
+  prueba.className = "nota";
+  const enlace = doc.createElement("a");
+  enlace.className = "prueba-adelgazado";
+  enlace.href = `/?demo=race&lead=3&musicagracia=1${o.lang === "en" ? "&lang=en" : ""}`;
+  enlace.textContent = t("probarAdelgazado");
+  prueba.append(enlace);
+  encabezado.append(prueba);
 
   let ponerTitulo = true;
   for (const id of Object.values(IDENTIDADES)) {
@@ -201,7 +211,7 @@ export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
 
     const etiquetas = doc.createElement("p");
     etiquetas.className = "etiquetas";
-    etiquetas.innerHTML = `${t("ritmos")}: ${id.ritmos.map((r) => `<span class="chip">${r}</span>`).join(" ")} — ${t("instrumentos")}: ${id.instrumentos.map((d) => `<span class="chip">${d}</span>`).join(" ")}`;
+    etiquetas.innerHTML = `${t("ritmos")}: ${id.ritmos.map((r) => `<span class="chip">${r}</span>`).join(" ")}. ${t("instrumentos")}: ${id.instrumentos.map((d) => `<span class="chip">${d}</span>`).join(" ")}`;
     tarjeta.append(etiquetas);
 
     const capas = doc.createElement("div");
