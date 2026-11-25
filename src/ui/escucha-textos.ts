@@ -45,7 +45,7 @@ export const TEXTOS_ESCUCHA = {
     tempo: "Beats per minute: start, pack and straight",
     ritmos: "Rhythms",
     instrumentos: "Instruments",
-    etiquetaTexto: "Intent tags: they say what the identity aims for; the instruments are still synthesized.",
+    etiquetaTexto: "Intent tags: they say what the identity aims for. The instruments are still synthesized.",
     votar: "Vote",
     quitar: "Remove",
     votos: "votes",
