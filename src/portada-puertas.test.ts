@@ -340,14 +340,27 @@ describe("la portada en el celular y en la laptop", () => {
     expect(css).not.toContain("[data-cancelar-entrada]");
   });
 
-  it("la imagen del hero va arriba del título solo en pantallas angostas y altas, y después de las puertas en las bajas", () => {
+  it("la imagen del hero va arriba del título solo en celulares angostos y altos, y después de las puertas en los demás", () => {
     const base = bloque(/@media \(max-width: 700px\) \{\s*\.hero-portada \{ grid-template-columns: 1fr;/);
     expect(base).toMatch(/\.hero-portada \.hero-shot \{[^}]*order: 2/);
-    const alta = bloque(/@media \(max-width: 700px\) and \(min-height: 741px\) \{/);
+    // La imagen mide el ancho de la pantalla por 0,562: a más ancho baja más el botón principal. Con la cabecera en dos filas y el
+    // título en dos renglones, el botón termina en unos 675 px a 520 de ancho, 755 a 650 y 790 a 700. Por eso el corte mira el
+    // ancho y no solo el alto: hasta 520 px entra en una pantalla de 741 px, más ancho no.
+    const alta = bloque(/@media \(max-width: 520px\) and \(min-height: 741px\) \{/);
     expect(alta).toMatch(/\.hero-portada \.hero-shot \{[^}]*order: -1/);
+    expect(css).not.toMatch(/@media \(max-width: 700px\) and \(min-height: 741px\)/);
     // El título deja de ir a la altura de las pantallas bajas (740 px o menos): la imagen no baja el botón principal.
     const baja = bloque(/@media \(max-width: 700px\) and \(max-height: 740px\) \{/);
     expect(baja).not.toMatch(/hero-shot/);
+  });
+
+  it("el enlace de la imagen del hero repite la puerta de Mirá cómo es y no es una parada del teclado ni del lector de pantalla", () => {
+    // Cambia de lugar según el ancho y el alto, así que su orden en pantalla no puede ser el del HTML: la puerta hace lo mismo
+    // y va en su sitio. La imagen sigue siendo un enlace para el mouse y el dedo.
+    const imagen = document.querySelector(".hero-shot");
+    expect(imagen?.getAttribute("tabindex")).toBe("-1");
+    expect(imagen?.getAttribute("aria-hidden")).toBe("true");
+    expect(document.querySelector(".puerta-lista [data-entrar-ensayo]")).not.toBeNull();
   });
 
   it("los renglones de las puertas ocupan el ancho del contenido, a la izquierda, junto al título y el botón", () => {
