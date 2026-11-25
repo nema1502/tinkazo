@@ -97,6 +97,8 @@ export type LecturaDelHistorial =
       retirado?: boolean;
       /** Con `contrato-ajeno`: es un contrato anterior al que le falta `ultimoLedger`: por historial no se acepta. */
       sinTope?: boolean;
+      /** Con `red-caida`: Horizon contestó que hay demasiados pedidos (429). Quien repite lecturas no debe seguir pidiendo. */
+      limitado?: boolean;
     };
 
 export interface OpcionesDelHistorial {
@@ -128,7 +130,10 @@ const ESPERA_MS = 700;
 const ES_HASH = /^[0-9a-f]{64}$/;
 const ES_HORA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$/;
 
-const fallo = (error: ErrorDelHistorial, extra: { retirado?: boolean; sinTope?: boolean } = {}): LecturaDelHistorial => ({
+const fallo = (
+  error: ErrorDelHistorial,
+  extra: { retirado?: boolean; sinTope?: boolean; limitado?: boolean } = {},
+): LecturaDelHistorial => ({
   ok: false,
   error,
   ...extra,
@@ -138,7 +143,11 @@ const hex = (b: Uint8Array): string => [...b].map((x) => x.toString(16).padStart
 
 /* --------------------------------------------------------------------- la red */
 
-type Pedido = { tipo: "ok"; texto: string } | { tipo: "no-encontrada" | "fuera-de-ventana" | "red-caida" | "respuesta-invalida" };
+type Pedido =
+  | { tipo: "ok"; texto: string }
+  | { tipo: "no-encontrada" | "fuera-de-ventana" | "respuesta-invalida" }
+  /** `limitado`: la última respuesta fue el límite de pedidos (429). */
+  | { tipo: "red-caida"; limitado?: true };
 
 /**
  * Corre `hacer` con un tiempo límite: al vencer, corta el pedido y falla,
@@ -196,7 +205,9 @@ async function traer(url: string, op: OpcionesDelHistorial): Promise<Pedido> {
   const intentos = Math.max(1, op.intentos ?? INTENTOS);
   const esperaMs = op.esperaMs ?? ESPERA_MS;
   const max = op.maxBytes ?? MAX_BYTES;
+  let limitado = false;
   for (let i = 0; i < intentos; i++) {
+    limitado = false;
     if (i) await new Promise((r) => setTimeout(r, esperaMs * i));
     try {
       const res = await conEspera(op.tiempoMs ?? TIEMPO_MS, async (signal) => {
@@ -211,6 +222,7 @@ async function traer(url: string, op: OpcionesDelHistorial): Promise<Pedido> {
         }
         // Lo que no depende de qué hash se pidió se vuelve a intentar: el límite de pedidos, un 5xx, un corte.
         if (r.status === 408 || r.status === 429 || r.status >= 500) {
+          limitado = r.status === 429;
           void r.body?.cancel().catch(() => undefined);
           return null;
         }
@@ -223,7 +235,7 @@ async function traer(url: string, op: OpcionesDelHistorial): Promise<Pedido> {
       /* un corte o un tiempo agotado: se vuelve a preguntar */
     }
   }
-  return { tipo: "red-caida" };
+  return limitado ? { tipo: "red-caida", limitado: true } : { tipo: "red-caida" };
 }
 
 /* ------------------------------------------------------------------- la lectura */
@@ -244,7 +256,7 @@ export async function leerHistorial(red: NetworkName, hash: string, op: Opciones
   if (!base) return fallo("contrato-ajeno");
 
   const pedido = await traer(`${base}/transactions/${hash}`, op);
-  if (pedido.tipo !== "ok") return fallo(pedido.tipo);
+  if (pedido.tipo !== "ok") return fallo(pedido.tipo, pedido.tipo === "red-caida" && pedido.limitado ? { limitado: true } : {});
 
   let rec: unknown;
   try {

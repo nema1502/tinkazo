@@ -252,11 +252,26 @@ describe("el sello de una transacción, del historial", () => {
     };
     expect(await leerHistorial("testnet", tx.hash, { fetch: corte, ...RONDAS })).toEqual({ ok: false, error: "red-caida" });
     expect(llamadas).toBe(2);
-    for (const estado of [500, 502, 503, 429]) {
+    for (const estado of [500, 502, 503]) {
       const h = horizonFalso({ [tx.hash]: estado });
       expect(await leerHistorial("testnet", tx.hash, { fetch: h.fetch, ...RONDAS }), String(estado)).toEqual({ ok: false, error: "red-caida" });
       expect(h.pedidos).toHaveLength(2);
     }
+    // El límite de pedidos (429) también es una red caída, pero se distingue: quien repite lecturas no debe seguir pidiendo.
+    const limitada = horizonFalso({ [tx.hash]: 429 });
+    expect(await leerHistorial("testnet", tx.hash, { fetch: limitada.fetch, ...RONDAS })).toEqual({ ok: false, error: "red-caida", limitado: true });
+    expect(limitada.pedidos).toHaveLength(2);
+    // Con un 429 y después un corte, la última respuesta es la que cuenta: no se marca como límite.
+    let secuencia = 0;
+    const mixto: typeof fetch = async () => {
+      if (++secuencia === 1) return new Response("", { status: 429 });
+      throw new TypeError("fetch failed");
+    };
+    expect(await leerHistorial("testnet", tx.hash, { fetch: mixto, ...RONDAS })).toEqual({ ok: false, error: "red-caida" });
+    // Con un solo intento (el que usa el celular de una campaña) es un único pedido.
+    const uno = horizonFalso({ [tx.hash]: 429 });
+    expect(await leerHistorial("testnet", tx.hash, { fetch: uno.fetch, ...RONDAS, intentos: 1 })).toEqual({ ok: false, error: "red-caida", limitado: true });
+    expect(uno.pedidos).toHaveLength(1);
     // Una que nunca contesta: se corta sola.
     const colgada: typeof fetch = () => new Promise<Response>(() => undefined);
     expect(await leerHistorial("testnet", tx.hash, { fetch: colgada, tiempoMs: 20, intentos: 1 })).toEqual({ ok: false, error: "red-caida" });
@@ -497,7 +512,7 @@ describe("el lector de una página", () => {
       const b = armarSello(VIGENTE, { ...SELLO, count: 9 });
       const m = montar({ [a.hash]: registroDeHorizon(a), [b.hash]: registroDeHorizon(b) });
       m.cae.testnet = true;
-      expect(await m.lector("testnet", a.hash)).toEqual({ ok: false, error: "red-caida" });
+      expect(await m.lector("testnet", a.hash)).toEqual({ ok: false, error: "red-caida", limitado: true });
       expect(m.pedidos).toHaveLength(2); // los dos intentos del primer sorteo
       // Mientras descansa no se vuelve a esperar por cada sorteo.
       expect(await m.lector("testnet", b.hash)).toEqual({ ok: false, error: "red-caida" });
@@ -516,7 +531,7 @@ describe("el lector de una página", () => {
       const a = armarSello(VIGENTE, SELLO);
       const m = montar({ [a.hash]: registroDeHorizon(a) });
       m.cae.testnet = true;
-      expect(await m.lector("testnet", a.hash)).toEqual({ ok: false, error: "red-caida" });
+      expect(await m.lector("testnet", a.hash)).toEqual({ ok: false, error: "red-caida", limitado: true });
       const antes = m.pedidos.length;
       // La otra red sí se pregunta (acá contesta 404: es una respuesta, no un corte).
       expect(await m.lector("mainnet", "b".repeat(64))).toEqual({ ok: false, error: "no-encontrada" });
