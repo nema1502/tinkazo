@@ -115,23 +115,22 @@ export function refDelEnlace(hash: string = location.hash): { id: string; clave:
 }
 
 /**
- * El enlace corto con el que entró este celular, o null si no lo conoce. Sale de la referencia del fragmento, si la
- * trae (`c.ts` la agrega cuando el servicio dice que el enlace puede cambiar) y, si no, de lo que este equipo recordó
- * al abrir el corto (`abrir`), con el fragmento tal como llegó. Es el único camino que no depende de la referencia:
- * el QR del panel de la pantalla, por ejemplo, entra sin ella. Solo lee: no escribe ni va a la red, y nunca devuelve
- * un corto de otro origen.
+ * El enlace corto con el que entró este celular, o null si no lo conoce. Sale de lo que este equipo recordó al abrir el
+ * corto (`abrir`, en `c.ts`), buscado con los datos del fragmento tal como llegaron: así el corto es el de este sorteo y
+ * no el de otro. Si el fragmento trae la referencia que `c.ts` agrega a un enlace que puede cambiar, tiene que ser la de
+ * ese mismo corto: un fragmento armado a mano, con la referencia de otro enlace, no da corto y se comparte el enlace
+ * completo del comprobante. Sin lo recordado (almacenamiento bloqueado o vaciado) tampoco: no se puede comprobar de quién
+ * es. Solo lee: no escribe ni va a la red, y nunca devuelve un corto de otro origen.
  */
 export function cortoDelEnlace(hash: string = location.hash, origen: string = location.origin): string | null {
   const m = FRAGMENTO.exec(hash);
   if (!m?.[1]) return null;
-  if (m[2] && m[3]) {
-    const c = `${origen}/c/${m[2]}#${m[3]}`;
-    return esCortoDe(c, origen) ? c : null;
-  }
   try {
     // Con los datos tal como están en el fragmento: ya releídos serían otros y darían otra llave.
-    const c = cortoGuardado(`${origen}/#espectador=${m[1]}`)?.corto;
-    return esCortoDe(c, origen) ? c : null;
+    const g = cortoGuardado(`${origen}/#espectador=${m[1]}`);
+    if (!g || !esCortoDe(g.corto, origen)) return null;
+    if (m[2] && m[3] && (g.id !== m[2] || !g.corto.endsWith(`#${m[3]}`))) return null;
+    return g.corto;
   } catch {
     return null;
   }

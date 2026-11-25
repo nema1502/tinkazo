@@ -6,8 +6,8 @@ import { cortoDelEnlace } from "./espectador-enlace";
 /**
  * El corto con el que entró un celular a la vista del espectador (`cortoDelEnlace`), sin mockear el servicio de
  * enlaces: la cadena real es `c.ts` (`abrir`), lo que este equipo recuerda en `localStorage` y la dirección de la vista.
- * Con la referencia en el fragmento sale de ahí. Sin ella (el QR del panel de la pantalla, o un servicio que no avisa
- * que el enlace cambia) sale de lo recordado. Nunca va a la red ni escribe nada.
+ * Sale siempre de lo que este equipo recordó al abrir el corto con esos mismos datos. La referencia del fragmento solo
+ * tiene que coincidir: un fragmento armado a mano no lleva a compartir el corto de otro sorteo. Nunca va a la red ni escribe nada.
  */
 
 const ORIGEN = "https://tinkazo.app";
@@ -53,14 +53,30 @@ describe("el corto con el que entró este celular", () => {
     expect(cortoDelEnlace(`#espectador=${DATOS}`, ORIGEN)).toBe(`${ORIGEN}/c/${ID}#${SECRETO}`);
   });
 
-  it("con la referencia en el fragmento sale de ella, también con el almacenamiento vacío o bloqueado", () => {
-    const esperado = `${ORIGEN}/c/${ID}#${SECRETO}`;
-    expect(cortoDelEnlace(`#espectador=${DATOS}.${ID}.${SECRETO}.3`, ORIGEN)).toBe(esperado);
+  it("con la referencia en el fragmento, sale de ella si es el mismo corto que este equipo abrió para esos datos", async () => {
+    const f = await servicioConContenido(`/#espectador=${DATOS}`);
+    await abrir(ID, SECRETO, { fetch: f, origen: ORIGEN });
+    olvidarMemoria();
+    expect(cortoDelEnlace(`#espectador=${DATOS}.${ID}.${SECRETO}.3`, ORIGEN)).toBe(`${ORIGEN}/c/${ID}#${SECRETO}`);
+  });
+
+  it("un fragmento armado a mano con una referencia que este equipo nunca abrió no da corto: se comparte el largo", () => {
+    expect(cortoDelEnlace(`#espectador=${DATOS}.${ID}.${SECRETO}.3`, ORIGEN)).toBeNull();
+  });
+
+  it("una referencia a otro corto distinto del que se abrió para esos datos no da corto", async () => {
+    const f = await servicioConContenido(`/#espectador=${DATOS}`);
+    await abrir(ID, SECRETO, { fetch: f, origen: ORIGEN });
+    olvidarMemoria();
+    expect(cortoDelEnlace(`#espectador=${DATOS}.ZyXwVuTs.${SECRETO}.3`, ORIGEN)).toBeNull();
+  });
+
+  it("con la referencia y el almacenamiento bloqueado no se puede comprobar de quién es: no da corto y no tira", () => {
     const tira = (): never => {
       throw new Error("bloqueado");
     };
     vi.stubGlobal("localStorage", { getItem: tira, setItem: tira, removeItem: tira });
-    expect(cortoDelEnlace(`#espectador=${DATOS}.${ID}.${SECRETO}.3`, ORIGEN)).toBe(esperado);
+    expect(cortoDelEnlace(`#espectador=${DATOS}.${ID}.${SECRETO}.3`, ORIGEN)).toBeNull();
   });
 
   it("sin la referencia y con el almacenamiento bloqueado, no conoce su corto y no tira", () => {
