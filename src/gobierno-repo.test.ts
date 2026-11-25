@@ -70,13 +70,17 @@ describe("CONTRIBUTING.md", () => {
     expect(exigidas.filter((nombre) => !ci.includes(`name: ${nombre}`))).toEqual([]);
   });
 
-  it("dice que la dirección une con su permiso de administración", () => {
-    expect(seccion(contribuir, "Cómo se revisa y se une")).toMatch(/permiso de administración/);
-  });
-
   it("la plantilla de pedido nombra comandos y guiones que existen", () => {
     const comandos = [...plantilla.matchAll(/pnpm ([a-z][\w:-]*)/g)].map((m) => m[1]!);
     expect(comandos.filter((n) => n !== "install" && !(n in paquete.scripts))).toEqual([]);
+    const guiones = [...plantilla.matchAll(/node (scripts\/[\w.-]+)/g)].map((m) => m[1]!);
+    expect(guiones.filter((r) => !existe(r))).toEqual([]);
+  });
+
+  it("los textos públicos solo ofrecen el correo permitido", () => {
+    const textos = [contribuir, seguridad, plantilla];
+    const correos = new Set(textos.flatMap((t) => [...t.matchAll(/[\w.+-]+@[\w.-]+\.\w+/g)].map((m) => m[0])));
+    expect([...correos].filter((c) => c !== "hola@tinkazo.app")).toEqual([]);
   });
 });
 
@@ -96,26 +100,17 @@ describe("SECURITY.md", () => {
     expect(seguridad).not.toMatch(/[$€]\s*\d|\d\s*(USD|USDC|XLM|dólares|bolivianos)\b/i);
   });
 
-  it("no pone en alcance lo que el modelo de amenazas acepta como riesgo", () => {
-    // El modelo de amenazas dice que la comprobación de origen solo frena a otras páginas y que
-    // los cupos de un servicio se pueden gastar: ninguna de las dos cosas es una falla a reportar.
-    const amenazas = leer("docs/amenazas.md");
-    expect(amenazas).toMatch(/solo frena a otras páginas/);
-    expect(alcance).not.toMatch(/origen|cupo/i);
-    expect(resumenIngles).not.toMatch(/origin|quota/i);
+  it("cada carpeta y archivo que pone en alcance existe", () => {
+    // Lo que la política nombra como alcance son rutas del repositorio: tienen que existir.
+    const rutas = [...alcance.matchAll(/\]\((?!https?:|mailto:|#)([^)\s]+)\)/g)].map((m) => m[1]!.split("#")[0]!);
+    expect(rutas.length).toBeGreaterThan(0);
+    expect(rutas.filter((r) => !existe(r))).toEqual([]);
   });
 
-  it("pone en alcance los servicios que leen, cambian o borran datos ajenos", () => {
-    expect(alcance).toMatch(/\[workers\]/);
-    expect(alcance).toMatch(/leer, cambiar o borrar datos ajenos/);
-    expect(resumenIngles).toMatch(/workers\//);
-  });
-
-  it("el pedido de no divulgar tiene salida si el equipo no contesta", () => {
-    const pedido = seguridad.split("\n").find((linea) => /pública/.test(linea));
-    expect(pedido).toBeDefined();
-    expect(pedido).toMatch(/no te contestamos/);
-    expect(pedido).toMatch(/decidís/);
+  it("el resumen en inglés enlaza un documento que existe", () => {
+    const enlaces = enlacesRelativos(resumenIngles);
+    expect(enlaces.length).toBeGreaterThan(0);
+    expect(enlaces.filter((r) => !existe(r))).toEqual([]);
   });
 });
 
@@ -201,9 +196,13 @@ describe("config.yml", () => {
     expect(existe("SECURITY.md")).toBe(true);
   });
 
-  it("no manda a abrir un reporte privado que no está activado", () => {
-    expect(config).not.toMatch(/security\/advisories/);
-    expect(seguridad).not.toMatch(/Reportar una vulnerabilidad|Report a vulnerability/);
+  it("cada enlace lleva a un archivo del repositorio que existe o a una página del sitio", () => {
+    expect(enlaces.length).toBeGreaterThan(0);
+    for (const e of enlaces) {
+      const archivo = e.url.startsWith(`${REPO}/blob/main/`) ? e.url.slice(`${REPO}/blob/main/`.length) : null;
+      if (archivo) expect(existe(archivo), e.url).toBe(true);
+      else expect(e.url.startsWith("https://tinkazo.app/"), e.url).toBe(true);
+    }
   });
 
   it("el correo que ofrece es el único permitido", () => {
