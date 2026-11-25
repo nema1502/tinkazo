@@ -11,12 +11,27 @@ const raiz = (ruta: string): URL => new URL(`../${ruta}`, import.meta.url);
 const existe = (ruta: string): boolean => existsSync(raiz(ruta));
 const leer = (ruta: string): string => readFileSync(raiz(ruta), "utf8").split(String.fromCharCode(13)).join("");
 
-const contribuir = leer("CONTRIBUTING.md");
-const seguridad = leer("SECURITY.md");
-const plantilla = leer(".github/pull_request_template.md");
-const config = leer(".github/ISSUE_TEMPLATE/config.yml");
-const ci = leer(".github/workflows/ci.yml");
-const paquete = JSON.parse(leer("package.json")) as { scripts: Record<string, string> };
+/**
+ * Se leen la primera vez que un caso los pide y no al cargar el módulo: un archivo ilegible hace
+ * fallar solo los casos que lo usan y no tumba el resto de la suite.
+ */
+const perezoso = <V>(cargar: () => V): (() => V) => {
+  let listo = false;
+  let valor: V;
+  return () => {
+    if (!listo) {
+      valor = cargar();
+      listo = true;
+    }
+    return valor;
+  };
+};
+const contribuir = perezoso(() => leer("CONTRIBUTING.md"));
+const seguridad = perezoso(() => leer("SECURITY.md"));
+const plantilla = perezoso(() => leer(".github/pull_request_template.md"));
+const config = perezoso(() => leer(".github/ISSUE_TEMPLATE/config.yml"));
+const ci = perezoso(() => leer(".github/workflows/ci.yml"));
+const paquete = perezoso(() => JSON.parse(leer("package.json")) as { scripts: Record<string, string> });
 
 const URL_REPARTO = "https://github.com/nema1502/tinkazo/issues/277";
 const REPO = "https://github.com/nema1502/tinkazo";
@@ -39,7 +54,7 @@ const archivosDeFormularios = (): string[] => readdirSync(raiz(".github/ISSUE_TE
 
 describe("CONTRIBUTING.md", () => {
   it("el ejemplo de commit cumple el límite de 72 caracteres que pide", () => {
-    const ejemplo = /Por ejemplo: `([^`]+)`/.exec(contribuir);
+    const ejemplo = /Por ejemplo: `([^`]+)`/.exec(contribuir());
     expect(ejemplo).not.toBeNull();
     expect([...ejemplo![1]!].length).toBeLessThanOrEqual(72);
   });
@@ -47,7 +62,7 @@ describe("CONTRIBUTING.md", () => {
   it("cada comando de pnpm que nombra existe en package.json", () => {
     const nombrados = [...contribuir.matchAll(/pnpm ([a-z][\w:-]*)/g)].map((m) => m[1]!);
     const propios = new Set(["install"]);
-    const faltan = nombrados.filter((n) => !propios.has(n) && !(n in paquete.scripts));
+    const faltan = nombrados.filter((n) => !propios.has(n) && !(n in paquete().scripts));
     expect(nombrados.length).toBeGreaterThan(0);
     expect(faltan).toEqual([]);
   });
@@ -58,23 +73,23 @@ describe("CONTRIBUTING.md", () => {
   });
 
   it("los enlaces relativos apuntan a archivos que existen", () => {
-    const enlaces = enlacesRelativos(contribuir);
+    const enlaces = enlacesRelativos(contribuir());
     expect(enlaces.length).toBeGreaterThan(0);
     expect(enlaces.filter((r) => !existe(r))).toEqual([]);
   });
 
   it("enlaza el reparto del trabajo con su dirección completa", () => {
-    expect(contribuir).toContain(URL_REPARTO);
+    expect(contribuir()).toContain(URL_REPARTO);
   });
 
   it("las comprobaciones que exige para unir existen en la integración continua", () => {
-    const exigidas = [...seccion(contribuir, "La revisión automática").matchAll(/^- La comprobación `([^`]+)`/gm)].map((m) => m[1]!);
+    const exigidas = [...seccion(contribuir(), "La revisión automática").matchAll(/^- La comprobación `([^`]+)`/gm)].map((m) => m[1]!);
     expect(exigidas.length).toBeGreaterThan(0);
-    expect(exigidas.filter((nombre) => !ci.includes(`name: ${nombre}`))).toEqual([]);
+    expect(exigidas.filter((nombre) => !ci().includes(`name: ${nombre}`))).toEqual([]);
   });
 
   it("al decir cómo se une nombra las tres cosas y no dice que frenen solo las comprobaciones", () => {
-    const unir = seccion(contribuir, "Cómo se revisa y se une");
+    const unir = seccion(contribuir(), "Cómo se revisa y se une");
     expect(unir).toMatch(/comprobaciones/);
     expect(unir).toMatch(/al día/);
     expect(unir).toMatch(/revisión de la dirección/);
@@ -82,7 +97,7 @@ describe("CONTRIBUTING.md", () => {
   });
 
   it("tomar un issue con responsable tiene salida y esperar una respuesta es un consejo", () => {
-    const antes = seccion(contribuir, "Antes de empezar");
+    const antes = seccion(contribuir(), "Antes de empezar");
     expect(antes).toMatch(/la dirección decide quién sigue/);
     expect(antes).not.toMatch(/sin respuesta no se empieza/i);
     expect(antes).not.toMatch(/esperá (una|la) respuesta/i);
@@ -90,45 +105,53 @@ describe("CONTRIBUTING.md", () => {
 
   it("la plantilla de pedido nombra comandos y guiones que existen", () => {
     const comandos = [...plantilla.matchAll(/pnpm ([a-z][\w:-]*)/g)].map((m) => m[1]!);
-    expect(comandos.filter((n) => n !== "install" && !(n in paquete.scripts))).toEqual([]);
+    expect(comandos.filter((n) => n !== "install" && !(n in paquete().scripts))).toEqual([]);
     const guiones = [...plantilla.matchAll(/node (scripts\/[\w.-]+)/g)].map((m) => m[1]!);
     expect(guiones.filter((r) => !existe(r))).toEqual([]);
   });
 
   it("los textos públicos solo ofrecen el correo permitido", () => {
-    const textos = [contribuir, seguridad, plantilla];
+    const textos = [contribuir(), seguridad(), plantilla()];
     const correos = new Set(textos.flatMap((t) => [...t.matchAll(/[\w.+-]+@[\w.-]+\.\w+/g)].map((m) => m[0])));
     expect([...correos].filter((c) => c !== "hola@tinkazo.app")).toEqual([]);
   });
 });
 
 describe("SECURITY.md", () => {
-  const alcance = seccion(seguridad, "Qué está en alcance");
-  const resumenIngles = seguridad.split("\n")[0]!;
+  const resumenIngles = (): string => seguridad().split("\n")[0]!;
 
   it("los enlaces relativos apuntan a archivos que existen", () => {
-    const enlaces = enlacesRelativos(seguridad);
+    const enlaces = enlacesRelativos(seguridad());
     expect(enlaces.length).toBeGreaterThan(0);
     expect(enlaces.filter((r) => !existe(r))).toEqual([]);
   });
 
   it("no trae cifras de plazo ni montos", () => {
-    expect(seguridad).not.toMatch(/\b\d+\s*(días|dias|horas|semanas|days|hours|weeks)\b/i);
-    expect(seguridad).not.toMatch(/\b(recompensa|premio|bounty) de\b/i);
-    expect(seguridad).not.toMatch(/[$€]\s*\d|\d\s*(USD|USDC|XLM|dólares|bolivianos)\b/i);
+    expect(seguridad()).not.toMatch(/\b\d+\s*(días|dias|horas|semanas|days|hours|weeks)\b/i);
+    expect(seguridad()).not.toMatch(/\b(recompensa|premio|bounty) de\b/i);
+    expect(seguridad()).not.toMatch(/[$€]\s*\d|\d\s*(USD|USDC|XLM|dólares|bolivianos)\b/i);
   });
 
   it("cada carpeta y archivo que pone en alcance existe", () => {
     // Lo que la política nombra como alcance son rutas del repositorio: tienen que existir.
+    const alcance = seccion(seguridad(), "Qué está en alcance");
     const rutas = [...alcance.matchAll(/\]\((?!https?:|mailto:|#)([^)\s]+)\)/g)].map((m) => m[1]!.split("#")[0]!);
     expect(rutas.length).toBeGreaterThan(0);
     expect(rutas.filter((r) => !existe(r))).toEqual([]);
   });
 
   it("el resumen en inglés enlaza un documento que existe", () => {
-    const enlaces = enlacesRelativos(resumenIngles);
+    const enlaces = enlacesRelativos(resumenIngles());
     expect(enlaces.length).toBeGreaterThan(0);
     expect(enlaces.filter((r) => !existe(r))).toEqual([]);
+  });
+
+  it("el resumen en inglés no usa palabras que el proyecto evita en lo visible", () => {
+    // La lista es la del auditor de palabras: el grupo que huele a apuesta, en inglés.
+    const lista = JSON.parse(leer("scripts/lib/palabras-prohibidas.json")) as { apuesta: { en: string[] } };
+    expect(lista.apuesta.en.length).toBeGreaterThan(0);
+    const patron = new RegExp(`\\b(?:${lista.apuesta.en.join("|")})\\b`, "i");
+    expect(patron.exec(resumenIngles())?.[0]).toBeUndefined();
   });
 
   it("el resumen en inglés pide y permite lo mismo que el español", () => {
@@ -141,36 +164,45 @@ describe("SECURITY.md", () => {
       ["la forma de probar", /red de prueba o con sorteos tuyos/, /test network or with your own draws/],
       ["no entrar a datos ajenos", /sin entrar a datos de otras personas/, /without (accessing|entering|reaching) (other people's|anyone else's) data/],
     ];
-    const cuerpo = seguridad.split("\n").slice(1).join("\n");
+    const cuerpo = seguridad().split("\n").slice(1).join("\n");
     for (const [que, es, en] of hechos) {
       expect(es.test(cuerpo), `español: ${que}`).toBe(true);
-      expect(en.test(resumenIngles), `inglés: ${que}`).toBe(true);
+      expect(en.test(resumenIngles()), `inglés: ${que}`).toBe(true);
     }
   });
 });
 
 describe("textos públicos de gobierno", () => {
-  const formularios = archivosDeFormularios().map((n) => ({ archivo: n, texto: leer(`.github/ISSUE_TEMPLATE/${n}`) }));
-  const todos = [
-    { archivo: "CONTRIBUTING.md", texto: contribuir },
-    { archivo: "SECURITY.md", texto: seguridad },
-    { archivo: ".github/pull_request_template.md", texto: plantilla },
-    ...formularios,
+  const todos = (): { archivo: string; texto: string }[] => [
+    { archivo: "CONTRIBUTING.md", texto: contribuir() },
+    { archivo: "SECURITY.md", texto: seguridad() },
+    { archivo: ".github/pull_request_template.md", texto: plantilla() },
+    ...archivosDeFormularios().map((n) => ({ archivo: n, texto: leer(`.github/ISSUE_TEMPLATE/${n}`) })),
   ];
 
   it("ninguno promete cuánto tarda la atención", () => {
     const promesas = /\b(más rápido|a la brevedad|en menos de \d+|en \d+ (horas|días|semanas)|dentro de \d+ )/i;
-    expect(todos.filter((t) => promesas.test(t.texto)).map((t) => t.archivo)).toEqual([]);
+    expect(todos().filter((t) => promesas.test(t.texto)).map((t) => t.archivo)).toEqual([]);
   });
 
   it("ninguno usa palabras que el proyecto evita en lo visible", () => {
     const evitadas = /\b(plata|rifa|rifas|lotería|apuesta|apuestas)\b/i;
-    expect(todos.filter((t) => evitadas.test(t.texto)).map((t) => t.archivo)).toEqual([]);
+    expect(todos().filter((t) => evitadas.test(t.texto)).map((t) => t.archivo)).toEqual([]);
   });
 });
 
 /** Un campo de un formulario de issue, con lo que la prueba necesita mirar. */
-type Campo = { type: string; id?: string; label?: string; value?: string; opciones: string[] };
+type Campo = {
+  type: string;
+  id?: string;
+  label?: string;
+  value?: string;
+  opciones: string[];
+  /** Si el campo trae su bloque `attributes`. GitHub lo exige en todos los tipos. */
+  atributos?: boolean;
+  /** Cómo está escrita cada opción: texto simple, mapa con `label` u otra cosa (un número, un booleano, otro mapa). */
+  formas?: ("texto" | "label" | "otro")[];
+};
 type Formulario = { archivo: string; error?: string; claves: Record<string, string>; labels: string[]; campos: Campo[] };
 
 const TIPOS = new Set(["markdown", "input", "textarea", "dropdown", "checkboxes"]);
@@ -293,8 +325,7 @@ const problemasDeEstructura = (f: Formulario): string[] => {
   }
   if (!f.claves["name"]) en("falta name");
   if (!f.claves["description"]) en("falta description");
-  if (!("body" in f.claves) || f.campos.length === 0) en("falta body con campos");
-  const ids: string[] = [];
+  if (!("body" in f.claves) || f.campos.length === 0) en("falta body con campos");  const ids: string[] = [];
   f.campos.forEach((c, n) => {
     const donde = `campo ${n + 1} (${c.type})`;
     if (!TIPOS.has(c.type)) en(`${donde} tiene un tipo inválido`);
@@ -304,13 +335,11 @@ const problemasDeEstructura = (f: Formulario): string[] => {
     }
     if (!c.id) en(`${donde} no tiene id`);
     else if (ids.includes(c.id)) en(`${donde} repite el id ${c.id}`);
-    else ids.push(c.id);
-    if (!c.label) en(`${donde} no tiene label`);
+    else ids.push(c.id);    if (!c.label) en(`${donde} no tiene label`);
     if (c.type === "dropdown" || c.type === "checkboxes") {
       if (c.opciones.length === 0) en(`${donde} no tiene opciones`);
       if (c.opciones.some((o) => o === "")) en(`${donde} tiene una opción vacía`);
-      if (new Set(c.opciones).size !== c.opciones.length) en(`${donde} repite una opción`);
-    }
+      if (new Set(c.opciones).size !== c.opciones.length) en(`${donde} repite una opción`);    }
   });
   return p;
 };
@@ -365,6 +394,55 @@ describe("lector de formularios", () => {
     expect(problemasDeEstructura(f)).toEqual([]);
   });
 
+  it("lee si cada campo trae su bloque attributes y cómo está escrita cada opción", () => {
+    const f = leerFormularioDeTexto("x.yml", ejemplo("labels: [bug]"));
+    expect(f.campos.map((c) => c.atributos)).toEqual([true, true, true]);
+    expect(f.campos[1]!.formas).toEqual(["texto", "texto"]);
+    expect(f.campos[2]!.formas).toEqual(["label"]);
+    const roto = [
+      "name: Algo",
+      "description: Un formulario",
+      "labels: [bug]",
+      "body:",
+      "  - type: dropdown",
+      "    id: zona",
+      "    attributes:",
+      "      label: Zona",
+      "      options:",
+      "        - Frente",
+      "        - true",
+      "        - 3",
+      "        - label: Otra",
+      "  - type: input",
+      "    id: sin-bloque",
+      "    label: Suelto",
+      "  - type: checkboxes",
+      "    id: cuidado",
+      "    attributes:",
+      "      label: Antes",
+      "      options:",
+      "        - Sin label",
+      "        - label: Con label",
+      "",
+    ].join("\n");
+    const g = leerFormularioDeTexto("y.yml", roto);
+    expect(g.campos[0]!.formas).toEqual(["texto", "otro", "otro", "label"]);
+    expect(g.campos[1]!.atributos).toBe(false);
+    expect(g.campos[2]!.formas).toEqual(["texto", "label"]);
+  });
+
+  it("una lectura que falla lanza en el caso que la pide y no al cargar el módulo", () => {
+    let lecturas = 0;
+    const ilegible = perezoso((): string => {
+      lecturas++;
+      throw new Error("ilegible");
+    });
+    expect(lecturas).toBe(0);
+    expect(ilegible).toThrow("ilegible");
+    const sana = perezoso(() => ++lecturas);
+    expect([sana(), sana()]).toEqual([2, 2]);
+  });
+
   it("un formulario que no se puede leer falla con el nombre del archivo y no tumba lo demás", () => {
     const textos = ["name: A\nlabels: [bug\nbody:\n", "name: A\nlabels:\n  - bug\nbody:\n"];
     for (const texto of textos) {
@@ -381,10 +459,10 @@ describe("estructura de los formularios de issue", () => {
     claves: { name: "Algo", description: "Un formulario", body: "" },
     labels: ["bug"],
     campos: [
-      { type: "markdown", value: "Gracias", opciones: [] },
-      { type: "textarea", id: "que-pasa", label: "Qué pasa", opciones: [] },
-      { type: "dropdown", id: "zona", label: "Zona", opciones: ["Frente", "Servicios"] },
-      { type: "checkboxes", id: "cuidado", label: "Antes de enviar", opciones: ["Sin secretos"] },
+      { type: "markdown", value: "Gracias", opciones: [], atributos: true },
+      { type: "textarea", id: "que-pasa", label: "Qué pasa", opciones: [], atributos: true },
+      { type: "dropdown", id: "zona", label: "Zona", opciones: ["Frente", "Servicios"], formas: ["texto", "texto"], atributos: true },
+      { type: "checkboxes", id: "cuidado", label: "Antes de enviar", opciones: ["Sin secretos"], formas: ["label"], atributos: true },
     ],
   });
 
@@ -413,6 +491,27 @@ describe("estructura de los formularios de issue", () => {
     { caso: "con un checkboxes sin opciones", romper: (f) => void (f.campos[3]!.opciones = []), dice: "no tiene opciones" },
     { caso: "con una opción vacía", romper: (f) => void (f.campos[2]!.opciones = ["Frente", ""]), dice: "opción vacía" },
     { caso: "con una opción repetida", romper: (f) => void (f.campos[2]!.opciones = ["Frente", "Frente"]), dice: "repite una opción" },
+    { caso: "con un campo sin el bloque attributes", romper: (f) => void (f.campos[1]!.atributos = false), dice: "el bloque attributes" },
+    { caso: "con un markdown sin el bloque attributes", romper: (f) => void (f.campos[0]!.atributos = false), dice: "el bloque attributes" },
+    {
+      caso: "con solo markdown y nada para rellenar",
+      romper: (f) => void (f.campos = [f.campos[0]!]),
+      dice: "ningún campo para rellenar",
+    },
+    { caso: "con un id con espacios", romper: (f) => void (f.campos[1]!.id = "que pasa"), dice: "id con caracteres no permitidos" },
+    { caso: "con un id con tildes", romper: (f) => void (f.campos[1]!.id = "qué-pasa"), dice: "id con caracteres no permitidos" },
+    { caso: "con un id con puntos", romper: (f) => void (f.campos[2]!.id = "zona.uno"), dice: "id con caracteres no permitidos" },
+    {
+      caso: "con un dropdown con una opción que no es texto simple",
+      romper: (f) => void (f.campos[2]!.formas = ["texto", "otro"]),
+      dice: "opción que no es texto simple",
+    },
+    {
+      caso: "con un dropdown con una opción escrita como label",
+      romper: (f) => void (f.campos[2]!.formas = ["label", "label"]),
+      dice: "opción que no es texto simple",
+    },
+    { caso: "con un checkboxes con una opción sin label", romper: (f) => void (f.campos[3]!.formas = ["texto"]), dice: "opción sin label" },
     { caso: "que no se pudo leer", romper: (f) => void (f.error = "labels vacío"), dice: "no se pudo leer" },
   ];
 
@@ -428,7 +527,7 @@ describe("estructura de los formularios de issue", () => {
 
 describe("formularios de issue", () => {
   const archivos = ["falla.yml", "mejora.yml", "trabajo.yml"];
-  const formularios = archivos.map(leerFormulario);
+  const casos = archivos.map((archivo) => ({ archivo }));
   // Las etiquetas que el repositorio usa de verdad (gh label list). Se actualiza a mano cuando se
   // crea o se borra una. Si algún día el repositorio versiona su lista, esa manda.
   const ARCHIVO_DE_ETIQUETAS = ".github/labels.yml";
@@ -451,23 +550,25 @@ describe("formularios de issue", () => {
     "en integración",
     "espera otra rama",
   ];
-  const ETIQUETAS = new Set(
-    existe(ARCHIVO_DE_ETIQUETAS)
-      ? [...leer(ARCHIVO_DE_ETIQUETAS).matchAll(/^- name:\s*"?([^"\n]+?)"?\s*$/gm)].map((m) => m[1]!)
-      : ETIQUETAS_DEL_REPOSITORIO,
-  );
+  const etiquetas = (): Set<string> =>
+    new Set(
+      existe(ARCHIVO_DE_ETIQUETAS)
+        ? [...leer(ARCHIVO_DE_ETIQUETAS).matchAll(/^- name:\s*"?([^"\n]+?)"?\s*$/gm)].map((m) => m[1]!)
+        : ETIQUETAS_DEL_REPOSITORIO,
+    );
 
   it("la prueba cubre todos los formularios del directorio", () => {
     const hay = archivosDeFormularios().filter((n) => n !== "config.yml");
     expect(hay.sort()).toEqual([...archivos].sort());
   });
 
-  it.each(formularios)("$archivo se puede leer y está bien armado", (f) => {
-    expect(problemasDeEstructura(f)).toEqual([]);
+  it.each(casos)("$archivo se puede leer y está bien armado", ({ archivo }) => {
+    expect(problemasDeEstructura(leerFormulario(archivo))).toEqual([]);
   });
 
-  it.each(formularios)("$archivo solo pone etiquetas que existen", (f) => {
-    expect(f.labels.filter((e) => !ETIQUETAS.has(e))).toEqual([]);
+  it.each(casos)("$archivo solo pone etiquetas que existen", ({ archivo }) => {
+    const permitidas = etiquetas();
+    expect(leerFormulario(archivo).labels.filter((e) => !permitidas.has(e))).toEqual([]);
   });
 
   it("el formulario del equipo enlaza el reparto con su dirección completa", () => {
@@ -527,32 +628,41 @@ describe("sintaxis de los YAML de .github/ISSUE_TEMPLATE", () => {
     expect(problemasDeSintaxis("x.yml", "description: Una cosa: otra").join("\n")).toContain("dos puntos");
   });
 
-  const todos = archivosDeFormularios();
+  // La lista se pide al armar los casos: si la carpeta no se puede leer, no hay casos y falla "hay archivos que revisar".
+  const todos = (): string[] => {
+    try {
+      return archivosDeFormularios();
+    } catch {
+      return [];
+    }
+  };
 
   it("hay archivos que revisar", () => {
-    expect(todos.length).toBeGreaterThan(1);
+    expect(archivosDeFormularios().length).toBeGreaterThan(1);
   });
 
-  it.each(todos.map((archivo) => ({ archivo })))("$archivo no tiene valores planos que rompan el YAML", ({ archivo }) => {
+  it.each(todos().map((archivo) => ({ archivo })))("$archivo no tiene valores planos que rompan el YAML", ({ archivo }) => {
     expect(problemasDeSintaxis(archivo, leer(`.github/ISSUE_TEMPLATE/${archivo}`))).toEqual([]);
   });
 });
 
 describe("config.yml", () => {
-  const enlaces = [...config.matchAll(/name: (.+)\n\s+url: (\S+)\n\s+about: (.+)/g)].map((m) => ({
-    nombre: m[1]!,
-    url: m[2]!,
-    texto: m[3]!,
-  }));
+  const enlacesDeConfig = (): { nombre: string; url: string; texto: string }[] =>
+    [...config().matchAll(/name: (.+)\n\s+url: (\S+)\n\s+about: (.+)/g)].map((m) => ({
+      nombre: m[1]!,
+      url: m[2]!,
+      texto: m[3]!,
+    }));
 
   it("el enlace de seguridad lleva a la política del repositorio, que existe", () => {
-    const seguridadEnlace = enlaces.find((e) => /seguridad/i.test(e.nombre));
+    const seguridadEnlace = enlacesDeConfig().find((e) => /seguridad/i.test(e.nombre));
     expect(seguridadEnlace).toBeDefined();
     expect(seguridadEnlace!.url).toBe(`${REPO}/blob/main/SECURITY.md`);
     expect(existe("SECURITY.md")).toBe(true);
   });
 
   it("cada enlace lleva a un archivo del repositorio que existe o a una página del sitio que existe", () => {
+    const enlaces = enlacesDeConfig();
     expect(enlaces.length).toBeGreaterThan(0);
     for (const e of enlaces) {
       if (e.url.startsWith(`${REPO}/blob/main/`)) {
@@ -568,7 +678,7 @@ describe("config.yml", () => {
   });
 
   it("el correo que ofrece es el único permitido", () => {
-    const correos = new Set([...config.matchAll(/[\w.+-]+@[\w.-]+\.\w+/g)].map((m) => m[0]));
+    const correos = new Set([...config().matchAll(/[\w.+-]+@[\w.-]+\.\w+/g)].map((m) => m[0]));
     expect([...correos].filter((c) => c !== "hola@tinkazo.app")).toEqual([]);
   });
 });
