@@ -239,8 +239,9 @@ export interface Env extends VariablesDeActivar, VariablesDeLlaveAuto {
   /** En "0" se apaga la exigencia del pase, solo como salida de emergencia el día del evento. */
   PASE?: string;
   /**
-   * Solo entra quien el proveedor dice que es de Google, sin importar mayúsculas ni espacios alrededor. El valor "suave" es un interruptor de emergencia:
-   * también deja entrar (y cuenta aparte) a quien el proveedor no dice por dónde entró. Cualquier otro valor es estricto.
+   * Solo entra quien el proveedor dice que es de Google, sin importar mayúsculas ni espacios alrededor. El valor "suave" es
+   * un interruptor de emergencia: también deja entrar (y cuenta aparte) a quien el proveedor no dice por dónde entró.
+   * Cualquier otro valor es estricto.
    */
   SOLO_GOOGLE?: string;
   /** Los RPC de la red principal, separados por comas. Se prueban en ese orden. */
