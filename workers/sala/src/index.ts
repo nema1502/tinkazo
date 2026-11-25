@@ -28,7 +28,7 @@
  *   PUT    /v1/sala/<id>/config            Authorization: Bearer <token>   JSON {modo, evento, cuenta} → 204
  *   GET    /v1/sala/<id>/publico           sin token: cómo es el registro y cuántos equipos van → 200 {config, equipos}
  *                                           (en una sala de campaña contesta {config: null, equipos: 0})
- *   POST   /v1/sala/<id>/equipos           JSON {cuenta, d, llave}, con d cifrado con la clave del QR (solo desde el sitio) → 201 {n, estado}
+ *   POST   /v1/sala/<id>/equipos           JSON {cuenta, d, llave, correccion?}, con d cifrado con la clave del QR (solo desde el sitio) → 201 {n, estado}; con correccion (la cuenta anterior que la página lleva) mueve la fila del mismo celular a la cuenta nueva, y 409 «cupon» si el cupón ya está entregado
  *                                           (una cuenta ya anotada solo se reescribe con la misma llave: si no, 409 {"error":"ajena"})
  *   GET    /v1/sala/<id>/equipos?desde=V   Authorization: Bearer <token>   → 200 [{n, cuenta, d, estado, v}]
  *   GET    /v1/sala/<id>/equipos/<cuenta>  sin token: en qué punto está ese equipo → 200 {n, estado}
@@ -154,6 +154,7 @@ import {
   vidaDeCampana,
 } from "./campana";
 import type { CampanaFirmada, EstadoDeCelular, Fase, MotivoDeSalida, ReemplazoDeSala, ReservaDeEvento } from "./campana";
+import { activacionesDeCampana, anotarAltaDeCampana } from "./vigilancia-campana";
 import { leerSorteoEnLaRed } from "./cadena";
 import { CABECERA_DE_CACHE, esCacheable, esSinResultado, guardar as guardarEnLaCache, leerGuardada } from "./cache";
 import {
@@ -926,8 +927,12 @@ export class Sala extends DurableObject<Env> {
     if (!r.ok && r.motivo === "quitada") this.fichasVerificadas.recordar(ficha, persona, ahora, alta.vence);
     if (!r.ok) return r;
     this.fichasVerificadas.recordar(ficha, persona, ahora, alta.vence);
-    if (!r.ya) this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta: r.cuenta, d: alta.d, estado: "aceptado" });
-    else if (r.nombre) this.avisarNombre(r.cuenta, { n: r.n, v: r.v, ...r.nombre });
+    if (!r.ya) {
+      // La vigilancia de firmas: cada alta nueva es una activación explicada del día. Lo que se guarda es la cantidad,
+      // nunca el token, el id de la persona, la cuenta ni el nombre.
+      anotarAltaDeCampana(this.sql, diaUtc(ahora));
+      this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta: r.cuenta, d: alta.d, estado: "aceptado" });
+    } else if (r.nombre) this.avisarNombre(r.cuenta, { n: r.n, v: r.v, ...r.nombre });
     return { ok: true, cuenta: r.cuenta, ya: r.ya, v: r.v, n: r.n };
   }
 
@@ -955,6 +960,12 @@ export class Sala extends DurableObject<Env> {
     // La marca de correo confirmado: solo si el Worker la acepta, con la llave del propio celular y si hay algo nuevo que escribir.
     if (confirmo && marcaDeCorreoPrendida(this.env)) marcarCorreoConfirmado(this.sql, cuenta, huella);
     return { ok: true, ...leerEstadoDeCelular(this.sql, cuenta, huella) };
+  }
+
+  /** Cuántas altas de campaña explican firmas, por día: solo cifras, sin ningún dato de persona. Lo lee la vigilancia. */
+  async activacionesDeCampana(): Promise<Resultado<Record<string, number>>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    return { ok: true, ...activacionesDeCampana(this.sql) };
   }
 
   /** El pase que la pantalla presenta al entrar con Google; solo lo renueva quien tiene el token. */
@@ -1018,6 +1029,10 @@ export class Sala extends DurableObject<Env> {
         "INSERT INTO sala (k, v) VALUES ('cierra', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
         String(cierre),
       );
+    } else if (fase === "abierta" && Number.isSafeInteger(cierre) && cierre > 0 && cierre <= Date.now()) {
+      // Sin hora nueva y con la que había ya vencida, el alta contesta «cerrada» a todos: la sala no puede quedar abierta
+      // para quien organiza y cerrada para los demás. Se rechaza y quien organiza tiene que poner una hora que valga.
+      return { ok: false, motivo: "forma" };
     }
     this.ctx.storage.sql.exec(
       "INSERT INTO sala (k, v) VALUES ('fase', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
@@ -1188,15 +1203,18 @@ export class Sala extends DurableObject<Env> {
 
   /**
    * Un equipo de un celular. La misma cuenta otra vez, con la misma llave, cambia los datos del equipo, no lo duplica:
-   * conserva su número y su estado. Con otra llave (o sin ella) se rechaza y lo que estaba queda igual.
+   * conserva su número y su estado. Con la cuenta anterior (la página avisa que corrige) la fila se mueve a la cuenta
+   * nueva si la llave es la misma: aceptada, en el modo con sorteo propio vuelve a solicitud, porque la aceptación era
+   * de la cuenta anterior; con el cupón ya entregado se rechaza con «cupon». Con otra llave (o sin ella) se rechaza y
+   * lo que estaba queda igual.
    */
-  async anotarEquipo(cuenta: string, d: string, llave: string, ip: string): Promise<Resultado<{ n: number; estado: EstadoEquipo }>> {
+  async anotarEquipo(cuenta: string, d: string, llave: string, ip: string, correccion?: string): Promise<Resultado<{ n: number; estado: EstadoEquipo }>> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
     // En campaña solo se anota por el alta con sesión verificada: el token no abre otra puerta ni saca a nadie sin motivo.
     if (this.esCampana()) return { ok: false, motivo: "campana" };
     const config = this.config();
     if (!config) return { ok: false, motivo: "sin-registro" };
-    const r = await anotarEnRegistro(this.sql, { cuenta, d, llave, ip, ahora: Date.now(), modo: config.modo }, () => this.equiposPorMinuto.intentar(Date.now()));
+    const r = await anotarEnRegistro(this.sql, { cuenta, d, llave, ip, ahora: Date.now(), modo: config.modo, ...(correccion ? { correccion } : {}) }, () => this.equiposPorMinuto.intentar(Date.now()));
     if (!r.ok) return r;
     this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta, d, estado: r.estado });
     return { ok: true, n: r.n, estado: r.estado };
@@ -1559,6 +1577,7 @@ const MOTIVOS: Record<string, number> = {
   rapido: 429,
   "sin-registro": 409,
   ajena: 409,
+  cupon: 409,
   repetido: 409,
   correcciones: 429,
   "cupo-conexion": 429,
@@ -2066,11 +2085,14 @@ export default {
       if (partes[3] === "equipos") {
         if (partes.length === 4 && req.method === "POST") {
           if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
-          const cuerpo = (await leerJson(req, MAX_CUERPO_EQUIPO)) as { cuenta?: unknown; d?: unknown; llave?: unknown } | null;
+          const cuerpo = (await leerJson(req, MAX_CUERPO_EQUIPO)) as { cuenta?: unknown; d?: unknown; llave?: unknown; correccion?: unknown } | null;
           if (!cuerpo || typeof cuerpo.cuenta !== "string" || !esCuentaValida(cuerpo.cuenta) || !equipoCifradoValido(cuerpo.d)) return json({ error: "forma" }, 400, h);
           // La llave del celular: sin ella no hay forma de probar después que es el mismo celular.
           if (typeof cuerpo.llave !== "string" || !ES_LLAVE.test(cuerpo.llave)) return json({ error: "forma" }, 400, h);
-          const r = await salaDe(id).anotarEquipo(cuerpo.cuenta, cuerpo.d, cuerpo.llave, req.headers.get("CF-Connecting-IP") ?? "sin-ip");
+          // La corrección (la cuenta anterior que la página lleva): si viene, tiene que ser una cuenta; mal formada, el pedido no entra.
+          const correccion = typeof cuerpo.correccion === "string" && cuerpo.correccion !== "" ? cuerpo.correccion : undefined;
+          if (correccion !== undefined && !esCuentaValida(correccion)) return json({ error: "forma" }, 400, h);
+          const r = await salaDe(id).anotarEquipo(cuerpo.cuenta, cuerpo.d, cuerpo.llave, req.headers.get("CF-Connecting-IP") ?? "sin-ip", correccion);
           return r.ok ? json({ n: r.n, estado: r.estado }, 201, h) : falla(r, h);
         }
         if (partes.length === 4 && req.method === "GET") {

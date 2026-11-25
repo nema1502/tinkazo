@@ -46,7 +46,7 @@ La tabla es la que traduce el cliente del celular (`src/sala/campana.ts`, `leerA
 | ● `502 {"error":"pollar"}` | El proveedor no contestó (aquí, el corte a propósito). | Familia `pollar`: reintenta a los 5, 10 y 20 segundos; si el proveedor vuelve, `201`; si no, el final es `proveedor`. |
 | `429 {"error":"rapido"}` | Más de 300 altas por minuto en la sala (`CAMPANA_POR_MINUTO`). | Familia `rapido`: 10, 20 y 30 s, estirada hasta el cambio de minuto. |
 | `429 {"error":"llena"}` | La sala llegó a 300 anotadas (`CAMPANA_MAX`). | Final `llena`. |
-| `429 {"error":"cupo-conexion"}` | La conexión gastó su tope de la ventana (400 altas nuevas o 800 envíos en 10 min) o su tope de reingresos. | Final `wifi`, con `Retry-After`. |
+| `429 {"error":"cupo-conexion"}` | La conexión gastó su tope de la ventana (800 envíos en 10 min) o su tope de reingresos. Las altas nuevas no tienen tope por conexión: todo el recinto sale por una sola y el límite es el cupo de la sala. | Final `wifi`, con `Retry-After`. |
 | `429 {"error":"rechazos"}` | 300 rechazos de la conexión, o 5 de una misma ficha, en la ventana. | Final `espera`, con `Retry-After`. |
 | `409 {"error":"cerrada"}` | La sala ya no está abierta. | Final `cerro`. |
 | `409 {"error":"pase"}` | El pase del enlace no vale. Solo con `PASE` distinto de `0`: en el servicio de pruebas está apagado, y por eso la corrida no lo ve. | Final `pase`. |
@@ -56,7 +56,7 @@ La tabla es la que traduce el cliente del celular (`src/sala/campana.ts`, `leerA
 | `403 {"error":"otra-app"}` | La sesión es de otra app o de la red de prueba. | Final `otro`: entrar de nuevo. |
 | `400 {"error":"forma"}` | El cuerpo no tiene la forma esperada (token vencido, `d` o `llave` con mala forma). | Final `sesion`. |
 
-Con los topes de defecto, una corrida de 150 altas de a una **no toca ningún tope de ritmo**: caben 400 altas nuevas por conexión en cada ventana de 10 minutos y 300 por minuto en toda la sala. Para ver el `429 rapido` de verdad habría que mandar más de 300 altas por minuto (con `--espera-ms=0` y en paralelo, que este guion no hace: deja el ensayo de a una, como el evento real).
+Con los topes de defecto, una corrida de 150 altas de a una **no toca ningún tope de ritmo**: caben 800 envíos por conexión en cada ventana de 10 minutos y 300 altas por minuto en toda la sala. Para ver el `429 rapido` de verdad habría que mandar más de 300 altas por minuto (con `--espera-ms=0` y en paralelo, que este guion no hace: deja el ensayo de a una, como el evento real).
 
 ## El corte del proveedor (S2)
 

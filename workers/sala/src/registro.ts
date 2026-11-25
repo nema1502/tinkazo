@@ -7,7 +7,9 @@
  *    en base64url) que guarda junto a los datos de su equipo; acá se guarda solo su huella SHA-256. Para volver a
  *    mandar esa cuenta (corregir los nombres, reintentar) hay que presentar la misma llave: sin ella, el pedido se
  *    rechaza con `ajena` y el registro que estaba queda igual. Quien organiza la libera quitando al equipo con su token
- *    (la fila se borra, con la huella).
+ *    (la fila se borra, con la huella). La página también puede avisar que corrige la cuenta del equipo (lleva la
+ *    cuenta anterior): con la misma llave, la fila se mueve a la cuenta nueva en vez de sumar otra; sin el aviso, el
+ *    alta suma un equipo nuevo, que es como una tableta anota a varios equipos de la misma sala.
  *  - **Un tope por conexión.** Las altas nuevas y los envíos se cuentan por grupo de dirección (`grupoDeIp`: la IPv4
  *    entera o el bloque /64 de IPv6) en ventanas fijas de 10 minutos. Generoso, porque en un evento decenas de
  *    celulares salen por la misma red del lugar: 60 equipos nuevos y 300 envíos por ventana dejan anotarse y corregir
@@ -60,6 +62,13 @@ export interface AltaDeEquipo {
   d: string;
   /** La llave del celular, tal como la manda: acá se guarda solo su huella. */
   llave: string;
+  /**
+   * La cuenta que el equipo tenía anotada si el que manda sabe que está corrigiendo (issue #119): la página la manda
+   * cuando salió de la pantalla del equipo ya anotado. Con ella, el registro mueve la fila del mismo celular (misma
+   * llave) a la cuenta nueva en vez de sumar otra. Sin ella, el alta suma un equipo nuevo, como siempre: así una
+   * tableta que anota a varios equipos de verdad sigue pudiendo.
+   */
+  correccion?: string;
   /** La dirección de la conexión (`CF-Connecting-IP`). No se guarda. */
   ip: string;
   ahora: number;
@@ -68,8 +77,17 @@ export interface AltaDeEquipo {
 
 export type ResultadoDeAlta =
   | { ok: true; n: number; estado: EstadoEquipo; v: number }
-  | { ok: false; motivo: "ajena" | "rapido" | "llena" }
+  | { ok: false; motivo: "ajena" | "rapido" | "llena" | "cupon" }
   | { ok: false; motivo: "cupo-conexion"; esperaS: number };
+
+/** Lo que vale el estado de la fila movida tras el cambio de cuenta, según el modo del registro. */
+function estadoDeLaMueva(anterior: EstadoEquipo, modo: "cupon" | "sorteo"): EstadoEquipo {
+  // La aceptación era de la cuenta anterior: en el modo con sorteo propio vuelve a quedar como solicitud, para que
+  // quien organize la acepte de nuevo viendo al equipo con la cuenta que cobra. En el modo de reserva no hay
+  // aceptación que heredar: el equipo sigue aceptado. El cupón entregado ya se rechazó antes de acá.
+  if (modo === "sorteo") return "solicitud";
+  return anterior;
+}
 
 /**
  * Anota un equipo, o cambia sus datos si el que manda es el mismo celular. `porMinuto` es el tope de la sala (en
@@ -104,6 +122,22 @@ export async function anotarEquipo(sql: Ejecutar, alta: AltaDeEquipo, porMinuto:
     const v = siguienteVersion(sql);
     sql("UPDATE equipos SET d = ?, v = ? WHERE n = ?", alta.d, v, hay.n);
     return { ok: true, n: hay.n, estado: hay.estado, v };
+  }
+  // Corrección de cuenta: la página avisa con la cuenta anterior. Solo la llave del mismo celular mueve la fila, y el
+  // cupón ya entregado no se cambia (quien organiza lo resuelve). Con la cuenta anterior ausente (la quitaron) el
+  // pedido sigue como alta nueva. Si la cuenta nueva ya tenía fila, el `hay` de arriba la actualizó: el reintento de
+  // una corrección que ya entró no suma nada.
+  if (alta.correccion) {
+    const antes = sql<{ n: number; estado: EstadoEquipo; llave: string }>("SELECT n, estado, llave FROM equipos WHERE cuenta = ?", alta.correccion)[0];
+    if (antes) {
+      contar(false);
+      if (!iguales(antes.llave, llave)) return { ok: false, motivo: "ajena" };
+      if (antes.estado === "cupon") return { ok: false, motivo: "cupon" };
+      const v = siguienteVersion(sql);
+      const estado = estadoDeLaMueva(antes.estado, alta.modo);
+      sql("UPDATE equipos SET cuenta = ?, d = ?, estado = ?, v = ? WHERE n = ?", alta.cuenta, alta.d, estado, v, antes.n);
+      return { ok: true, n: antes.n, estado, v };
+    }
   }
   if (ritmo.altas >= ALTAS_POR_CONEXION) {
     contar(false);

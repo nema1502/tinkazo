@@ -135,3 +135,15 @@ describe("cómo entran en el proyector", () => {
     expect(deLaPagina(xs, 3, 3)).toEqual([0, 1, 2]);
   });
 });
+
+describe("la marca de nombre repetido para quien organiza", () => {
+  it("los dos equipos con el mismo nombre quedan marcados; el que no repite, no", () => {
+    const a = equipo(1, { nombre: "Equipo 7" });
+    const b = equipo(2, { nombre: "equipo 7" });
+    const c = equipo(3, { nombre: "Los Cóndores" });
+    const r = filasDePantalla("cupon", [a, b, c], new Map());
+    expect(r.filas.map((f) => f.repetido)).toEqual([true, true, undefined]);
+    // La numeración de antes queda igual: el "(2)" sigue señalando al mismo equipo.
+    expect(r.filas.map((f) => f.nombre)).toEqual(["Equipo 7", "equipo 7 (2)", "Los Cóndores"]);
+  });
+});
