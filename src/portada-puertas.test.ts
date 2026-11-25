@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import { campanasActivo, mostrarEnlacesDeCampana } from "./campana/bandera";
+import { TEXTOS_SALA_CAMPANA } from "./campana/textos-sala";
 import { T, t } from "./i18n";
 import { pintarCancelarEnPortada } from "./ui/cancelar-en-portada";
 
@@ -171,6 +172,7 @@ describe("los textos de las puertas, en los dos idiomas", () => {
   const CLAVES = [
     "ptListaT", "ptListaB", "ptStandT", "ptStandB", "ptEmpresaT", "ptEmpresaB", "ptEmpresaA",
     "peRotulo", "peMarca", "peLugar", "pePremioN", "pePremioM", "peEstado", "peGente",
+    "s1c", "pasoMas", "s2b", "s3b", "navEmpresasC", "ctaEmpresa",
   ];
 
   it("cada una existe en español y en inglés", () => {
@@ -192,10 +194,24 @@ describe("los textos de las puertas, en los dos idiomas", () => {
     for (const l of ["es", "en"] as const) {
       for (const k of CLAVES) {
         const v = T[l][k] as string;
-        expect(v, `${l}.${k}`).not.toMatch(/[«»;]/);
+        expect(v, `${l}.${k}`).not.toMatch(/[«»;—–]/);
         expect(v, `${l}.${k}`).not.toMatch(/rifa|loter|raffle|ticket|boleto|apuesta|suerte/i);
       }
     }
+  });
+});
+
+describe("la tarjeta de ejemplo dice lo mismo en los dos idiomas", () => {
+  it("el premio son dólares digitales también en inglés", () => {
+    expect(T.es.pePremioN).toBe("3 premios de");
+    expect(T.es.pePremioM).toBe("40 dólares digitales");
+    expect(T.en.pePremioN).toBe("3 prizes of");
+    expect(T.en.pePremioM).toBe("40 digital dollars");
+  });
+
+  it("el estado usa la palabra de la tarjeta real de una campaña abierta, en español y en inglés", () => {
+    expect(TEXTOS_SALA_CAMPANA.es.cpoAbiertaHasta.startsWith(T.es.peEstado)).toBe(true);
+    expect(TEXTOS_SALA_CAMPANA.en.cpoAbiertaHasta.startsWith(T.en.peEstado)).toBe(true);
   });
 });
 
