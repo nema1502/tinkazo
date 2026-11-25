@@ -11,6 +11,10 @@ import type { DepsDelCelular, SesionDelCelular } from "./celular";
 import { fetchFalso, type Llamada, type Paso } from "../sala/fetch-falso";
 import type { SesionDeGoogle } from "./sesion";
 import { descifrarEquipo } from "../equipos/datos";
+import { listHash } from "../protocol/canonical";
+import { encodeProof } from "../protocol/proof";
+import { bytesToHex, roundAt } from "../protocol/quicknet";
+import type { LecturaDelHistorial } from "../stellar/historial";
 import type { LecturaDelCelular } from "../stellar/wallet-pollar";
 
 const CUENTA = `G${"A".repeat(55)}`;
@@ -96,6 +100,9 @@ function montar(
     sinSoltar?: boolean;
     /** La sesión de Google sabe decir si la sesión del navegador es de la cuenta (para ir a recibir). */
     laSesionEs?: (cuenta: string) => Promise<"si" | "otra" | "no-se-sabe">;
+    /** El historial de la red y la espera de la comprobación del sello, de mentira. */
+    leerSello?: PiezasDelCelular["leerSello"];
+    esperar?: PiezasDelCelular["esperar"];
   } = {},
 ): Montaje {
   const { f, llamadas } = fetchFalso(guion);
@@ -136,6 +143,8 @@ function montar(
     enlace: () => "https://tinkazo.example.org/participar.html?c=x",
     ...(o.origen ? { origen: () => o.origen as string } : {}),
     ...(o.compartir ? { compartir: o.compartir } : {}),
+    ...(o.leerSello ? { leerSello: o.leerSello } : {}),
+    ...(o.esperar ? { esperar: o.esperar } : {}),
     bloquear,
     dep: { fetch: f, azar: () => o.azar ?? 0.5 },
     ...(o.entorno ? { entorno: o.entorno } : {}),
@@ -612,6 +621,51 @@ describe("el resto de las dependencias", () => {
     expect(await correr(terminada.deps.resultado())).toBe("red");
     const aun = montar({ resultado: [error(404, "sin-resultado")] });
     expect(await correr(aun.deps.resultado())).toBeNull();
+  });
+
+  it("comprobar espera su turno al azar, lee el sello con reintento y dice que la cuenta está", async () => {
+    const lista = [CUENTA, OTRA];
+    const comprobante = `/verificar.html#${await encodeProof({
+      v: 2,
+      names: lista,
+      round: 32_254_977,
+      net: "testnet",
+      contract: `C${"A".repeat(55)}`,
+      id: "7",
+      signature: "0".repeat(96),
+      stx: "2".repeat(64),
+    })}`;
+    const sello = {
+      hash: "0".repeat(64),
+      hashInterior: "1".repeat(64),
+      contractId: `C${"A".repeat(55)}`,
+      organizer: `G${"D".repeat(55)}`,
+      listHash: bytesToHex(listHash([...lista])),
+      count: 2,
+      numWinners: 1,
+      round: roundAt(Date.now() / 1000) - 10,
+      meta: "",
+      closedAt: 1,
+      ledger: 1,
+    };
+    const lecturas: LecturaDelHistorial[] = [{ ok: false, error: "red-caida" }, { ok: true, sello }];
+    const leerSello = vi.fn(async () => lecturas.shift() as LecturaDelHistorial);
+    const esperas: number[] = [];
+    const m = montar({ azar: 0.5, leerSello, esperar: async (ms) => void esperas.push(ms) });
+    const dicho = await m.deps.comprobar?.({ comprobante, cuenta: CUENTA, campana: { sorteo: "7", ganadoras: [CUENTA], promo: null } });
+    expect(dicho).toBe("esta");
+    expect(leerSello).toHaveBeenCalledTimes(2);
+    expect(leerSello).toHaveBeenCalledWith("testnet", "2".repeat(64));
+    // Primero el turno al azar de este celular (la mitad de 6 segundos), después la espera del reintento.
+    expect(esperas).toEqual([3_000, 4_000]);
+  });
+
+  it("comprobar con un comprobante ilegible no pide nada a la red", async () => {
+    const leerSello = vi.fn(async (): Promise<LecturaDelHistorial> => ({ ok: false, error: "red-caida" }));
+    const m = montar({ leerSello, esperar: async () => undefined });
+    const dicho = await m.deps.comprobar?.({ comprobante: "/verificar.html#no-es-nada", cuenta: CUENTA, campana: { sorteo: "7", ganadoras: [CUENTA], promo: null } });
+    expect(dicho).toBeNull();
+    expect(leerSello).not.toHaveBeenCalled();
   });
 
   it("recibir lleva a la herramienta según la red", () => {

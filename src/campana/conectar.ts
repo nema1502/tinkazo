@@ -23,6 +23,7 @@ import {
   type SosiegoDelAlta,
 } from "../sala/campana";
 import type { NetworkName } from "../stellar/config";
+import type { LecturaDelHistorial } from "../stellar/historial";
 import type { LecturaDelCelular } from "../stellar/wallet-pollar";
 import { cargarCampana, type ResultadoDeCarga } from "./carga";
 import type { DepsDelCelular, EstadoPublico, MotivoDeAlta, ResultadoDelAlta, SesionDelCelular } from "./celular";
@@ -39,6 +40,8 @@ export const CONSULTA_ESTIRADA_MS = 30_000;
 export const RETRASO_DE_LA_LECTURA_MS = 1_500;
 /** Cuánto se espera para repetir la primera carga o la primera consulta, si fallaron. */
 export const ESPERA_DE_LA_PRIMERA_MS = 3_000;
+/** Cuánto como máximo se demora, al azar, la comprobación del sello: 150 celulares reciben el resultado a la vez y no leen juntos. */
+export const RETRASO_DE_LA_COMPROBACION_MS = 6_000;
 
 export type BaseDelCelular = Pick<
   DepsDelCelular,
@@ -118,6 +121,10 @@ export interface PiezasDelCelular {
   dep?: DependenciasDeCampana;
   /** La configuración del build que dice el costo de retirar. Sin ella, la de este sitio. */
   entorno?: Record<string, unknown>;
+  /** El historial público de la red, para la comprobación del sello. Sin esto, el de verdad (se baja recién al hacer falta). */
+  leerSello?: (red: NetworkName, hash: string) => Promise<LecturaDelHistorial>;
+  /** Para esperar sin el reloj de verdad. */
+  esperar?: (ms: number) => Promise<void>;
 }
 
 /** Las dependencias del celular con lo de verdad. */
@@ -269,6 +276,23 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
       const r = await resultadoDeCampana(p.servicio, p.sala, dep);
       // El celular ya llega a Terminó por el estado y por `yo`: acá solo le sirve lo que se pudo leer.
       return r === "terminada" ? "red" : r;
+    },
+    // La comprobación propia del sello se baja recién cuando hay resultado: la página de antes no carga nada de esto. Cada celular
+    // espera su turno al azar y la lectura se repite si la red falla, con tope (`comprobar.ts`). No usa el lector que recuerda
+    // lo que falló: el reintento tiene que volver a preguntar.
+    comprobar: async ({ comprobante, cuenta, campana }) => {
+      const dormir = p.esperar ?? esperar;
+      await dormir(Math.round(azar() * RETRASO_DE_LA_COMPROBACION_MS));
+      const [{ comprobarConReintento }, leerSello] = await Promise.all([
+        import("./comprobar"),
+        p.leerSello
+          ? Promise.resolve(p.leerSello)
+          : import("../stellar/historial").then((m) => (red: NetworkName, hash: string) => m.leerHistorial(red, hash)),
+      ]);
+      return comprobarConReintento(
+        { comprobante, cuenta, red: p.red, contrato: p.campana.contrato, campana },
+        { leer: (red, hash) => leerSello(red as NetworkName, hash), esperar: dormir, ahora },
+      );
     },
     recibir: () => p.ir(destinoDeRecibir(p.red)),
     ...(p.origen ? { enlaceDelPremio: () => enlaceParaMandar(p.red, (p.origen as () => string)()) } : {}),
