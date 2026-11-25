@@ -199,7 +199,7 @@ Las rutas nuevas:
 
 ## Los pagos de premios, los retiros y el alta de quien ganó
 
-Además de los sellos y los sorteos, el portero de mainnet puede pagar la comisión de la red de dos pagos de dólares digitales y dar de alta a quien ganó un premio. Son tres cosas aparte, cada una con su variable en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml`. Nacen apagadas en el código y solo valen en la red principal y con `ALTAS = "1"`. Hoy las tres están en `"1"` en `[env.mainnet.vars]`, desde mediados de noviembre de 2026. Con las tres apagadas el portero hace lo de siempre: las rutas nuevas dan `404 no-existe` y `estado` y `cupo` no traen nada nuevo.
+Además de los sellos y los sorteos, el portero de mainnet puede pagar la comisión de la red de dos pagos de dólares digitales y dar de alta a quien ganó un premio. Son tres cosas aparte, cada una con su variable en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml`. Nacen apagadas en el código y solo valen en la red principal y con `ALTAS = "1"`. En el repositorio las tres están en `"1"` en `[env.mainnet.vars]` desde el cambio `c2aec150`. Con las tres apagadas el portero hace lo de siempre: las rutas nuevas dan `404 no-existe` y `estado` y `cupo` no traen nada nuevo.
 
 - **El pago de un premio** (`POST /v1/patrocinio/pago` con `{"forma":"premio","xdr":...}`). Quien organizó un sorteo le paga a quien ganó, desde su propia cuenta, con la nota `tk:premio:<sorteo>:<puesto>`. No lleva sesión: la firma de la cuenta que paga prueba quién es. El portero lo paga solo si esa cuenta está en su libro, el sorteo es suyo, ya se sorteó, el puesto existe, el sello lo pagó el portero, el `draw` de ese mismo sorteo también lo pagó el portero con ese sello (un sello respalda un solo sorteo: otro igual sellado por fuera no tiene premios por acá) y ese puesto no se pagó antes por esta ruta.
 - **El retiro con su costo** (`forma: "retiro"`). Una persona saca dólares digitales de su cuenta a otra, y en la misma transacción paga el costo de `COSTO_RETIRO` a `CUENTA_COBROS`. Vale desde cualquier cuenta. El portero reconoce ese costo por la transacción que él mismo pagó: no cae a los pagos sueltos ni se confunde con una orden, y la nota de un retiro nunca se lee como la de una orden.
@@ -278,9 +278,11 @@ Mueve 3 dólares digitales entre cuentas propias (1 queda en cobros), unos cient
 
 Las funciones del sitio se prenden con variables `VITE_` que se leen al construir y quedan escritas en su código. Esta tabla dice cuáles trae hoy el sitio publicado. **Leído del sitio publicado el 25 de noviembre de 2026**, del código que sirve tinkazo.app, y vigilado cada día por `pnpm check:banderas`, que baja el sitio, saca el valor de cada variable y falla si una fila ya no coincide o si el sitio trae una variable que la tabla no nombra.
 
-- **Sin la variable.** Lo que pasa cuando no está definida. Una variable ausente no es una bandera apagada: `VITE_EQUIPOS`, `VITE_MODOS`, `VITE_FOTO_JUEGO` y las pistas de música nacen prendidas, y solo un valor de apagado las frena. Las demás nacen apagadas.
+**Quien prende o apaga una bandera en producción actualiza esta tabla en el mismo cambio. Si no, la vigilancia del día siguiente falla.**
+
+- **Sin la variable.** Lo que pasa cuando no está definida. Una variable ausente no es una bandera apagada: `VITE_EQUIPOS`, `VITE_MODOS`, `VITE_FOTO_JUEGO` y las pistas de música nacen prendidas (`VITE_EQUIPOS` y `VITE_MODOS` desde el cambio `7e414660`), y solo un valor de apagado las frena. Las demás nacen apagadas.
 - **En producción.** El valor escrito, `sin definir` si el sitio no la trae, o `definida` si la trae y su valor es un monto, una dirección o una llave pública: de esas la tabla no escribe el valor y la comprobación solo mira que exista.
-- **Desde cuándo.** Las variables viven en Vercel y ningún archivo del repositorio registra el día en que se pusieron. Se sabe que el sitio abre en Oficial desde el 20 de noviembre de 2026 y que el código de cada bandera de pagos y campañas ya estaba hecho el 18 de noviembre de 2026. Las de pagos y campañas están prendidas desde mediados de noviembre de 2026.
+- **Desde cuándo.** Las variables viven en Vercel y ningún archivo del repositorio registra el día en que se pusieron. La única fuente de una fecha es la lista de variables de Vercel, leída el 25 de noviembre de 2026, que dice cuándo figura creada cada una. Muestra la antigüedad en días enteros, así que cada fecha puede correrse un día. Es la fecha de la variable en Vercel y no la de la publicación que empezó a usarla. `VITE_PAGOS`, `VITE_PAGAR_CON_GOOGLE`, `VITE_VOTO_POR_CONTENIDO`, `VITE_RAMPA` y `VITE_CAMPANAS` figuran creadas alrededor del 18 de noviembre de 2026, `VITE_STELLAR_NETWORK` y `VITE_REGALO` alrededor del 20, `VITE_EQUIPOS`, `VITE_MODOS` y `VITE_INGRESO_PLAN_B` alrededor del 12 y `VITE_ALTA` alrededor del 11. De las demás no hay fecha. Una fecha de otro documento sobre una de estas banderas tiene que citar su fuente: el cambio de git que la movió, o esta lectura.
 - **Qué no entra.** Las variables `VITE_VERCEL_` las pone el sistema de publicación y no son banderas.
 - **Cómo se cambia una fila.** Se cambia la variable en Vercel, se publica de nuevo y en el mismo pedido se corrige la tabla. Si no, la vigilancia diaria falla.
 
@@ -511,7 +513,7 @@ El build no sale con una sola o con dos de las tres, con la cuenta repetida, sin
 
 **Qué hace falta antes (no es código):**
 
-1. El portero de la red principal con `RETIROS = "1"` y `PAGOS_PREMIO = "1"`: es un cambio en `workers/patrocinio/wrangler.toml` y un despliegue del portero, que pide la palabra de quien mantiene el proyecto. **Hoy `RETIROS` está en `"1"`, desde mediados de noviembre de 2026. Con `"0"`, el panel muestra el pago desde otra billetera como único camino.**
+1. El portero de la red principal con `RETIROS = "1"` y `PAGOS_PREMIO = "1"`: es un cambio en `workers/patrocinio/wrangler.toml` y un despliegue del portero, que pide la palabra de quien mantiene el proyecto. **En el repositorio `RETIROS` está en `"1"` desde el cambio `c2aec150`. Con `"0"`, el panel muestra el pago desde otra billetera como único camino.**
 2. La cuenta que cobra, creada en la red principal con su línea del USDC de Circle. Sin la línea, el retiro da `no-recibe`.
 3. Créditos de Pollar para la firma del retiro.
 
