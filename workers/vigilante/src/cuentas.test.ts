@@ -247,6 +247,51 @@ describe("la vuelta con el conteo del portero sin leer: el aviso no queda mudo s
   });
 });
 
+describe("la vuelta con el conteo sin leer vuelta tras vuelta: ya no es solo un renglón del registro", () => {
+  it("con el bloque en null dos vueltas seguidas manda un aviso propio, no repite y avisa cuando el conteo vuelve", async () => {
+    const m = mundoFalso({ estado: estadoBien({ cuentas: null }) });
+    await m.vuelta();
+    // Una sola vez es un tropiezo: no se avisa.
+    expect(m.correo.enviados).toEqual([]);
+    expect((await m.memoria()).cuentasSinConteo).toBe(1);
+    await m.vueltaEn(10);
+    expect(m.correo.enviados).toHaveLength(1);
+    expect(m.correo.enviados[0]?.subject).toBe("No se están contando las cuentas nuevas");
+    expect((await m.memoria()).cuentasSinConteo).toBe(2);
+    await m.vueltaEn(10);
+    expect(m.correo.enviados).toHaveLength(1);
+    m.portero.estado = estadoBien({ cuentas: bloqueCuentas([], T0 - HORA, T0 + 30 * MINUTO) });
+    await m.vueltaEn(10);
+    expect(m.correo.enviados).toHaveLength(2);
+    expect(m.correo.enviados[1]?.text).toContain("volvió a contar las cuentas nuevas");
+    expect((await m.memoria()).cuentasSinConteo).toBe(0);
+  });
+
+  it("un bloque que no se entiende cuenta igual, y un tropiezo suelto no deja nada", async () => {
+    const raro = mundoFalso({ estado: estadoBien({ cuentas: { porHora: "no" } }) });
+    await raro.vuelta();
+    await raro.vueltaEn(10);
+    expect(raro.correo.enviados.map((c) => c.subject)).toEqual(["No se están contando las cuentas nuevas"]);
+    const suelto = mundoFalso({ estado: estadoBien({ cuentas: null }) });
+    await suelto.vuelta();
+    suelto.portero.estado = estadoBien({ cuentas: bloqueCuentas([], T0 - HORA, T0 + 30 * MINUTO) });
+    await suelto.vueltaEn(10);
+    suelto.portero.estado = estadoBien({ cuentas: null });
+    await suelto.vueltaEn(10);
+    expect(suelto.correo.enviados).toEqual([]);
+    expect((await suelto.memoria()).cuentasSinConteo).toBe(1);
+  });
+
+  it("sin el bloque (un portero que no es el de mainnet) no cuenta como sin leer: el estado de siempre no avisa nada", async () => {
+    const m = mundoFalso();
+    await m.vuelta();
+    await m.vueltaEn(10);
+    await m.vueltaEn(10);
+    expect(m.correo.enviados).toEqual([]);
+    expect((await m.memoria()).cuentasSinConteo).toBe(0);
+  });
+});
+
 describe("lo que se documenta: los avisos nuevos tienen fila y las variables existen", () => {
   it("los dos motivos tienen su texto, y sin cifras raras en la de arriba del umbral", () => {
     expect(asuntoDeClave("desbordado:cuentas-nuevas")).toBeNull();

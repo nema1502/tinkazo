@@ -24,7 +24,7 @@ import {
   revisarPortero,
 } from "../../../scripts/lib/revision-portero.mjs";
 import { type Canal, canalesActivos, faltaConfigurar, horasDeResumen, secreto, urlDelPortero } from "./config";
-import { MOTIVOS_CUENTAS, umbralDeCuentas, vigilarCuentas } from "./cuentas";
+import { MOTIVOS_CUENTAS, cuentasDelEstado, umbralDeCuentas, vigilarCuentas } from "./cuentas";
 import { codigoDe, enviarPor, motivoDe } from "./envio";
 import { olvidarMemoriaDeLaRuta } from "./memoria-ruta";
 import { type Contexto, type Mensaje, mensajeDeAlerta, mensajeDeArreglo, mensajeDeCuentas, mensajeDeResumen } from "./mensaje";
@@ -98,6 +98,8 @@ export interface Memoria {
   resumenEn: string | null;
   /** Las cuentas por hora (issue 177): la última hora cuyo aviso se armó, y qué motivos se avisaron en ella. */
   cuentasAviso: { hora: string; motivos: string[] } | null;
+  /** Vueltas seguidas en que el portero mandó el conteo de cuentas en null o sin entenderse. */
+  cuentasSinConteo: number;
   pendientes: Aviso[];
 }
 
@@ -112,12 +114,14 @@ export const PENDIENTE_MAX_HORAS = 24;
 export const PENDIENTES_MAX = 10;
 /** El vigilante no puede entrar al portero: falta la clave o ya no vale. */
 export const SIN_CLAVE = "vigilante-sin-clave";
+/** El portero contesta pero no pudo contar las cuentas nuevas varias vueltas seguidas: una ola de cuentas no se vería. */
+export const CUENTAS_SIN_CONTEO = "cuentas-sin-conteo";
 
 const HORA_MS = 3_600_000;
 /** Las ranuras del resumen se cuentan desde este instante, a las 12:00 UTC (las 8 de la mañana en Bolivia). */
 const ANCLA_DEL_RESUMEN = Date.UTC(2026, 0, 1, 12, 0, 0);
 
-export const memoriaVacia = (): Memoria => ({ v: 1, claves: [], avisadoEn: null, sinRespuesta: 0, ultimaVuelta: null, salioBien: false, resumenEn: null, cuentasAviso: null, pendientes: [] });
+export const memoriaVacia = (): Memoria => ({ v: 1, claves: [], avisadoEn: null, sinRespuesta: 0, ultimaVuelta: null, salioBien: false, resumenEn: null, cuentasAviso: null, cuentasSinConteo: 0, pendientes: [] });
 
 /** El comienzo de la ranura del resumen a la que pertenece `ahora`: cada `horas` horas, contadas desde las 12:00 UTC. */
 export function inicioDeResumen(ahora: Date, horas: number): Date {
@@ -170,6 +174,7 @@ export function memoriaDe(texto: string): Memoria | null {
     salioBien: j.salioBien === true,
     resumenEn: fechaOnull(j.resumenEn),
     cuentasAviso: cuentasAvisoDe(j.cuentasAviso),
+    cuentasSinConteo: entero(j.cuentasSinConteo),
     pendientes: Array.isArray(j.pendientes) ? j.pendientes.map(avisoDe).filter((a): a is Aviso => a !== null) : [],
   };
 }
@@ -276,9 +281,20 @@ export async function vuelta(env: Entorno, dep: Dependencias): Promise<Resultado
   const lectura = await leerPortero(env, dep);
   let claves: string[] | null = null;
   let problemas: string[] = [];
+  // El bloque `cuentas` del estado (issue 177), tal como vino: sin él (undefined) no hay nada que contar, y en null o sin
+  // entenderse el portero no pudo contar.
+  const estadoLeido: unknown = lectura.ok ? lectura.estado : null;
+  const bloqueDeCuentas = estadoLeido && typeof estadoLeido === "object" && !Array.isArray(estadoLeido) ? (estadoLeido as Record<string, unknown>).cuentas : undefined;
   if (lectura.ok) {
     m.sinRespuesta = 0;
     ({ claves, problemas } = revisarPortero(lectura.estado));
+    // Un conteo que no se pudo hacer vuelta tras vuelta es un problema como el de las firmas: una ola de cuentas no se vería.
+    const sinConteo = bloqueDeCuentas !== undefined && cuentasDelEstado({ cuentas: bloqueDeCuentas }) === null;
+    m.cuentasSinConteo = sinConteo ? m.cuentasSinConteo + 1 : 0;
+    if (m.cuentasSinConteo >= SIN_RESPUESTA_MAX) {
+      claves = [...claves, CUENTAS_SIN_CONTEO];
+      problemas = [...problemas, "el portero no pudo contar las cuentas nuevas"];
+    }
   } else if (lectura.motivo === "sin-clave" || lectura.motivo === "clave-rechazada") {
     registrar("portero-sin-acceso", { motivo: lectura.motivo });
     claves = [SIN_CLAVE];
@@ -322,7 +338,6 @@ export async function vuelta(env: Entorno, dep: Dependencias): Promise<Resultado
   // 2b. Las cuentas nuevas y las activaciones por hora (issue 177): el portero las cuenta desde los movimientos de los
   // créditos de Pollar (`lectura-cuentas.ts`) y las manda en el bloque `cuentas` de `/estado`. Un aviso por hora y por
   // motivo: lo avisado en una hora queda anotado y la hora nueva manda el aviso de vuelta, si sigue arriba del umbral.
-  const bloqueDeCuentas = lectura.ok && estado && typeof estado === "object" && !Array.isArray(estado) ? (estado as Record<string, unknown>).cuentas : undefined;
   if (canales.length > 0 && bloqueDeCuentas !== undefined) {
     const decisionCuentas = vigilarCuentas({
       cuentas: bloqueDeCuentas,
