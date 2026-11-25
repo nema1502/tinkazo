@@ -65,6 +65,7 @@ import { listHash } from "../protocol/canonical";
 import { select } from "../protocol/select";
 import { app, paceSeconds } from "../state";
 import { etiquetaConCuenta, ponerEtiquetas } from "../equipos/etiquetas";
+import { lineaDePrueba } from "../campana/cuentas-de-prueba";
 import { cuentaCorta } from "../equipos/modelo";
 import { esSoloMirar, setSoloMirar } from "../solo-mirar";
 import { T, type Lang } from "../i18n";
@@ -1235,5 +1236,70 @@ describe("compartir el sorteo desde la vista en vivo", () => {
       const nombre = etiquetas.find(([c]) => c === gana)?.[1] ?? "";
       expect(txt).toContain(nombre);
     });
+  });
+});
+
+describe("una lista de personas vista desde el celular", () => {
+  const lineas = [1, 2, 3, 4, 5, 6].map((n) => lineaDePrueba(n));
+  const gana = (): number => ganadores(lineas)[0] ?? 0;
+  beforeEach(() => ponerEtiquetas(new Map()));
+  afterEach(() => ponerEtiquetas(new Map()));
+
+  /** Abre, deja pasar la espera y el show, y llega a Lo que salió. */
+  const hastaElFinDe = async (d: DatosEspectador, op: OpcionesDeLaVista = {}, lang: Lang = "es"): Promise<void> => {
+    abrirEspectador(d, lang, { desfase: async () => 0, irA, azar: () => 0, leer: async () => registro({ grabado: true, n: d.n }), ...op });
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
+    (h.jugar.mock.calls[0]?.[0] as () => void)();
+    await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000 + 10_000);
+  };
+
+  /** Lo que el diálogo de compartir recibe como ganadores, sin abrir el diálogo. */
+  const ganadoresQueSeComparten = async (d: DatosEspectador): Promise<string[]> => {
+    const abrirSorteo = vi.fn();
+    await hastaElFinDe(d, { cargarCompartir: async () => ({ abrirSorteo }) as unknown as typeof import("./compartir") });
+    capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+    await vi.waitFor(() => expect(abrirSorteo).toHaveBeenCalled());
+    return (abrirSorteo.mock.calls[0]?.[0] as { ganadores: string[] }).ganadores;
+  };
+
+  it("sin nombres, la cinta de la espera dice el lugar de cada persona y nunca la línea", () => {
+    abrir(datos({ n: lineas }));
+    const cinta = capa().querySelector(".espera-nombres")?.textContent ?? "";
+    expect(cinta).toContain("Lugar");
+    expect(cinta).not.toContain("p1:");
+  });
+
+  it("sin nombres, al final dice el lugar de quien ganó en la lista y nunca un trozo de la línea", async () => {
+    await hastaElFinDe(datos({ n: lineas }));
+    const final = capa().querySelector(".espectador-ganadores")?.textContent ?? "";
+    expect(final).toBe(`Lugar ${gana() + 1} de la lista`);
+    expect(final).not.toContain("p1:");
+    expect(final).not.toContain(lineas[gana()]!.slice(0, 6));
+  });
+
+  it("con el nombre en el enlace, al final va el nombre, sin paréntesis", async () => {
+    await hastaElFinDe(datos({ n: lineas, e: [[lineas[gana()]!, "Ana R."]], q: 1 }));
+    expect(capa().querySelector(".espectador-ganadores")?.textContent).toBe("Ana R.");
+  });
+
+  it("en inglés dice Spot n on the list", async () => {
+    await hastaElFinDe(datos({ n: lineas }), {}, "en");
+    expect(capa().querySelector(".espectador-ganadores")?.textContent).toBe(`Spot ${gana() + 1} on the list`);
+  });
+
+  it("al compartir, sin nombres sale el lugar en la lista y no un trozo de la línea", async () => {
+    const g = await ganadoresQueSeComparten(datos({ n: lineas }));
+    expect(g).toEqual([`Lugar ${gana() + 1} de la lista`]);
+  });
+
+  it("al compartir, en una campaña el nombre no sale del celular: sale el lugar", async () => {
+    const g = await ganadoresQueSeComparten(datos({ n: lineas, e: [[lineas[gana()]!, "Ana R."]], q: 1 }));
+    expect(g).toEqual([`Lugar ${gana() + 1} de la lista`]);
+  });
+
+  it("al compartir, con una lista de cuentas sigue la cuenta acortada como siempre", async () => {
+    const cuentas = ["G" + "A".repeat(55), "G" + "B".repeat(55), "G" + "C".repeat(55)];
+    const g = await ganadoresQueSeComparten(datos({ n: cuentas, e: [[cuentas[0]!, "Ana R."]], q: 1 }));
+    expect(g).toEqual([cuentaCorta(cuentas[ganadores(cuentas)[0] ?? 0] ?? "")]);
   });
 });
