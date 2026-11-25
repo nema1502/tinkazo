@@ -92,10 +92,14 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
   const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable }] = await Promise.all([import("../protocol/drand"), import("./sorteo-seguro")]);
   // Apagado en el build, la condición es una constante falsa y todo este bloque desaparece: el camino de siempre, sin
   // cargar nada de más. Prendido, el servicio de comisiones manda el sorteo de una cuenta de Google en la red principal
-  // (`sorteo-del-servicio.ts`) y, si asegura que no lo manda, sigue el camino de abajo con su presupuesto entero.
+  // (`sorteo-del-servicio.ts`) y, si asegura que no lo manda, sigue el camino de abajo con lo que le queda del
+  // presupuesto de siempre: lo que se esperó al servicio se descuenta, así la sala no espera más que antes.
+  let yaGastadoMs: number | undefined;
   if (import.meta.env.VITE_SORTEO_SERVIDOR === "1") {
     const [{ sorteoPorServidor }, servicio] = await Promise.all([import("../stellar/alta-config"), import("./sorteo-del-servicio")]);
     if (sorteoPorServidor() && servicio.loTomaElServicio(p.raffleId, !!p.pagarConMiCuenta, p.ahora)) {
+      const ahora = p.ahora ?? Date.now;
+      const desde = ahora();
       const r = await servicio.sortearPorElServicio({
         raffleId: p.raffleId,
         firma96: decompressG1(p.signature),
@@ -105,6 +109,7 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
       });
       if (r.estado === "listo") return comparar(p.esperados, r.valor, r.yaEstaba);
       if (r.estado === "error") return { estado: "fallo", error: r.error };
+      yaGastadoMs = Math.max(0, ahora() - desde);
     }
   }
   const fin = await sortearConReintentos<{ winners: number[]; randomness: string; txHash?: string }>({
@@ -113,6 +118,7 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
     reintentable: sorteoReintentable,
     alReintentar: p.alReintentar ?? (() => undefined),
     ...(p.ahora ? { ahora: p.ahora } : {}),
+    ...(yaGastadoMs !== undefined ? { yaGastadoMs } : {}),
     dormir,
   });
   if (!fin.ok) return { estado: "fallo", error: fin.error };

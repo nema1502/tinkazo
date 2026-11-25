@@ -128,3 +128,30 @@ describe("el servicio asegura que no lo manda", () => {
     expect(h.drawOnChain).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("la sala no espera más que antes", () => {
+  it("lo que se esperó al servicio se descuenta del presupuesto del camino de siempre", async () => {
+    let t = (roundTime(R) + 60) * 1000;
+    const ahora = (): number => t;
+    const dormir = async (ms: number): Promise<void> => void (t += ms);
+    // El servicio tardó 80 segundos y aseguró que no manda: al camino de siempre le quedan 10.
+    h.sortearPorElServicio.mockImplementation(async () => {
+      t += 80_000;
+      return { estado: "camino-de-hoy" };
+    });
+    h.drawOnChain.mockRejectedValue(new Error("la red no contestó"));
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    const fin = await grabarElSorteo({ ...base, ahora, dormir });
+    expect(fin.estado).toBe("fallo");
+    // Esperas de 2 y 4 segundos caben en 10, la de 8 ya no: tres intentos en vez de cinco.
+    expect(h.drawOnChain).toHaveBeenCalledTimes(3);
+  });
+
+  it("si el servicio no se usó, el presupuesto es el de siempre", async () => {
+    h.loToma.mockReturnValue(false);
+    h.drawOnChain.mockRejectedValue(new Error("la red no contestó"));
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    await grabarElSorteo(base);
+    expect(h.drawOnChain).toHaveBeenCalledTimes(5);
+  });
+});
