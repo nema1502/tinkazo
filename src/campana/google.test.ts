@@ -42,6 +42,8 @@ describe("cargarElGuionDeGoogle", () => {
     expect(guiones[0]?.src).toBe(URL_DEL_GUION_DE_GOOGLE);
     expect(URL_DEL_GUION_DE_GOOGLE).toBe("https://accounts.google.com/gsi/client");
     expect(guiones[0]?.async).toBe(true);
+    // Google no recibe de dónde viene la persona: la dirección lleva el pase de la campaña.
+    expect(guiones[0]?.referrerPolicy).toBe("no-referrer");
     (window as unknown as Ventana).google = { accounts: { id: api } };
     guiones[0]?.dispatchEvent(new Event("load"));
     expect(await a).toBe(api);

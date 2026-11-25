@@ -67,6 +67,8 @@ export function cargarElGuionDeGoogle(
     }, tope);
     guion.src = URL_DEL_GUION_DE_GOOGLE;
     guion.async = true;
+    // La dirección de la página lleva el pase de la campaña: el guion de Google no tiene por qué recibirla.
+    guion.referrerPolicy = "no-referrer";
     guion.defer = true;
     guion.addEventListener("load", () => {
       ventana.clearTimeout(reloj);
