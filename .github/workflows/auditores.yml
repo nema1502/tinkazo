@@ -1,5 +1,9 @@
 # Auditores con navegador, a pedido.
 #
+# NUNCA se capturan vistas con datos de personas reales (una lista de invitados, una campaña de
+# verdad): el artefacto de capturas de un repositorio público lo puede bajar cualquiera. Solo la
+# demostración y las páginas públicas.
+#
 # La revisión de cada pedido (ci.yml) corre las pruebas y unas pocas comprobaciones. Los
 # auditores de `scripts/` abren el sitio construido en un Chrome de verdad y tardan mucho más:
 # acá se lanzan a mano, desde la pestaña Actions («Run workflow») o con
@@ -32,21 +36,26 @@
 #
 # Capturas de cualquier vista de cualquier rama. Con el dato `vistas` (una lista JSON, ver
 # `scripts/capturar-vistas.mjs`), la corrida NO audita: construye la rama pedida, saca las capturas
-# con un solo trabajo y las sube como el artefacto `capturas-vistas` (con un `informe.json`). Los
-# datos de entrada son tres, todos opcionales:
+# con un solo trabajo y las sube como el artefacto `capturas-vistas` (con un `informe.json`), que se
+# guarda un solo día. Los datos de entrada son tres, todos opcionales:
 #   - `vistas`: la lista de vistas, en JSON. Con este dato vacío, todo corre como siempre.
 #   - `rama`: la rama, la etiqueta o el commit del mismo repositorio que se construye y se
 #     captura. Vacío, la misma desde donde se lanzó la corrida.
 #   - `entorno`: variables de construcción del sitio, separadas por espacios, por ejemplo
 #     `VITE_CAMPANAS=1`. Solo nombres que empiezan con VITE_ y valores de letras, números y _ . : / -
+# `rama` y `entorno` sin `vistas` no valen: la corrida falla enseguida en vez de correr los auditores.
 # El guion que saca las fotos es el de la rama desde donde se lanzó la corrida (la herramienta), y el
-# sitio que se fotografía es el de `rama`: dos copias del repositorio en la máquina. Ejemplo:
-#   gh workflow run auditores.yml --ref <rama-con-la-herramienta> \
+# sitio que se fotografía es el de `rama`: dos copias del repositorio en la máquina.
+# Ejemplo (cambiá MI-RAMA por la rama que trae la herramienta, e ID por el número de la corrida
+# que muestra `gh run list`):
+#   gh workflow run auditores.yml --ref MI-RAMA \
 #     -f rama=main -f entorno=VITE_CAMPANAS=1 \
 #     -f vistas='[{"nombre":"portada","ruta":"/","ancho":1440,"alto":900,"tema":"light"}]'
-#   gh run download <id> -n capturas-vistas -D capturas
+#   gh run download ID -n capturas-vistas -D capturas
 # Los datos de entrada nunca se escriben dentro de un comando: llegan por variables de entorno y se
-# validan antes de construir nada. No usa ningún secreto y los permisos son de solo lectura.
+# validan antes de construir nada. No usa ningún secreto, los permisos son de solo lectura y el trabajo de
+# capturas no usa la caché de pnpm: construye código de otra rama, y lo que guardara quedaría en el ámbito
+# de la rama desde donde se lanzó la corrida, donde lo leería después la revisión de esa rama.
 #
 # Para ver andar este archivo antes de que esté en la rama principal, se dispara también en
 # un pedido que lo cambie (el botón «Run workflow» solo aparece cuando el archivo ya está en
@@ -88,11 +97,14 @@ jobs:
     name: Construir el sitio
     # Un pedido que viene de una bifurcación no corre la matriz: son quince máquinas. El trabajo
     # que audita depende de este, así que tampoco corre. Con `vistas` tampoco: eso es una corrida de capturas.
-    if: ${{ inputs.vistas == '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    # Y con `rama` o `entorno` sin `vistas` tampoco: ver `datos-a-medias`.
+    if: ${{ inputs.vistas == '' && inputs.rama == '' && inputs.entorno == '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11
@@ -108,6 +120,18 @@ jobs:
           path: dist
           if-no-files-found: error
           retention-days: 1
+
+  # Rama o entorno sin vistas: son datos de las capturas, y sin la lista no hay capturas. Se avisa en vez de
+  # ignorarlos y correr los quince auditores sin que nadie lo pidiera.
+  datos-a-medias:
+    name: Datos que faltan
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.vistas == '' && (inputs.rama != '' || inputs.entorno != '') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: |
+          echo "::error::Mandaste rama o entorno sin vistas. Son datos de las capturas: mandá también la lista de vistas, o sacá rama y entorno para correr los auditores."
+          exit 1
 
   auditar:
     name: Auditar ${{ matrix.nombre }}${{ matrix.experimental && ' (experimental)' || '' }}
@@ -196,6 +220,8 @@ jobs:
             experimental: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11
@@ -263,8 +289,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: sitio/pnpm-lock.yaml
       - name: Instalar y construir el sitio
         working-directory: sitio
         run: |
@@ -283,4 +307,4 @@ jobs:
           name: capturas-vistas
           path: capturas
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1
