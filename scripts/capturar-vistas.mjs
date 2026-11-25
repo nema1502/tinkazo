@@ -44,7 +44,15 @@
  *     {"accion":"esperar","selector":"#wait-box","ms":20000}            espera a que se vea
  *     {"accion":"pausa","ms":1500}
  *     {"accion":"tecla","tecla":"Enter"}                                Enter, Escape, Tab, Space, flechas, Home, End...
- *     {"accion":"desplazar","selector":"#winner-box"}
+ *     {"accion":"desplazar","selector":"#winner-box"}                   lo lleva al centro; falla si no se dibuja en 10 s (esperalo antes)
+ *
+ * Antes de cada foto el guion espera las tipografías y las imágenes que se dibujan (con paginaEntera
+ * recorre la página de a una pantalla para que carguen las diferidas y vuelve arriba). El informe dice
+ * cuántas imágenes había (`imagenesEnLaFoto`) y cuántas quedaron sin completar (`imagenesSinCompletar`).
+ *
+ * La pestaña no sale del sitio servido: navegar a otro origen se corta, y un enlace externo que abre
+ * ventana nueva (target="_blank", window.open, un formulario) se frena antes de abrirse. La vista falla
+ * con el sitio al que quiso ir.
  *
  * Recetas (probadas contra el sitio servido, cada una es un objeto de la lista):
  *
@@ -66,9 +74,11 @@
  *     {"nombre":"espera-demo-150","ruta":"/?demo=wheel&lead=45&n=150","ancho":1280,"alto":900,"tema":"dark","pausaMs":4000,
  *      "pasos":[{"accion":"esperar","selector":"#btn-espera"},{"accion":"clicHasta","selector":"#btn-espera","hasta":".espera-reloj"}]}
  *
- *   El resultado de una demostración (sin animaciones, la ronda llega a los 3 s):
- *     {"nombre":"resultado-demo","ruta":"/?demo=wheel&instant=1&lead=3","ancho":1280,"alto":900,"tema":"light",
- *      "esperar":".winner-name","pausaMs":2500,"pasos":[{"accion":"desplazar","selector":"#winner-box"}]}
+ *   El resultado de una demostración (sin animaciones, la ronda llega a los 3 s). La caja del resultado
+ *   existe desde el principio pero no se dibuja hasta que hay ganador: primero se espera al nombre, después
+ *   se deja que termine el desplazamiento suave que hace el propio sitio y recién entonces se desplaza.
+ *     {"nombre":"resultado-demo","ruta":"/?demo=wheel&instant=1&lead=3","ancho":1280,"alto":900,"tema":"light","pausaMs":500,
+ *      "pasos":[{"accion":"esperar","selector":".winner-name"},{"accion":"pausa","ms":1500},{"accion":"desplazar","selector":"#winner-box"}]}
  *
  *   Una página de lectura entera, en inglés y celular:
  *     {"nombre":"seguridad-en-390","ruta":"/seguridad.html","ancho":390,"alto":844,"idioma":"en","paginaEntera":true,"esperar":"main"}
@@ -83,7 +93,7 @@
 import { mkdirSync, readFileSync, appendFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
-import { clicHasta, cortarFueraDelOrigen, evidenciaDelFallo } from "./lib/vistas-pagina.mjs";
+import { clicHasta, cortarFueraDelOrigen, desplazar, evidenciaDelFallo, prepararFoto } from "./lib/vistas-pagina.mjs";
 import { TECLAS, TOPES, direccionDeVista, generarNombres, leerEntorno, leerVistas, plazoDeLaVista, problemaDeBase, problemaDeRama } from "./lib/vistas.mjs";
 
 const args = process.argv.slice(2);
@@ -195,12 +205,8 @@ async function paso(page, p, revisar) {
       return sleep(p.ms);
     case "tecla":
       return tecla(page, p.tecla);
-    case "desplazar": {
-      const r = await page.waitFor(`document.querySelector(${js(p.selector)})`, 10_000);
-      if (!r.ok) throw new Error(`no está ${p.selector}`);
-      await page.eval(`document.querySelector(${js(p.selector)}).scrollIntoView({ block: 'center', behavior: 'instant' })`);
-      return undefined;
-    }
+    case "desplazar":
+      return desplazar(page, p.selector, esperarVisible);
     default:
       throw new Error(`acción desconocida ${p.accion}`);
   }
@@ -237,7 +243,7 @@ async function fotografiar(page, archivo, entera) {
 
 async function capturar(browser, v, plazoMs, porElTotal) {
   const url = direccionDeVista(v, base);
-  const fila = { nombre: v.nombre, ok: false, archivo: null, error: null, direccion: url, direccionFinal: null, idiomaDeLaPagina: null, pantalla: `${v.ancho}x${v.alto}`, tema: v.tema, idioma: v.idioma, paginaEntera: v.paginaEntera, truncada: false, scrollHorizontal: null, anchoDelContenido: null, anchoDeLaPantalla: null, erroresDeConsola: [], archivoDelFallo: null, direccionEnElFallo: null, textoVisible: null };
+  const fila = { nombre: v.nombre, ok: false, archivo: null, error: null, direccion: url, direccionFinal: null, idiomaDeLaPagina: null, pantalla: `${v.ancho}x${v.alto}`, tema: v.tema, idioma: v.idioma, paginaEntera: v.paginaEntera, truncada: false, imagenesEnLaFoto: null, imagenesSinCompletar: null, scrollHorizontal: null, anchoDelContenido: null, anchoDeLaPantalla: null, erroresDeConsola: [], archivoDelFallo: null, direccionEnElFallo: null, textoVisible: null };
   const page = await browser.open("about:blank");
   let errores = () => [];
   let revisar = () => undefined;
@@ -279,6 +285,10 @@ async function capturar(browser, v, plazoMs, porElTotal) {
     if (v.esperar) await motivoReal(() => esperarVisible(page, v.esperar, 30_000));
     if (v.pausaMs) await sleep(v.pausaMs);
     revisar();
+    // Las imágenes diferidas y las letras, antes de la foto (con la página entera, recorriéndola): lo que no llegó se anota.
+    const listas = await motivoReal(() => prepararFoto(page, v.paginaEntera));
+    fila.imagenesEnLaFoto = listas.imagenes;
+    fila.imagenesSinCompletar = listas.sinCompletar;
     const d = JSON.parse(await page.eval("JSON.stringify({ href: location.href, lang: document.documentElement.lang, sw: document.documentElement.scrollWidth, iw: window.innerWidth })"));
     fila.direccionFinal = d.href;
     fila.idiomaDeLaPagina = d.lang;
@@ -332,7 +342,7 @@ try {
     informe.falladas = informe.vistas.filter((f) => !f.ok).length;
     informe.sinHacer = informe.vistas.filter((f) => f.sinHacer).length;
     guardar();
-    console.log(`${fila.sinHacer ? "SIN HACER" : fila.ok ? "OK    " : "FALLÓ "} ${v.nombre} (${fila.pantalla})${fila.ok ? `${fila.scrollHorizontal ? " con scroll horizontal" : ""}${fila.erroresDeConsola.length ? ` y ${fila.erroresDeConsola.length} errores de consola` : ""}` : `: ${fila.error}${fila.archivoDelFallo ? ` (foto: ${fila.archivoDelFallo})` : ""}`}`);
+    console.log(`${fila.sinHacer ? "SIN HACER" : fila.ok ? "OK    " : "FALLÓ "} ${v.nombre} (${fila.pantalla})${fila.ok ? `${fila.scrollHorizontal ? " con scroll horizontal" : ""}${fila.imagenesSinCompletar ? ` con ${fila.imagenesSinCompletar} imágenes sin completar` : ""}${fila.erroresDeConsola.length ? ` y ${fila.erroresDeConsola.length} errores de consola` : ""}` : `: ${fila.error}${fila.archivoDelFallo ? ` (foto: ${fila.archivoDelFallo})` : ""}`}`);
   }
 } finally {
   await browser.close();
