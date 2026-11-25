@@ -210,8 +210,8 @@ describe("la tarjeta de ejemplo dice lo mismo en los dos idiomas", () => {
   });
 
   it("el estado usa la palabra de la tarjeta real de una campaña abierta, en español y en inglés", () => {
-    expect(TEXTOS_SALA_CAMPANA.es.cpoAbiertaHasta.startsWith(T.es.peEstado)).toBe(true);
-    expect(TEXTOS_SALA_CAMPANA.en.cpoAbiertaHasta.startsWith(T.en.peEstado)).toBe(true);
+    expect(String(TEXTOS_SALA_CAMPANA.es.cpoAbiertaHasta).startsWith(String(T.es.peEstado))).toBe(true);
+    expect(String(TEXTOS_SALA_CAMPANA.en.cpoAbiertaHasta).startsWith(String(T.en.peEstado))).toBe(true);
   });
 });
 
