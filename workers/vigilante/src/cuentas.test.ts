@@ -52,6 +52,15 @@ describe("vigilarCuentas: debajo del umbral no avisa y arriba avisa una vez por 
     expect(r.avisar).toEqual([]);
   });
 
+  it("una página llena de movimientos solo dice cuántos hay por lo menos: llegar al umbral ya avisa, y con el conteo completo hace falta pasarlo", () => {
+    const hora = (nuevas: number, completo: boolean) => ({ porHora: [{ hora: iso(T0), nuevas, activaciones: 0 }], completo });
+    const con = { base: 200, cupoEvento: null as number | null, recordado: sinAviso };
+    expect(vigilarCuentas({ cuentas: hora(200, false), ...con }).avisar).toEqual([{ motivo: "cuentas-nuevas", hubo: 200, umbral: 200, hora: iso(T0) }]);
+    expect(vigilarCuentas({ cuentas: hora(199, false), ...con }).avisar).toEqual([]);
+    expect(vigilarCuentas({ cuentas: hora(200, true), ...con }).avisar).toEqual([]);
+    expect(vigilarCuentas({ cuentas: hora(201, true), ...con }).avisar).toHaveLength(1);
+  });
+
   it("arriba avisa una vez, y dentro de la misma hora no vuelve a avisar el mismo motivo", () => {
     const cuentas = { porHora: [{ hora: iso(T0), nuevas: 61, activaciones: 0 }], completo: true };
     const primera = vigilarCuentas({ cuentas: cuentas, ...umbrales, recordado: sinAviso });
