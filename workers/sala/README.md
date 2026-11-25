@@ -187,7 +187,7 @@ este orden:
 3. Comprueba que exista la configuración del proveedor y verifica la sesión fuera del objeto persistente.
 4. Una falla del proveedor da `502 pollar`; una sesión inválida da `401 sesion` y una de otra app da `403 otra-app`.
 5. Solo entra quien el proveedor dice que es de Google, escrito como lo escriba (una lista de lo permitido): cualquier otra vía, o un
-   campo que no viene, da `403 solo-google`. En el modo suave, que es un interruptor de emergencia, entra además quien no dice
+   campo que no viene, da `403 solo-google` y deja una línea `via-rechazada` en el registro (ver `SOLO_GOOGLE`). En el modo suave, que es un interruptor de emergencia, entra además quien no dice
    por dónde entró y se cuenta aparte.
 6. Si la persona ya estaba, reconoce su nueva llave y contesta `200 {"cuenta","ya":true}` sin duplicarla. Cada persona
    tiene su propio tope de 6 reingresos por hora: pasado, contesta `429 {"error":"cupo-conexion"}` con `Retry-After` y no toca nada.
@@ -237,6 +237,12 @@ La configuración no secreta vive en `wrangler.toml`:
   `VIA_DE_LA_SESION` en `workers/patrocinio/src/pollar.ts`. Se compara sin importar mayúsculas ni espacios alrededor
   (`google`, `GOOGLE` y `Google` valen), pero lo que escribe el verify con una cuenta de Google todavía no se midió con una
   respuesta real. Si no coincide, en modo estricto no entra nadie.
+  Cada rechazo por la vía deja una línea en el registro, `{"evento":"via-rechazada","datos":{"valor","modo"}}`, con lo que mandó el
+  proveedor (minúsculas, solo letras, números y `.` `-` `_` `:`, hasta 32 caracteres, o `sin-campo`, `no-es-texto` o `vacio`) y nada
+  de la persona: ni cuenta, ni correo, ni sesión, ni dirección de red. Se mira con
+  `npx wrangler@4.160.0 tail --config wrangler.toml --search via-rechazada`. Esta regla vive en el módulo del portero que la sala
+  empaqueta: para que valga hay que desplegar la sala y el portero. Si el valor que aparece no es `google`, no se cambia nada en
+  vivo sin la palabra de quien mantiene el proyecto, y el arreglo es la constante `VIA_DE_LA_SESION`.
 
 `POLLAR_SECRETO` es la misma llave secreta del portero de la red principal y no se escribe en el repositorio. Se carga desde
 esta carpeta con:
