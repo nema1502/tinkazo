@@ -11,7 +11,7 @@ import { type AccesoDelPaso, type CuentaDelPaso, GUARDA_DE_TOQUE_MS, type Opcion
  * altas de mentira: sin red.
  * - Una billetera que no contesta no deja la ruedita para siempre: a los 45 segundos del toque, «Está tardando».
  * - Si el voto salió y la cuenta no aparece, se sigue mirando callado y la pantalla avanza sola si aparece.
- * - El pedido de crear la cuenta se espera 30 segundos, y su falta tiene su propio texto.
+ * - El pedido de crear la cuenta se espera 45 segundos, y su falta tiene su propio texto.
  * - Volver a la pestaña lee enseguida, y nunca vota.
  * - La relectura del acceso al activar se hace una sola vez, y solo si hubo un intento.
  */
@@ -311,15 +311,15 @@ describe("la relectura del acceso al activar", () => {
 });
 
 describe("la cadena del regalo", () => {
-  it("sin pedido: a los 30 segundos dice que se está preparando, y «Probar de nuevo» no vuelve a pedir el regalo", async () => {
+  it("sin pedido: a los 45 segundos dice que se está preparando, y «Probar de nuevo» no vuelve a pedir el regalo", async () => {
     const srv = servidorFalso(true);
     const cf = cuentaFalsa();
     await abrir(srv, cf);
     cf.e.est = { ...NUEVA, activacion: "preparando" };
     principal().click();
-    await pasa(29_000);
+    await pasa(44_000);
     expect(alerta()).toBe("");
-    await pasa(2_500);
+    await pasa(3_000);
     expect(alerta()).toContain(t("clErrSinPedido"));
     expect(alerta()).not.toContain(t("clErrFallo"));
     expect(principal().textContent).toBe(t("clProbarDeNuevo"));
@@ -337,7 +337,7 @@ describe("la cadena del regalo", () => {
     await abrir(srv, cf);
     cf.e.est = { ...NUEVA, activacion: "preparando" };
     principal().click();
-    await pasa(32_000);
+    await pasa(48_000);
     expect(alerta()).toContain(t("clErrSinPedido"));
     cf.e.est = { ...NUEVA };
     principal().click();
@@ -347,7 +347,7 @@ describe("la cadena del regalo", () => {
     expect(parte()).toBe("proteger");
   });
 
-  it("en una de cada dos vueltas se le pide a la billetera que relea de verdad", async () => {
+  it("las vueltas de espera del pedido no le piden a la billetera que relea de verdad, como siempre", async () => {
     const srv = servidorFalso(true);
     const cf = cuentaFalsa();
     await abrir(srv, cf);
@@ -355,11 +355,42 @@ describe("la cadena del regalo", () => {
     cf.cuenta.estadoOficial.mockClear();
     principal().click();
     await pasa(20_000);
-    const frescas = cf.cuenta.estadoOficial.mock.calls.filter((c) => c[0] === true).length;
     const total = cf.cuenta.estadoOficial.mock.calls.length;
     expect(total).toBeGreaterThan(8);
-    expect(frescas).toBeGreaterThanOrEqual(Math.floor(total / 2) - 1);
-    expect(frescas).toBeLessThanOrEqual(Math.ceil(total / 2) + 1);
+    expect(cf.cuenta.estadoOficial.mock.calls.filter((c) => c[0] === true).length).toBe(0);
+  });
+
+  it("un pedido que aparece pasados los 30 segundos se encuentra solo, sin un toque más", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    cf.e.est = { ...NUEVA, activacion: "preparando" };
+    principal().click();
+    setTimeout(() => (cf.e.est = { ...NUEVA }), 38_000);
+    await pasa(45_000);
+    expect(alerta()).toBe("");
+    expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
+    expect(srv.reclamar).toHaveBeenCalledTimes(1);
+  });
+
+  it("un pedido que se ve en la última lectura, aunque termine pasado el tope, cuenta como encontrado", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    cf.e.est = { ...NUEVA, activacion: "preparando" };
+    const t0 = Date.now();
+    cf.cuenta.estadoOficial.mockImplementation(async () => {
+      // La lectura que corre justo antes del tope tarda un segundo y medio, termina pasado el tope y trae el pedido.
+      if (Date.now() >= t0 + 43_000) {
+        await new Promise((r) => setTimeout(r, 1_500));
+        return { ...NUEVA };
+      }
+      return { ...cf.e.est };
+    });
+    principal().click();
+    await pasa(52_000);
+    expect(alerta()).not.toContain(t("clErrSinPedido"));
+    expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
   });
 
   it("la billetera lenta: dice que tarda, a los 45 segundos de empezar a activar", async () => {
@@ -567,5 +598,103 @@ describe("volver a la pestaña", () => {
     expect(parte()).toBe("proteger");
     expect(alerta()).toBe("");
     expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("lo que sigue al regalo dice lo que pasó de verdad", () => {
+  it("el servidor no contesta al preguntar el acceso antes de votar: dice que tarda, no que falló, y no vota", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    srv.reclamar.mockImplementationOnce(async () => {
+      srv.estado.mockImplementation(() => new Promise<never>(() => undefined));
+      srv.s.acceso = "admin";
+      srv.s.bienvenida = null;
+      return ok({ ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: { fecha: VENCE, cuantos: 3 } }, regalo: "dado", sigue: "activar" });
+    });
+    principal().click();
+    await pasa(35_000);
+    expect(alerta()).toContain(t("clErrTarda"));
+    expect(alerta()).not.toContain(t("clErrFallo"));
+    expect(cf.activarCuenta).not.toHaveBeenCalled();
+  });
+
+  it("el servidor no se alcanza al preguntar el acceso antes de votar: dice que no hay conexión", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    srv.reclamar.mockImplementationOnce(async () => {
+      srv.estado.mockImplementation(async () => ({ ok: false as const, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 }));
+      srv.s.acceso = "admin";
+      srv.s.bienvenida = null;
+      return ok({ ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: { fecha: VENCE, cuantos: 3 } }, regalo: "dado", sigue: "activar" });
+    });
+    principal().click();
+    await pasa(2_500);
+    expect(alerta()).toContain(t("clErrRed"));
+    expect(alerta()).not.toContain(t("clErrFallo"));
+    expect(cf.activarCuenta).not.toHaveBeenCalled();
+  });
+
+  it("la cuenta ya quedó activada y el servidor falla al releer el acceso: no dice que no se pudo activar", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa({}, async () => {
+      cf.e.est = { ...cf.e.est, activacion: "lista" };
+      srv.estado.mockImplementation(async () => ({ ok: false as const, clave: "altaErrServicio", vars: {}, motivo: "servidor", estado: 500 }));
+      return "activada" as const;
+    });
+    await abrir(srv, cf);
+    principal().click();
+    await pasa(3_000);
+    expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
+    expect(alerta()).toContain(t("clErrTarda"));
+    expect(alerta()).not.toContain(t("clErrFallo"));
+    expect(principal().textContent).toBe(t("clProbarDeNuevo"));
+  });
+});
+
+describe("volver a la pestaña no borra la falla del último toque", () => {
+  it.each([
+    ["pollar-activacion-rara", "clErrRara"],
+    ["pollar-activacion-fallo", "clErrFallo"],
+    ["SDK_CREDITS_INSUFFICIENT", "clErrServicio"],
+  ])("con %s la falla sigue a la vista después de volver", async (codigo, clave) => {
+    const srv = servidorFalso(false);
+    const cf = cuentaFalsa({}, async () => Promise.reject(new Error(codigo)));
+    await abrir(srv, cf);
+    principal().click();
+    await pasa(2_500);
+    expect(alerta()).toContain(t(clave));
+    cf.avisar();
+    volverALaPestana();
+    await pasa(2_000);
+    expect(alerta()).toContain(t(clave));
+    expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
+  });
+
+  it("si al volver la cuenta ya está lista, la falla se va y la pantalla avanza", async () => {
+    const srv = servidorFalso(false);
+    const cf = cuentaFalsa({}, async () => Promise.reject(new Error("pollar-activacion-fallo")));
+    await abrir(srv, cf);
+    principal().click();
+    await pasa(2_500);
+    expect(alerta()).toContain(t("clErrFallo"));
+    cf.e.est = { ...LISTA_EST };
+    volverALaPestana();
+    await pasa(2_000);
+    expect(alerta()).toBe("");
+    expect(parte()).toBe("proteger");
+  });
+
+  it("un corte de red sí se va cuando una lectura contesta", async () => {
+    const srv = servidorFalso(false);
+    const cf = cuentaFalsa({}, async () => Promise.reject(new Error("SDK_NETWORK_TIMEOUT")));
+    await abrir(srv, cf);
+    principal().click();
+    await pasa(2_500);
+    expect(alerta()).toContain(t("clErrRed"));
+    volverALaPestana();
+    await pasa(2_000);
+    expect(alerta()).toBe("");
   });
 });

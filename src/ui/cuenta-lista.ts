@@ -198,7 +198,8 @@ const CUPON_QUE_NO_SIRVE: ReadonlySet<string> = new Set(["forma", "cupon-no-exis
 
 /** Cada cuánto, y hasta cuándo en total, se mira si ya está el pedido de crear la cuenta después del canje. */
 export const PEDIDO_CADA_MS = 2_000;
-export const PEDIDO_TOPE_MS = 30_000;
+/** Lo más que se espera el pedido: como los 40 segundos de antes (veinte vueltas de dos), medidos con la hora de verdad. */
+export const PEDIDO_TOPE_MS = 45_000;
 
 /**
  * El canje en curso, fuera del paso: un doble toque, o cerrar y volver a abrir el paso mientras el servidor contesta,
@@ -285,6 +286,8 @@ export const MARCA_CODIGO = "tinkazo.cl.codigo";
 
 /** Cuánto se espera para decir que algo tarda, entre lecturas, y los topes de cada espera. */
 const LENTO_MS = 8_000;
+/** Las fallas de un toque que una lectura de fondo no borra: decirlas otra vez con el botón de volver a activar sin explicación no sirve. */
+const FALLAS_DEL_TOQUE: readonly Falla[] = ["tarda", "fallo", "rara", "servicio"];
 const CADA_LECTURA_MS = 4_000;
 const SONDEO_SIN_PEDIDO_MS = 20_000;
 /**
@@ -386,8 +389,8 @@ function fallaDeLaCadena(e: unknown): FallaDeLaCadena {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return "red";
   const m = mensaje(e);
   if (m === "sin-pedido") return "sin-pedido";
-  if (m === "tarda" || m === "tope" || m === "pollar-activacion-lenta") return "tarda";
-  if (m === "SDK_NETWORK_TIMEOUT" || esDeRed(e)) return "red";
+  if (m === "tarda" || m === "tope" || m === "pollar-activacion-lenta" || m === "sin-acceso" || m === "estado") return "tarda";
+  if (m === "SDK_NETWORK_TIMEOUT" || m === "sin-acceso-red" || m === "estado-red" || esDeRed(e)) return "red";
   return "fallo";
 }
 
@@ -581,8 +584,11 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   /** En esta página la persona tocó para activar: solo entonces, al quedar lista la cuenta, se le avisa al portero. */
   let huboIntentoDeActivar = false;
   let accesoReleido = false;
-  /** El toque cuya falla de «tarda» no se borra con una lectura de fondo (solo «Probar de nuevo» o un toque nuevo la sacan). */
-  let tardaDelToque = -1;
+  /**
+   * El toque cuya falla (tarda, no se pudo, rara o el servicio) no se borra con una lectura de fondo: solo «Probar de nuevo»,
+   * un toque nuevo o encontrar la cuenta lista la sacan. La de red sí se va cuando una lectura contesta.
+   */
+  let fallaDelToque = -1;
   /** El toque que ya mira callado, para no armar dos veces la misma lectura. */
   let toqueSilencioso = -1;
   /** Las pausas de las esperas que corren ahora: al volver a la pestaña terminan en el acto y deciden con la hora de verdad. */
@@ -1079,8 +1085,10 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     const laPidioLaPersona = st.corre === "revisando";
     if (st.corre === "revisando") st.corre = null;
     if (!cuentaSesionViva()) st.falla = "sesion";
-    // Lo que dijo «tarda» queda a la vista con su «Probar de nuevo» aunque una lectura de fondo no encuentre la cuenta.
-    else if (st.falla === "tarda" && tardaDelToque === toqueN && !laPidioLaPersona && st.corre === null && e.activacion !== "lista") st.falla = "tarda";
+    // La falla del último toque queda a la vista con su «Probar de nuevo» aunque una lectura de fondo no encuentre la cuenta.
+    else if (st.falla && FALLAS_DEL_TOQUE.includes(st.falla) && fallaDelToque === toqueN && !laPidioLaPersona && st.corre === null && e.activacion !== "lista") {
+      /* queda a la vista */
+    }
     else if (st.falla && ["red", "tarda", "fallo", "rara", "servicio", "prot-red"].includes(st.falla)) st.falla = null;
     else if (st.falla === "sin-pedido" && e.activacion !== "preparando") st.falla = null;
     if (antes.activacion !== "lista" && e.activacion === "lista") {
@@ -1255,7 +1263,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       if (st.corre === "activando" || st.corre === "esperando") {
         correr(null);
         st.falla = "tarda";
-        tardaDelToque = toque;
+        fallaDelToque = toque;
         pintar();
       }
       leerEnSilencio(toque, rueda + ESPERA_CALLADA_MS, alQuedarLista);
@@ -1300,7 +1308,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       if (ruedaVigente?.toque === toque) ruedaVigente = null;
       correr(null);
       st.falla = f;
-      if (f === "tarda") tardaDelToque = toque;
+      if (FALLAS_DEL_TOQUE.includes(f)) fallaDelToque = toque;
       pintar();
     }
   }
@@ -1759,9 +1767,10 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
 
   /**
    * Después del canje, con la cuenta que se abre en el momento: el pedido de crear la cuenta, cada 2 segundos y hasta
-   * `PEDIDO_TOPE_MS` medidos con la hora (no contando vueltas), con una relectura de verdad en una de cada dos. Con la
-   * pestaña congelada, al volver se lee en el acto. «hay» solo si el pedido apareció dentro del tiempo: pasado el tope no
-   * se vota, se dice que falta y la persona toca «Probar de nuevo». «sin-lectura»: ninguna lectura contestó.
+   * `PEDIDO_TOPE_MS` medidos con la hora (no contando vueltas), sin pedirle a la billetera que relea de verdad (el kit ya la
+   * mira solo), salvo al volver a la pestaña. Con la pestaña congelada, al volver se lee en el acto. Un pedido que se ve en
+   * la última lectura cuenta como «hay», aunque la lectura haya terminado pasado el tope. «sin-lectura»: ninguna lectura
+   * contestó.
    */
   async function esperarPedido(): Promise<"hay" | "lista" | "no" | "sin-lectura"> {
     const hasta = Date.now() + PEDIDO_TOPE_MS;
@@ -1770,10 +1779,10 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       const despertada = i > 0 ? await pausa(PEDIDO_CADA_MS) : false;
       let e: EstadoOficial | null = null;
       try {
-        // Una de cada dos vueltas, o al volver a la pestaña, se le pide a Pollar que relea la billetera de verdad.
+        // Sin pedirle a Pollar que relea la billetera, como siempre: solo al volver a la pestaña se le pide de verdad.
         const resto = hasta - Date.now();
         const tope = resto > 0 ? Math.min(TOPE_LECTURA_MS, Math.max(resto, 2_000)) : TOPE_LECTURA_MS;
-        e = await conTopeSimple(cuenta.estadoOficial(i % 2 === 1 || despertada), tope);
+        e = await conTopeSimple(cuenta.estadoOficial(despertada), tope);
       } catch {
         e = null;
       }
@@ -1782,7 +1791,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         leyo = true;
         st.est = e;
         if (e.activacion === "lista") return "lista";
-        if (e.activacion === "falta") return Date.now() < hasta ? "hay" : "no";
+        if (e.activacion === "falta") return "hay";
       }
       if (Date.now() >= hasta) return leyo ? "no" : "sin-lectura";
     }
@@ -2013,8 +2022,9 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     let e: ResultadoDeAlta<EstadoDeAlta>;
     try {
       e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
-    } catch {
-      throw new Error("sin-acceso");
+    } catch (x) {
+      // Sin respuesta a tiempo: tarda. Un corte de la red: no hay conexión. Cada uno con su texto.
+      throw new Error(mensaje(x) !== "tope" && esDeRed(x) ? "sin-acceso-red" : "sin-acceso");
     }
     if (cerrado) return "no";
     const mia = cuentaDelAcceso(acceso);
@@ -2038,7 +2048,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       pintar();
       return "no";
     }
-    throw new Error("sin-acceso");
+    throw new Error(!e.ok && e.motivo === "sin-red" ? "sin-acceso-red" : "sin-acceso");
   }
 
   /**
@@ -2102,7 +2112,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
           pintar();
           return;
         }
-        throw new Error("estado");
+        // La cuenta ya está activa: lo que falta es la lectura del acceso, y el texto no dice que no se pudo activar.
+        throw new Error(e.motivo === "sin-red" ? "estado-red" : "estado");
       }
       aplicarAcceso(e);
       acceso.refrescarCupo();
@@ -2116,7 +2127,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       acc.cadena = false;
       correr(null);
       const m = mensaje(x);
-      if (paso === "activar" && !["sin-pedido", "tarda", "sin-acceso"].includes(m)) {
+      if (paso === "activar" && !["sin-pedido", "tarda", "sin-acceso", "sin-acceso-red"].includes(m)) {
         // La activación falló con lo suyo: sin sesión, o sin arreglo desde acá, se dice como siempre.
         const f = fallaDeActivar(x, cuentaSesionViva());
         if (f === "sesion" || f === "tope") {
