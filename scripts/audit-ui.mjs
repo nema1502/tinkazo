@@ -47,7 +47,7 @@ import { ABRIR_OTRAS_FORMAS_JS, HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR
 import { CUENTA_FALSA, freighterFalsa } from "./lib/freighter-falsa.mjs";
 import { UMBRALES, sondaTexto } from "./lib/texto-minimo.mjs";
 import { esLaLinea, frasesDeLaLinea } from "./lib/linea-sellar.mjs";
-import { ANCHOS_CABECERA, SONDA_FILA_CABECERA, evaluarFilaCabecera } from "./lib/cabecera-fila.mjs";
+import { ANCHOS_CABECERA, FORZAR_LETRA_ANCHA, SONDA_FILA_CABECERA, evaluarFilaCabecera } from "./lib/cabecera-fila.mjs";
 
 // La línea bajo Entrar para sellar tranquiliza a quien organiza. Se compara la frase COMPLETA, en español y en inglés, leída del
 // diccionario (src/i18n.ts): así el auditor sigue al texto cuando se retoca y no deja pasar otra frase que empiece igual.
@@ -1116,8 +1116,8 @@ async function run() {
         }
       }
     }
-    // La cabecera de escritorio en una sola fila, en el modo Oficial (la marca más ancha) y con las campañas abiertas, a 1101 y a
-    // 1280 px. Con cinco entradas en la fila, el grupo de la derecha (idioma, marca y cuenta) cayó a una segunda fila y nada
+    // La cabecera de escritorio en una sola fila, en el modo Oficial (la marca más ancha), con las campañas abiertas y con la letra
+    // ancha del peor caso, a 1101 y a 1280 px. Con cinco entradas en la fila, el grupo de la derecha (idioma, marca y cuenta) cayó a una segunda fila y nada
     // lo avisó. La evaluación vive en `lib/cabecera-fila.mjs`, con su prueba.
     if (!soloPantalla || soloPantalla === "cabecera") {
       for (const tema of ["dark", "light"]) {
@@ -1128,9 +1128,11 @@ async function run() {
             await sinSesionGuardada(c);
             await c.send("Page.navigate", { url: `${base}/?theme=${tema}&red=oficial` });
             await c.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded' && !!document.querySelector('header .header-lado') && !!document.querySelector('#wallet-box .cuenta-chip')", 20000);
+            // Con la letra ancha del peor caso (la de las máquinas de GitHub), no la de esta máquina: ver lib/cabecera-fila.mjs.
+            const cambiados = await c.eval(FORZAR_LETRA_ANCHA);
             await sleep(400);
             const medida = JSON.parse(await c.eval(SONDA_FILA_CABECERA));
-            const r = evaluarFilaCabecera(medida);
+            const r = cambiados > 0 ? evaluarFilaCabecera(medida) : { ok: false, detalle: "no se pudo poner la letra ancha en la cabecera: la medida no sería la del peor caso" };
             check(`cabecera ${ancho} px ${tema} en modo Oficial: el grupo de la derecha queda en la fila del logo`, r.ok, r.detalle);
             await c.screenshot(join(outDir, `ui-cabecera-${ancho}-${tema}.png`));
           } finally {

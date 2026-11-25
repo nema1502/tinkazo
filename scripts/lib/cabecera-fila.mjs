@@ -7,6 +7,22 @@
 /** Cuántos píxeles de diferencia entre los centros todavía cuentan como la misma fila. */
 export const MARGEN_FILA_PX = 6;
 
+/**
+ * El aire mínimo, en píxeles, entre el último enlace de la fila y el grupo de la derecha. Cero pasa por un píxel y a la primera
+ * letra distinta se parte: pide un colchón para que un cambio chico de texto o de relleno avise antes de romper la fila.
+ */
+export const AIRE_MINIMO_PX = 16;
+
+/**
+ * La letra del peor caso. Las máquinas de GitHub dibujan con una letra más ancha que la de una compu de verdad (DejaVu Sans en
+ * Linux) y ahí se vio el defecto, pero este auditor corre con el Chrome de quien lo lanza, que en Windows usa una letra mucho más
+ * angosta (Segoe UI) y dejaba pasar la cabecera partida. Se fuerza una letra ancha en todo lo de la cabecera antes de medir:
+ * DejaVu Sans donde está y Verdana, que mide casi igual y viene con Windows y con macOS. La monoespaciada de la marca del modo
+ * y de los botones del idioma (Consolas en Windows es angosta) pasa a DejaVu Sans Mono o a Courier New.
+ */
+export const LETRA_ANCHA = '"DejaVu Sans", Verdana, sans-serif';
+export const LETRA_MONO_ANCHA = '"DejaVu Sans Mono", "Courier New", monospace';
+
 /** Los anchos de escritorio que mira el auditor, en el modo Oficial (la dirección lleva ?red=oficial). */
 export const ANCHOS_CABECERA = [1101, 1280];
 
@@ -37,14 +53,30 @@ export const SONDA_FILA_CABECERA = `JSON.stringify((() => {
   };
 })())`;
 
+/**
+ * Se evalúa en la página antes de medir: pone la letra ancha, con prioridad, en la cabecera y en todo lo que lleva. Una letra es
+ * monoespaciada si la que tiene puesta nombra una monoespaciada (ui-monospace, Consolas, monospace). Devuelve cuántos elementos
+ * cambió, para que quien llama compruebe que no fue cero.
+ */
+export const FORZAR_LETRA_ANCHA = `(() => {
+  const ancha = ${JSON.stringify(LETRA_ANCHA)};
+  const mono = ${JSON.stringify(LETRA_MONO_ANCHA)};
+  const todos = [...document.querySelectorAll('header, header *')];
+  for (const el of todos) {
+    const f = getComputedStyle(el).fontFamily || '';
+    el.style.setProperty('font-family', /mono|consolas/i.test(f) ? mono : ancha, 'important');
+  }
+  return todos.length;
+})()`;
+
 const centro = (c) => (c.arriba + c.abajo) / 2;
 
 /**
  * Evalúa lo medido. Falla, con el motivo en claro, si falta una pieza, si el grupo de la derecha no está en la misma fila que el
- * logo (el centro a más de `margen` píxeles) o si la fila de enlaces llega hasta pisarlo.
+ * logo (el centro a más de `margen` píxeles) si la fila de enlaces llega hasta pisarlo o si deja menos de `aireMinimo` píxeles de aire.
  * @returns {{ ok: boolean, detalle: string }}
  */
-export function evaluarFilaCabecera(m, margen = MARGEN_FILA_PX) {
+export function evaluarFilaCabecera(m, margen = MARGEN_FILA_PX, aireMinimo = AIRE_MINIMO_PX) {
   if (!m || !m.logo || !m.lado) {
     return { ok: false, detalle: "no se encontró el logo o el grupo de la derecha (.header-lado) en la cabecera" };
   }
@@ -68,5 +100,13 @@ export function evaluarFilaCabecera(m, margen = MARGEN_FILA_PX) {
     };
   }
   const aire = m.ultimoEnlace ? Math.round(m.lado.izquierda - m.ultimoEnlace.derecha) : 0;
+  if (m.ultimoEnlace && aire < aireMinimo) {
+    return {
+      ok: false,
+      detalle:
+        `la fila de enlaces llega hasta "${m.ultimoTexto}" y deja ${aire} px de aire al grupo de la derecha con ${m.ancho} px de ancho ` +
+        `(el mínimo es de ${aireMinimo} px, medido con la letra ancha). Sigue en una fila, pero a la menor diferencia se parte`,
+    };
+  }
   return { ok: true, detalle: `el grupo de la derecha está en la fila del logo, con ${aire} px de aire (${m.entradas} entradas, hasta "${m.ultimoTexto}")` };
 }
