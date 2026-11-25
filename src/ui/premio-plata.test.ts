@@ -58,6 +58,18 @@ describe("qué es un premio en plata", () => {
     }
   });
 
+  it("no se dispara con la moneda de otro país: el aviso habla de dólares digitales", () => {
+    for (const texto of ["R$ 50", "R$50", "MX$ 100", "COP$ 20000", "ARS$ 5000", "Entrada R$10"]) {
+      expect(parecePremioEnPlata(texto), texto).toBe(false);
+    }
+    // Los dólares con su sigla sí cuentan, pegada o no al signo.
+    for (const texto of ["US$ 50", "US$50", "USD$ 50", "usd$50", "50 US$"]) {
+      expect(parecePremioEnPlata(texto), texto).toBe(true);
+    }
+    // Una moneda ajena en un campo no tapa un monto en dólares escrito aparte.
+    expect(parecePremioEnPlata("R$ 50 o 20 USD")).toBe(true);
+  });
+
   it("no se dispara con un premio común ni con un número suelto", () => {
     for (const texto of ["", "Polera", "Libro", "2 entradas", "Kit de bienvenida", "10 stickers"]) {
       expect(parecePremioEnPlata(texto), texto).toBe(false);
@@ -91,13 +103,34 @@ describe("el aviso debajo del campo del premio", () => {
     expect(aviso().hidden).toBe(false);
   });
 
-  it("si el foco va a un botón o a un enlace no aparece en ese momento: la persona ya está tocando otra cosa", () => {
+  it("con el teclado el aviso aparece al pasar a un botón o a un enlace: nadie lo está tocando", () => {
     montarAvisoDePlata(true);
     const sellar = document.getElementById("btn-freeze") as HTMLButtonElement;
     escribir(premio(), "50 USD");
+    // Tab desde el campo: el foco llega al botón sin que nadie lo toque. El aviso se ve y el botón conserva el foco.
+    salir(premio(), sellar);
+    expect(aviso().hidden).toBe(false);
+    reiniciarAvisoDePlata();
+    document.body.innerHTML = html.slice(html.indexOf("<body>") + 6, html.indexOf("</body>"));
+    montarAvisoDePlata(true);
+    escribir(premio(), "50 USD");
+    const enlace = document.querySelector<HTMLElement>(".premio-campana a")!;
+    salir(premio(), enlace);
+    expect(aviso().hidden).toBe(false);
+  });
+
+  it("con el mouse o el dedo sobre un botón no aparece en ese momento: la persona ya está tocando otra cosa", () => {
+    montarAvisoDePlata(true);
+    const sellar = document.getElementById("btn-freeze") as HTMLButtonElement;
+    escribir(premio(), "50 USD");
+    sellar.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     salir(premio(), sellar);
     expect(aviso().hidden).toBe(true);
-    // Pasa de un campo a otro de la misma lista: sigue siendo escribir, y el aviso espera.
+  });
+
+  it("al pasar a un campo de otro lugar, que no es un botón, el aviso se ve", () => {
+    montarAvisoDePlata(true);
+    escribir(premio(), "50 USD");
     const lugares = document.getElementById("prize-lugares") as HTMLElement;
     lugares.hidden = false;
     lugares.innerHTML = '<input data-lugar="2" type="text" />';
