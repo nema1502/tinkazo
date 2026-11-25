@@ -888,6 +888,7 @@ describe("cerrar la lista", () => {
       for (let i = 0; i < 36; i++) {
         boton(p, "15 minutos más").click();
         await vi.waitFor(() => expect(m.fases).toHaveLength(i + 2));
+        await suelta();
       }
       await alta(m, 1, "Ana");
       await alta(m, 2, "Nora");
