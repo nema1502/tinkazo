@@ -3038,6 +3038,18 @@
   .premio-lugares[hidden] { display: none; }
   /* Los premios no entran en lo que se sella: es un aviso, no una ayuda gris, y el campo que no entra queda marcado. */
   .note.aviso-premio { color: var(--ink); font-weight: 700; border-left: 4px solid var(--orange); padding-left: 10px; }
+  /* El aviso del premio en plata: una pista que se cierra, con el enlace a la campaña. Va en tinta y papel, sin color de acción:
+     la acción principal del paso sigue siendo Sellar la lista. */
+  .aviso-plata { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 10px; padding: 6px 4px 6px 12px; border-left: 4px solid var(--teal); background: var(--field); }
+  .aviso-plata[hidden] { display: none; }
+  .aviso-plata p { flex: 1 1 220px; margin: 0; font-size: var(--letra-sec); color: var(--ink); }
+  .aviso-plata .enlace { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; }
+  .aviso-plata-x { flex: none; width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 0; color: var(--ink); font-size: 26px; line-height: 1; cursor: pointer; }
+  .aviso-plata-x:hover { background: var(--line); }
+  /* El enlace discreto de siempre se va mientras el aviso dice lo mismo. */
+  .aviso-plata:not([hidden]) ~ .premio-campana { display: none; }
+  .premio-campana { margin-top: 6px; }
+  .premio-campana a { display: inline-flex; align-items: center; min-height: 44px; }
   #prize[aria-invalid="true"], .premio-lugares input[aria-invalid="true"] { box-shadow: 0 0 0 3px var(--orange); }
 
   /* Cuántos ganan (src/ui/ganadores.ts), a la vista junto a Sellar la lista. Todo son botones: menos, más y los atajos
