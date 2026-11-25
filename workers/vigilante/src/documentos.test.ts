@@ -387,3 +387,12 @@ describe("lo que se publica", () => {
     }
   });
 });
+
+describe("el umbral de las cuentas nuevas por hora: el valor de siempre se dice igual en el código, la configuración y el README", () => {
+  it("son 200 por hora, y el README lo dice junto con la variable del cupo del evento", () => {
+    expect(wrangler).toMatch(/^CUENTAS_UMBRAL = "200"\r?$/m);
+    expect(readme).toMatch(/`CUENTAS_UMBRAL`[^\n]*`200` por defecto/);
+    expect(readme).toMatch(/`CUENTAS_UMBRAL` \(200 por hora/);
+    expect(readme).not.toMatch(/`60` por defecto/);
+  });
+});
