@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { archivosDeLaPortada, comparar, leerTabla, referenciasRelativas, sacarVariables } from "./banderas.mjs";
+import { archivosDeLaPortada, comparar, leerTabla, referenciasRelativas, RESERVADAS, sacarVariables } from "./banderas.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 
@@ -155,5 +155,39 @@ describe("comparar", () => {
     const r = comparar(tabla, sitio({ VITE_PAGOS: "1", VITE_STELLAR_NETWORK: "mainnet", VITE_COMISION_PB: secreto, VITE_NUEVA: secreto, VITE_EQUIPOS: secreto }));
     const todo = JSON.stringify(r);
     expect(todo).not.toContain("SECRETO");
+  });
+
+  it("una reservada con un valor escrito en su fila no hace salir el valor del sitio", () => {
+    const secreto = "pub_ABCDEF1234567890SECRETO";
+    const conLiteral = leerTabla(TABLA.replace("| `VITE_COMISION_PB` | apagada | definida |", "| `VITE_COMISION_PB` | apagada | `7` |")).filas;
+    for (const valor of [secreto, "7"]) {
+      const r = comparar(conLiteral, sitio({ VITE_PAGOS: "1", VITE_STELLAR_NETWORK: "mainnet", VITE_COMISION_PB: valor }));
+      expect(r.fallas.join(" ")).toContain("VITE_COMISION_PB");
+      expect(JSON.stringify(r)).not.toContain("SECRETO");
+      expect(r.filas.find((f) => f.variable === "VITE_COMISION_PB").estado).not.toContain(valor);
+      expect(r.fallas.join(" ")).not.toContain(valor === "7" ? "trae 7" : secreto);
+    }
+  });
+
+  it("la lista fija de reservadas trae las ocho variables de montos, cuentas y llaves", () => {
+    expect([...RESERVADAS].sort()).toEqual([
+      "VITE_COMISION_CUENTA",
+      "VITE_COMISION_MINIMO",
+      "VITE_COMISION_PB",
+      "VITE_PATROCINIO_URL_MAINNET",
+      "VITE_POLLAR_PUBLISHABLE_KEY",
+      "VITE_POLLAR_PUBLISHABLE_KEY_MAINNET",
+      "VITE_RETIRO_COSTO",
+      "VITE_RETIRO_CUENTA",
+    ]);
+  });
+
+  it("en un desajuste de una bandera común solo se escribe el valor del sitio si es de los conocidos", () => {
+    const base = { VITE_STELLAR_NETWORK: "mainnet", VITE_COMISION_PB: "200" };
+    const raro = comparar(tabla, sitio({ ...base, VITE_PAGOS: "pub_RAROSECRETO" }));
+    expect(JSON.stringify(raro)).not.toContain("RAROSECRETO");
+    expect(raro.fallas.join(" ")).toContain("otro valor");
+    const conocido = comparar(tabla, sitio({ ...base, VITE_PAGOS: "0" }));
+    expect(conocido.fallas.join(" ")).toContain("trae 0");
   });
 });
