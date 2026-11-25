@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { MARGEN_BASE } from "./music-margen";
-import { trazaDelShow, type PasoDelGuion } from "./music-traza";
+import { JUEGOS_DEL_SELECTOR, semillaDelJuego, trazaDelShow, type PasoDelGuion } from "./music-traza";
 
 /**
  * Con la pestaña escondida, el navegador deja los temporizadores en uno por segundo y el show está frenado. La música
@@ -26,12 +26,23 @@ const guion = (): PasoDelGuion[] => [
 ];
 
 describe("la música con la pestaña escondida", () => {
-  it.each(["race", "chovena"])("%s: no programa más allá del margen de siempre mientras la pestaña no se ve", async (juego) => {
-    const t = await trazaDelShow(juego, 7, guion());
+  it.each(JUEGOS_DEL_SELECTOR)("%s: no programa más allá del margen de siempre mientras la pestaña no se ve", async (juego) => {
+    const t = await trazaDelShow(juego, semillaDelJuego(juego), guion());
     const escondidos = t.porTick.filter((p) => p.escondida);
     expect(escondidos).toHaveLength(8);
     for (const p of escondidos) {
       // Un paso entero (una semicorchea larga) de holgura sobre el margen: el último paso cabe entero.
+      for (const hora of arranques(t.eventos, p.desde, p.hasta)) expect(hora).toBeLessThanOrEqual(p.ahora + MARGEN_BASE + 0.35);
+    }
+  });
+
+  it.each(JUEGOS_DEL_SELECTOR)("%s: con el adelgazado prendido sigue saltándose en silencio con la pestaña escondida", async (juego) => {
+    const t = await trazaDelShow(juego, semillaDelJuego(juego), guion(), async () => {
+      (await import("./music-margen")).prenderAdelgazado(true);
+    });
+    const escondidos = t.porTick.filter((p) => p.escondida);
+    expect(escondidos).toHaveLength(8);
+    for (const p of escondidos) {
       for (const hora of arranques(t.eventos, p.desde, p.hasta)) expect(hora).toBeLessThanOrEqual(p.ahora + MARGEN_BASE + 0.35);
     }
   });
