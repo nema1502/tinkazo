@@ -9,7 +9,7 @@ import {
   type CuentaDelPaso,
   GUARDA_DE_TOQUE_MS,
   PEDIDO_CADA_MS,
-  PEDIDO_VECES,
+  PEDIDO_TOPE_MS,
   type OpcionesDelPaso,
   TOPE_LECTURA_SERVIDOR_MS,
   abrirCuentaLista,
@@ -480,7 +480,7 @@ describe("un error en cada paso", () => {
     cf.estado.est = { ...cf.estado.est, activacion: "preparando" };
     await pasa(25_000);
     principal().click();
-    await pasa(PEDIDO_CADA_MS * (PEDIDO_VECES + 2));
+    await pasa(PEDIDO_TOPE_MS + PEDIDO_CADA_MS * 2);
     expect(alerta()).toContain(t("altaCuponGuardado"));
     expect(principal().textContent).toBe(t("clProbarDeNuevo"));
     expect(cf.cuenta.activarCuenta).not.toHaveBeenCalled();
