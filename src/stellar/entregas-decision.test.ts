@@ -56,7 +56,7 @@ function conEstados(lectura: LecturaDeLaPromocion, estadoDelPremio: PremioDeLaPr
 
 /** Un día de marzo de 2026, con la hora fija: la decisión nunca mira el reloj de la máquina. */
 const AHORA = 1_772_000_000_000;
-/** La fecha límite de entrega de la campaña de ensayo: un año después de `AHORA`. */
+/** El plazo para cobrar del ensayo: un año después de `AHORA`. */
 const HASTA = 2_088_000_000_000;
 
 /** El reloj como lo ve la prueba: todas las cuentas con línea, menos las que el caso cambia. */
@@ -77,14 +77,14 @@ describe("la decisión pura por premio", () => {
     if (!lectura.ok) throw new Error("el fixture tiene que leerse");
     const premio = lectura.promocion.premios[0];
     if (!premio) throw new Error("el fixture tiene un premio");
-    const r = entregasDeLaPromocion(lectura, { recibirHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() });
+    const r = entregasDeLaPromocion(lectura, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() });
     expect(filas(r)).toHaveLength(1);
     expect((filas(r) as unknown[])[0]).toEqual({ puesto: 0, cuenta: premio.winner, monto: "50000000", accion: "llamar" });
   });
 
   it("el premio retenido (Held) espera igual que el prometido (Owed): con línea, se llama", async () => {
     const lectura = conEstados(await leida(rpcCD3, CD3, "1"), "Held");
-    expect(entregasDeLaPromocion(lectura, { recibirHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
+    expect(entregasDeLaPromocion(lectura, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
       ok: true,
       entregas: expect.arrayContaining([expect.objectContaining({ accion: "llamar" })]),
     });
@@ -92,21 +92,35 @@ describe("la decisión pura por premio", () => {
 
   it("el premio ya recibido no se llama, y el devuelto tampoco: volvió a la empresa", async () => {
     const recibido = await leida(rpcCD3, CD3, "1");
-    expect(entregasDeLaPromocion(recibido, { recibirHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
+    expect(entregasDeLaPromocion(recibido, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
       ok: true,
       entregas: [{ puesto: 0, cuenta: "GA647PFT46KI2BVCRGL3DJBNJXT2KCEEPSNKCTPI4JFIWLLY4BHVIQ7C", monto: "50000000", accion: "no", motivo: "ya-recibido" }],
     });
     // El ensayo de la devolución en especie dejó el premio pagado: el estado devuelto (Returned) se arma como en premios.test.ts.
     const devuelto = conEstados(await leida(rpcCD5, CD5, "1"), "Returned");
-    expect(entregasDeLaPromocion(devuelto, { recibirHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
+    expect(entregasDeLaPromocion(devuelto, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
       ok: true,
       entregas: [expect.objectContaining({ accion: "no", motivo: "volvio" })],
     });
   });
 
-  it("vencido no se llama, con la fecha de la campaña: justo el día de la fecha límite ya no va", async () => {
+  it("el plazo es solo el dato que llega: a los 8 días todavía se llama si se puede cobrar hasta el día 180, y a los 181 ya no", async () => {
+    const DIA = 86_400_000;
     const lectura = conEstados(await leida(rpcCD3, CD3, "1"), "Owed");
-    expect(entregasDeLaPromocion(lectura, { recibirHastaMs: AHORA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
+    const cobrarHastaMs = AHORA + 180 * DIA;
+    expect(entregasDeLaPromocion(lectura, { cobrarHastaMs, ahoraMs: AHORA + 8 * DIA, laLineaDe: lineas() })).toEqual({
+      ok: true,
+      entregas: [expect.objectContaining({ accion: "llamar" })],
+    });
+    expect(entregasDeLaPromocion(lectura, { cobrarHastaMs, ahoraMs: AHORA + 181 * DIA, laLineaDe: lineas() })).toEqual({
+      ok: true,
+      entregas: [expect.objectContaining({ accion: "no", motivo: "vencido" })],
+    });
+  });
+
+  it("vencido no se llama, con el plazo que llega: justo el día del plazo ya no va", async () => {
+    const lectura = conEstados(await leida(rpcCD3, CD3, "1"), "Owed");
+    expect(entregasDeLaPromocion(lectura, { cobrarHastaMs: AHORA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
       ok: true,
       entregas: [expect.objectContaining({ accion: "no", motivo: "vencido" })],
     });
@@ -116,11 +130,11 @@ describe("la decisión pura por premio", () => {
     const lectura = conEstados(await leida(rpcCD3, CD3, "1"), "Owed");
     if (!lectura.ok) throw new Error("el fixture tiene que leerse");
     const cuenta = lectura.promocion.premios[0]?.winner as string;
-    expect(entregasDeLaPromocion(lectura, { recibirHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas([cuenta]) })).toEqual({
+    expect(entregasDeLaPromocion(lectura, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas([cuenta]) })).toEqual({
       ok: true,
       entregas: [{ puesto: 0, cuenta, monto: "50000000", accion: "no", motivo: "sin-linea" }],
     });
-    expect(entregasDeLaPromocion(lectura, { recibirHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas([], [cuenta]) })).toEqual({
+    expect(entregasDeLaPromocion(lectura, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas([], [cuenta]) })).toEqual({
       ok: true,
       entregas: [{ puesto: 0, cuenta, monto: "50000000", accion: "no", motivo: "no-se-sabe" }],
     });
@@ -130,7 +144,7 @@ describe("la decisión pura por premio", () => {
     const lectura = await leida(rpcCD3, CD3, "1");
     for (const estado of ["Cancelled", "Refunded"] as const) {
       const quedaEsperando = conEstados(lectura, "Owed", estado);
-      expect(entregasDeLaPromocion(quedaEsperando, { recibirHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() }), estado).toEqual({
+      expect(entregasDeLaPromocion(quedaEsperando, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() }), estado).toEqual({
         ok: true,
         entregas: [expect.objectContaining({ accion: "no", motivo: "volvio" })],
       });
@@ -139,7 +153,7 @@ describe("la decisión pura por premio", () => {
 
   it("una promoción sin sello no tiene nada que entregar, aunque el estado diga otra cosa", async () => {
     const lectura = conEstados(await leida(rpcCD3, CD3, "1"), "Owed", "Funded");
-    expect(entregasDeLaPromocion(lectura, { recibirHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
+    expect(entregasDeLaPromocion(lectura, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() })).toEqual({
       ok: true,
       entregas: [expect.objectContaining({ accion: "no", motivo: "sin-sello" })],
     });
@@ -153,7 +167,7 @@ describe("la decisión pura por premio", () => {
     const ganadora = conUnoEsperando.promocion.premios[0]?.winner as string;
     // Todas esperan; la ganadora del primer puesto se quedó sin línea: solo la segunda se llama.
     const esperan = conEstados(lectura, "Owed");
-    const decisiones = entregasDeLaPromocion(esperan, { recibirHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas([ganadora]) });
+    const decisiones = entregasDeLaPromocion(esperan, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas([ganadora]) });
     if (!decisiones.ok) throw new Error("la decisión no puede fallar");
     const llamadas = decisiones.entregas
       .map((e, puesto) => (e.accion === "llamar" ? puesto : null))
@@ -161,7 +175,7 @@ describe("la decisión pura por premio", () => {
     expect(llamadas).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(decisiones.entregas[0]).toEqual({ puesto: 0, cuenta: ganadora, monto: "100000000", accion: "no", motivo: "sin-linea" });
     // Del ensayo de verdad (todos pagados): diez decisiones, ninguna se llama.
-    const reales = entregasDeLaPromocion(lectura, { recibirHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() });
+    const reales = entregasDeLaPromocion(lectura, { cobrarHastaMs: HASTA, ahoraMs: AHORA, laLineaDe: lineas() });
     expect(reales.ok && reales.entregas.every((e) => e.accion === "no" && e.motivo === "ya-recibido")).toBe(true);
     expect(reales.ok && reales.entregas).toHaveLength(10);
   });
@@ -173,7 +187,7 @@ describe("lo que la red contesta para la decisión (get_prize)", () => {
     const r = await entregasDeLaRed({
       contrato: deLaTabla(CD3),
       promo: "1",
-      recibirHastaMs: HASTA,
+      cobrarHastaMs: HASTA,
       ahoraMs: AHORA,
       laLineaDe: lineas(),
       fetch: rpc.fetch,
@@ -188,7 +202,7 @@ describe("lo que la red contesta para la decisión (get_prize)", () => {
     const caida = await entregasDeLaRed({
       contrato: deLaTabla(CC),
       promo: "8",
-      recibirHastaMs: HASTA,
+      cobrarHastaMs: HASTA,
       ahoraMs: AHORA,
       laLineaDe: lineas(),
       fetch: rpcFalso(rpcCC, "corte").fetch,
