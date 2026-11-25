@@ -48,11 +48,26 @@ function temaOscuro(): boolean {
 }
 
 /**
- * Cuántas personas se presentan como mucho. Con 150 en la lista, una tarjeta por persona empujaba el reloj y las
- * cintas fuera de la pantalla, que es lo primero que ve la sala: las demás se cuentan en una línea. La lista
- * entera sigue visible en las cintas de abajo.
+ * Cuántas personas se presentan como mucho en una pantalla ancha. Con 150 en la lista, una tarjeta por persona
+ * empujaba el reloj y las cintas fuera de la pantalla, que es lo primero que ve la sala: las demás se cuentan en una
+ * línea. La lista entera sigue visible en las cintas de abajo.
  */
 export const TOPE_TARJETAS = 6;
+
+/** Hasta este ancho (en píxeles) la pantalla es de celular: cada tarjeta ocupa una fila entera. */
+export const ANCHO_ANGOSTO = 480;
+
+/**
+ * Cuántas personas se presentan en un celular. Con cada tarjeta en su propia fila, seis ocuparían casi toda la
+ * pantalla: dos, el titular y la línea de las que faltan caben junto con el reloj y las cintas. No hay ninguna zona que
+ * recorte, así que ninguna tarjeta queda cortada: la cantidad es lo que cuida el alto.
+ */
+export const TOPE_TARJETAS_ANGOSTO = 2;
+
+/** ¿Pantalla de celular? Se consulta cada vez que se arma: un celular que se gira cambia de ancho con la cuenta en marcha. */
+function esAngosta(): boolean {
+  return typeof matchMedia === "function" && matchMedia(`(max-width: ${ANCHO_ANGOSTO}px)`).matches;
+}
 
 /**
  * Una tarjeta: el nombre de una persona, su lugar en la lista sellada y el
@@ -85,12 +100,18 @@ export function presentarTeaser(caja: HTMLElement | null, juego: string, nombres
   if (!caja || nombres.length === 0) return;
   // El gancho visual: si el juego elegido no expone captura, la presentación va sin imagen y igual presenta a cada uno.
   const gancho = ganchoVisual(juego);
-  const resto = nombres.length - TOPE_TARJETAS;
+  // La cantidad la decide el ancho de la pantalla de ahora, no un recorte: la línea de las que faltan nunca queda tapada.
+  const tope = esAngosta() ? TOPE_TARJETAS_ANGOSTO : TOPE_TARJETAS;
+  // Lo mismo que ya está armado no se rehace: un cambio de tamaño que deja la misma cantidad no parpadea las tarjetas.
+  const clave = [juego, gancho ?? "", tope, getLang(), nombres.join("\u0000")].join("|");
+  if (caja.dataset.clave === clave && caja.firstElementChild) return;
+  caja.dataset.clave = clave;
+  const resto = nombres.length - tope;
   caja.innerHTML =
     `<div class="espera-teaser" role="list" data-juego="${esc(juego)}" data-fuente="sellada" aria-label="${esc(t("espTeaserT"))}">` +
     `<p class="espera-teaser-t">${esc(t("espTeaserT"))}</p>` +
     // Las tarjetas, en el orden sellado y hasta el tope: nacen y mueren con la capa, que muere entera al nacer el número.
-    nombres.slice(0, TOPE_TARJETAS).map((nombre, i) => tarjeta(nombre, gancho, i, nombres.length)).join("") +
+    nombres.slice(0, tope).map((nombre, i) => tarjeta(nombre, gancho, i, nombres.length)).join("") +
     // Las que no entran, contadas en una línea: la lista entera sigue en las cintas.
     (resto > 0 ? `<span class="espera-teaser-mas" role="listitem">${esc(T[getLang()].espTeaserMas(resto))}</span>` : "") +
     `</div>`;
