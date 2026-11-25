@@ -640,16 +640,17 @@ export const ACTIVACION_LENTA = "pollar-activacion-lenta";
 /**
  * Los topes propios del sitio para activar la cuenta, alrededor de las llamadas del kit (que traen los suyos, por
  * llamada, y algunas esperas sin reloj). Antes del voto: `sinAvanzarMs` sin pasar de un paso al siguiente y `totalMs`
- * como techo desde que se pide, con la espera del candado adentro. `candadoMs`: lo que se espera el candado entre
- * pestañas. Desde que sale el voto: `despuesDelVotoMs` para el voto, la lectura y el cierre, y `candadoConVotoMs` como
- * seguridad del candado y del voto en vuelo (el kit corta el voto a los 60 s).
+ * como techo desde que se pide, con la espera del candado adentro. Los dos quedan por encima del peor caso sano del kit
+ * (una lectura de hasta 10 s que reintenta y tarda otros 10 s, en una cadena de unos siete pasos): con un proveedor lento
+ * pero que contesta, la activación termina, y con uno que no contesta, se corta sin votar. `candadoMs`: lo que se espera
+ * el candado entre pestañas. Desde que sale el voto: `despuesDelVotoMs` para el voto, la lectura y el cierre. El voto en
+ * vuelo y el candado que lo acompaña nunca se sueltan por tiempo: ante la duda, se espera.
  */
 export const TOPES_DE_ACTIVACION = {
-  sinAvanzarMs: 20_000,
-  totalMs: 40_000,
+  sinAvanzarMs: 45_000,
+  totalMs: 90_000,
   candadoMs: 8_000,
   despuesDelVotoMs: 20_000,
-  candadoConVotoMs: 65_000,
 } as const;
 /** Los pasos de la activación, con las palabras fijas que van a la consola cuando un tope vence. */
 type PasoDeActivar = "candado" | "cliente" | "billetera" | "pedidos" | "rearmar" | "leer" | "verificar" | "voto" | "cierre";
@@ -669,8 +670,22 @@ interface ControlDeActivar {
   avanzar(paso: PasoDeActivar): void;
   /** Empieza el cierre sin voto de este intento (leer y esperar un pedido que ya trae un voto), bajo el tope de después del voto. */
   alCerrarSinVoto(): void;
-  /** Se llama en el mismo instante que el voto, sin ninguna espera en el medio: si el intento venció, corta. */
-  alVotar(): void;
+  /**
+   * Después de cada espera de antes del voto: si el intento venció, corta. Además de los temporizadores mira la hora de
+   * pared (que no se congela con la pestaña), así una cadena que se destraba después de un bloqueo del celular no sigue.
+   */
+  comprobar(): void;
+  /**
+   * Se llama en el mismo instante que el voto, sin ninguna espera en el medio: si el intento venció, corta. `cuenta` es
+   * la dirección que vota, para saber de quién es el voto en vuelo.
+   */
+  alVotar(cuenta: string): void;
+}
+/** El voto que ya salió: de qué cuenta, cómo termina y cómo soltar su candado (solo si cambia la cuenta de la pestaña). */
+interface VotoEnVuelo {
+  cuenta: string;
+  fin: Promise<ResultadoDeActivar>;
+  soltar: () => void;
 }
 /** Cuántos votos fallados se admiten por pestaña antes de pedir que cierre sesión y entre de nuevo: cada voto cuesta. */
 export const TOPE_DE_VOTOS_FALLADOS = 2;
@@ -1456,10 +1471,11 @@ class PollarWallet implements SubmittingWallet {
   #activando: Promise<ResultadoDeActivar> | null = null;
   /**
    * El voto de la activación que ya salió y todavía no terminó, con lo que viene después (leer y cerrar). Aunque quien
-   * pidió ya recibió `pendiente` a los 20 s, el voto sigue por detrás: una llamada nueva espera este mismo voto y nunca
-   * vota otro. Se suelta cuando termina, a los 65 s o al cerrar sesión.
+   * pidió ya recibió `pendiente` a los 20 s, el voto sigue por detrás: una llamada nueva de la misma cuenta espera este
+   * mismo voto y nunca vota otro. Se suelta solo cuando termina (nunca por tiempo, porque el sitio no sabe si el voto está
+   * por llegar) o cuando entra otra cuenta, que tiene su propio pedido y no depende de este voto.
    */
-  #votoEnVuelo: Promise<ResultadoDeActivar> | null = null;
+  #votoEnVuelo: VotoEnVuelo | null = null;
   /** Cierra el intento de activar que todavía no votó (al cerrar sesión): suelta el candado y rechaza a quien espera. */
   #descartarActivacion: (() => void) | null = null;
   /** Una confirmación de este navegador en curso: cerrar sesión la espera antes de sacarlo de la cuenta. */
@@ -2292,6 +2308,11 @@ class PollarWallet implements SubmittingWallet {
   async disconnect(): Promise<void> {
     this.ultimoCierreDejoNavegador = false;
     // Si este navegador se sumó a la cuenta en esta pestaña (otro celular u otra compu), sale de la cuenta antes de cerrar.
+    // Lo primero: la activación que todavía no votó se cierra antes de esperar nada de la red, porque quien cierra sesión no
+    // quiere que su cuenta vote en ese rato. El voto que ya salió sigue por su cuenta y no escribe en la sesión siguiente
+    // (`#sigueEnEstaSesion`): queda como voto en vuelo de su cuenta, y la misma cuenta que entre de nuevo lo espera.
+    this.#descartarActivacion?.();
+    this.#activando = null;
     await this.#sacarEsteNavegador();
     try {
       forgetIntent();
@@ -2300,11 +2321,6 @@ class PollarWallet implements SubmittingWallet {
     }
     this.address = null;
     this.#memoria = null;
-    this.#activando = null;
-    // Lo que quede corriendo de la activación de esta sesión no escribe en la siguiente: el intento que todavía no votó
-    // se cierra, y el voto que ya salió sigue por su cuenta pero ya nadie lo espera (`#sigueEnEstaSesion`).
-    this.#descartarActivacion?.();
-    this.#votoEnVuelo = null;
     for (const clave of Object.values(MARCAS_DE_LA_CUENTA)) borrarMarca(clave);
     borrarMarca(MARCA_DE_APROBACIONES);
     this.#fallasDeAprobar.clear();
@@ -3665,8 +3681,8 @@ class PollarWallet implements SubmittingWallet {
    * cuenta y esta organización (`propuestaEsLaNuestra`). Recién ahí `relay`. Nunca usa `approve` (vuelve a pedir la
    * transacción por dentro), ni `reject` o `cancel` (rechazar es definitivo). No vota sobre una cuenta que ya existe.
    *
-   * Cada paso de antes del voto corre contra relojes del sitio (`TOPES_DE_ACTIVACION`): 20 s sin pasar de un paso al
-   * siguiente y 40 s en total, con la espera del candado adentro. Al vencer, el intento deja de valer y la promesa
+   * Cada paso de antes del voto corre contra relojes del sitio (`TOPES_DE_ACTIVACION`): 45 s sin pasar de un paso al
+   * siguiente y 90 s en total, con la espera del candado adentro. Al vencer, el intento deja de valer y la promesa
    * rechaza con `pollar-activacion-lenta`: una cadena vieja que se destraba tarde no vuelve a pedir, importar, verificar
    * ni votar. Desde que sale el voto, la lectura y el cierre tienen 20 s: pasado ese tiempo da `pendiente` (nunca
    * `activada`) y el voto sigue por detrás, sin que una llamada nueva vote otra vez. Un pedido que ya trae un voto no se
@@ -3680,12 +3696,18 @@ class PollarWallet implements SubmittingWallet {
     if (network.name !== "mainnet") return Promise.reject(new Error(ACTIVACION_SIN_CUENTA));
     if (this.#activando) return this.#activando;
     const enVuelo = this.#votoEnVuelo;
-    if (enVuelo) {
+    if (enVuelo && enVuelo.cuenta === this.address) {
       // El voto ya salió: no se vota otro. Se espera ese mismo, con el mismo tope, y se dice cómo quedó o pendiente.
-      return esperarHasta(enVuelo, TOPES_DE_ACTIVACION.despuesDelVotoMs, () => {
+      return esperarHasta(enVuelo.fin, TOPES_DE_ACTIVACION.despuesDelVotoMs, () => {
         console.warn("[tinkazo] activación lenta: voto");
         return "pendiente";
       });
+    }
+    if (enVuelo) {
+      // El voto en vuelo es de otra cuenta (se cerró sesión y entró otra persona): su resultado ya no se escribe acá y esta
+      // cuenta tiene su propio pedido, así que el candado viejo se suelta en vez de hacerla esperar.
+      enVuelo.soltar();
+      this.#votoEnVuelo = null;
     }
     const corrida: Promise<ResultadoDeActivar> = this.#correrIntento().finally(() => {
       if (this.#activando === corrida) this.#activando = null;
@@ -3698,17 +3720,19 @@ class PollarWallet implements SubmittingWallet {
    * Un intento de activar con sus relojes y el candado entre pestañas. La promesa de afuera se resuelve una sola vez: con
    * lo que da la cadena de pasos, con `pollar-activacion-lenta` si un tope de antes del voto vence, o con `pendiente` si
    * vence el de después. El candado se suelta cuando el intento termina sin voto (bien, con error o por tope) y, si hubo
-   * voto, cuando el voto termina, o a los 65 s por seguridad.
+   * voto, cuando el voto termina (nunca por tiempo).
    */
   #correrIntento(): Promise<ResultadoDeActivar> {
     const topes = TOPES_DE_ACTIVACION;
     const intento: IntentoDeActivar = { vigente: true, votoSalio: false, paso: "candado" };
+    // La hora de pared del principio y del último avance: los temporizadores se congelan con la pestaña y la hora no.
+    const inicio = Date.now();
+    let ultimoAvance = inicio;
     return new Promise<ResultadoDeActivar>((resolver, rechazar) => {
       type Reloj = ReturnType<typeof setTimeout> | undefined;
       let sinAvanzar: Reloj;
       let techo: Reloj;
       let despues: Reloj;
-      let seguridad: Reloj;
       let cerrada = false;
       let enElCierre = false;
       let resolverFin!: (r: ResultadoDeActivar) => void;
@@ -3740,9 +3764,8 @@ class PollarWallet implements SubmittingWallet {
       const terminar = (): void => {
         pararLosDeAntes();
         clearTimeout(despues);
-        clearTimeout(seguridad);
         soltarElCandado();
-        if (this.#votoEnVuelo === fin) this.#votoEnVuelo = null;
+        if (this.#votoEnVuelo?.fin === fin) this.#votoEnVuelo = null;
         if (this.#descartarActivacion === descartar) this.#descartarActivacion = null;
       };
       /** Venció un tope de antes del voto. */
@@ -3778,6 +3801,7 @@ class PollarWallet implements SubmittingWallet {
         intento,
         avanzar: (paso) => {
           intento.paso = paso;
+          ultimoAvance = Date.now();
           if (cerrada || enElCierre) return;
           clearTimeout(sinAvanzar);
           sinAvanzar = setTimeout(vencerAntes, topes.sinAvanzarMs);
@@ -3786,15 +3810,18 @@ class PollarWallet implements SubmittingWallet {
           intento.paso = "cierre";
           if (!cerrada) empezarElCierre();
         },
-        alVotar: () => {
+        comprobar: () => {
+          if (intento.vigente && !enElCierre) {
+            const ahora = Date.now();
+            if (ahora - inicio > topes.totalMs || ahora - ultimoAvance > topes.sinAvanzarMs) vencerAntes();
+          }
           if (!intento.vigente) throw new Error(ACTIVACION_LENTA);
+        },
+        alVotar: (cuenta) => {
+          control.comprobar();
           intento.votoSalio = true;
           intento.paso = "voto";
-          this.#votoEnVuelo = fin;
-          seguridad = setTimeout(() => {
-            soltarElCandado();
-            if (this.#votoEnVuelo === fin) this.#votoEnVuelo = null;
-          }, topes.candadoConVotoMs);
+          this.#votoEnVuelo = { cuenta, fin, soltar: soltarElCandado };
           empezarElCierre();
         },
       };
@@ -3850,9 +3877,7 @@ class PollarWallet implements SubmittingWallet {
   async #activar(ctl: ControlDeActivar): Promise<ResultadoDeActivar> {
     const { intento } = ctl;
     /** Después de cada espera de antes del voto: un intento vencido corta ahí, sin pedir, importar, verificar ni votar. */
-    const sigue = (): void => {
-      if (!intento.vigente) throw new Error(ACTIVACION_LENTA);
-    };
+    const sigue = (): void => ctl.comprobar();
     // 1. La cuenta y la red.
     ctl.avanzar("cliente");
     const client = await this.#ensureClient();
@@ -3916,13 +3941,13 @@ class PollarWallet implements SubmittingWallet {
     // 9. Lo que se va a estampar: el hash del kit tiene que ser el nuestro, y la propuesta, exactamente esa.
     ctl.avanzar("verificar");
     const verificacion = await delKit(client.cosign.verify(pedido as unknown as CosignRequest));
-    sigue();
+    // Sin guarda acá: no hay ninguna espera entre esta línea y `alVotar`, que es la que corta a una cadena vieja.
     if (!verificacion.ok || verificacion.localHash !== tx.hash) throw noAprobada("la verificación del kit");
     if (!propuestaEsLaNuestra(verificacion.proposal, cuenta, tx.hash, pedido.subOrgId ?? "")) throw noAprobada("la propuesta");
     // 10. La cuenta otra vez, y el voto. Entre `alVotar` (que comprueba que el intento vale y marca que el voto salió) y
     // `relay` no hay ninguna espera.
     if (this.#client !== client || this.#cuentaParaActivar(client) !== cuenta) throw new Error(ACTIVACION_SIN_CUENTA);
-    ctl.alVotar();
+    ctl.alVotar(cuenta);
     let votado: PedidoDeCofirma;
     try {
       const res = await client.cosign.relay(verificacion.proposal.path, verificacion.proposal.body, { requestId: pedido.id });
