@@ -49,6 +49,7 @@ vi.mock("../stellar/wallet-pollar", () => ({
   pollarWallet: { hayMarca: () => false, restore: async () => null },
 }));
 vi.mock("../stellar/seals", () => ({ sealsOfAccount: async () => null }));
+vi.mock("./history", () => ({ remember: () => undefined, renderHistory: () => undefined }));
 vi.mock("./freeze", () => ({ refreshFreezeLabel: () => undefined }));
 vi.mock("./anchor", () => ({ precalentarSello: () => undefined }));
 vi.mock("./participants", () => ({ guardarBorrador: () => undefined }));
@@ -66,8 +67,10 @@ beforeEach(() => {
   document.body.innerHTML = `<div><div id="gate"></div></div><div id="wallet-box"></div><div id="fund-box"></div><button id="btn-freeze"></button><div id="cuenta-aviso"></div><section id="sec-history"></section>`;
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.useRealTimers();
+  // Lo que la cabecera pidió de forma diferida termina antes de cerrar la prueba.
+  await new Promise((r) => setTimeout(r, 0));
 });
 
 const puerta = (): string => document.getElementById("gate")?.textContent ?? "";
