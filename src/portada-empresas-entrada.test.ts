@@ -116,12 +116,22 @@ describe("la fila del celular aguanta la letra agrandada", () => {
     expect(m, "falta el tramo de 412 a 520 px").not.toBeNull();
     const cuerpo = m?.[1] ?? "";
     // Solo con las campañas abiertas: cerradas, la fila lleva tres entradas y queda como en la rama principal.
-    expect(cuerpo).toMatch(/html\[data-campanas="1"\] header \.topnav a/);
-    expect(cuerpo).toMatch(/html\[data-campanas="true"\] header \.topnav a/);
+    expect(cuerpo).toMatch(/html\[data-campanas="1"\] header \.topnav > a/);
+    expect(cuerpo).toMatch(/html\[data-campanas="true"\] header \.topnav > a/);
     expect(cuerpo).toMatch(/header \.topnav \.mas-btn[^{]*\{[^}]*padding-inline: 5px/);
-    expect(cuerpo).toMatch(/header \.topnav a\.nav-app[^{]*\{[^}]*margin-right: 4px/);
+    expect(cuerpo).toMatch(/header \.topnav > a\.nav-app[^{]*\{[^}]*margin-right: 4px/);
     // Los blancos de toque no bajan de 44 px de alto, y de ancho el más angosto sigue sobre los 44 px (Sortear mide más de 60).
     expect(cuerpo).not.toMatch(/min-height: (?:[0-3]\d|4[0-3])px/);
+  });
+
+  it("el relleno apretado es solo de la fila: no alcanza a los renglones de la lista que abre Más, que conservan sus 16 px", () => {
+    const m = css.match(/@media \(min-width: 412px\) and \(max-width: 520px\) \{([\s\S]*?)\r?\n  \}/);
+    const selectores = ((m?.[1] ?? "").match(/[^{}]+(?=\{)/g) ?? []).flatMap((g) => g.split(","));
+    expect(selectores.length).toBeGreaterThan(0);
+    // Un enlace con espacio (descendiente) también agarra los de .mas-lista, que cuelgan de .topnav: solo hijos directos.
+    for (const s of selectores) expect(s.trim(), s).not.toMatch(/\.topnav a/);
+    // Y la regla de la lista sigue con su relleno de 16 px en el celular.
+    expect(css).toMatch(/\.topnav \.mas-lista a \{ min-height: 44px; padding: 0 16px;/);
   });
 
   it("el tramo apretado no toca la cabecera de las páginas ni la fila sin campañas", () => {
