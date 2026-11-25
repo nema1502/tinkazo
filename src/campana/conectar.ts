@@ -278,20 +278,24 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
       return r === "terminada" ? "red" : r;
     },
     // La comprobación propia del sello se baja recién cuando hay resultado: la página de antes no carga nada de esto. Cada celular
-    // espera su turno al azar y la lectura se repite si la red falla, con tope (`comprobar.ts`). No usa el lector que recuerda
-    // lo que falló: el reintento tiene que volver a preguntar.
+    // espera su turno al azar y la lectura se repite una vez si la red falla, con tope (`comprobar.ts`). Cada lectura es un solo
+    // pedido a la red (sin los reintentos de adentro) y no usa el lector que recuerda lo que falló: con cientos de celulares detrás
+    // de la misma conexión, los pedidos de más son lo que hace que la red empiece a limitar. Una campaña con premios no repite:
+    // su sello suma una lectura al servicio que usa quien organiza para sellar y sortear.
     comprobar: async ({ comprobante, cuenta, campana }) => {
       const dormir = p.esperar ?? esperar;
       await dormir(Math.round(azar() * RETRASO_DE_LA_COMPROBACION_MS));
-      const [{ comprobarConReintento }, leerSello] = await Promise.all([
+      const [{ comprobarConReintento }, leerSello, { contratoDePremios }] = await Promise.all([
         import("./comprobar"),
         p.leerSello
           ? Promise.resolve(p.leerSello)
-          : import("../stellar/historial").then((m) => (red: NetworkName, hash: string) => m.leerHistorial(red, hash)),
+          : import("../stellar/historial").then((m) => (red: NetworkName, hash: string) => m.leerHistorial(red, hash, { intentos: 1 })),
+        import("../stellar/oficiales"),
       ]);
+      const conPremios = p.campana.promo !== null || contratoDePremios(p.red, p.campana.contrato) !== null;
       return comprobarConReintento(
         { comprobante, cuenta, red: p.red, contrato: p.campana.contrato, campana },
-        { leer: (red, hash) => leerSello(red as NetworkName, hash), esperar: dormir, ahora },
+        { leer: (red, hash) => leerSello(red as NetworkName, hash), esperar: dormir, ahora, ...(conPremios ? { esperas: [] } : {}) },
       );
     },
     recibir: () => p.ir(destinoDeRecibir(p.red)),

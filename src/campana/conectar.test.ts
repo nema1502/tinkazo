@@ -8,6 +8,7 @@ import {
 } from "./conectar";
 import { destinoDeRecibir } from "./recibir";
 import type { DepsDelCelular, SesionDelCelular } from "./celular";
+import type { Campana } from "./modelo";
 import { fetchFalso, type Llamada, type Paso } from "../sala/fetch-falso";
 import type { SesionDeGoogle } from "./sesion";
 import { descifrarEquipo } from "../equipos/datos";
@@ -103,6 +104,8 @@ function montar(
     /** El historial de la red y la espera de la comprobación del sello, de mentira. */
     leerSello?: PiezasDelCelular["leerSello"];
     esperar?: PiezasDelCelular["esperar"];
+    /** Cambios a la campaña de ejemplo (la promoción, el contrato). */
+    campana?: Partial<Campana>;
   } = {},
 ): Montaje {
   const { f, llamadas } = fetchFalso(guion);
@@ -130,7 +133,7 @@ function montar(
       vibrar: () => undefined,
       movimientoReducido: () => true,
     },
-    campana: campanaDeEjemplo(AHORA),
+    campana: { ...campanaDeEjemplo(AHORA), ...o.campana },
     servicio: SERVICIO,
     sala: SALA,
     clave: CLAVE,
@@ -625,10 +628,11 @@ describe("el resto de las dependencias", () => {
 
   it("comprobar espera su turno al azar, lee el sello con reintento y dice que la cuenta está", async () => {
     const lista = [CUENTA, OTRA];
+    const rondaDelSello = roundAt(Date.now() / 1000) - 10;
     const comprobante = `/verificar.html#${await encodeProof({
       v: 2,
       names: lista,
-      round: 32_254_977,
+      round: rondaDelSello,
       net: "testnet",
       contract: `C${"A".repeat(55)}`,
       id: "7",
@@ -636,14 +640,14 @@ describe("el resto de las dependencias", () => {
       stx: "2".repeat(64),
     })}`;
     const sello = {
-      hash: "0".repeat(64),
+      hash: "2".repeat(64),
       hashInterior: "1".repeat(64),
       contractId: `C${"A".repeat(55)}`,
       organizer: `G${"D".repeat(55)}`,
       listHash: bytesToHex(listHash([...lista])),
       count: 2,
       numWinners: 1,
-      round: roundAt(Date.now() / 1000) - 10,
+      round: rondaDelSello,
       meta: "",
       closedAt: 1,
       ledger: 1,
@@ -657,7 +661,57 @@ describe("el resto de las dependencias", () => {
     expect(leerSello).toHaveBeenCalledTimes(2);
     expect(leerSello).toHaveBeenCalledWith("testnet", "2".repeat(64));
     // Primero el turno al azar de este celular (la mitad de 6 segundos), después la espera del reintento.
-    expect(esperas).toEqual([3_000, 4_000]);
+    expect(esperas).toEqual([3_000, 8_000]);
+  });
+
+  /** El comprobante de una lista de dos cuentas, para las pruebas de cuántas veces se lee la red. */
+  async function comprobanteDeDos(): Promise<string> {
+    return `/verificar.html#${await encodeProof({
+      v: 2,
+      names: [CUENTA, OTRA],
+      round: roundAt(Date.now() / 1000) - 10,
+      net: "testnet",
+      contract: `C${"A".repeat(55)}`,
+      id: "7",
+      signature: "0".repeat(96),
+      stx: "2".repeat(64),
+    })}`;
+  }
+  const DE_LA_SALA = { sorteo: "7", ganadoras: [CUENTA], promo: null };
+
+  it("comprobar en una campaña con premios lee el sello una sola vez, aunque la red falle", async () => {
+    const leerSello = vi.fn(async (): Promise<LecturaDelHistorial> => ({ ok: false, error: "red-caida" }));
+    const esperas: number[] = [];
+    const m = montar({}, { leerSello, esperar: async (ms) => void esperas.push(ms), campana: { promo: "41" } });
+    const dicho = await m.deps.comprobar?.({ comprobante: await comprobanteDeDos(), cuenta: CUENTA, campana: { ...DE_LA_SALA, promo: "41" } });
+    expect(dicho).toBeNull();
+    expect(leerSello).toHaveBeenCalledTimes(1);
+    // Solo el turno al azar del principio: ninguna espera de reintento.
+    expect(esperas).toHaveLength(1);
+  });
+
+  it("comprobar sin premios lee a lo sumo dos veces", async () => {
+    const leerSello = vi.fn(async (): Promise<LecturaDelHistorial> => ({ ok: false, error: "red-caida" }));
+    const m = montar({}, { leerSello, esperar: async () => undefined });
+    await m.deps.comprobar?.({ comprobante: await comprobanteDeDos(), cuenta: CUENTA, campana: DE_LA_SALA });
+    expect(leerSello).toHaveBeenCalledTimes(2);
+  });
+
+  it("la lectura de verdad hace un solo pedido a la red por lectura y, si le dicen que hay demasiados, no insiste", async () => {
+    const pedidos: string[] = [];
+    vi.stubGlobal("fetch", async (u: unknown) => {
+      pedidos.push(String(u));
+      return new Response("", { status: 429 });
+    });
+    try {
+      const m = montar({}, { esperar: async () => undefined });
+      const dicho = await m.deps.comprobar?.({ comprobante: await comprobanteDeDos(), cuenta: CUENTA, campana: DE_LA_SALA });
+      expect(dicho).toBeNull();
+      expect(pedidos).toHaveLength(1);
+      expect(pedidos[0]).toContain(`/transactions/${"2".repeat(64)}`);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("comprobar con un comprobante ilegible no pide nada a la red", async () => {

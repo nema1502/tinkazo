@@ -165,8 +165,8 @@ export interface DepsDelCelular {
   resultado: () => Promise<{ sorteo?: string | null; ganadoras: string[]; comprobante: string | null } | null | "red">;
   /**
    * La comprobación propia del sello (`comprobar.ts`): el celular lee el sello en el historial público y comprueba él mismo
-   * que su cuenta está en la lista sellada de esta campaña, sin creerle a la sala. Dice `esta`, `no-esta` o `null` cuando no
-   * pudo comprobar, y en ese caso la pantalla no dice nada. Sin esto (la demostración) no se comprueba nada.
+   * que su cuenta está en la lista sellada de esta campaña, sin creerle a la sala. Dice `esta` o `null` cuando no
+   * pudo comprobar o algo no cuadró, y en ese caso la pantalla no dice nada: nunca le dice a nadie que no está. Sin esto (la demostración) no se comprueba nada.
    */
   comprobar?: (o: { comprobante: string; cuenta: string; campana: DeLaCampana }) => Promise<ComprobacionDelSello>;
   /** Lleva a recibir el premio. */
@@ -321,6 +321,12 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     comprobandoSello: false,
   };
   let desmontado = false;
+  /** De qué comprobante es la comprobación del sello que está en vuelo, y el pedido que llegó mientras tanto. */
+  let comprobandoDe: string | null = null;
+  let pedidoDelSello: {
+    resultado: { sorteo?: string | null; ganadoras: string[]; comprobante: string | null };
+    cuenta: string;
+  } | null = null;
   let consultando = false;
   /** La línea del límite del servicio de cuentas, bajada solo si hizo falta. */
   let limite: typeof import("./limite") | null = null;
@@ -1099,8 +1105,14 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   ): Promise<void> {
     const comprobar = deps.comprobar;
     const comprobante = resultado.comprobante;
-    if (desmontado || !comprobar || !comprobante || !cuenta || estado.comprobandoSello || estado.selloDe === comprobante) return;
+    if (desmontado || !comprobar || !comprobante || !cuenta || estado.selloDe === comprobante) return;
+    if (estado.comprobandoSello) {
+      // Otro comprobante llegó mientras se comprobaba el anterior: queda pedido y se comprueba cuando aquella termine.
+      if (comprobante !== comprobandoDe) pedidoDelSello = { resultado, cuenta };
+      return;
+    }
     estado.comprobandoSello = true;
+    comprobandoDe = comprobante;
     let dicho: ComprobacionDelSello = null;
     try {
       dicho = await comprobar({
@@ -1112,10 +1124,19 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       dicho = null;
     }
     estado.comprobandoSello = false;
-    if (desmontado || estado.comprobante !== comprobante) return;
-    estado.sello = dicho;
-    estado.selloDe = comprobante;
-    if (estado.pantalla === "gano" || estado.pantalla === "otra") ponerElSello(raiz, deps, dicho);
+    comprobandoDe = null;
+    const siguiente = pedidoDelSello;
+    pedidoDelSello = null;
+    if (desmontado) return;
+    if (estado.comprobante === comprobante) {
+      estado.sello = dicho;
+      estado.selloDe = comprobante;
+      if (estado.pantalla === "gano" || estado.pantalla === "otra") ponerElSello(raiz, deps, dicho);
+    }
+    // El comprobante vigente es otro que el que se acaba de comprobar: se comprueba ahora, para que no quede sin línea.
+    if (siguiente && siguiente.resultado.comprobante === estado.comprobante) {
+      void comprobarElSello(siguiente.resultado, siguiente.cuenta);
+    }
   }
 
   /** Lo que se dice de la comprobación en una pantalla que se pinta de nuevo: nada si es de otro comprobante o no comprobó. */

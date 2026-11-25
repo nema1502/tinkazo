@@ -480,10 +480,11 @@ export function pintarOtra(
 
 /**
  * La línea de la comprobación propia del sello, puesta en el bloque del resultado que ya está a la vista. No repinta nada:
- * el festejo, el título y el botón siguen como estaban, y si la línea ya estaba solo cambia su texto. Con `null` no hace nada.
+ * el festejo, el título y el botón siguen como estaban. Con `null` no hace nada.
  */
 export function ponerElSello(raizPrincipal: HTMLElement, deps: DepsDelCelular, dicho: ComprobacionDelSello): void {
-  if (dicho === null) return;
+  // Solo se dice lo que se comprobó a favor: no hay línea para nada más.
+  if (dicho !== "esta") return;
   const bloque = raizPrincipal.querySelector<HTMLElement>("#cmp-estado .cmp-izq");
   if (!bloque) return;
   let linea = bloque.querySelector<HTMLElement>(":scope > .cmp-sello");
@@ -496,7 +497,7 @@ export function ponerElSello(raizPrincipal: HTMLElement, deps: DepsDelCelular, d
     if (enlace) enlace.before(linea);
     else bloque.append(linea);
   }
-  linea.textContent = deps.tx(dicho === "esta" ? "cpMiSelloEsta" : "cpMiSelloNo");
+  linea.textContent = deps.tx("cpMiSelloEsta");
 }
 
 /** La salida de la lista siempre explica el motivo que informó la sala. */

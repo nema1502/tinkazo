@@ -10,7 +10,7 @@ import type { DepsDelCelular } from "./celular";
 import { AHORA, CUENTA, OTRA_CUENTA, SESION, pasar, prepararCelular, propio } from "./celular-falso";
 import { TEXTOS_CAMPANA } from "./textos";
 
-type Respuesta = "esta" | "no-esta" | null;
+type Respuesta = "esta" | null;
 type Comprobar = NonNullable<DepsDelCelular["comprobar"]>;
 
 const es = TEXTOS_CAMPANA.es;
@@ -169,6 +169,32 @@ describe("quien ganó: la línea aparece sin repintar y el festejo sigue", () =>
     await pasar(0);
     expect(lineaDelSello(mundo.raiz)).toBeNull();
   });
+
+  it("un comprobante nuevo que llega mientras se comprueba el anterior se comprueba cuando termina aquella", async () => {
+    let cambiar = false;
+    const entregas: ((r: Respuesta) => void)[] = [];
+    const comprobar = vi.fn<Comprobar>(() => new Promise<Respuesta>((resolver) => { entregas.push(resolver); }));
+    const { mundo } = await conResultado({
+      gano: true,
+      cambios: {
+        comprobar,
+        resultado: async () => ({ sorteo: "7", ganadoras: [CUENTA], comprobante: cambiar ? "/verificar.html#otro" : COMPROBANTE }),
+      },
+    });
+    cambiar = true;
+    await mundo.volver();
+    await pasar(50);
+    // Mientras la primera sigue en vuelo, la segunda no se pide todavía (una a la vez por celular).
+    expect(comprobar).toHaveBeenCalledTimes(1);
+    entregas[0]?.("esta");
+    await pasar(0);
+    expect(lineaDelSello(mundo.raiz)).toBeNull();
+    expect(comprobar).toHaveBeenCalledTimes(2);
+    expect(comprobar.mock.calls[1]?.[0].comprobante).toBe("/verificar.html#otro");
+    entregas[1]?.("esta");
+    await pasar(0);
+    expect(lineaDelSello(mundo.raiz)).toBe(es.cpMiSelloEsta);
+  });
 });
 
 describe("quien no ganó", () => {
@@ -183,11 +209,12 @@ describe("quien no ganó", () => {
     expect(titulo?.textContent).toBe(es.cpOtraPersona);
   });
 
-  it("si no la encuentra lo dice con calma y dice a quién escribir", async () => {
-    const { mundo } = await conResultado({ gano: false, cambios: { comprobar: async () => "no-esta" } });
-    expect(lineaDelSello(mundo.raiz)).toBe(es.cpMiSelloNo);
-    expect(es.cpMiSelloNo).toContain("hola@tinkazo.app");
-    expect(en.cpMiSelloNo).toContain("hola@tinkazo.app");
+  it("nunca le dice a nadie que no está: cualquier cosa que no sea esta no se pinta", async () => {
+    const { mundo } = await conResultado({ gano: false, cambios: { comprobar: (async () => "no-esta") as unknown as Comprobar } });
+    expect(lineaDelSello(mundo.raiz)).toBeNull();
+    expect(mundo.raiz.querySelector("#cmp-estado h1")?.textContent).toBe(es.cpOtraPersona);
+    expect(Object.keys(es)).not.toContain("cpMiSelloNo");
+    expect(Object.keys(en)).not.toContain("cpMiSelloNo");
   });
 });
 
@@ -210,7 +237,7 @@ describe("cuando no se pudo comprobar, la pantalla no dice nada", () => {
 describe("los textos", () => {
   it("están en los dos idiomas, sin tecnicismos y sin los signos que el sitio no usa", () => {
     for (const idioma of [es, en]) {
-      for (const clave of ["cpMiSelloEsta", "cpMiSelloNo"] as const) {
+      for (const clave of ["cpMiSelloEsta"] as const) {
         const texto = idioma[clave];
         expect(texto, clave).toBeTruthy();
         expect(texto, clave).not.toMatch(/[;«»"“”—–·!]/u);

@@ -1,6 +1,6 @@
 /** La comprobación propia del sello: el celular lee el sello del historial, sin creerle al servidor. */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { listHash } from "../protocol/canonical";
 import { encodeProof, type Proof } from "../protocol/proof";
 import { bytesToHex, roundAt, roundTime } from "../protocol/quicknet";
@@ -16,19 +16,21 @@ import {
 } from "./comprobar";
 
 const AHORA = Date.UTC(2026, 10, 21, 18);
+/** El reloj de verdad, para esperar mientras el de las pruebas está detenido. */
+const esperaReal = globalThis.setTimeout;
+const respiroReal = (): Promise<void> => new Promise((resolver) => void esperaReal(resolver, 5));
 const RED = "mainnet";
 const CONTRATO = `C${"A".repeat(63)}`;
 const CONTRATO_DE_PREMIOS = `C${"P".repeat(55)}`;
 const CUENTA = `G${"A".repeat(55)}`;
 const OTRA = `G${"B".repeat(55)}`;
 const TERCERA = `G${"C".repeat(55)}`;
-const RONDA = 32_254_977;
 const SORTEO = "7";
 const rondaPasada = (): number => Math.floor(AHORA / 900_000) - 3;
 
 function sello(nombres: string[], extras: Partial<SelloDelHistorial> = {}): SelloDelHistorial {
   return {
-    hash: "0".repeat(64),
+    hash: "2".repeat(64),
     hashInterior: "1".repeat(64),
     contractId: CONTRATO,
     organizer: `G${"D".repeat(55)}`,
@@ -47,7 +49,7 @@ async function comprobanteDe(nombres: string[], extras: Partial<Proof> = {}): Pr
   const prueba: Proof = {
     v: 2,
     names: [...nombres],
-    round: RONDA,
+    round: rondaPasada(),
     net: RED,
     contract: CONTRATO,
     id: SORTEO,
@@ -79,7 +81,7 @@ async function comprobar(
   nombres: string[],
   p: PiezasDeLaComprobacion,
   o: { contrato?: string | null; red?: string; campana?: Partial<DeLaCampana>; comprobante?: Partial<Proof> } = {},
-): Promise<"esta" | "no-esta" | null> {
+): Promise<"esta" | null> {
   const enlace = await comprobanteDe(nombres, o.comprobante);
   return comprobarMiCuenta(
     {
@@ -99,9 +101,9 @@ describe("comprobarMiCuenta: el celular se cree la red, no al servidor", () => {
     expect(await comprobar(lista, piezas(lista))).toBe("esta");
   });
 
-  it("una transacción sellada con otra lista que no la incluye dice no-esta", async () => {
+  it("una lista sellada que no la incluye no dice nada: nunca le dice a nadie que no está", async () => {
     const lista = [OTRA, TERCERA];
-    expect(await comprobar(lista, piezas(lista))).toBe("no-esta");
+    expect(await comprobar(lista, piezas(lista))).toBeNull();
   });
 
   it("la huella de la transacción que no es la del comprobante no dice nada", async () => {
@@ -153,14 +155,16 @@ describe("comprobarMiCuenta: el celular se cree la red, no al servidor", () => {
   it("el sello de una ronda que todavía no salió no dice nada", async () => {
     const lista = [CUENTA, OTRA];
     const rondaFutura = roundAt(AHORA / 1000) + 2;
-    expect(await comprobar(lista, piezas(lista, { round: rondaFutura }))).toBeNull();
+    expect(await comprobar(lista, piezas(lista, { round: rondaFutura }), { comprobante: { round: rondaFutura } })).toBeNull();
   });
 
   it("la ronda del sello se mira con la hora de la campaña, no con la del reloj", async () => {
     const lista = [CUENTA, OTRA];
     const rondaQueYaSalio = roundAt(AHORA / 1000) - 5_000;
     expect(roundTime(rondaQueYaSalio) * 1000).toBeLessThanOrEqual(AHORA);
-    expect(await comprobar(lista, piezas(lista, { round: rondaQueYaSalio }))).toBe("esta");
+    expect(
+      await comprobar(lista, piezas(lista, { round: rondaQueYaSalio }), { comprobante: { round: rondaQueYaSalio } }),
+    ).toBe("esta");
   });
 
   it("una lista con algo que no sea una cuenta no dice nada", async () => {
@@ -169,8 +173,23 @@ describe("comprobarMiCuenta: el celular se cree la red, no al servidor", () => {
   });
 
   it("una lista de una sola persona también se comprueba", async () => {
-    const lista = [OTRA];
-    expect(await comprobar(lista, piezas(lista))).toBe("no-esta");
+    const lista = [CUENTA];
+    expect(await comprobar(lista, piezas(lista))).toBe("esta");
+  });
+
+  it("si la ronda del sello de la red no es la del comprobante, no dice nada", async () => {
+    const lista = [CUENTA, OTRA];
+    expect(await comprobar(lista, piezas(lista, { round: rondaPasada() - 1 }))).toBeNull();
+  });
+
+  it("si la transacción que devolvió la lectura no es la del comprobante, no dice nada", async () => {
+    const lista = [CUENTA, OTRA];
+    expect(await comprobar(lista, piezas(lista, { hash: "3".repeat(64), hashInterior: "4".repeat(64) }))).toBeNull();
+  });
+
+  it("la transacción interior de un sobre con comisión de terceros también vale", async () => {
+    const lista = [CUENTA, OTRA];
+    expect(await comprobar(lista, piezas(lista, { hash: "3".repeat(64), hashInterior: "2".repeat(64) }))).toBe("esta");
   });
 });
 
@@ -244,7 +263,7 @@ describe("comprobarConReintento: lee con reintento y con tope", () => {
   const buena: LecturaDelHistorial = { ok: true, sello: sello(lista) };
   const mala = (error: ErrorDelHistorial): LecturaDelHistorial => ({ ok: false, error });
 
-  async function correr(p: PiezasConReintento): Promise<"esta" | "no-esta" | null> {
+  async function correr(p: PiezasConReintento): Promise<"esta" | null> {
     return comprobarConReintento(
       { comprobante: await comprobanteDe(lista), cuenta: CUENTA, red: RED, contrato: CONTRATO, campana: campanaDe(lista) },
       p,
@@ -259,9 +278,9 @@ describe("comprobarConReintento: lee con reintento y con tope", () => {
   });
 
   it("si la red se cae, espera y vuelve a leer hasta conseguirlo", async () => {
-    const l = lector([mala("red-caida"), mala("red-caida"), buena]);
+    const l = lector([mala("red-caida"), buena]);
     expect(await correr(l.piezas)).toBe("esta");
-    expect(l.llamadas()).toBe(3);
+    expect(l.llamadas()).toBe(2);
     expect(l.esperas).toEqual([...ESPERAS_DEL_SELLO_MS]);
   });
 
@@ -274,6 +293,27 @@ describe("comprobarConReintento: lee con reintento y con tope", () => {
   it("una transacción que todavía no se ve se vuelve a pedir", async () => {
     const l = lector([mala("no-encontrada"), buena]);
     expect(await correr(l.piezas)).toBe("esta");
+  });
+
+  it("como mucho dos lecturas por celular: con 300 celulares detrás de la misma conexión no se multiplican los pedidos", async () => {
+    expect(ESPERAS_DEL_SELLO_MS).toHaveLength(1);
+    const l = lector([mala("red-caida")]);
+    expect(await correr(l.piezas)).toBeNull();
+    expect(l.llamadas()).toBe(2);
+  });
+
+  it("si la red contestó que hay demasiados pedidos, no vuelve a pedir ni espera", async () => {
+    const l = lector([{ ok: false, error: "red-caida", limitado: true }, buena]);
+    expect(await correr(l.piezas)).toBeNull();
+    expect(l.llamadas()).toBe(1);
+    expect(l.esperas).toEqual([]);
+  });
+
+  it("con las esperas vacías (el sello de una campaña con premios) lee una sola vez", async () => {
+    const l = lector([mala("red-caida"), buena]);
+    expect(await correr({ ...l.piezas, esperas: [] })).toBeNull();
+    expect(l.llamadas()).toBe(1);
+    expect(l.esperas).toEqual([]);
   });
 
   it("tiene tope de intentos: si nunca contesta, no dice nada", async () => {
@@ -292,22 +332,45 @@ describe("comprobarConReintento: lee con reintento y con tope", () => {
     expect(l.llamadas()).toBe(2);
   });
 
+  it("el tope de tiempo corta también una lectura que no contesta nunca", async () => {
+    const comprobante = await comprobanteDe(lista);
+    vi.useFakeTimers();
+    try {
+      let lecturas = 0;
+      const colgada: PiezasConReintento = {
+        leer: () => {
+          lecturas += 1;
+          return new Promise<LecturaDelHistorial>(() => undefined);
+        },
+        esperar: async () => undefined,
+      };
+      let dijo: unknown = "nada todavía";
+      const corrida = comprobarConReintento(
+        { comprobante, cuenta: CUENTA, red: RED, contrato: CONTRATO, campana: campanaDe(lista) },
+        colgada,
+      ).then((r) => {
+        dijo = r;
+      });
+      // El comprobante se decodifica con trabajo de verdad asíncrono: se espera con el reloj real a que empiece la lectura.
+      for (let i = 0; i < 400 && lecturas === 0; i += 1) await respiroReal();
+      expect(lecturas).toBe(1);
+      await vi.advanceTimersByTimeAsync(TOPE_DEL_SELLO_MS - 1);
+      expect(dijo).toBe("nada todavía");
+      await vi.advanceTimersByTimeAsync(2);
+      await corrida;
+      expect(dijo).toBeNull();
+      // Pasado el tope no se vuelve a pedir.
+      expect(lecturas).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("lo que la red contradice no se reintenta ni se afirma", async () => {
     for (const error of ["fallida", "no-es-un-sello", "contrato-ajeno", "fuera-de-ventana"] as const) {
       const l = lector([mala(error), buena]);
       expect(await correr(l.piezas), error).toBeNull();
       expect(l.llamadas(), error).toBe(1);
     }
-  });
-
-  it("un no-esta también sale tras reintentar", async () => {
-    const otra = [OTRA, TERCERA];
-    const l = lector([mala("red-caida"), { ok: true, sello: sello(otra) }]);
-    expect(
-      await comprobarConReintento(
-        { comprobante: await comprobanteDe(otra), cuenta: CUENTA, red: RED, contrato: CONTRATO, campana: campanaDe(otra) },
-        l.piezas,
-      ),
-    ).toBe("no-esta");
   });
 });
