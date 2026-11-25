@@ -199,7 +199,7 @@ function lugarDelArchivo(f: FormularioDeCampana, lugar: string): Bilingue {
  * La red es la principal: el archivo es para el día del evento. Lo que trae un archivo abierto y esta página no edita
  * (cuenta que sella, contrato, promo, comprobante, plazo, entrada, estado, red, anotadas y el inglés del lugar) se repite tal cual.
  */
-export function armarCampana(f: FormularioDeCampana, o: { bases: Bilingue }): Record<string, unknown> {
+export function armarCampana(f: FormularioDeCampana, o: { bases: Bilingue; identidad?: "persona" }): Record<string, unknown> {
   const t = instantesDe(f);
   const abreMs = t?.abreMs ?? 0;
   const cierraMs = t?.cierraMs ?? 0;
@@ -229,6 +229,8 @@ export function armarCampana(f: FormularioDeCampana, o: { bases: Bilingue }): Re
     comprobante: guardado?.comprobante ?? null,
   };
   if (guardado?.organizadora) archivo.organizadora = guardado.organizadora;
+  // Anotarse sin billetera: el campo solo va si se pidió o si el archivo que se abrió ya lo traía. Sin él, la campaña es la de siempre.
+  if ((o.identidad ?? guardado?.identidad) === "persona") archivo.identidad = "persona";
   return archivo;
 }
 
@@ -457,6 +459,7 @@ export function formularioDesdeTexto(crudo: string, o: OpcionesDeApertura): { ok
       estado: c.estado,
       red: datos.red === "testnet" ? "testnet" : "mainnet",
       anotadas: c.anotadas,
+      ...(c.identidad === "persona" ? { identidad: "persona" as const } : {}),
       lugar: { es: c.lugar.es, en: c.lugar.en },
     },
     origen: {
