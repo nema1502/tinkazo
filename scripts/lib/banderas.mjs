@@ -6,8 +6,10 @@
  * ya empaquetado las variables que quedaron escritas, y comparar las dos.
  *
  * Regla de oro: el informe de la comparación nunca escribe el valor de una variable
- * que la tabla marca como reservada (`definida`) ni de una que la tabla no nombra.
- * Un valor solo se escribe cuando la tabla lo publica.
+ * reservada (la lista fija de RESERVADAS: montos, cuentas y llaves), diga lo que diga
+ * su fila, ni el de una que la tabla no nombra. De las demás, solo escribe el valor
+ * del sitio si es uno de los conocidos de VALORES_QUE_SE_ESCRIBEN y, si no, dice
+ * que tiene otro valor.
  */
 
 /** El encabezado de la sección de docs/operacion.md que lee la comprobación. */
@@ -18,6 +20,25 @@ export const SIN_DEFINIR = "sin definir";
 
 /** Lo que dice la columna En producción de una variable reservada: solo se comprueba que exista. */
 export const DEFINIDA = "definida";
+
+/**
+ * Las variables cuyo valor es un monto, una dirección o una llave pública. La tabla de
+ * operacion.md dice de ellas solo `definida` y la comprobación solo mira que existan.
+ * La lista es fija a propósito: no depende de lo que escriba la tabla.
+ */
+export const RESERVADAS = new Set([
+  "VITE_COMISION_CUENTA",
+  "VITE_COMISION_MINIMO",
+  "VITE_COMISION_PB",
+  "VITE_RETIRO_CUENTA",
+  "VITE_RETIRO_COSTO",
+  "VITE_POLLAR_PUBLISHABLE_KEY",
+  "VITE_POLLAR_PUBLISHABLE_KEY_MAINNET",
+  "VITE_PATROCINIO_URL_MAINNET",
+]);
+
+/** Los únicos valores del sitio que un informe puede escribir en un desajuste de una bandera común. */
+const VALORES_QUE_SE_ESCRIBEN = new Set(["", "0", "1", "true", "false", "mainnet", "testnet", "premios", "sintetizada"]);
 
 /** Las variables que pone el sistema de publicación: no son banderas y no se leen ni se muestran. */
 export const esDelSistema = (nombre) => nombre.startsWith("VITE_VERCEL_");
@@ -199,6 +220,13 @@ export function referenciasRelativas(codigo) {
 
 const valorTexto = (v) => (typeof v === "string" ? v : v === undefined || v === null ? "" : String(v)).slice(0, 40);
 
+/** Cómo se nombra, en un informe, el valor que trae el sitio: nunca el de una reservada ni uno desconocido. */
+function mostrar(variable, valor) {
+  if (valor === "") return "vacía";
+  if (RESERVADAS.has(variable) || !VALORES_QUE_SE_ESCRIBEN.has(valor)) return "otro valor";
+  return valor;
+}
+
 /**
  * Compara la tabla con lo que el sitio tiene escrito. `variables` es un Map de
  * `sacarVariables`. Devuelve `{ filas, fallas }`: una entrada por fila con su estado
@@ -211,29 +239,34 @@ export function comparar(tabla, variables) {
   for (const f of tabla) {
     const escrita = variables.has(f.variable);
     const valor = escrita ? valorTexto(variables.get(f.variable)) : "";
+    const reservada = RESERVADAS.has(f.variable);
     let ok = true;
     let estado;
     if (f.produccion === SIN_DEFINIR) {
-      const prendida = /^(pistas )?prendidas?\b/i.test(f.sinLaVariable);
+      const prendida = /^(pistas )?prendidas?/i.test(f.sinLaVariable);
       estado = escrita ? "definida en el sitio" : prendida ? `sin definir, así que está prendida por defecto (${f.sinLaVariable})` : `sin definir, ${f.sinLaVariable}`;
       if (escrita) {
         ok = false;
         fallas.push(`${f.variable}: la tabla dice '${SIN_DEFINIR}' y el sitio la trae definida`);
       }
-    } else if (f.produccion === DEFINIDA) {
+    } else if (f.produccion === DEFINIDA || reservada) {
       estado = escrita && valor !== "" ? "definida" : escrita ? "vacía" : "sin definir";
       if (!escrita || valor === "") {
         ok = false;
         fallas.push(`${f.variable}: la tabla dice '${DEFINIDA}' y el sitio la trae ${escrita ? "vacía" : "sin definir"}`);
+      } else if (f.produccion !== DEFINIDA) {
+        // Una reservada con un valor escrito en la tabla: se rechaza la fila sin comparar ni mostrar ningún valor.
+        ok = false;
+        fallas.push(`${f.variable}: es una variable reservada y su fila debe decir '${DEFINIDA}', no un valor`);
       }
     } else {
-      estado = escrita ? `vale ${valor}` : "sin definir";
+      estado = escrita ? `vale ${mostrar(f.variable, valor)}` : "sin definir";
       if (!escrita) {
         ok = false;
         fallas.push(`${f.variable}: la tabla dice que vale ${f.produccion} y el sitio no la trae`);
       } else if (valor !== f.produccion) {
         ok = false;
-        fallas.push(`${f.variable}: la tabla dice que vale ${f.produccion} y el sitio trae ${valor === "" ? "vacía" : valor}`);
+        fallas.push(`${f.variable}: la tabla dice que vale ${f.produccion} y el sitio trae ${mostrar(f.variable, valor)}`);
       }
     }
     filas.push({ variable: f.variable, ok, estado });
