@@ -48,6 +48,12 @@ export interface PollarDeMentira {
   creditosCaido: boolean;
   /** Los últimos movimientos de los créditos, como los devuelve `billing/credits`. */
   movimientos: unknown[];
+  /** Los eventos que contesta la consulta de uso `billing/usage` (`[{ event, count, credits }]`). Por defecto, ninguno. */
+  uso: unknown;
+  /** Solo `billing/usage` falla. */
+  usoCaido: boolean;
+  /** Las ventanas que pidió `billing/usage`, tal como llegaron (`from` y `to`). */
+  consultasDeUso: Array<{ from: string | null; to: string | null }>;
   /** Lo que contesta `treasury/sponsorship` (su contenido), o null para que falle. */
   patrocinio: Record<string, unknown> | null;
   /** Lo que contesta `wallets/fund` para una cuenta: el estado y el código. Por defecto, el pedido abierto (202). */
@@ -83,6 +89,9 @@ export function montarAltas(env: Partial<Env> = {}, opciones: OpcionesDelMontaje
     usersCaido: false,
     creditosCaido: false,
     movimientos: [],
+    uso: [],
+    usoCaido: false,
+    consultasDeUso: [],
     patrocinio: { sponsor_trustlines: false, sponsor_swap_venues: false, sponsor_all_contracts: false, sponsor_signer_rotation: false },
     fondeo: () => ({ status: 202, code: "SERVER_WALLET_ACCOUNT_REQUESTED" }),
     fondeos: [],
@@ -108,6 +117,11 @@ export function montarAltas(env: Partial<Env> = {}, opciones: OpcionesDelMontaje
     }
     if (u.pathname === "/v3/billing/credits" && pm.creditosCaido) return resp(503, { code: "DOWN", success: false });
     if (u.pathname === "/v3/billing/credits") return resp(200, { code: "SERVER_BILLING_CREDITS", success: true, content: { billingModel: "PREPAID", available: pm.creditos, movements: pm.movimientos } });
+    if (u.pathname === "/v3/billing/usage") {
+      pm.consultasDeUso.push({ from: u.searchParams.get("from"), to: u.searchParams.get("to") });
+      if (pm.usoCaido) return resp(503, { code: "DOWN", success: false });
+      return resp(200, { code: "SERVER_BILLING_USAGE", success: true, content: { from: u.searchParams.get("from"), to: u.searchParams.get("to"), totalCredits: "0", events: pm.uso } });
+    }
     if (u.pathname === "/v3/treasury/sponsorship") return pm.patrocinio ? resp(200, { code: "SERVER_TREASURY_SPONSORSHIP", success: true, content: pm.patrocinio }) : resp(503, { code: "DOWN", success: false });
     if (u.pathname === "/v3/wallets/fund" && init?.method === "POST") {
       const cuerpo = JSON.parse(String(init.body)) as { publicKey: string };

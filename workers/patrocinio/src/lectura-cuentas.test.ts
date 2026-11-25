@@ -1,97 +1,51 @@
-// El conteo de cuentas nuevas y de activaciones por hora (issue 177): desde los movimientos de los créditos de Pollar,
-// como los lee `pollar.ts` y los cuenta por evento `vigilancia.ts`. Módulo puro, con el reloj entrando como argumento:
-// ninguna prueba toca una red.
+// El conteo de cuentas nuevas y de activaciones de la última hora (issue 177): desde la consulta de uso del proveedor por
+// ventana de tiempo, como la lee pollar.ts. Módulo puro: ninguna prueba toca una red. Los nombres y las cifras son inventados.
 import { describe, expect, it } from "vitest";
-import { MAX_MOVIMIENTOS } from "./vigilancia";
-import { contarCuentasPorHora } from "./lectura-cuentas";
+import { contarCuentasEnUso } from "./lectura-cuentas";
 
-const HORA = 3_600_000;
-/** Sábado 14 de noviembre de 2026, 09:00 UTC: la misma ancla que usan las otras pruebas de los movimientos. */
-const T0 = Date.UTC(2026, 10, 14, 9, 0, 0);
-const iso = (ms: number) => new Date(ms).toISOString();
-const horaDe = (ms: number) => iso(Math.floor(ms / HORA) * HORA);
-
-/** Una cuenta nueva: el cobro de crear la billetera de Turnkey, medido en la vigilancia de firmas. */
-const nueva = (ms: number, extra: Record<string, unknown> = {}) => ({ event: "wallet.created:STELLAR:COSIGNED", amount: -15, createdAt: iso(ms), ...extra });
-/** Una activación: el cobro de poner la cuenta en la red (`account.active`). */
-const activacion = (ms: number, extra: Record<string, unknown> = {}) => ({ event: "account.active:monthly", amount: -10, createdAt: iso(ms), ...extra });
-
-describe("contarCuentasPorHora: las cuentas nuevas y las activaciones de cada hora", () => {
-  it("cuenta solo los cobros de crear billetera y de activar, desde el comienzo de la ventana", () => {
-    const movimientos = [
-      nueva(T0 - MINUTOS(10)),
-      nueva(T0 - 30 * 60_000),
-      activacion(T0 - 20 * 60_000),
-      // Firmas, devoluciones y otros cobros no cuentan.
-      { event: "cosign.signature:STELLAR", amount: -20, createdAt: iso(T0 - MINUTOS(5)) },
-      activacion(T0 - MINUTOS(30), { amount: 10 }),
-      nueva(T0 - 2 * HORA),
-      { event: "otra.cosa", amount: -3, createdAt: iso(T0) },
-    ];
-    const r = contarCuentasPorHora(movimientos, T0 - HORA, T0);
-    expect(r.porHora).toEqual([
-      { hora: horaDe(T0 - HORA), nuevas: 2, activaciones: 1 },
-      { hora: horaDe(T0), nuevas: 0, activaciones: 0 },
-    ]);
-    expect(r.completo).toBe(true);
+describe("contarCuentasEnUso: las cuentas nuevas y las activaciones de la consulta de uso por ventana", () => {
+  // Los nombres reales del proveedor llevan sufijo: el evento se reconoce por su comienzo, nunca por igualdad.
+  it("reconoce los nombres con sufijo y suma todos los eventos que empiezan igual", () => {
+    expect(
+      contarCuentasEnUso([
+        { event: "wallet.created:STELLAR:COSIGNED", count: 7, credits: "105" },
+        { event: "wallet.created:STELLAR", count: 2, credits: "30" },
+        { event: "wallet.created", count: 1, credits: "15" },
+        { event: "account.active:monthly", count: 4, credits: "40" },
+        { event: "cosign.signature:STELLAR", count: 900, credits: "18000" },
+      ]),
+    ).toEqual({ nuevas: 10, activaciones: 4 });
   });
 
-  it("lo que se mide distingue las horas del día con el reloj que entra como argumento", () => {
-    const movimientos = [nueva(T0 - MINUTOS(10)), activacion(T0 - 90 * 60_000)];
-    const r = contarCuentasPorHora(movimientos, T0 - 2 * HORA, T0);
-    expect(r.porHora).toEqual([
-      { hora: horaDe(T0 - 2 * HORA), nuevas: 0, activaciones: 1 },
-      { hora: horaDe(T0 - HORA), nuevas: 1, activaciones: 0 },
-      { hora: horaDe(T0), nuevas: 0, activaciones: 0 },
-    ]);
-  });
-
-  it("un movimiento que agrupa varias cuenta las que dice, y lo que no se entiende no cuenta", () => {
-    const r = contarCuentasPorHora(
-      [nueva(T0 - MINUTOS(10), { count: 4 }), activacion(T0 - MINUTOS(20), { count: 2 }), null, 3, "x", { amount: -15 }, { event: "wallet.created:STELLAR:COSIGNED" }, nueva(T0 - MINUTOS(5), { count: -2 })],
-      T0 - HORA,
-      T0,
-    );
-    expect(r.porHora).toEqual([
-      { hora: horaDe(T0 - HORA), nuevas: 5, activaciones: 2 },
-      // El cobro sin fecha no se sabe de qué hora es: cuenta en la hora del reloj.
-      { hora: horaDe(T0), nuevas: 1, activaciones: 0 },
-    ]);
-  });
-
-  it("una fecha numérica más grande que la última fecha posible no lanza: el movimiento cuenta en la hora del reloj", () => {
-    const r = contarCuentasPorHora([nueva(T0, { createdAt: 1e20 }), nueva(T0, { createdAt: 8.64e15 + 1 }), activacion(T0, { createdAt: 1e300 })], T0 - HORA, T0);
-    expect(r.porHora).toEqual([
-      { hora: horaDe(T0 - HORA), nuevas: 0, activaciones: 0 },
-      { hora: horaDe(T0), nuevas: 2, activaciones: 1 },
-    ]);
-    // La última fecha posible sí es una fecha: cuenta en la hora del reloj porque esa hora todavía no existe, y no lanza.
-    expect(() => contarCuentasPorHora([nueva(T0, { createdAt: 8.64e15 })], T0 - HORA, T0)).not.toThrow();
-  });
-
-  it("lo que no sea una lista de movimientos da cero y completo", () => {
-    expect(contarCuentasPorHora("no es una lista", T0 - HORA, T0)).toEqual({
-      porHora: [
-        { hora: horaDe(T0 - HORA), nuevas: 0, activaciones: 0 },
-        { hora: horaDe(T0), nuevas: 0, activaciones: 0 },
-      ],
-      completo: true,
+  it("un nombre que solo se parece al comienzo no cuenta", () => {
+    expect(contarCuentasEnUso([{ event: "wallet.createdX", count: 5 }, { event: "wallet.creat", count: 5 }, { event: "x.wallet.created", count: 5 }, { event: "account.activeX", count: 5 }])).toEqual({
+      nuevas: 0,
+      activaciones: 0,
     });
   });
 
-  it("con la página llena, dice que puede haber más", () => {
-    const movimientos = Array.from({ length: MAX_MOVIMIENTOS }, (_, i) => nueva(T0 - i * 1000));
-    const r = contarCuentasPorHora(movimientos, T0 - HORA, T0);
-    expect(r.completo).toBe(false);
+  it("sin cuentas en la ventana da cero, que es un dato: la lista de eventos puede venir vacía", () => {
+    expect(contarCuentasEnUso([])).toEqual({ nuevas: 0, activaciones: 0 });
+    expect(contarCuentasEnUso([{ event: "cosign.signature:STELLAR", count: 3 }])).toEqual({ nuevas: 0, activaciones: 0 });
   });
 
-  it("ninguna ventana de más de un día: el conteo se pide desde la misma ventana que la vigilancia", () => {
-    const movimientos = Array.from({ length: 30 }, (_, i) => nueva(T0 - i * HORA - MINUTOS(30)));
-    const r = contarCuentasPorHora(movimientos, T0 - 24 * HORA, T0);
-    expect(r.porHora).toHaveLength(25);
+  it("si falta la lista, o un count no es un entero seguro mayor o igual a cero, no hay conteo: null, nunca un cero inventado", () => {
+    expect(contarCuentasEnUso(undefined)).toBeNull();
+    expect(contarCuentasEnUso(null)).toBeNull();
+    expect(contarCuentasEnUso("no")).toBeNull();
+    expect(contarCuentasEnUso({ wallet: 3 })).toBeNull();
+    for (const count of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1, "7", null, undefined]) {
+      expect(contarCuentasEnUso([{ event: "wallet.created:STELLAR:COSIGNED", count }]), String(count)).toBeNull();
+      // Un count malo de otro evento también invalida: la forma no es la esperada.
+      expect(contarCuentasEnUso([{ event: "wallet.created:STELLAR:COSIGNED", count: 2 }, { event: "cosign.signature:STELLAR", count }]), String(count)).toBeNull();
+    }
+    expect(contarCuentasEnUso([null])).toBeNull();
+    expect(contarCuentasEnUso([{ count: 2 }])).toBeNull();
+    expect(contarCuentasEnUso([{ event: 7, count: 2 }])).toBeNull();
+  });
+
+  it("una suma que no cabe en un entero seguro tampoco es un conteo", () => {
+    const m = Number.MAX_SAFE_INTEGER;
+    expect(contarCuentasEnUso([{ event: "wallet.created:A", count: m }, { event: "wallet.created:B", count: 1 }])).toBeNull();
   });
 });
-
-function MINUTOS(n: number): number {
-  return n * 60_000;
-}
