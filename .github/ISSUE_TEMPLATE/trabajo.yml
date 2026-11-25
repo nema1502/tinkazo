@@ -1,5 +1,5 @@
-name: Trabajo del equipo
-description: Un trabajo interno con su zona, su lugar en el código y cómo se comprueba
+name: Trabajo del equipo (solo equipo)
+description: Solo para quienes tienen permiso de escritura. Un trabajo interno con su zona, su lugar en el código y cómo se comprueba
 body:
   - type: markdown
     attributes:
