@@ -10,7 +10,7 @@ import { enEnsayo, sinGrabar } from "../ensayo-modo";
 import { pieDeLaEspera, pieSinGanador, sinSelloAhora } from "./sin-sello-textos";
 import { rechazarGrande } from "./vista-grande";
 import { soltarPantallaCompleta } from "./pantalla-completa";
-import { nombreDelEquipo, paraMostrar } from "../equipos/etiquetas";
+import { etiquetasSonDePersonas, nombreDelEquipo, paraMostrar } from "../equipos/etiquetas";
 import { hayModoOficial, network } from "../stellar/config";
 import { atencionPrendida } from "../estilos-atencion";
 import { armarQrDeEspectador, datosDeLaEspera, esconderQrDeEspectador, figuraDelQrHtml } from "./espectador-enlace";
@@ -361,6 +361,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
       red: network.name,
       contrato: network.contractId,
       equipo: nombreDelEquipo,
+      personas: etiquetasSonDePersonas(),
     });
     // Sin el número del sorteo en Stellar no hay QR: el celular no sabría cuándo la sala lo lanza (coronaría antes) ni
     // con qué comparar la lista del enlace.

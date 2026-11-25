@@ -64,7 +64,8 @@ import { bytesToHex, hexToBytes, randomnessOf, roundTime } from "../protocol/qui
 import { listHash } from "../protocol/canonical";
 import { select } from "../protocol/select";
 import { app, paceSeconds } from "../state";
-import { etiquetaConCuenta } from "../equipos/etiquetas";
+import { etiquetaConCuenta, ponerEtiquetas } from "../equipos/etiquetas";
+import { cuentaCorta } from "../equipos/modelo";
 import { esSoloMirar, setSoloMirar } from "../solo-mirar";
 import { T, type Lang } from "../i18n";
 import type { Registro } from "../protocol/verificacion";
@@ -1113,5 +1114,70 @@ describe("compartir el sorteo desde la vista en vivo", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(dialogo()).toBeFalsy();
     expect(document.activeElement).toBe(boton);
+  });
+
+  it("desde el celular de quien mira no sale nada hacia el servicio de enlaces cortos: el enlace va completo, en el mensaje", async () => {
+    await hastaElFin();
+    capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+    await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+    await vi.waitFor(() => expect(dialogo().querySelector<HTMLTextAreaElement>(".cmp-txt")?.value).toBeTruthy());
+    // Ni un pedido de enlace corto: la lista cifrada tampoco se guarda en ningún servidor por un toque de quien mira.
+    expect(h.acortar).not.toHaveBeenCalled();
+    const txt = dialogo().querySelector<HTMLTextAreaElement>(".cmp-txt")?.value ?? "";
+    expect(txt).toMatch(/https?:\/\/\S+\/verificar\.html#\S+/);
+    // Y el aviso de privacidad no promete una copia que no existe.
+    expect(dialogo().querySelector(".cmp-priv")?.textContent).not.toContain(T.es.cmpPrivCorto);
+  });
+
+  describe("quién va en el mensaje según de quién son las etiquetas", () => {
+    const cuentas = ["G" + "A".repeat(55), "G" + "B".repeat(55), "G" + "C".repeat(55)];
+    const etiquetas: [string, string][] = [[cuentas[0]!, "Ana R."], [cuentas[1]!, "Beto S."], [cuentas[2]!, "Nora T."]];
+    beforeEach(() => ponerEtiquetas(new Map()));
+    afterEach(() => ponerEtiquetas(new Map()));
+    const compartirYLeer = async (extra: Partial<DatosEspectador>): Promise<string> => {
+      abrir(datos({ n: cuentas, e: etiquetas, ...extra }));
+      await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
+      (h.jugar.mock.calls[0]?.[0] as () => void)();
+      await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000 + 10_000);
+      capa().querySelector<HTMLButtonElement>("[data-compartir]")?.click();
+      await vi.waitFor(() => expect(dialogo()).toBeTruthy());
+      await vi.waitFor(() => expect(dialogo().querySelector<HTMLTextAreaElement>(".cmp-txt")?.value).toBeTruthy());
+      return dialogo().querySelector<HTMLTextAreaElement>(".cmp-txt")?.value ?? "";
+    };
+
+    it("en una campaña de empresa viajan las cuentas acortadas y nunca los nombres de las personas", async () => {
+      const txt = await compartirYLeer({ q: 1 });
+      const gana = cuentas[ganadores(cuentas)[0] ?? 0] ?? "";
+      expect(txt).toContain(cuentaCorta(gana));
+      for (const [, nombre] of etiquetas) expect(txt).not.toContain(nombre);
+      // La lista del comprobante son las cuentas sellada, sin los nombres: los nombres nunca estuvieron en ella.
+      const pieza = txt.match(/https?:\/\/\S+\/verificar\.html#\S+/)?.[0] ?? "";
+      const comprobante = await decodeProof("#" + new URL(pieza).hash.slice(1));
+      expect(comprobante.names).toEqual(cuentas);
+    });
+
+    it("en una campaña el mensaje cuenta personas, no equipos, y es el de siempre con las cuentas acortadas", async () => {
+      const txt = await compartirYLeer({ q: 1 });
+      const pieza = txt.match(/https?:\/\/\S+\/verificar\.html#\S+/)?.[0] ?? "";
+      const gana = cuentas[ganadores(cuentas)[0] ?? 0] ?? "";
+      const esperado = mensajeDeSorteo("es", {
+        enlace: pieza,
+        ganadores: [cuentaCorta(gana)],
+        total: 3,
+        personas: 3,
+        premio: "Una polera",
+        fecha: roundTime(R),
+        numero: "42",
+        red: "testnet",
+      });
+      expect(txt).toBe(esperado);
+    });
+
+    it("con equipos de un evento sigue siendo el nombre del equipo, que la sala ya mostró a todos", async () => {
+      const txt = await compartirYLeer({});
+      const gana = cuentas[ganadores(cuentas)[0] ?? 0] ?? "";
+      const nombre = etiquetas.find(([c]) => c === gana)?.[1] ?? "";
+      expect(txt).toContain(nombre);
+    });
   });
 });

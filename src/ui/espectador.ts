@@ -26,6 +26,7 @@ import {
 import { etiquetaConCuenta, etiquetaDe, esListaDeEquipos, ponerEtiquetas } from "../equipos/etiquetas";
 import { contar as contarPersonas, nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { refDe } from "../contar";
+import { cuentaCorta } from "../equipos/modelo";
 import { hayModoOficial } from "../stellar/config";
 import { modesVisible, withMode } from "../modos/bandera";
 import { isTurnOrder, modoDelComprobante, ordenSinComprobante } from "../modos/turnos";
@@ -188,7 +189,10 @@ async function compartirElSorteo(
   // Los nombres como los manda la sala: la línea sellada sin su marca cuando la lista se lee por persona, y el
   // nombre del equipo cuando la lista es de equipos con etiqueta (`etiquetaDe`).
   const porPersona = seCuentaPorPersona(datos.n, modesVisible());
+  // En una campaña de empresa los nombres son de personas: se ven en la pantalla de la sala, pero de este celular no
+  // sale ninguno. Lo que sale es la cuenta acortada, que es lo que dice el comprobante (la lista sellada son cuentas).
   const ganadores = d.winners.map((i) => {
+    if (datos.q) return cuentaCorta(datos.n[i] ?? "");
     const linea = etiquetaDe(datos.n[i] ?? "");
     return porPersona ? nombreDePersona(linea) : linea;
   });
@@ -210,6 +214,8 @@ async function compartirElSorteo(
       ref: refDe({ net: datos.net, contract: datos.k, id: datos.i }),
     },
     getLang(),
+    // Nada sale de este celular hacia el servicio de enlaces cortos: el enlace va completo, el que este celular ya tiene.
+    { corto: false },
   );
   // Al cerrarse el diálogo, el foco vuelve al botón que lo abrió. El navegador ya lo hace con un diálogo modal, pero si
   // no (un teclado que quedó en el diálogo que se retiró), la vista no pierde el lugar: sigue en Compartir.
@@ -253,7 +259,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
   setSoloMirar(true);
   document.getElementById("st-skip")?.setAttribute("hidden", "");
   // Los equipos con cupón se ven por su nombre, como en la sala: la lista sellada son cuentas.
-  if (datos.e) ponerEtiquetas(new Map(datos.e));
+  if (datos.e) ponerEtiquetas(new Map(datos.e), datos.q ? "personas" : "equipos");
   const sorteo: SorteoDelEnlace = {
     contrato,
     id: datos.i,
@@ -553,7 +559,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     datos.p = nuevos.p;
     if (nuevos.e) {
       datos.e = nuevos.e;
-      ponerEtiquetas(new Map(nuevos.e));
+      ponerEtiquetas(new Map(nuevos.e), nuevos.q ? "personas" : "equipos");
     }
     forzarRitmo(datos.p);
     app.game = datos.g;
