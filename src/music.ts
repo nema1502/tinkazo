@@ -1,7 +1,7 @@
 import { audio, destinoDeMezcla, isMuted } from "./sound";
 import { anotarGolpe } from "./state";
 import { camaDeMusica } from "./sonidos/banco";
-import { MARGEN_BASE, horizonteDeMusica, margenMusica, nivelDeGracia } from "./music-margen";
+import { MARGEN_BASE, adelgazadoPrendido, horizonteDeMusica, margenMusica, nivelDeGracia } from "./music-margen";
 import { ACORDES, curvaDeTecho, PERFIL_BASE, VUELTAS_PENTATONICAS, type AcordeId, type Golpe, type PerfilMusica } from "./sonidos/carrera";
 import { bomboYBajoChico, festejoPropio, golpePropio, perfilDeMusica } from "./sonidos/carrera-eleccion";
 import { permitirPistas, pistaArrancar, pistaCallar, pistaParar, pistaRemata, pistaRetener, pistaSuena, pistaTension } from "./sonidos/pistas-enganche";
@@ -200,8 +200,10 @@ interface Session {
   timer: number;
   /** Cuánto por delante se programa: crece si los ticks llegan tarde (`music-margen.ts`). */
   margen: number;
-  /** Cuánto frenó el procesador en los últimos ticks, de 0 nada a 1 frenado (`nivelDeGracia` en music-margen.ts). */
+  /** Cuánto frenó el procesador en los últimos ticks, de 0 nada a 1 frenado (`nivelDeGracia` en music-margen.ts). Siempre 0 con el adelgazado apagado. */
   gracia: number;
+  /** ¿El adelgazado de capas está prendido para esta música? Se mide al armarla (`adelgazadoPrendido`). */
+  adelgazar: boolean;
   /** La hora de la página (`performance.now`) del último tick. */
   ultimoTick: number;
   /** La semilla con que arrancó: pedirla otra vez con la misma no la reinicia. */
@@ -378,6 +380,7 @@ function armarSesion(
     timer: 0,
     margen: MARGEN_BASE,
     gracia: 0,
+    adelgazar: adelgazadoPrendido(),
     ultimoTick: performance.now(),
     seed,
     style,
@@ -632,10 +635,10 @@ function tick(): void {
   const escondida = document.hidden;
   // Con la pestaña escondida el show está frenado: la música sigue saltando en silencio como desde el 2 de noviembre,
   // sin agrandar el margen por los temporizadores de uno por segundo.
-  s.margen = escondida ? MARGEN_BASE : margenMusica(s.margen, intervalo);
-  // Cuánto frenó el procesador: sube al toque y baja de a poco. Con gracia suenan menos capas y el horizonte de
-  // programación llega hasta el próximo tick. Escondida no cuenta: el tropiezo es del navegador, no del equipo.
-  s.gracia = escondida ? 0 : nivelDeGracia(s.gracia, intervalo);
+  s.margen = escondida ? MARGEN_BASE : margenMusica(s.margen, intervalo, s.adelgazar);
+  // Con el adelgazado prendido, el procesador frenado baja las capas y adelanta lo programado hasta el próximo tick.
+  // Escondida no cuenta: el tropiezo es del navegador, no del equipo.
+  s.gracia = s.adelgazar && !escondida ? nivelDeGracia(s.gracia, intervalo) : 0;
   s.ultimoTick = ahora;
   // La tensión sube de a poco aunque el relator no diga nada: el piso crece
   // con el tiempo, así que la música siempre va de menos a más.
@@ -664,7 +667,7 @@ function tick(): void {
     s.step++;
   }
 
-  while (s.next < s.ctx.currentTime + (escondida ? s.margen : horizonteDeMusica(s.margen, intervalo))) {
+  while (s.next < s.ctx.currentTime + (s.adelgazar && !escondida ? horizonteDeMusica(s.margen, intervalo) : s.margen)) {
     const sixteenth = beatLength(s) / 4;
     // Durante el corte de una sorpresa no suena nada.
     if (s.style === "chovena") playStepChovena(s, s.next, s.step);

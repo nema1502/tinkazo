@@ -1,0 +1,52 @@
+{
+  "race": {
+    "eventos": 21042,
+    "notas": 1709,
+    "sha256": "9332965a0a14043cb5460ddfccce744211d5a48256a3531bd97e8eb6e0ce3eb4"
+  },
+  "chovena": {
+    "eventos": 19976,
+    "notas": 1702,
+    "sha256": "43734fee0590992fbf81c145bb2ec2c583a5491c76434022e758486887b97965"
+  },
+  "trompo": {
+    "eventos": 20970,
+    "notas": 1703,
+    "sha256": "a30559d081d4e1f0ea63cafef8bf3c1c9c87c797b1ccbf626dfe3f42bec6547b"
+  },
+  "pinata": {
+    "eventos": 21042,
+    "notas": 1709,
+    "sha256": "e339d9dd760fc436ed3cfd9072d351a42c5422f634510496617faef3e9b48147"
+  },
+  "oruro": {
+    "eventos": 20970,
+    "notas": 1703,
+    "sha256": "50ed79d2f70babf1a49a3b6d65d86f3646f88ac9d0d9bea83d641289f73e8a88"
+  },
+  "wheel": {
+    "eventos": 21186,
+    "notas": 1721,
+    "sha256": "e6cebaae1ca8d32d9898781f0697ac883ce9105e0fed7c7ce4b56c54c0bd538b"
+  },
+  "teleferico": {
+    "eventos": 20862,
+    "notas": 1694,
+    "sha256": "e244e4887879bbd26a1bc8e9cb73fef1dee546a891629dfc680005af12b3f1db"
+  },
+  "sapo": {
+    "eventos": 21006,
+    "notas": 1706,
+    "sha256": "76ed6523eb3a03152bea476ae6a2aeea08b528f285ad4ce0370e0666fa98b547"
+  },
+  "guajojo": {
+    "eventos": 21042,
+    "notas": 1709,
+    "sha256": "044e7c437223f34ac3664af8e7a58b39faaed5c015bf37ccaacfb81c4419bcaf"
+  },
+  "toborochi": {
+    "eventos": 21150,
+    "notas": 1718,
+    "sha256": "27900b0fabab569157914dcb556a7574345a95526b4b91a74567b55607057414"
+  }
+}
