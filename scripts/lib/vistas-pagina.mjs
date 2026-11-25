@@ -16,19 +16,29 @@ export const CLIC_HASTA = { esperaMs: 1000, topeMs: 20_000 };
  *
  * `deps`: `clic(page, selector)`, `estaVisible(page, selector, ms)` (verdadero o falso, sin
  * lanzar), `ahora()` en milisegundos y, si hace falta, `revisar()`, que lanza si la página
- * ya falló por otro motivo y no vale la pena seguir insistiendo.
+ * ya falló por otro motivo y no vale la pena seguir insistiendo. Si el elemento está apagado o tapado (`ClicNoPosible`),
+ * no cuenta como un clic: se vuelve a probar hasta el tope y el error nombra el motivo.
  */
 export async function clicHasta(page, paso, deps) {
   const { clic, estaVisible, ahora, revisar } = deps;
   const inicio = ahora();
   let intentos = 0;
+  let sinPoder = "";
   for (;;) {
     revisar?.();
     intentos++;
-    await clic(page, paso.selector);
+    try {
+      await clic(page, paso.selector);
+      sinPoder = "";
+    } catch (e) {
+      // Apagado o tapado ahora: puede ser que la página todavía no esté lista. Se espera y se vuelve a probar.
+      if (!(e instanceof ClicNoPosible)) throw e;
+      sinPoder = e.message;
+    }
     if (await estaVisible(page, paso.hasta, CLIC_HASTA.esperaMs)) return intentos;
     if (ahora() - inicio >= CLIC_HASTA.topeMs) {
-      throw new Error(`hice clic ${intentos} veces en ${paso.selector} y en ${Math.round(CLIC_HASTA.topeMs / 1000)} s no apareció ${paso.hasta}`);
+      const segundos = Math.round(CLIC_HASTA.topeMs / 1000);
+      throw new Error(sinPoder ? `${sinPoder} y en ${segundos} s no se pudo hacer clic para que apareciera ${paso.hasta}` : `hice clic ${intentos} veces en ${paso.selector} y en ${segundos} s no apareció ${paso.hasta}`);
     }
   }
 }
@@ -37,7 +47,7 @@ export async function clicHasta(page, paso, deps) {
 export const FALLO = { textoMax: 300, esperaMs: 15_000 };
 
 /** Espera una promesa hasta `ms`: si tarda más, falla (y no deja el temporizador vivo). */
-function conTope(promesa, ms) {
+export function conTope(promesa, ms) {
   let t;
   const corte = new Promise((_, rechazar) => {
     t = setTimeout(() => rechazar(new Error(`no contestó en ${Math.round(ms / 1000)} s`)), ms);
@@ -262,4 +272,228 @@ export async function cortarFueraDelOrigen(page, base) {
       if (fuera.length) throw new Error(`la página quiso ir a otro sitio y se cortó: ${fuera.slice(0, 3).join(", ")}`);
     },
   };
+}
+
+/** Un clic que ahora no se puede hacer: el elemento está apagado, tapado o fuera de la pantalla. `clicHasta` lo reintenta. */
+export class ClicNoPosible extends Error {
+  constructor(mensaje) {
+    super(mensaje);
+    this.name = "ClicNoPosible";
+  }
+}
+
+/**
+ * Corre DENTRO de la página (se manda como texto, por eso no puede usar nada de afuera). Lleva el elemento a la
+ * vista y dice dónde hacer el clic, o por qué no se puede: apagado (`disabled` o `aria-disabled`), fuera de la
+ * pantalla o tapado por otro elemento. El punto es el centro de lo que se ve del elemento.
+ */
+export function puntoDelClic(selector) {
+  const e = document.querySelector(selector);
+  if (!e) return { error: `${selector} no está en la página` };
+  e.scrollIntoView({ block: "center", behavior: "instant" });
+  if (e.disabled === true || e.matches(":disabled")) return { error: `${selector} está apagado (disabled)` };
+  if (e.closest('[aria-disabled="true"]')) return { error: `${selector} está apagado (aria-disabled)` };
+  const r = e.getBoundingClientRect();
+  const izquierda = Math.max(r.left, 0);
+  const derecha = Math.min(r.right, window.innerWidth);
+  const arriba = Math.max(r.top, 0);
+  const abajo = Math.min(r.bottom, window.innerHeight);
+  if (derecha <= izquierda || abajo <= arriba) return { error: `${selector} no queda a la vista` };
+  const x = (izquierda + derecha) / 2;
+  const y = (arriba + abajo) / 2;
+  const encima = document.elementFromPoint(x, y);
+  if (!encima) return { error: `${selector}: en el punto del clic (${Math.round(x)}, ${Math.round(y)}) no hay nada, queda fuera de la pantalla` };
+  if (encima !== e && !e.contains(encima)) {
+    const clase = typeof encima.className === "string" ? encima.className.trim().split(/\s+/)[0] : "";
+    const nombre = `${encima.tagName.toLowerCase()}${encima.id ? `#${encima.id}` : ""}${clase ? `.${clase}` : ""}`;
+    const texto = (encima.textContent || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    return { error: `${selector} está tapado en el punto del clic (${Math.round(x)}, ${Math.round(y)}) por ${nombre}${texto ? ` con el texto "${texto}"` : ""}` };
+  }
+  return { x, y };
+}
+
+/** Pide a la página el punto del clic de `selector` (ver `puntoDelClic`). Lanza `ClicNoPosible` si no se puede. */
+export async function puntoDelClicEn(page, selector) {
+  const r = JSON.parse(await page.eval(`JSON.stringify((${puntoDelClic.toString()})(${JSON.stringify(selector)}))`));
+  if (r.error) throw new ClicNoPosible(r.error);
+  return { x: r.x, y: r.y };
+}
+
+/**
+ * Corre DENTRO de la página: lo que ella dice de sí misma al terminar los pasos. La dirección, el idioma de la
+ * etiqueta html (solo la base: "es-BO" es "es"), el tema (el forzado por la página o, sin él, el del sistema),
+ * el ancho del contenido y de la pantalla, y si hay contexto webgl2 y con qué placa dibuja.
+ */
+export function estadoDeLaPagina() {
+  const raiz = document.documentElement;
+  const forzado = raiz.dataset.theme;
+  let tema = "light";
+  if (forzado === "light" || forzado === "dark") tema = forzado;
+  else if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches) tema = "dark";
+  let webgl2 = false;
+  let renderizador = null;
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2");
+    if (gl) {
+      webgl2 = true;
+      const info = gl.getExtension("WEBGL_debug_renderer_info");
+      if (info) renderizador = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL));
+      const perder = gl.getExtension("WEBGL_lose_context");
+      if (perder) perder.loseContext();
+    }
+  } catch (e) {
+    webgl2 = false;
+    renderizador = null;
+  }
+  return { href: location.href, idioma: String(raiz.lang || "").toLowerCase().split("-")[0], tema, sw: raiz.scrollWidth, iw: window.innerWidth, webgl2, renderizador };
+}
+
+/** Si la página salió con el tema y el idioma que se pidieron. Devuelve el motivo si no. */
+export function problemaDeTemaEIdioma(pedido, leido) {
+  if (pedido.tema && leido.tema !== pedido.tema) return `se pidió el tema ${pedido.tema} y la página salió con el tema ${leido.tema || "desconocido"}`;
+  if (pedido.idioma && leido.idioma !== pedido.idioma) return `se pidió el idioma ${pedido.idioma} y la página salió en ${leido.idioma || "ningún idioma"}`;
+  return "";
+}
+
+const PLACA_POR_SOFTWARE = /swiftshader|llvmpipe|softpipe|lavapipe|software/i;
+
+/** Con qué se dibujó la página: si hay webgl2 y si la placa es de software (la foto de un juego sale distinta que con placa de video). */
+export function describirGraficos({ webgl2, renderizador }) {
+  const placa = renderizador ? String(renderizador) : null;
+  return { webgl2: Boolean(webgl2), renderizador: placa, porSoftware: webgl2 && placa ? PLACA_POR_SOFTWARE.test(placa) : null };
+}
+
+/** Un solo texto sin consulta ni fragmento (que pueden traer claves), para anotar una dirección. */
+function sinConsulta(direccion) {
+  try {
+    const u = new URL(direccion);
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return String(direccion).slice(0, 300);
+  }
+}
+
+const CAMINO_DE_LA_PORTADA = "/index.html";
+const normalizarCamino = (c) => (c === CAMINO_DE_LA_PORTADA ? "/" : c);
+const ORIGEN_FALSO = "http://sitio.invalid";
+
+/**
+ * Comprueba, antes de navegar, que la ruta pedida es una página que de verdad existe en el sitio servido. El
+ * servidor de vista previa contesta la portada con 200 a cualquier camino que no es un archivo (una ruta mal
+ * escrita como /seguridad en vez de /seguridad.html), y una captura de la portada con el nombre de otra página es
+ * peor que un error. Pide el camino (sin la consulta ni el fragmento) y lo compara con la portada, que pide
+ * una sola vez: si el texto es el mismo, es el respaldo. Devuelve el motivo, o "" si está bien o si no se pudo
+ * saber (la navegación lo dirá).
+ */
+export function crearComprobadorDeRutas(base, buscar = fetch) {
+  const raiz = String(base).replace(/\/+$/, "");
+  const leer = async (camino) => {
+    const r = await buscar(`${raiz}${camino}`, { signal: AbortSignal.timeout(10_000) });
+    const bien = r.status >= 200 && r.status < 300;
+    return { estado: r.status, texto: bien ? await r.text() : "" };
+  };
+  let portada = null;
+  return async (ruta) => {
+    const camino = new URL(ruta, ORIGEN_FALSO).pathname;
+    if (normalizarCamino(camino) === "/") return "";
+    try {
+      const pagina = await leer(camino);
+      if (!(pagina.estado >= 200 && pagina.estado < 300)) return `el servidor contestó ${pagina.estado} a ${camino}`;
+      portada ??= leer("/");
+      if (pagina.texto === (await portada).texto) return `${camino} no existe en el sitio servido: el servidor devolvió la portada`;
+      return "";
+    } catch {
+      return "";
+    }
+  };
+}
+
+/**
+ * Los documentos que cargó la pestaña principal, con su estado HTTP. Se anotan solo los del marco principal (no
+ * las imágenes ni los marcos de adentro) y sin la consulta de la dirección.
+ */
+export async function vigilarDocumentos(page) {
+  const { frameTree } = await page.send("Page.getFrameTree");
+  const principal = frameTree.frame.id;
+  const respuestas = [];
+  page.ws.addEventListener("message", (ev) => {
+    let m;
+    try {
+      m = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    if (m.method !== "Network.responseReceived") return;
+    const { type, frameId, response } = m.params ?? {};
+    if (type !== "Document" || frameId !== principal || !response) return;
+    respuestas.push({ estado: Number(response.status), direccion: sinConsulta(response.url) });
+  });
+  await page.send("Network.enable");
+  return { respuestas, ultimo: () => respuestas.at(-1) ?? null };
+}
+
+/**
+ * Si lo que cargó la pestaña es lo que se pidió: todos los documentos con estado 2xx y, si se sabe el camino
+ * cargado, que sea el pedido (la portada vale como / y como /index.html). Devuelve el motivo, o "" si está bien.
+ */
+export function problemaDelDocumento({ respuestas, caminoPedido, caminoCargado }) {
+  if (!respuestas.length) return "no pude comprobar el estado de la página: el navegador no avisó de ningún documento cargado";
+  const mala = respuestas.find((r) => !(r.estado >= 200 && r.estado < 300));
+  if (mala) return `el servidor contestó ${mala.estado} a ${mala.direccion}`;
+  if (caminoCargado !== undefined && normalizarCamino(caminoCargado) !== normalizarCamino(caminoPedido)) return `se pidió ${caminoPedido} y la página terminó en ${caminoCargado}`;
+  return "";
+}
+
+/**
+ * Corre `hacer(datos, vigente)` con un plazo. `datos` es donde el trabajo anota lo que va sabiendo, y `vigente()` dice
+ * si el plazo sigue abierto. Si el plazo se acaba, el resultado es un error, `datos` queda como estaba en ese
+ * momento (una copia) y todo lo que el trabajo escriba o haga después se ignora: una vista que se pasó no puede
+ * terminar más tarde y quedar marcada como bien. Un error del trabajo que llega tarde se absorbe.
+ */
+export async function correrConPlazo(hacer, plazoMs, mensaje) {
+  const estado = { vigente: true };
+  const datos = {};
+  const trabajo = Promise.resolve().then(() => hacer(datos, () => estado.vigente));
+  let reloj;
+  const corte = new Promise((_, rechazar) => {
+    reloj = setTimeout(() => rechazar(new Error(mensaje)), plazoMs);
+  });
+  try {
+    await Promise.race([trabajo, corte]);
+    return { ok: true, error: null, datos: { ...datos } };
+  } catch (e) {
+    return { ok: false, error: e, datos: { ...datos } };
+  } finally {
+    estado.vigente = false;
+    clearTimeout(reloj);
+    trabajo.catch(() => undefined);
+  }
+}
+
+/**
+ * Recorre las vistas en orden y deja SIEMPRE una fila por cada una, con `alTerminar(fila)` después de cada
+ * una. `capturar(vista, plan)` devuelve su fila. Si lanza, o si la fila dice `navegadorCaido`, el navegador
+ * ya no sirve y las que faltan quedan como no hechas con ese motivo. Lo mismo si el navegador ni arrancó
+ * (`sinNavegador`) o si se acabó el tiempo total (`planear` dice que no se hace).
+ */
+export async function recorrerVistas({ vistas, capturar, sinHacer, planear, motivoDelTotal, ahora = Date.now, alTerminar = () => undefined, sinNavegador = "" }) {
+  const inicio = ahora();
+  let corte = sinNavegador ? `no se pudo abrir el navegador: ${sinNavegador}` : "";
+  for (const v of vistas) {
+    let fila;
+    if (corte) fila = sinHacer(v, corte);
+    else {
+      const plan = planear(ahora() - inicio);
+      if (!plan.hacer) fila = sinHacer(v, motivoDelTotal);
+      else {
+        try {
+          fila = await capturar(v, plan);
+        } catch (e) {
+          fila = { nombre: v.nombre, ok: false, archivo: null, error: String(e?.message ?? e).slice(0, 400), navegadorCaido: true };
+        }
+        if (fila.navegadorCaido) corte = `el navegador dejó de contestar en la vista ${v.nombre} (${fila.error})`;
+      }
+    }
+    alTerminar(fila);
+  }
 }
