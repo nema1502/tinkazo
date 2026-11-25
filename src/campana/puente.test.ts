@@ -120,10 +120,19 @@ describe("cuál de los dos avisos le falta a los celulares", () => {
     }
   });
 
-  it("con el sorteo hecho, falta el resultado, salvo con todas avisadas o con la sala ya borrada", () => {
-    expect(avisoQueFalta({ paso: "boton-resultado" }, "sorteada")).toBe("resultado");
-    expect(avisoQueFalta({ paso: "nada" }, "sorteada")).toBe("resultado");
-    expect(avisoQueFalta({ paso: "resultado", filas: [fila("esperando"), una], otraBilletera: false }, "sorteada")).toBe("resultado");
+  it("con el sorteo hecho y el resultado todavía sin llegar a la sala, falta el resultado", () => {
+    for (const paso of ["nada", "otro-sorteo", "boton-resultado", "mandando", "guardar-sorteo", "ganadoras"] as const) {
+      const p = TODOS.find((x) => x.paso === paso) as PasoDelPuente;
+      expect(avisoQueFalta(p, "sorteada"), paso).toBe("resultado");
+    }
+  });
+
+  it("con el resultado ya en la sala y alguna ganadora sin avisar, falta el aviso a ella y no el resultado de todos", () => {
+    expect(avisoQueFalta({ paso: "resultado", filas: [fila("esperando"), una], otraBilletera: false }, "sorteada")).toBe("ganadora");
+    expect(avisoQueFalta({ paso: "resultado", filas: [fila("esperando")], otraBilletera: true }, "sorteada")).toBe("ganadora");
+  });
+
+  it("con el sorteo hecho, no falta nada con todas avisadas ni con la sala ya borrada", () => {
     expect(avisoQueFalta({ paso: "resultado", filas: [una], otraBilletera: false }, "sorteada")).toBeNull();
     expect(avisoQueFalta({ paso: "sala-borrada" }, "sorteada")).toBeNull();
   });
