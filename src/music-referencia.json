@@ -1,52 +1,147 @@
 {
-  "race": {
-    "eventos": 21042,
-    "notas": 1709,
-    "sha256": "9332965a0a14043cb5460ddfccce744211d5a48256a3531bd97e8eb6e0ce3eb4"
+  "origen": "04aa2db3b2f709f91f6b63e582e6c65fe84f06cf",
+  "juegos": {
+    "race": {
+      "eventos": 21042,
+      "notas": 1709,
+      "sha256": "9332965a0a14043cb5460ddfccce744211d5a48256a3531bd97e8eb6e0ce3eb4"
+    },
+    "chovena": {
+      "eventos": 19976,
+      "notas": 1702,
+      "sha256": "43734fee0590992fbf81c145bb2ec2c583a5491c76434022e758486887b97965"
+    },
+    "trompo": {
+      "eventos": 20970,
+      "notas": 1703,
+      "sha256": "a30559d081d4e1f0ea63cafef8bf3c1c9c87c797b1ccbf626dfe3f42bec6547b"
+    },
+    "pinata": {
+      "eventos": 21042,
+      "notas": 1709,
+      "sha256": "e339d9dd760fc436ed3cfd9072d351a42c5422f634510496617faef3e9b48147"
+    },
+    "oruro": {
+      "eventos": 20970,
+      "notas": 1703,
+      "sha256": "50ed79d2f70babf1a49a3b6d65d86f3646f88ac9d0d9bea83d641289f73e8a88"
+    },
+    "wheel": {
+      "eventos": 21186,
+      "notas": 1721,
+      "sha256": "e6cebaae1ca8d32d9898781f0697ac883ce9105e0fed7c7ce4b56c54c0bd538b"
+    },
+    "teleferico": {
+      "eventos": 20862,
+      "notas": 1694,
+      "sha256": "e244e4887879bbd26a1bc8e9cb73fef1dee546a891629dfc680005af12b3f1db"
+    },
+    "sapo": {
+      "eventos": 21006,
+      "notas": 1706,
+      "sha256": "76ed6523eb3a03152bea476ae6a2aeea08b528f285ad4ce0370e0666fa98b547"
+    },
+    "guajojo": {
+      "eventos": 21042,
+      "notas": 1709,
+      "sha256": "044e7c437223f34ac3664af8e7a58b39faaed5c015bf37ccaacfb81c4419bcaf"
+    },
+    "toborochi": {
+      "eventos": 21150,
+      "notas": 1718,
+      "sha256": "27900b0fabab569157914dcb556a7574345a95526b4b91a74567b55607057414"
+    }
   },
-  "chovena": {
-    "eventos": 19976,
-    "notas": 1702,
-    "sha256": "43734fee0590992fbf81c145bb2ec2c583a5491c76434022e758486887b97965"
-  },
-  "trompo": {
-    "eventos": 20970,
-    "notas": 1703,
-    "sha256": "a30559d081d4e1f0ea63cafef8bf3c1c9c87c797b1ccbf626dfe3f42bec6547b"
-  },
-  "pinata": {
-    "eventos": 21042,
-    "notas": 1709,
-    "sha256": "e339d9dd760fc436ed3cfd9072d351a42c5422f634510496617faef3e9b48147"
-  },
-  "oruro": {
-    "eventos": 20970,
-    "notas": 1703,
-    "sha256": "50ed79d2f70babf1a49a3b6d65d86f3646f88ac9d0d9bea83d641289f73e8a88"
-  },
-  "wheel": {
-    "eventos": 21186,
-    "notas": 1721,
-    "sha256": "e6cebaae1ca8d32d9898781f0697ac883ce9105e0fed7c7ce4b56c54c0bd538b"
-  },
-  "teleferico": {
-    "eventos": 20862,
-    "notas": 1694,
-    "sha256": "e244e4887879bbd26a1bc8e9cb73fef1dee546a891629dfc680005af12b3f1db"
-  },
-  "sapo": {
-    "eventos": 21006,
-    "notas": 1706,
-    "sha256": "76ed6523eb3a03152bea476ae6a2aeea08b528f285ad4ce0370e0666fa98b547"
-  },
-  "guajojo": {
-    "eventos": 21042,
-    "notas": 1709,
-    "sha256": "044e7c437223f34ac3664af8e7a58b39faaed5c015bf37ccaacfb81c4419bcaf"
-  },
-  "toborochi": {
-    "eventos": 21150,
-    "notas": 1718,
-    "sha256": "27900b0fabab569157914dcb556a7574345a95526b4b91a74567b55607057414"
+  "escenarios": {
+    "dos-premios/race": {
+      "eventos": 8295,
+      "notas": 669,
+      "sha256": "118a167b7fb88c4c5fc7ab8e46c3cce72c32386964ad85585d2cb303b8c81787"
+    },
+    "dos-premios/chovena": {
+      "eventos": 10590,
+      "notas": 900,
+      "sha256": "9f9fc3554b46f7359375f6f18d22f70bac654a963c3f83897675cd8913e5a95e"
+    },
+    "dos-premios/sapo": {
+      "eventos": 8295,
+      "notas": 669,
+      "sha256": "8d7e8882df642029ace0f0e5a3f6096417d16da5173a202329bea1043f2109d5"
+    },
+    "arranque-escondido/race": {
+      "eventos": 3762,
+      "notas": 303,
+      "sha256": "1e9ecacaad6287ab152a22d5df70a541d4c544c3ca69b3538a9f91d90ad61e6c"
+    },
+    "arranque-escondido/chovena": {
+      "eventos": 5003,
+      "notas": 425,
+      "sha256": "d1a5adbe675b414ab799d8617b3748aa5c2720044381c8430fd4d9107969a5d7"
+    },
+    "arranque-escondido/sapo": {
+      "eventos": 3762,
+      "notas": 303,
+      "sha256": "41da0bd2cf61d87d8b1632b219eaebba3b4bfdf475177a29cd0de77d75830c3a"
+    },
+    "saltar-el-show/race": {
+      "eventos": 5221,
+      "notas": 420,
+      "sha256": "bc332d1afc25cfe21de451ecc8d9272f01b1303d26fe53d6a02c4b5b80e15ad6"
+    },
+    "saltar-el-show/chovena": {
+      "eventos": 5445,
+      "notas": 462,
+      "sha256": "1e9035dc1376a802eeae0da342f374017a0bb18146963a9f6c74a39b39e5b349"
+    },
+    "saltar-el-show/sapo": {
+      "eventos": 5221,
+      "notas": 420,
+      "sha256": "a2425f62693b83d5376876faaf24b0a2f416bc6638ea0a21e39ba49dc96da0d9"
+    },
+    "contexto-suspendido/race": {
+      "eventos": 2773,
+      "notas": 223,
+      "sha256": "b419355a06d1df60bd3e87e79abbeab32a2a538413e21e947c82ef7659f89ef9"
+    },
+    "contexto-suspendido/chovena": {
+      "eventos": 3397,
+      "notas": 288,
+      "sha256": "4640171872a10a8774d23d34e2cd83ad97f45f00b254a0345bc7b8db397fb170"
+    },
+    "contexto-suspendido/sapo": {
+      "eventos": 2773,
+      "notas": 223,
+      "sha256": "8e43b2089e74cc862940f38f2e460593c0306b52a39597124270c93f28b628ef"
+    },
+    "volver-interrumpido/race": {
+      "eventos": 4080,
+      "notas": 328,
+      "sha256": "d6c8b4abdfa45fbbc4ea05eff00471840ec93b2b3509ab201bfe326079ce2e72"
+    },
+    "volver-interrumpido/chovena": {
+      "eventos": 3896,
+      "notas": 330,
+      "sha256": "e0ff28ce29a36e33b9f45aae293614702bb437cb3eef14dd036f638dad953219"
+    },
+    "volver-interrumpido/sapo": {
+      "eventos": 4080,
+      "notas": 328,
+      "sha256": "252e460f55f0dcc7075f9b58acbe5b917fc4282126f32df00962fff8295e98a3"
+    },
+    "con-instant/race": {
+      "eventos": 2773,
+      "notas": 223,
+      "sha256": "d2a47c607c5133fe8390582ab666c8ad2ffdabba21f1fc005d5f45ac625e31ce"
+    },
+    "con-instant/chovena": {
+      "eventos": 3538,
+      "notas": 300,
+      "sha256": "46b2b23d02211a92d99b3c789d9cd22e911f15749a08bb0ba7067b9460b97d88"
+    },
+    "con-instant/sapo": {
+      "eventos": 2773,
+      "notas": 223,
+      "sha256": "0f8658478f558c47ad0b5d3f482912de674112ed835531ff64bf82212f7d4a95"
+    }
   }
 }
