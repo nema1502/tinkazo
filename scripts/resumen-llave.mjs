@@ -29,8 +29,14 @@ for (const [nombre, paso] of [["Crear la cuenta", d.cuenta], ["Sellar", d.sello]
 salida.push("");
 salida.push(`Verificación del comprobante: ${d.verificacion ? `${d.verificacion.estado}` : "sin dato"}.`);
 salida.push(`Otro aparato: ${d.otroAparato ? d.otroAparato.resultado : "no se probó"}.`);
+if (d.otroAparato) {
+  for (const [nombre, e] of [["Búsqueda en el historial", d.otroAparato.entradas?.historial], ["Búsqueda en el RPC", d.otroAparato.entradas?.rpc]]) {
+    const en = e?.entrada;
+    salida.push(`- ${nombre}: ${e?.ok ? "entró" : `no entró (${e?.estado ?? "sin estado"})`}${en ? `, fuente ${en.fuente}, ledger ${en.ledgerDeNacimiento ?? "sin dato"}, ${texto(en.segundosBuscando)} s buscando, ${en.desbloqueos ?? "sin dato"} desbloqueos` : ""}.`);
+  }
+  salida.push(`- Llave sin cuenta: ${d.otroAparato.sinCuenta?.estado ?? "sin estado"}.`);
+}
 salida.push(`Segundos del recorrido: ${texto(d.segundos)}.`);
-if (d.previo) salida.push(`Atraso del índice, en ledgers: ${d.previo.atrasoDelIndice ?? "sin dato"}.`);
 if (Array.isArray(d.fallas) && d.fallas.length) {
   salida.push("", "Fallas:");
   for (const f of d.fallas) salida.push(`- ${f.paso}: ${f.motivo}${f.detalle ? ` (${f.detalle})` : ""}${f.conFoco === false ? ", sin foco" : ""}`);

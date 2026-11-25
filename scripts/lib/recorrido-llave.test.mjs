@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armarDatos, clasificarOtroAparato, codigoDeSalida, esperarEstado, tocar } from "./recorrido-llave.mjs";
+import { armarDatos, CHECKS_INFORMATIVOS, CHECKS_PRINCIPALES, checksDeOtroAparato, codigoDeSalida, ESTADOS_DE_FALLA, esperarEstado, tocar } from "./recorrido-llave.mjs";
 
 /** Un CDP de mentira que anota lo que se le manda. */
 function cdpFalso({ rect = { x: 50, y: 30, foco: true }, estados = [] } = {}) {
@@ -138,35 +138,87 @@ describe("el archivo de medidas", () => {
   });
 });
 
-describe("clasificar el paso de otro aparato", () => {
-  const procedencia = "no-aparece:Wallet C1 has unverified birth provenance. The indexer is stale at ledger 100; the network was at ledger 190 before lookup.";
+describe("los checks de entrar desde otro aparato", () => {
+  const bien = () => ({
+    a: { contractId: "CCUENTA", selloId: "7", ledger: 500 },
+    historial: { estado: "cuenta-lista", contractId: "CCUENTA", entrada: { fuente: "historial", ledgerDeNacimiento: 500, desbloqueos: 1 }, sello: { id: "8", desbloqueos: 1 } },
+    rpc: { estado: "cuenta-lista", contractId: "CCUENTA", entrada: { fuente: "rpc", ledgerDeNacimiento: 500, desbloqueos: 1 } },
+    sinCuenta: { estado: "sin-cuenta" },
+    anfitriones: ["localhost", "horizon-testnet.stellar.org", "soroban-testnet.stellar.org"],
+  });
+  const por = (d) => Object.fromEntries(checksDeOtroAparato(d).map((c) => [c.nombre, c.ok]));
 
-  it("indice-atrasado solo si el kit dice que el índice está atrasado y el atraso actual supera lo que se esperó", () => {
-    const r = clasificarOtroAparato({ estado: "no-aparece", error: procedencia, atrasoAhora: 86, segundos: 96 });
-    expect(r.resultado).toBe("indice-atrasado");
+  it("con todo bien dan los siete, y son los informativos", () => {
+    const r = checksDeOtroAparato(bien());
+    expect(r.map((c) => c.nombre)).toEqual(CHECKS_INFORMATIVOS);
+    expect(r.every((c) => c.ok)).toBe(true);
   });
 
-  it("si el atraso actual ya es menor que lo esperado, no era el atraso: fallo con el texto", () => {
-    const r = clasificarOtroAparato({ estado: "no-aparece", error: procedencia, atrasoAhora: 5, segundos: 96 });
-    expect(r.resultado).toBe("fallo");
+  it("los informativos no están entre los principales: no cambian el código de salida", () => {
+    for (const n of CHECKS_INFORMATIVOS) expect(CHECKS_PRINCIPALES).not.toContain(n);
   });
 
-  it("si no se pudo medir el atraso, es fallo", () => {
-    expect(clasificarOtroAparato({ estado: "no-aparece", error: procedencia, atrasoAhora: null, segundos: 96 }).resultado).toBe("fallo");
+  it("otro-aparato falla si no llegó a la cuenta lista", () => {
+    expect(por({ ...bien(), historial: { estado: "sin-cuenta" } })["otro-aparato"]).toBe(false);
   });
 
-  it("otro error del kit (no encontró la cuenta, otra llave) es fallo aunque el índice vaya atrasado", () => {
-    for (const error of ["no-aparece:Smart account contract not found on-chain", "no-aparece:The indexer did not return one complete schema-2 birth claim.", ""]) {
-      expect(clasificarOtroAparato({ estado: "no-aparece", error, atrasoAhora: 500, segundos: 96 }).resultado).toBe("fallo");
-    }
+  it("misma-cuenta pide que las dos entradas den la dirección de la cuenta original", () => {
+    const d = bien();
+    d.rpc.contractId = "COTRA";
+    expect(por(d)["misma-cuenta"]).toBe(false);
+    expect(por({ ...bien(), a: {} })["misma-cuenta"]).toBe(false);
   });
 
-  it("un estado que no es no-aparece es fallo", () => {
-    expect(clasificarOtroAparato({ estado: "falla", error: procedencia, atrasoAhora: 500, segundos: 96 }).resultado).toBe("fallo");
+  it("un-desbloqueo-al-entrar falla con dos desbloqueos en cualquiera de las dos entradas", () => {
+    const d = bien();
+    d.rpc.entrada.desbloqueos = 2;
+    expect(por(d)["un-desbloqueo-al-entrar"]).toBe(false);
   });
 
-  it("guarda el error y el atraso para el archivo", () => {
-    const r = clasificarOtroAparato({ estado: "no-aparece", error: procedencia, atrasoAhora: 86, segundos: 96 });
-    expect(r).toMatchObject({ estado: "no-aparece", error: procedencia, atrasoAlFinal: 86 });
+  it("segundo-sello pide un sello distinto del primero y con un desbloqueo", () => {
+    const d = bien();
+    d.historial.sello.id = "7";
+    expect(por(d)["segundo-sello"]).toBe(false);
+    const e = bien();
+    e.historial.sello.desbloqueos = 2;
+    expect(por(e)["segundo-sello"]).toBe(false);
+    expect(por({ ...bien(), historial: { ...bien().historial, sello: null } })["segundo-sello"]).toBe(false);
+  });
+
+  it("dos-fuentes pide cada fuente en su entrada y el ledger de la creación original en las dos", () => {
+    const d = bien();
+    d.rpc.entrada.ledgerDeNacimiento = 501;
+    expect(por(d)["dos-fuentes"]).toBe(false);
+    const e = bien();
+    e.rpc.entrada.fuente = "historial";
+    expect(por(e)["dos-fuentes"]).toBe(false);
+  });
+
+  it("sin-cuenta pide llegar a esa pantalla con una llave ajena", () => {
+    expect(por({ ...bien(), sinCuenta: { estado: "no-aparece" } })["sin-cuenta"]).toBe(false);
+  });
+
+  it("sin-indice falla si algún pedido fue al índice ajeno, o si no se anotó ningún pedido", () => {
+    expect(por({ ...bien(), anfitriones: ["localhost", "testnet.mercurydata.app"] })["sin-indice"]).toBe(false);
+    expect(por({ ...bien(), anfitriones: [] })["sin-indice"]).toBe(false);
+  });
+
+  it("las pantallas nuevas cuentan como cortes de la espera", () => {
+    for (const e of ["sin-cuenta", "vencida", "no-se-comprobo"]) expect(ESTADOS_DE_FALLA).toContain(e);
+  });
+});
+
+describe("el código de salida con la entrada desde otro aparato", () => {
+  const bien = ["previo", "carga", "crear", "sellar", "sortear", "coincide", "verificacion-ok"].map((nombre) => ({ nombre, ok: true }));
+
+  it("una falla de red al entrar cuenta como falla ajena: da 2 y no 1", () => {
+    const checks = bien.map((c) => (c.nombre === "sortear" ? { ...c, ok: false } : c));
+    expect(codigoDeSalida({ checks, fallas: [{ paso: "entrar", motivo: "red" }] })).toBe(2);
+    expect(codigoDeSalida({ checks, fallas: [{ paso: "sortear", motivo: "red" }] })).toBe(1);
+  });
+
+  it("los pasos informativos que fallan no cambian el código", () => {
+    const informativos = CHECKS_INFORMATIVOS.map((nombre) => ({ nombre, ok: false }));
+    expect(codigoDeSalida({ checks: [...bien, ...informativos], fallas: [{ paso: "entrar", motivo: "sin-cuenta" }] })).toBe(0);
   });
 });

@@ -22,7 +22,23 @@ export async function tocar(cdp, selector) {
 }
 
 /** Las pantallas donde la prueba se rindió. */
-export const ESTADOS_DE_FALLA = ["falla", "no-se-armo", "no-se-sello", "sin-fondos", "cuenta-sin-armar", "lento", "no-aparece", "sorteo-trabado", "no-es-aca", "sin-llaves", "en-app", "sin-bloqueo"];
+export const ESTADOS_DE_FALLA = [
+  "falla",
+  "no-se-armo",
+  "no-se-sello",
+  "sin-fondos",
+  "cuenta-sin-armar",
+  "lento",
+  "no-aparece",
+  "sin-cuenta",
+  "vencida",
+  "no-se-comprobo",
+  "sorteo-trabado",
+  "no-es-aca",
+  "sin-llaves",
+  "en-app",
+  "sin-bloqueo",
+];
 
 /**
  * Espera a que la página llegue a una de las pantallas. Devuelve `{ estado, ok }`: `ok` es verdadero solo si llegó a una de
@@ -39,12 +55,19 @@ export async function esperarEstado(cdp, pedidos, ms, { fallas = ESTADOS_DE_FALL
 /** Lo que tiene que haber dado bien para que la prueba cuente como buena. Si un check no se emitió, es que no se llegó. */
 export const CHECKS_PRINCIPALES = ["previo", "carga", "crear", "sellar", "sortear", "coincide", "verificacion-ok"];
 
-/** Las fallas que no son de la prueba: el grifo o el servicio de azar público no contestaron. */
+/**
+ * Los pasos de entrar desde otro aparato. Durante las primeras corridas buenas solo se registran y se muestran: no cambian el
+ * código de salida. Después de tres corridas buenas pasan a `CHECKS_PRINCIPALES`.
+ */
+export const CHECKS_INFORMATIVOS = ["otro-aparato", "misma-cuenta", "un-desbloqueo-al-entrar", "segundo-sello", "dos-fuentes", "sin-cuenta", "sin-indice"];
+
+/** Las fallas que no son de la prueba: el grifo o el servicio de azar público no contestaron, o la red no se pudo leer al entrar. */
 const FALLA_AJENA = /^(grifo|ronda)/;
+const esFallaAjena = (f) => FALLA_AJENA.test(f.motivo) || (f.paso === "entrar" && f.motivo === "red");
 
 /**
  * El código de salida: 0 si lo principal dio bien, 1 si la prueba falló, 2 si no se pudo medir (la red cambió o el grifo,
- * la red o el servicio de azar no contestaron). El paso de otro aparato nunca lo cambia.
+ * la red o el servicio de azar no contestaron). Los pasos de otro aparato no lo cambian mientras sean informativos.
  * Un check principal que nunca se emitió (la página no cargó, se acabó el tiempo) cuenta como falla, y el check `tope` en
  * falso también.
  * @param {{ checks: Array<{ nombre: string, ok: boolean }>, fallas: Array<{ motivo: string }>, previo?: { salida: number } }} o
@@ -55,21 +78,43 @@ export function codigoDeSalida(o) {
   const faltan = CHECKS_PRINCIPALES.some((n) => vistos.get(n) !== true);
   const sinTope = vistos.get("tope") === false;
   if (!faltan && !sinTope) return 0;
-  const ajena = o.fallas.length > 0 && o.fallas.every((f) => FALLA_AJENA.test(f.motivo));
+  const ajena = o.fallas.length > 0 && o.fallas.every(esFallaAjena);
   return ajena && !sinTope ? 2 : 1;
 }
 
 /**
- * Qué decir del paso de otro aparato cuando no se pudo entrar. `indice-atrasado` solo si el kit dijo que el índice estaba
- * atrasado y el atraso de ahora, en segundos de ledger (unos 5 cada uno), supera lo que se esperó. Cualquier otra cosa es
- * `fallo`, con el texto del error para que se pueda leer.
- * @param {{ estado: string | null, error: string, atrasoAhora: number | null, segundos: number }} o
+ * Los checks de entrar desde otro aparato con la misma llave, a partir de lo que se midió en cada navegador.
+ * @param {{
+ *   a?: { contractId?: string, selloId?: string, ledger?: number },
+ *   historial?: { estado?: string | null, contractId?: string, entrada?: { fuente?: string, ledgerDeNacimiento?: number | null, desbloqueos?: number | null } | null, sello?: { id?: string, desbloqueos?: number } | null },
+ *   rpc?: { estado?: string | null, contractId?: string, entrada?: { fuente?: string, ledgerDeNacimiento?: number | null, desbloqueos?: number | null } | null },
+ *   sinCuenta?: { estado?: string | null },
+ *   anfitriones?: string[],
+ * }} d
  */
-export function clasificarOtroAparato(o) {
-  const dijoAtrasado = /indexer is stale/i.test(o.error ?? "");
-  const supera = typeof o.atrasoAhora === "number" && o.atrasoAhora * 5 > o.segundos;
-  const resultado = o.estado === "no-aparece" && dijoAtrasado && supera ? "indice-atrasado" : "fallo";
-  return { resultado, estado: o.estado, error: o.error ?? "", atrasoAlFinal: o.atrasoAhora };
+export function checksDeOtroAparato(d) {
+  const { a, historial, rpc, sinCuenta, anfitriones = [] } = d;
+  const eh = historial?.entrada ?? null;
+  const er = rpc?.entrada ?? null;
+  const mismaCuenta = !!a?.contractId && historial?.contractId === a.contractId && rpc?.contractId === a.contractId;
+  const ledgers = [eh?.ledgerDeNacimiento, er?.ledgerDeNacimiento];
+  return [
+    { nombre: "otro-aparato", ok: historial?.estado === "cuenta-lista", detalle: historial?.estado ?? "sin estado" },
+    { nombre: "misma-cuenta", ok: mismaCuenta, detalle: `${historial?.contractId ?? "sin cuenta"} / ${rpc?.contractId ?? "sin cuenta"}` },
+    { nombre: "un-desbloqueo-al-entrar", ok: eh?.desbloqueos === 1 && er?.desbloqueos === 1, detalle: `${eh?.desbloqueos ?? "sin dato"} y ${er?.desbloqueos ?? "sin dato"}` },
+    {
+      nombre: "segundo-sello",
+      ok: !!historial?.sello?.id && historial.sello.id !== a?.selloId && historial.sello.desbloqueos === 1,
+      detalle: historial?.sello ? `sello ${historial.sello.id}, ${historial.sello.desbloqueos} desbloqueos` : "sin sello",
+    },
+    {
+      nombre: "dos-fuentes",
+      ok: eh?.fuente === "historial" && er?.fuente === "rpc" && typeof a?.ledger === "number" && ledgers.every((l) => l === a.ledger),
+      detalle: `${eh?.fuente ?? "sin fuente"} ${eh?.ledgerDeNacimiento ?? "-"}, ${er?.fuente ?? "sin fuente"} ${er?.ledgerDeNacimiento ?? "-"}`,
+    },
+    { nombre: "sin-cuenta", ok: sinCuenta?.estado === "sin-cuenta", detalle: sinCuenta?.estado ?? "sin estado" },
+    { nombre: "sin-indice", ok: anfitriones.length > 0 && !anfitriones.some((h) => /mercury/i.test(h)), detalle: `${anfitriones.length} anfitriones` },
+  ];
 }
 
 /** El archivo de medidas, con la forma de la sección de la prueba. */

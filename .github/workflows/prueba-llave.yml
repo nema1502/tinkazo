@@ -1,6 +1,6 @@
 # La prueba de la llave (issue 301): crea una llave con un autenticador virtual, sella una lista, sortea y deja lo que cobró la
 # red de prueba en cada paso. Corre aparte de lo que exige la rama principal: depende del grifo, de la red de prueba, del
-# servicio de azar público y de un índice ajeno, y puede fallar sin que el sitio tenga nada roto. El armado con la página
+# servicio de azar público, y puede fallar sin que el sitio tenga nada roto. El armado con la página
 # (y la revisión de que no llega a producción) sí frena, y está en ci.yml.
 #
 # Las acciones de terceros van fijadas por el SHA completo de su commit, los mismos de ci.yml.
