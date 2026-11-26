@@ -51,7 +51,7 @@ interface Montaje {
   cada: ReturnType<typeof vi.fn>;
 }
 
-function montar(guion: Record<string, Paso[]>, o: { enLinea?: boolean; memoria?: Storage } = {}): Montaje {
+function montar(guion: Record<string, Paso[]>, o: { enLinea?: boolean; memoria?: Storage; congelado?: boolean } = {}): Montaje {
   const { f, llamadas } = fetchFalso(guion);
   const memoria = o.memoria ?? almacenFalso();
   let alEntrar: (credencial: string) => void = () => undefined;
@@ -89,7 +89,8 @@ function montar(guion: Record<string, Paso[]>, o: { enLinea?: boolean; memoria?:
       bloqueos.push(nombre);
       return trabajo();
     },
-    dep: { fetch: f, azar: () => 0.5 },
+    // Con el reloj congelado el tope del toque no se pasa, así que cada pedido sin respuesta espera y se vuelve a intentar.
+    dep: { fetch: f, azar: () => 0.5, ...(o.congelado ? { ahora: () => AHORA } : {}) },
   };
   const deps = depsDePersona(piezas);
   const entrar = (credencial: string): SesionDelCelular | null => {
@@ -106,6 +107,12 @@ function montar(guion: Record<string, Paso[]>, o: { enLinea?: boolean; memoria?:
 /** Deja correr el reloj falso hasta que todo lo pendiente termine. */
 async function correr<T>(promesa: Promise<T>, ms = 300_000): Promise<T> {
   await vi.advanceTimersByTimeAsync(ms);
+  return promesa;
+}
+
+/** Como `correr`, pero en pasos: entre uno y otro el reloj falso deja avanzar lo que no depende de él. */
+async function correrDeAPoco<T>(promesa: Promise<T>): Promise<T> {
+  for (let i = 0; i < 12; i += 1) await vi.advanceTimersByTimeAsync(5_000);
   return promesa;
 }
 
@@ -189,10 +196,10 @@ describe("depsDePersona", () => {
     const { deps, llamadas, entrar } = montar({
       alta: ["corte", "corte", { estado: 200, cuerpo: { anotada: true, ya: true } }],
       yo: [{ estado: 200, cuerpo: YO_ANOTADA }],
-    });
+    }, { congelado: true });
     const token = tokenDe("Ana");
     entrar(token);
-    expect(await correr(deps.anotar("Ana", () => undefined))).toEqual({ ok: true, ya: true });
+    expect(await correrDeAPoco(deps.anotar("Ana", () => undefined))).toEqual({ ok: true, ya: true });
     const altas = llamadas.filter((l) => l.ruta === "alta");
     expect(altas).toHaveLength(3);
     expect((JSON.parse(String(altas[2]?.init.body)) as { google: string }).google).toBe(token);
@@ -201,16 +208,16 @@ describe("depsDePersona", () => {
   });
 
   it("si otra persona usó antes este celular, su anotación no da por anotada a quien falló", async () => {
-    const { deps, llamadas, entrar } = montar({ alta: ["corte"], yo: [{ estado: 200, cuerpo: YO_ANOTADA }] });
+    const { deps, llamadas, entrar } = montar({ alta: ["corte"], yo: [{ estado: 200, cuerpo: YO_ANOTADA }] }, { congelado: true });
     entrar(tokenDe("Beto"));
-    expect(await correr(deps.anotar("Beto", () => undefined))).toEqual({ ok: false, motivo: "red" });
+    expect(await correrDeAPoco(deps.anotar("Beto", () => undefined))).toEqual({ ok: false, motivo: "red" });
     expect(llamadas.some((l) => l.ruta === "yo")).toBe(false);
   });
 
   it("si al repetir la sala dice que el token no sirve, hay que entrar de nuevo", async () => {
-    const { deps, entrar } = montar({ alta: ["corte", "corte", error(401, "sesion")] });
+    const { deps, entrar } = montar({ alta: ["corte", "corte", error(401, "sesion")] }, { congelado: true });
     entrar(tokenDe("Ana"));
-    expect(await correr(deps.anotar("Ana", () => undefined))).toEqual({ ok: false, motivo: "sesion" });
+    expect(await correrDeAPoco(deps.anotar("Ana", () => undefined))).toEqual({ ok: false, motivo: "sesion" });
     expect(await correr(deps.anotar("Ana", () => undefined))).toEqual({ ok: false, motivo: "sesion" });
   });
 
