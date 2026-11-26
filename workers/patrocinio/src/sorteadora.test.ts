@@ -164,6 +164,21 @@ let firmasSorteadora = 0;
 let cfgActual: ReturnType<typeof leerConfig>;
 let registrarActual: ReturnType<typeof registrador>;
 
+/** Si la llave del portero (la que firma el sobre) falla: para probar un error antes de mandar. */
+let romperSobre = false;
+
+/** La llave del portero, que puede fallar a pedido de la prueba. */
+async function firmanteDelPortero(): Promise<Firmante> {
+  const f = await firmanteDe(llave.secret());
+  return {
+    clavePublica: f.clavePublica,
+    firmar: async (m) => {
+      if (romperSobre) throw new Error("llave");
+      return f.firmar(m);
+    },
+  };
+}
+
 /** La llave de la sorteadora, y cuántas veces se la usó. */
 async function firmanteContado(): Promise<Firmante> {
   const f = await firmanteDe(sorteadora.secret());
@@ -185,6 +200,7 @@ async function montar(env: Parameters<typeof leerConfig>[0] = {}) {
   cfgActual = cfg;
   registrarActual = registrar;
   firmasSorteadora = 0;
+  romperSobre = false;
   // La espera de la sorteadora no usa el reloj de verdad: cada vuelta le avisa a esta red, que decide si cierra el ledger.
   const deEstaRed = red;
   const esperar = async () => {
@@ -192,7 +208,7 @@ async function montar(env: Parameters<typeof leerConfig>[0] = {}) {
   };
   const s = cfg.sorteoServidor ? new Sorteadora({ passphrase: cfg.passphrase, contractId: CONTRATO, cuenta: sorteadora.publicKey(), red, firmante: await firmanteContado(), esperar }) : null;
   sor = s;
-  p = new Portero(cfg, cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora, () => {}, registrar, null, s);
+  p = new Portero(cfg, cupos, red, await firmanteDelPortero(), patrocinadora.publicKey(), () => ahora, () => {}, registrar, null, s);
   red.cuentas.set(sorteadora.publicKey(), { patrocinador: null, balance: 20_000_000n, secuencia: "500" });
 }
 
@@ -202,7 +218,7 @@ async function otroObjeto(): Promise<{ p: Portero; sor: Sorteadora }> {
     await red.alEsperar();
   };
   const s = new Sorteadora({ passphrase: cfgActual.passphrase, contractId: CONTRATO, cuenta: sorteadora.publicKey(), red, firmante: await firmanteContado(), esperar });
-  const o = new Portero(cfgActual, cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora, () => {}, registrarActual, null, s);
+  const o = new Portero(cfgActual, cupos, red, await firmanteDelPortero(), patrocinadora.publicKey(), () => ahora, () => {}, registrarActual, null, s);
   return { p: o, sor: s };
 }
 
@@ -408,6 +424,21 @@ describe("POST /v1/sorteo: ya sorteado y repetido", () => {
     expect(b).toEqual({ estado: 200, cuerpo: { hash: (a.cuerpo as { hash: string }).hash, status: "DUPLICATE", estado: "enviado" } });
     expect(draws()).toHaveLength(1);
     expect(usados(org.publicKey()).sorteos).toBe(1);
+  });
+
+  it("un error interno antes de mandar lo dice y devuelve lo reservado", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    romperSobre = true;
+    expect(await p.sortear("1", FIRMA)).toEqual({ estado: 500, cuerpo: { motivo: "interno", detalle: "sin-mandar" } });
+    expect(draws()).toHaveLength(0);
+    expect(usados(org.publicKey()).sorteos).toBe(0);
+    expect(cupos.exportar(true).uso?.filter((f) => f.metodo === "draw").map((f) => f.estado)).toEqual(["devuelto"]);
+    await sor!.libre();
+    expect(sor!.ocupada()).toBeNull();
+    // Con la llave de vuelta el mismo sorteo sale: no quedó nada reservado ni atado.
+    romperSobre = false;
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
   });
 
   it("el envío propio que la red ya tenía se contesta pendiente: es de este pedido y la red lo tiene", async () => {
