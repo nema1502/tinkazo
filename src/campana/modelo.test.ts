@@ -463,9 +463,11 @@ describe("leerCampana: la identidad de quien se anota", () => {
     if (lectura.ok) expect(lectura.campana.identidad).toBe("persona");
   });
 
-  it("cualquier otro valor rechaza la campaña con el campo identidad", () => {
+  it("cualquier otro valor se lee como la campaña de siempre y no deja ninguna clave", () => {
     for (const valor of ["Persona", "personas", "", null, 1, true, {}, []]) {
-      expect(campo({ identidad: valor }), String(valor)).toBe("identidad");
+      const lectura = leerCampana({ ...base(), identidad: valor });
+      expect(lectura.ok, String(valor)).toBe(true);
+      if (lectura.ok) expect("identidad" in lectura.campana, String(valor)).toBe(false);
     }
   });
 

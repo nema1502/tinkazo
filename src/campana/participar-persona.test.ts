@@ -400,10 +400,10 @@ describe("participar.html: una campaña de siempre no cambia", () => {
     expect(texto("#cmp-saber button.primary")).toBe("Entrar con Google");
   });
 
-  it("una identidad que no existe no se muestra: la campaña no se abre", async () => {
-    ponerSala({ campana: [envuelta(campanaCruda({ identidad: "otra" }))] });
+  it.each(["otra", null])("un campo de identidad que no es persona (%s) se ignora: es la campaña de siempre", async (valor) => {
+    ponerSala({ campana: [envuelta(campanaCruda({ identidad: valor }))], estado: [estadoDeSala()], yo: [yoDeSala(false)] });
     await abrir();
-    expect(texto("#cmp-estado")).toBe("No pudimos mostrar esta campaña. Avisale a quien atiende el stand.");
     expect(guiones).toHaveLength(0);
+    expect(texto("#cmp-saber button.primary")).toBe("Entrar con Google");
   });
 });

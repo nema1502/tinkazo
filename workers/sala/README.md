@@ -272,8 +272,9 @@ enlace simbólico o una junction.
 ### Campañas de personas: anotarse sin billetera
 
 Quien solo se anota en una campaña no necesita una billetera. Una campaña lo pide con `"identidad": "persona"` en su texto
-firmado. Sin el campo, o con `"cuenta"`, la campaña es la de siempre y ninguna ruta cambia. Cualquier otro valor no se firma ni
-se acepta (`400 forma`): así un error de tipeo no convierte en silencio una campaña de personas en una de cuentas.
+firmado. Solo el valor exacto `"persona"` la vuelve de personas. Sin el campo, con `"cuenta"` o con cualquier otra cosa (un valor
+nulo, otro texto) la campaña es la de siempre y ninguna ruta cambia: la sala lee el texto como lo leía antes de que existiera el
+campo, y un campo que no conoce no lo cambia.
 
 Nacen apagadas. Hacen falta dos variables en `wrangler.toml`: `DIFERIDA` en `"1"` y un `GOOGLE_CLIENT_ID` (el identificador de
 cliente de Google de Tinkazo, que es público). Si falta una, crear una campaña de personas da `503 personas-apagadas`, activarla

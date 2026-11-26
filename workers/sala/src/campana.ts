@@ -113,9 +113,9 @@ export function leerTextoDeCampana(texto: string, ahora: number): LecturaDelText
   if (!Array.isArray(premios) || premios.length < 1 || premios.length > 10) return forma("premios");
   if (premios.some((premio) => typeof premio !== "string" || !ES_PREMIO.test(premio))) return forma("premios");
   if (organizadora !== null && !esCuentaValida(organizadora)) return forma("organizadora");
-  // Ausente o `cuenta` es el modo de siempre. `persona` es el modo sin billetera. Cualquier otro valor no se firma ni se acepta.
+  // Solo el valor exacto `persona` es el modo sin billetera. Cualquier otra cosa (sin el campo, `cuenta`, nulo, otro valor) se lee
+  // como siempre: un campo que esta lectura no conoce no la cambia, igual que antes de que existiera el modo.
   const identidad = c.identidad;
-  if (identidad !== undefined && identidad !== "cuenta" && identidad !== "persona") return forma("identidad");
   if (cierraMs <= ahora) return { ok: false, motivo: "vencida", campo: "cierra_ms" };
   return {
     ok: true,

@@ -250,8 +250,7 @@ export function leerCampana(x: unknown): LecturaDeCampana {
   const horas = leerHoras(x);
   if (esFallo(horas)) return horas;
   if (!esMiembro(x.entrada, ["google", "google-correo"] as const)) return fallo("entrada");
-  // Ausente o "cuenta" es la campaña de siempre y no deja ninguna clave en el resultado.
-  if (x.identidad !== undefined && x.identidad !== "cuenta" && x.identidad !== "persona") return fallo("identidad");
+  // Solo el valor exacto "persona" deja una clave en el resultado. Cualquier otra cosa se lee como la campaña de siempre.
   const pasos = leerPasos(x.pasos);
   if (!Array.isArray(pasos)) return pasos;
   const bases = leerBilingue(x.bases, "bases", 6000, true);

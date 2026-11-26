@@ -182,9 +182,10 @@ describe("el campo de identidad del texto firmado", () => {
     expect(lee({ identidad: "persona" })).toMatchObject({ ok: true, identidad: "persona" });
   });
 
-  it("cualquier otro valor se rechaza, también uno vacío o que no es texto", () => {
+  it("cualquier otro valor se lee como siempre: un campo que la lectura no conoce no la cambia", () => {
+    const sin = lee({});
     for (const valor of ["Persona", "personas", "otra", "", " persona", null, 1, true, ["persona"], { modo: "persona" }]) {
-      expect(lee({ identidad: valor }), JSON.stringify(valor)).toEqual({ ok: false, motivo: "forma", campo: "identidad" });
+      expect(lee({ identidad: valor }), JSON.stringify(valor)).toEqual(sin);
     }
   });
 });
@@ -274,14 +275,16 @@ describe("crear una campaña de personas", () => {
     }
   });
 
-  it("un valor que no es persona ni cuenta no se acepta, con los interruptores como estén", async () => {
+  it("un valor que no es persona crea la campaña de siempre, con los interruptores como estén", async () => {
     const interruptores: Record<string, string>[] = [{}, { DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE }];
     for (const extra of interruptores) {
       const mundo = await montarMundo(extra);
+      let n = 0;
       for (const valor of ["otra", "", null, 1]) {
-        const r = await mundo.pedir("/v1/campana", { cuerpo: archivo(mundo, { identidad: valor }) });
-        expect(r.status, `${JSON.stringify(valor)} ${JSON.stringify(extra)}`).toBe(400);
-        expect(await r.json()).toEqual({ error: "forma" });
+        const r = await mundo.pedir("/v1/campana", { cuerpo: archivo(mundo, { evento: `feria-${++n}`, identidad: valor }) });
+        expect(r.status, `${JSON.stringify(valor)} ${JSON.stringify(extra)}`).toBe(201);
+        const { id } = (await r.json()) as { id: string };
+        expect(mundo.ejecutar(`sala:${id}`, "SELECT v FROM sala WHERE k = 'identidad'")).toEqual([]);
       }
     }
   });
@@ -768,15 +771,14 @@ describe("activar una campaña de personas", () => {
     expect(((await r.json()) as { texto: string }).texto).toBe(JSON.stringify(m.campana({ identidad: "persona" })));
   });
 
-  it("un valor de identidad que no existe no se activa con los interruptores como estén", async () => {
+  it("un valor de identidad que no es persona se activa como la campaña de siempre, con los interruptores como estén", async () => {
     const interruptores: Record<string, string>[] = [{}, { DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE }];
     for (const extra of interruptores) {
       const m = await montarMundoDeActivar(extra);
       vi.setSystemTime(HORA_DE_LA_PRUEBA);
       m.horizon.pagos = [m.pagoCompleto("casa-andina-k7p2")];
       const r = await m.activar({ texto: JSON.stringify(m.campana({ identidad: "otra" })), sesion: m.organizadora.token });
-      expect(r.status).toBe(400);
-      expect(await r.json()).toMatchObject({ error: "forma", campo: "identidad" });
+      expect(r.status, JSON.stringify(extra)).toBe(200);
     }
   });
 });
