@@ -547,6 +547,35 @@ export async function avisarEnSala(s: Sala, cuenta: string, dep: DependenciasOrg
   return DE_AVISO.find((m) => m === motivo) ?? "red";
 }
 
+/** Por qué la sala no dio los códigos de entrega, además de las fallas de siempre. */
+export type FallaDeCodigos = FallaDeSala | "fase" | "no-es-de-personas";
+
+const ES_CODIGO_DE_ENTREGA = /^[0-9]{4}$/u;
+
+/**
+ * Los códigos de entrega de las ganadoras de una campaña de personas, en orden de puesto. Solo quien organiza los pide (con
+ * el token de la sala) y se leen en cada pedido: la sala los recalcula y no los guarda. `fase` es que todavía no se sorteó y
+ * `no-es-de-personas` que la sala es de cuentas. Una respuesta buena exige cuatro cifras en cada código y que ninguno se
+ * repita: si no, es `red`, porque no sirve para entregar nada. El código no se escribe en ningún lado.
+ */
+export async function codigosDeEntrega(s: Sala, dep: DependenciasOrg = {}): Promise<string[] | FallaDeCodigos> {
+  const r = await llamar(dep, rutaDe(s, "/campana/entrega"), { headers: auth(s) });
+  if (!r) return "red";
+  if (r.status === 409) {
+    const motivo = await motivoDe(r);
+    return motivo === "fase" || motivo === "no-es-de-personas" ? motivo : "rechazo";
+  }
+  if (!r.ok) return fallaDe(r);
+  const x = (await r.json().catch(() => null)) as { codigos?: unknown } | null;
+  if (!x || !Array.isArray(x.codigos) || x.codigos.length === 0) return "red";
+  const codigos: string[] = [];
+  for (const c of x.codigos as unknown[]) {
+    if (typeof c !== "string" || !ES_CODIGO_DE_ENTREGA.test(c) || codigos.includes(c)) return "red";
+    codigos.push(c);
+  }
+  return codigos;
+}
+
 /** La cuenta que la campaña nombra para sellar (campo `organizadora` del texto firmado), `null` si no nombra ninguna. */
 export async function leerOrganizadora(s: Sala, dep: DependenciasOrg = {}): Promise<string | null | FallaDeSala> {
   const r = await llamar(dep, rutaDe(s, "/campana"), {});
