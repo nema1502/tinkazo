@@ -4,6 +4,7 @@
  */
 
 import type { Lang } from "../idioma";
+import type { Campana } from "./modelo";
 import { TEXTOS_CAMPANA } from "./textos";
 
 /** Convierte unidades de siete decimales a un monto visible, truncado a centavos. */
@@ -91,6 +92,18 @@ export function premiosTexto(premios: readonly bigint[], idioma: Lang, conCentav
   const texto = TEXTOS_CAMPANA[idioma][clave] ?? "";
   const monto = montos[0] ?? "";
   return texto.replace("{monto}", monto).replace("{montos}", lista).replace("{n}", String(premios.length));
+}
+
+/**
+ * El premio de una campaña como lo lee la persona. En una campaña con el premio entregado en mano es lo que se escribió, en el
+ * idioma de la pantalla, y con varias personas dice para cuántas: nunca un monto, porque los montos van en cero. Sin premio en
+ * mano, el de siempre (`premiosTexto`). El texto se pone tal cual, sin tocar nada de lo que escribió quien organiza.
+ */
+export function textoDelPremio(c: Pick<Campana, "premios" | "premioEnMano">, idioma: Lang, conCentavos = false): string {
+  if (c.premioEnMano === undefined) return premiosTexto(c.premios, idioma, conCentavos);
+  const texto = TEXTOS_CAMPANA[idioma][c.premios.length === 1 ? "cpPremioMano1" : "cpPremioManoVarios"] ?? "";
+  const valores: Record<string, string> = { premio: c.premioEnMano[idioma], n: String(c.premios.length) };
+  return texto.replace(/\{(premio|n)\}/gu, (_, clave: string) => valores[clave] ?? "");
 }
 
 /** Formatea un día en la zona de la campaña, con año solo cuando se pide para un plazo. */
