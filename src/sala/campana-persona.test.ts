@@ -506,18 +506,20 @@ describe("el alta de una persona con Google", () => {
     expect(await r.json()).toEqual({ error: "forma" });
     expect(filas(mundo, cuentas)).toEqual([]);
     expect(falso.pedidos).toBe(0);
-    // Una sala que no existe (cerrada, vencida o nunca creada) contesta lo mismo que una de cuentas: no existe, y el celular sale por ahí.
+    // Una sala que no existe (cerrada, vencida o nunca creada) contesta lo mismo que una de cuentas: un pedido sin forma, como siempre.
     const nada = await mundo.pedir("/v1/sala/AbCdEf12/campana/alta", { cuerpo: { google: await tokenDeGoogle(1), d: "A".repeat(60), llave: llaveDe(1) } });
-    expect(nada.status).toBe(404);
-    expect(await nada.json()).toEqual({ error: "no-existe" });
+    expect(nada.status).toBe(400);
+    expect(await nada.json()).toEqual({ error: "forma" });
   });
 
-  it("una sala que se cerró deja de existir también para el alta de personas", async () => {
+  it("una sala que se cerró contesta el alta de personas como cualquier sala sin ese modo: un pedido sin forma", async () => {
     const cerrada = await mundo.pedir(`/v1/sala/${sala.id}`, { metodo: "DELETE", cabeceras: auth(sala) });
     expect(cerrada.status).toBe(204);
     const r = await altaGoogle(mundo, sala, await tokenDeGoogle(1));
-    expect(r.status).toBe(404);
-    expect(await r.json()).toEqual({ error: "no-existe" });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: "forma" });
+    // El celular se entera por el estado público, que sigue diciendo que la sala no existe.
+    expect((await mundo.pedir(ruta(sala, "/campana/estado"))).status).toBe(404);
   });
 
   it("un token de otra aplicación de Google es un error de configuración nuestro: no es un rechazo de la persona y no cuenta en ningún tope", async () => {
@@ -624,13 +626,13 @@ describe("la consulta propia con la llave sola", () => {
     expect(await r.json()).toEqual({ error: "forma" });
   });
 
-  it("en una sala que no existe o se cerró, la consulta propia dice que no existe y el celular la da por terminada", async () => {
+  it("en una sala que no existe o se cerró, la consulta propia contesta lo de siempre: un pedido sin forma", async () => {
     const nada = await yoPorLlave(mundo, { id: "AbCdEf12", token: "x" }, llaveDe(1));
-    expect(nada.status).toBe(404);
-    expect(await nada.json()).toEqual({ error: "no-existe" });
+    expect(nada.status).toBe(400);
+    expect(await nada.json()).toEqual({ error: "forma" });
     const cerrada = await mundo.pedir(`/v1/sala/${sala.id}`, { metodo: "DELETE", cabeceras: auth(sala) });
     expect(cerrada.status).toBe(204);
-    expect((await yoPorLlave(mundo, sala, llaveDe(1))).status).toBe(404);
+    expect((await yoPorLlave(mundo, sala, llaveDe(1))).status).toBe(400);
   });
 
   it("con una cuenta y su llave, el camino de siempre sigue contestando", async () => {
@@ -779,6 +781,34 @@ describe("activar una campaña de personas", () => {
       m.horizon.pagos = [m.pagoCompleto("casa-andina-k7p2")];
       const r = await m.activar({ texto: JSON.stringify(m.campana({ identidad: "otra" })), sesion: m.organizadora.token });
       expect(r.status, JSON.stringify(extra)).toBe(200);
+    }
+  });
+});
+
+describe("las rutas de personas en las salas de hoy", () => {
+  /** Todo lo que se ve de una respuesta: estado, cabeceras y cuerpo en bruto. */
+  async function foto(r: Response): Promise<string> {
+    const cabeceras = [...r.headers.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return JSON.stringify([r.status, cabeceras, await r.text()]);
+  }
+  const LINEA = `p1:${"a".repeat(26)}`;
+  const interruptores: Record<string, string>[] = [{}, { DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE }];
+
+  it.each(interruptores)("una sala de cuentas y una que no existe contestan lo mismo que antes del modo, con los interruptores %j", async (extra) => {
+    const { mundo } = await montarPersonas(extra);
+    const cuentas = await campanaAbierta(mundo, AHORA, { evento: "feria-de-cuentas" });
+    const token = await tokenDeGoogle(1);
+    const d = "A".repeat(60);
+    for (const sala of [cuentas, { id: "AbCdEf12", token: "x" }]) {
+      // Lo que contestaba la sala de hoy a un pedido sin la forma de su alta, de su consulta y de su aviso: la referencia de cada ruta.
+      const alta = await foto(await mundo.pedir(ruta(sala, "/campana/alta"), { cuerpo: { token: "no", d, llave: llaveDe(1) } }));
+      const yo = await foto(await mundo.pedir(ruta(sala, "/campana/yo"), { cuerpo: { cuenta: "no", llave: llaveDe(1) } }));
+      const avisar = await foto(await mundo.pedir(ruta(sala, "/campana/avisar"), { cuerpo: { cuenta: "no" }, cabeceras: auth(sala) }));
+      expect(JSON.parse(alta)[0]).toBe(400);
+      // Lo que traen las rutas de personas contesta exactamente eso, respuesta por respuesta, sin tocar nada.
+      expect(await foto(await altaGoogle(mundo, sala, token)), "alta").toBe(alta);
+      expect(await foto(await yoPorLlave(mundo, sala, llaveDe(1))), "consulta propia").toBe(yo);
+      expect(await foto(await mundo.pedir(ruta(sala, "/campana/avisar"), { cuerpo: { cuenta: LINEA }, cabeceras: auth(sala) })), "aviso").toBe(avisar);
     }
   });
 });

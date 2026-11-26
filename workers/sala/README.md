@@ -302,8 +302,10 @@ La sala guarda el modo en la clave `identidad` de la sala, solo en esas campaña
   y la sala solo acepta una línea en una campaña de personas.
 - **Saber si estoy anotada.** El celular no tiene cuenta que mandar: `POST campana/yo` con `{"llave"}` sola. La sala busca la fila
   que anotó esa llave y contesta lo mismo que con una cuenta y su llave. Quien no tiene la llave de una fila no ve nada de esa
-  fila. En una campaña de cuentas, un pedido sin `cuenta` sigue siendo `400 forma`. En una sala que no existe (cerrada o vencida)
-  el alta y la consulta propia dan `404 no-existe`, como las rutas de cuentas.
+  fila. En una campaña de cuentas, un pedido sin `cuenta` sigue siendo `400 forma`. Lo mismo en una sala que no existe (cerrada,
+  vencida o que nunca se creó): el alta con `google`, la consulta propia con la llave sola y el aviso por una línea dan `400 forma`,
+  que es lo que daban en toda sala de hoy antes del modo. Desde afuera no se distingue una sala de personas que se cerró de una que
+  nunca existió, y el celular sale por el estado público, que da `404 no-existe`.
 - **Comprobación antes de un evento.** `GET /v1/personas/estado` contesta `{"prendido","cliente"}`: si las dos variables están
   puestas y cuál es el `GOOGLE_CLIENT_ID` de la sala. Tiene que ser el mismo que `VITE_GOOGLE_CLIENT_ID` del sitio: si no, nadie
   entra. El identificador es público.

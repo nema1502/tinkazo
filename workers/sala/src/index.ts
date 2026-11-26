@@ -54,10 +54,10 @@
  *                                           (solo en una campaña de personas, con "identidad": "persona" en su texto firmado: "google" es el
  *                                           token de identidad que entrega el botón de Google, que la sala verifica sola, sin preguntarle al
  *                                           proveedor de cuentas. La respuesta no lleva la línea de la persona ni nada que la identifique.
- *                                           En una campaña de cuentas, un pedido con "google" y sin "token" es un 400 forma, como siempre)
+ *                                           En una campaña de cuentas, o en una sala que no existe, un pedido con "google" y sin "token" es un 400 forma, como siempre)
  *   POST   /v1/sala/<id>/campana/yo        JSON {"cuenta","llave"} → 200 {"fase","total","cierraMs","anotada"} más "sorteo" y "ronda" con la lista sellada o sorteada
  *   POST   /v1/sala/<id>/campana/yo        JSON {"llave"}: lo mismo, para una campaña de personas. El celular no tiene cuenta que mandar y la
- *                                           sala busca su fila por la llave. En una campaña de cuentas es un 400 forma, como siempre
+ *                                           sala busca su fila por la llave. En una campaña de cuentas, o en una sala que no existe, es un 400 forma, como siempre
  *
  *   GET    /v1/personas/estado             contesta 200 {"prendido","cliente"}: si las campañas de personas están prendidas y con qué identificador de
  *                                           Google (público). Sirve para comprobar antes de un evento que es el mismo que el del sitio.
@@ -984,7 +984,7 @@ export class Sala extends DurableObject<Env> {
    * Las dos primeras comprobaciones de toda ruta que anota a las campañas de personas, antes de gastar nada: tiene que ser una
    * sala de campaña de personas y la sala tiene que tenerlas prendidas.
    */
-  private sinPersonas(): { ok: false; motivo: "no-existe" | "forma" | "personas-apagadas" } | null {
+  private sinPersonas(): { ok: false; motivo: "forma" | "personas-apagadas" } | null {
     const no = this.sinSalaDePersonas();
     if (no) return no;
     if (!personasPrendido(this.env)) return { ok: false, motivo: "personas-apagadas" };
@@ -992,13 +992,12 @@ export class Sala extends DurableObject<Env> {
   }
 
   /**
-   * Lo que piden las rutas de personas aunque el modo se haya apagado después: que la sala exista y sea de personas. Una sala que
-   * no existe (cerrada, vencida o nunca creada) o que no es de campaña contesta `no-existe`, como las rutas de cuentas, y el celular
-   * la da por terminada. Una sala de cuentas contesta `forma`: la llave sola no le dice nada.
+   * Lo que piden las rutas de personas aunque el modo se haya apagado después: que la sala exista y sea de personas. Quien no lo
+   * es contesta `forma`, que es lo que estos pedidos contestaban en toda sala de hoy antes de que existiera el modo: sin la llave
+   * o el token de Google, una sala de cuentas, una que se cerró o venció y una que nunca existió no se distinguen desde afuera.
    */
-  private sinSalaDePersonas(): { ok: false; motivo: "no-existe" | "forma" } | null {
-    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
-    if (!this.esDePersonas()) return { ok: false, motivo: "forma" };
+  private sinSalaDePersonas(): { ok: false; motivo: "forma" } | null {
+    if (!this.dato("huella") || !this.esCampana() || !this.esDePersonas()) return { ok: false, motivo: "forma" };
     return null;
   }
 
