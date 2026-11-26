@@ -109,6 +109,8 @@ export const ASENTAR_CADA_MS = 5_000;
 const r = (estado: number, cuerpo: Record<string, unknown>): Respuesta => ({ estado, cuerpo });
 
 export class Portero {
+  /** Los pedidos de sorteo en curso, por sorteo y firma: los iguales que llegan casi juntos comparten el trabajo y la respuesta. */
+  private readonly vuelos = new Map<string, Promise<Respuesta>>();
   /** Cuándo se le preguntó a la red por última vez por cada sello en el aire (`asentarSellosDe`). Vive en la memoria del objeto. */
   private readonly preguntadoEn = new Map<string, number>();
   /** La averiguación en curso de cada cuenta: los `/cupo` que llegan mientras tanto esperan esa misma y no abren otra. */
@@ -441,7 +443,24 @@ export class Portero {
     const id = leerNumeroDeSorteo(sorteo);
     const firma = leerFirma(firmaHex);
     if (id === null || !firma) return r(400, { motivo: "cuerpo" });
+    // Un solo trabajo por pedido igual (dos pestañas, una recarga, un reintento). Desde mirar hasta anotar no hay ningún
+    // await: dos pedidos a la vez no abren dos trabajos. Con otra firma es otro trabajo: una firma que no pasa no tumba a la
+    // buena.
+    const clave = `${id}:${firmaHex.toLowerCase()}`;
+    const enCurso = this.vuelos.get(clave);
+    if (enCurso) return enCurso;
+    const vuelo = this.sortearUnaVez(s, id, firma);
+    this.vuelos.set(clave, vuelo);
+    // Cualquier respuesta, o una falla, cierra el trabajo: el siguiente pedido igual mira el libro.
+    const soltar = (): void => {
+      if (this.vuelos.get(clave) === vuelo) this.vuelos.delete(clave);
+    };
+    vuelo.then(soltar, soltar);
+    return vuelo;
+  }
 
+  /** El trabajo de un pedido de sorteo, ya con el cuerpo leído. Lo comparten los pedidos iguales (`vuelos`). */
+  private async sortearUnaVez(s: Sorteadora, id: bigint, firma: Uint8Array): Promise<Respuesta> {
     let selloHash: string;
     let organizador: string;
     let sim;
