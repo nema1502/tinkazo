@@ -574,7 +574,9 @@ export class Portero {
               if (estado === "NOT_FOUND") this.registrar("sorteo-sin-confirmar", { hash: corto(hash) });
             }),
           );
-          return r(200, { hash, status: envio.status });
+          // La red tomó este envío, o ya lo tenía porque el primer RPC lo recibió y no contestó: en los dos casos es el de este
+          // pedido y la red lo tiene, que es lo que dice PENDING. Un DUPLICATE de esta ruta es siempre el de otro pedido.
+          return r(200, { hash, status: "PENDING" });
         }
         // La red no la tomó: no se pagó nada, el sorteo del mes y lo guardado vuelven.
         this.cupos.devolver(firmada.hash);

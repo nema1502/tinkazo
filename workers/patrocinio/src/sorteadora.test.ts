@@ -410,6 +410,21 @@ describe("POST /v1/sorteo: ya sorteado y repetido", () => {
     expect(usados(org.publicKey()).sorteos).toBe(1);
   });
 
+  it("el envío propio que la red ya tenía se contesta pendiente: es de este pedido y la red lo tiene", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    red.envios = [{ status: "DUPLICATE" }];
+    const abrir = trabarLaEspera();
+    const r = await p.sortear("1", FIRMA);
+    expect(r).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(r.cuerpo.hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(cupos.exportar(true).uso?.filter((f) => f.metodo === "draw").map((f) => f.estado)).toEqual(["enviado"]);
+    expect(sor!.ocupada()?.sorteo).toBe("1");
+    // El registro sigue con lo que contestó la red.
+    expect(registros("enviado").some((x) => x.red === "DUPLICATE")).toBe(true);
+    abrir();
+  });
+
   it("el repetido de un envío que se cortó dice reservado: no se sabe si la red lo tiene", async () => {
     const org = admitida();
     await selloDelPortero(org, 1n);
