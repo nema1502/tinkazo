@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ES_LLAVE } from "../../workers/sala/src/registro";
 import { anotarEquipoEnSala } from "../sala/equipos";
-import { llaveDelCelular } from "./celular";
+import { llaveDelCelular, olvidarLlaveDelCelular } from "./celular";
 
 /**
  * La llave con que el celular del encargado prueba ante la sala que es el mismo que anotó la cuenta, y lo que
@@ -48,6 +48,32 @@ describe("la llave del celular", () => {
       },
     } as unknown as Storage;
     expect(llaveDelCelular("AbCd1234", bloqueado)).toMatch(ES_LLAVE);
+  });
+});
+
+describe("soltar la llave del celular", () => {
+  it("la sala suelta su llave, la siguiente es otra y las demás salas no se tocan", () => {
+    const al = memoria();
+    const a = llaveDelCelular("AbCd1234", al);
+    const otra = llaveDelCelular("ZzYy9876", al);
+    olvidarLlaveDelCelular("AbCd1234", al);
+    expect(al.getItem("tinkazo.equipo.llaves") ?? "").not.toContain(a);
+    expect(llaveDelCelular("ZzYy9876", al)).toBe(otra);
+    expect(llaveDelCelular("AbCd1234", al)).not.toBe(a);
+  });
+  it("sin almacenamiento, con algo roto o con una sala que no estaba, no falla", () => {
+    expect(() => olvidarLlaveDelCelular("AbCd1234", memoria())).not.toThrow();
+    const roto = { getItem: () => "{no es json", setItem: () => undefined } as unknown as Storage;
+    expect(() => olvidarLlaveDelCelular("AbCd1234", roto)).not.toThrow();
+    const bloqueado = {
+      getItem: () => {
+        throw new Error("bloqueado");
+      },
+      setItem: () => {
+        throw new Error("bloqueado");
+      },
+    } as unknown as Storage;
+    expect(() => olvidarLlaveDelCelular("AbCd1234", bloqueado)).not.toThrow();
   });
 });
 

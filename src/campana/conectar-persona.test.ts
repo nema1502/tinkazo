@@ -185,12 +185,55 @@ describe("depsDePersona", () => {
     expect(llamadas.filter((l) => l.ruta === "alta")).toHaveLength(1);
   });
 
-  it("si la respuesta se perdió pero la sala ya la anotó, se pregunta una vez por su llave y cuenta como anotada", async () => {
+  it("si la respuesta se perdió, se repite el alta con el mismo token y la sala la reconoce: cuenta como anotada", async () => {
+    const { deps, llamadas, entrar } = montar({
+      alta: ["corte", "corte", { estado: 200, cuerpo: { anotada: true, ya: true } }],
+      yo: [{ estado: 200, cuerpo: YO_ANOTADA }],
+    });
+    const token = tokenDe("Ana");
+    entrar(token);
+    expect(await correr(deps.anotar("Ana", () => undefined))).toEqual({ ok: true, ya: true });
+    const altas = llamadas.filter((l) => l.ruta === "alta");
+    expect(altas).toHaveLength(3);
+    expect((JSON.parse(String(altas[2]?.init.body)) as { google: string }).google).toBe(token);
+    // Lo que dice la llave del celular no prueba que esta persona quedó anotada: no se pregunta.
+    expect(llamadas.some((l) => l.ruta === "yo")).toBe(false);
+  });
+
+  it("si otra persona usó antes este celular, su anotación no da por anotada a quien falló", async () => {
+    const { deps, llamadas, entrar } = montar({ alta: ["corte"], yo: [{ estado: 200, cuerpo: YO_ANOTADA }] });
+    entrar(tokenDe("Beto"));
+    expect(await correr(deps.anotar("Beto", () => undefined))).toEqual({ ok: false, motivo: "red" });
+    expect(llamadas.some((l) => l.ruta === "yo")).toBe(false);
+  });
+
+  it("si al repetir la sala dice que el token no sirve, hay que entrar de nuevo", async () => {
+    const { deps, entrar } = montar({ alta: ["corte", "corte", error(401, "sesion")] });
+    entrar(tokenDe("Ana"));
+    expect(await correr(deps.anotar("Ana", () => undefined))).toEqual({ ok: false, motivo: "sesion" });
+    expect(await correr(deps.anotar("Ana", () => undefined))).toEqual({ ok: false, motivo: "sesion" });
+  });
+
+  it("si la sala dijo que no anotó nada (tope de la conexión), no se repite ni se pregunta", async () => {
     const { deps, llamadas, entrar } = montar({ alta: [error(429, "cupo-conexion")], yo: [{ estado: 200, cuerpo: YO_ANOTADA }] });
     entrar(tokenDe("Ana"));
-    expect(await correr(deps.anotar("Ana", () => undefined))).toEqual({ ok: true, ya: true });
-    const yo = llamadas.find((l) => l.ruta === "yo");
-    expect(Object.keys(JSON.parse(String(yo?.init.body)) as object)).toEqual(["llave"]);
+    expect(await correr(deps.anotar("Ana", () => undefined))).toEqual({ ok: false, motivo: "wifi" });
+    expect(llamadas.filter((l) => l.ruta === "alta")).toHaveLength(1);
+    expect(llamadas.some((l) => l.ruta === "yo")).toBe(false);
+  });
+
+  it("No soy yo suelta la llave de este celular: la próxima persona no hereda lo que anotó la anterior", async () => {
+    const { deps, llamadas, entrar, memoria } = montar({ alta: [ALTA_OK], yo: [{ estado: 200, cuerpo: YO_ANOTADA }] });
+    entrar(tokenDe("Ana"));
+    await correr(deps.anotar("Ana", () => undefined));
+    await deps.yo();
+    const antes = (JSON.parse(String(llamadas.find((l) => l.ruta === "yo")?.init.body)) as { llave: string }).llave;
+    await deps.salir();
+    await deps.yo();
+    const yos = llamadas.filter((l) => l.ruta === "yo");
+    const despues = (JSON.parse(String(yos[1]?.init.body)) as { llave: string }).llave;
+    expect(despues).not.toBe(antes);
+    expect(memoria.getItem("tinkazo.equipo.llaves") ?? "").not.toContain(antes);
   });
 
   it("un rechazo que no se pudo perder no pregunta nada más", async () => {

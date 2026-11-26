@@ -13,7 +13,7 @@
  */
 
 import { cifrarEquipo } from "../equipos/datos";
-import { llaveDelCelular } from "../equipos/celular";
+import { llaveDelCelular, olvidarLlaveDelCelular } from "../equipos/celular";
 import { estadoPublico, type DependenciasDeCampana, type SosiegoDelAlta } from "../sala/campana";
 import { anotarPersonaEnCampana, miEstadoDePersona, resultadoDeCampanaDePersona } from "../sala/celular-persona";
 import type { NetworkName } from "../stellar/config";
@@ -93,29 +93,22 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
     // Sin el token no hay con qué anotarse: se entra de nuevo con el botón.
     if (google === null) return { ok: false, motivo: "sesion" };
     const d = await cifrarEquipo(p.clave, { nombre: nombre ?? "", integrantes: [] });
-    const r = await anotarPersonaEnCampana(
-      p.servicio,
-      p.sala,
-      { google, d, llave: llave(), p: p.pase },
-      dep,
-      alReintentar,
-      { inicio, sosiego },
-    );
+    const cuerpo = { google, d, llave: llave(), p: p.pase };
+    const opciones = { inicio, sosiego };
+    let r = await anotarPersonaEnCampana(p.servicio, p.sala, cuerpo, dep, alReintentar, opciones);
+    // La sala pudo anotarla y perderse la respuesta. Lo que contesta la llave del celular no prueba nada: ese celular pudo
+    // anotar antes a otra persona. Se repite el mismo alta, que la sala reconoce por la persona del token y contesta `ya`.
+    // Sigue dentro del tope del toque: pasado ese tiempo es un solo pedido.
+    if (!r.ok && (r.motivo === "red" || r.motivo === "proveedor")) {
+      const otra = await anotarPersonaEnCampana(p.servicio, p.sala, cuerpo, dep, alReintentar, opciones);
+      if (otra.ok || otra.motivo === "sesion") r = otra;
+    }
     if (r.ok) {
       credencial = null;
       return { ok: true, ya: r.ya };
     }
     // Un token que la sala rechazó no sirve para repetir: hay que entrar de nuevo.
     if (r.motivo === "sesion") credencial = null;
-    const sePudoPerder = r.motivo === "red" || r.motivo === "wifi" || r.motivo === "espera" || r.motivo === "proveedor";
-    if (sePudoPerder) {
-      // La sala pudo anotarla y perderse la respuesta (o pasarse el tope de reingresos de quien ya estaba): se pregunta una vez.
-      const propio = await miEstadoDePersona(p.servicio, p.sala, llave(), dep);
-      if (propio !== "red" && propio !== "terminada" && propio.anotada) {
-        credencial = null;
-        return { ok: true, ya: true };
-      }
-    }
     return { ok: false, motivo: r.motivo };
   }
 
@@ -153,8 +146,10 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
     },
     // Recibir el premio lo lleva `celular.ts` a la pantalla de la entrega, que la etapa del reclamo reemplaza.
     recibir: () => undefined,
+    // Quien dice que este celular no es suyo suelta también su llave: la próxima persona no hereda lo que anotó la anterior.
     salir: async () => {
       credencial = null;
+      olvidarLlaveDelCelular(p.sala, almacenDeLlaves);
     },
     // Sin cuenta que mover no hay costo de retiro que decir.
     costoDelRetiro: () => null,
