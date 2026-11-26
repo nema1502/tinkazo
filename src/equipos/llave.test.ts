@@ -61,6 +61,35 @@ describe("soltar la llave del celular", () => {
     expect(llaveDelCelular("ZzYy9876", al)).toBe(otra);
     expect(llaveDelCelular("AbCd1234", al)).not.toBe(a);
   });
+  it("solo saca la entrada de esa sala y deja intactas las demás, también las de los equipos", () => {
+    const al = memoria();
+    // Las salas de una campaña y las de un equipo comparten la misma clave: cada una con su llave, en el orden en que se pidieron.
+    const salas = ["CampAna1", "EquIpo22", "CampAna3", "EquIpo44", "CampAna5"];
+    const llaves = salas.map((sala) => llaveDelCelular(sala, al));
+    const antes = JSON.parse(al.getItem("tinkazo.equipo.llaves") ?? "[]") as [string, string][];
+    expect(antes).toEqual(salas.map((sala, i) => [sala, llaves[i]]));
+    for (const [i, sala] of salas.entries()) {
+      const otro = memoria();
+      otro.setItem("tinkazo.equipo.llaves", JSON.stringify(antes));
+      olvidarLlaveDelCelular(sala, otro);
+      const despues = JSON.parse(otro.getItem("tinkazo.equipo.llaves") ?? "[]") as [string, string][];
+      expect(despues, sala).toEqual(antes.filter((_, j) => j !== i));
+      for (const [j, otraSala] of salas.entries()) {
+        if (j !== i) expect(llaveDelCelular(otraSala, otro), otraSala).toBe(llaves[j]);
+      }
+    }
+    // Soltar una sala que no estaba no cambia nada de lo guardado.
+    const sinCambio = memoria();
+    sinCambio.setItem("tinkazo.equipo.llaves", JSON.stringify(antes));
+    olvidarLlaveDelCelular("NoEstaba", sinCambio);
+    expect(JSON.parse(sinCambio.getItem("tinkazo.equipo.llaves") ?? "[]")).toEqual(antes);
+  });
+  it("lo único que descarta además de esa sala es lo que no es un par de textos, que nadie puede leer", () => {
+    const al = memoria();
+    al.setItem("tinkazo.equipo.llaves", JSON.stringify([["CampAna1", "L1"], 5, ["SinLlave"], ["EquIpo22", 7], ["EquIpo44", "L4"]]));
+    olvidarLlaveDelCelular("CampAna1", al);
+    expect(JSON.parse(al.getItem("tinkazo.equipo.llaves") ?? "[]")).toEqual([["EquIpo44", "L4"]]);
+  });
   it("sin almacenamiento, con algo roto o con una sala que no estaba, no falla", () => {
     expect(() => olvidarLlaveDelCelular("AbCd1234", memoria())).not.toThrow();
     const roto = { getItem: () => "{no es json", setItem: () => undefined } as unknown as Storage;
