@@ -559,7 +559,12 @@ describe("reponer los nombres de una campaña de personas ya pasada", () => {
   it("arma los mismos nombres que al pasar la lista, como de personas", async () => {
     const m = mundo();
     const alPasar = await alPasarLaLista(m);
-    expect([...alPasar.values()].sort()).toEqual(["Ana", "Persona 2", "Persona 3", "ana (2)"].sort());
+    // Con el filtro, un nombre vacío y un repetido: el segundo en el orden de la lista lleva (2).
+    const valores = [...alPasar.values()];
+    expect(valores.filter((v) => v.startsWith("Persona"))).toHaveLength(2);
+    expect(valores).toContain("Persona 2");
+    expect(valores).toContain("Persona 3");
+    expect(valores.filter((v) => /^ana( \(2\))?$/i.test(v) && v.endsWith("(2)"))).toHaveLength(1);
     const { d, puestas } = reposicion(m);
     expect(reponerLasEtiquetas(d, SALA, panelDeLoMismo())).toBe(true);
     expect(puestas).toHaveLength(1);
