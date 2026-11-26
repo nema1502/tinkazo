@@ -686,7 +686,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       const resultado = await pedirResultado();
       if (desmontado || resultado === "red") return;
       huboRespuesta();
-      if (resultado !== null) await aplicarResultado(resultado, null);
+      // En una campaña de personas la lista de elegidas no dice si esta persona ganó (son líneas, no cuentas): solo lo sabe la
+      // sala por la llave de este celular. Se le pregunta a ella, y no se concluye nada de la lista.
+      if (resultado !== null) await (deps.persona ? consultarPropio() : aplicarResultado(resultado, null));
     } finally {
       consultando = false;
     }
@@ -1087,6 +1089,14 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     const avisadoAntes = estado.avisado;
     estado.comprobante = resultado.comprobante;
     if (propio) estado.avisado = propio.avisado === true;
+    // En una campaña de personas solo la sala sabe si esta persona ganó, y solo si la llave de este celular sigue siendo la de su
+    // fila (anotada desde otro celular, la fila pasó a la llave del otro). Sin esa certeza nunca se dice que no ganó: quien ya
+    // vio Ganaste lo conserva, y quien no, ve que el sorteo ya se hizo y no se recuerda ningún resultado.
+    if (deps.persona && propio?.gano !== true && !(propio?.anotada === true && propio.gano === false)) {
+      if (estado.memoria?.resultado === "gano") return;
+      ir("sorteada");
+      return;
+    }
     const cuenta = estado.sesion?.cuenta ?? estado.memoria?.cuenta;
     const gano = propio?.gano === true || (cuenta !== undefined && resultado.ganadoras.includes(cuenta));
     guardar({

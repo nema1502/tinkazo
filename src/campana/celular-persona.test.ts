@@ -303,6 +303,39 @@ describe("una campaña de personas: el resultado", () => {
     expect(texto(mundo, "#cmp-estado .cmp-apoyo")).toBe("Gracias por participar.");
   });
 
+  it("si la llave de este celular ya no es la de la fila, no dice que salió otra persona ni lo recuerda", async () => {
+    // La misma persona se anotó desde otro celular y la sala le dio ese lugar: este celular no sabe si ganó.
+    const memoria = adentro();
+    const { mundo, g } = await montarPersona(
+      { ...sorteada(false), yo: async () => ({ ...propio("sorteada"), anotada: false }) },
+      memoria,
+    );
+    const pantalla = texto(mundo, "#cmp-estado") ?? "";
+    expect(pantalla).toContain(TEXTOS_CAMPANA.es.cpSorteado);
+    expect(pantalla).not.toContain("otra persona");
+    expect(pantalla).not.toContain("Ganaste");
+    expect(g.montajes).toHaveLength(0);
+    // Lo que queda recordado no es un resultado: al volver a abrir el enlace tampoco dice que no ganó.
+    expect(leerMemoria(memoria, SALA, AHORA)?.resultado ?? null).toBeNull();
+  });
+
+  it("si la sala no dice si ganó, aunque la llave sea la de la fila, tampoco dice que salió otra persona", async () => {
+    const { mundo } = await montarPersona({ ...sorteada(false), yo: async () => ({ ...propio("sorteada"), anotada: true }) }, adentro());
+    expect(texto(mundo, "#cmp-estado") ?? "").not.toContain("otra persona");
+    expect(texto(mundo, "#cmp-estado") ?? "").toContain(TEXTOS_CAMPANA.es.cpSorteado);
+  });
+
+  it("quien ya vio Ganaste no pierde su pantalla porque la llave de este celular dejó de ser la de la fila", async () => {
+    const memoria = almacenFalso();
+    guardarMemoria(memoria, SALA, { cuenta: SIN_CUENTA, fase: "sorteada", resultado: "gano", comprobante: null, guardado: AHORA });
+    const { mundo } = await montarPersona(
+      { ...sorteada(true), yo: async () => ({ ...propio("sorteada"), anotada: false }) },
+      memoria,
+    );
+    expect(texto(mundo, "#cmp-estado h1")).toBe("Ganaste");
+    expect(leerMemoria(memoria, SALA, AHORA)?.resultado).toBe("gano");
+  });
+
   it("quien ganó y vuelve a abrir el enlace ve de nuevo Ganaste por lo que recuerda, sin pedir Google", async () => {
     const memoria = almacenFalso();
     guardarMemoria(memoria, SALA, { cuenta: SIN_CUENTA, fase: "sorteada", resultado: "gano", comprobante: null, guardado: AHORA });
