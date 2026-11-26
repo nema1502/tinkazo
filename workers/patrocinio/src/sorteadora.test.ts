@@ -770,6 +770,58 @@ describe("POST /v1/sorteo: un sorteo a la vez", () => {
     expect(red.lecturas - antes).toBe(1);
   });
 
+  it("un pedido que llega tarde a la admisión no toma la sorteadora: tarde, sin reservar ni mandar nada", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    const simular = red.simular.bind(red);
+    red.simular = async (x) => {
+      const sim = await simular(x);
+      if (invocacion(x).metodo === "draw") ahora += 10_000;
+      return sim;
+    };
+    expect(await p.sortear("1", FIRMA)).toEqual({ estado: 503, cuerpo: { motivo: "tarde" } });
+    expect(draws()).toHaveLength(0);
+    expect(cupos.exportar(true).uso?.filter((f) => f.metodo === "draw")).toHaveLength(0);
+    expect(usados(org.publicKey()).sorteos).toBe(0);
+    expect(sor!.ocupada()).toBeNull();
+    const tardes = registros("sorteo-tarde");
+    expect(tardes).toHaveLength(1);
+    expect(typeof tardes[0]?.edadMs).toBe("number");
+    expect(tardes[0]?.edadMs as number).toBeGreaterThan(9_000);
+    for (const l of lineas) expect(l).not.toMatch(/\b[GC][A-Z2-7]{55}\b/);
+  });
+
+  it("un pedido que se pone viejo adentro, mientras lee la secuencia, tampoco se manda", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    const leer = red.leerCuenta.bind(red);
+    red.leerCuenta = async (g) => {
+      if (g === sorteadora.publicKey()) ahora += 10_000;
+      return leer(g);
+    };
+    expect(await p.sortear("1", FIRMA)).toEqual({ estado: 503, cuerpo: { motivo: "tarde" } });
+    expect(draws()).toHaveLength(0);
+    expect(cupos.exportar(true).uso?.filter((f) => f.metodo === "draw")).toHaveLength(0);
+    expect(usados(org.publicKey()).sorteos).toBe(0);
+    await sor!.libre();
+    expect(sor!.ocupada()).toBeNull();
+    expect(registros("sorteo-tarde")).toHaveLength(1);
+  });
+
+  it("un pedido de 8 segundos todavía sale", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    const simular = red.simular.bind(red);
+    red.simular = async (x) => {
+      const sim = await simular(x);
+      if (invocacion(x).metodo === "draw") ahora += 8_000;
+      return sim;
+    };
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(draws()).toHaveLength(1);
+    expect(registros("sorteo-tarde")).toHaveLength(0);
+  });
+
   it("dos sorteos gemelos a la vez (misma lista y ronda): el servicio manda uno solo", async () => {
     const org = admitida();
     await selloDelPortero(org, 1n);
@@ -985,11 +1037,13 @@ describe("la ruta", () => {
     expect(llamadas).toHaveLength(cfg.porIpPorHora);
   });
 
-  it("pasa ocupado tal cual, con CORS para el sitio", async () => {
-    const r = (await atenderSorteo(pedido({ sorteo: "1", firma: FIRMA }), cfgMainnet(), new PorIp(), async () => ({ estado: 503, cuerpo: { motivo: "ocupado" } }))) as Response;
-    expect(r.status).toBe(503);
-    expect(await r.json()).toEqual({ motivo: "ocupado" });
-    expect(r.headers.get("Access-Control-Allow-Origin")).toBe("https://tinkazo.app");
+  it("pasa ocupado y tarde tal cual, con CORS para el sitio", async () => {
+    for (const motivo of ["ocupado", "tarde"]) {
+      const r = (await atenderSorteo(pedido({ sorteo: "1", firma: FIRMA }), cfgMainnet(), new PorIp(), async () => ({ estado: 503, cuerpo: { motivo } }))) as Response;
+      expect(r.status).toBe(503);
+      expect(await r.json()).toEqual({ motivo });
+      expect(r.headers.get("Access-Control-Allow-Origin")).toBe("https://tinkazo.app");
+    }
   });
 
   it("con la bandera apagada, 503 apagado sin llamar al objeto", async () => {
