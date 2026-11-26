@@ -1,7 +1,14 @@
 import type { Fase } from "./celular";
 
+/**
+ * Lo que el celular guarda en lugar de la cuenta en una campaña de personas: quien se anota sin billetera no tiene cuenta que
+ * recordar. Es solo una marca, no dice nada de nadie. La sala reconoce a la persona por la llave de este celular.
+ */
+export const SIN_CUENTA = "persona";
+
 /** Lo que el celular recuerda de una campaña. Nunca el correo, el token ni el nombre. */
 export interface MemoriaDeCampana {
+  /** La cuenta de Stellar de quien se anotó, o `SIN_CUENTA` en una campaña de personas. */
   cuenta: string;
   fase: Fase;
   resultado: "gano" | "otra" | null;
@@ -18,7 +25,7 @@ function esMemoria(valor: unknown): valor is MemoriaDeCampana {
   if (typeof valor !== "object" || valor === null) return false;
   const m = valor as Record<string, unknown>;
   return typeof m.cuenta === "string"
-    && /^G[A-Z2-7]{55}$/u.test(m.cuenta)
+    && (/^G[A-Z2-7]{55}$/u.test(m.cuenta) || m.cuenta === SIN_CUENTA)
     && typeof m.fase === "string"
     && FASES.includes(m.fase as Fase)
     && (m.resultado === "gano" || m.resultado === "otra" || m.resultado === null)

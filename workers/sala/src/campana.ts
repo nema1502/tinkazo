@@ -31,6 +31,13 @@ export const VENTANA_CAMPANA_MS = 10 * 60_000;
  * Cada ficha cuenta una sola vez acá (ver `RECHAZOS_POR_FICHA`) y lo que se rechaza antes de llamar al proveedor no cuenta.
  */
 export const RECHAZOS_POR_CONEXION = 300;
+/**
+ * Tokens de Google que la sala rechazó, por conexión y por ventana, en las campañas de personas. Verificar un token es local y no
+ * cuesta una llamada al proveedor, así que este tope no protege a un tercero: protege a la sala de quien manda tokens falsos sin
+ * parar (cada uno inventa una ficha nueva). Está muy por encima de las 150 personas de un salón. Pasado el tope, la sala no deja
+ * de atender a nadie: solo le dice al Worker que verifique primero, y quien trae un token bueno entra igual que antes.
+ */
+export const RECHAZOS_DE_PERSONAS_POR_CONEXION = 1_000;
 /** Rechazos de una misma ficha por ventana. Repetir una ficha mala no sirve: cuando se pasa, ni se le pregunta al proveedor. */
 export const RECHAZOS_POR_FICHA = 5;
 /** Veces que una misma persona ya anotada puede volver a entrar (otro celular, otra pestaña) en una hora. */
@@ -68,6 +75,11 @@ export interface CampanaFirmada {
   premios: number;
   /** La cuenta que tiene que sellar, si la campaña la nombra. Sin ella, el sello de cualquier cuenta sirve. */
   organizadora: string | null;
+  /**
+   * Cómo se anota la gente: solo viene con el valor `persona` (se anotan con Google, sin billetera, y la lista sella una línea
+   * por persona). Una campaña sin este campo, o con `cuenta`, es la de siempre y el lector no agrega nada a su lectura.
+   */
+  identidad?: "persona";
 }
 export type LecturaFirmada = ({ ok: true } & CampanaFirmada) | { ok: false; motivo: "forma" | "firma" | "vencida" };
 
@@ -108,8 +120,20 @@ export function leerTextoDeCampana(texto: string, ahora: number): LecturaDelText
   if (!Array.isArray(premios) || premios.length < 1 || premios.length > 10) return forma("premios");
   if (premios.some((premio) => typeof premio !== "string" || !ES_PREMIO.test(premio))) return forma("premios");
   if (organizadora !== null && !esCuentaValida(organizadora)) return forma("organizadora");
+  // Solo el valor exacto `persona` es el modo sin billetera. Cualquier otra cosa (sin el campo, `cuenta`, nulo, otro valor) se lee
+  // como siempre: un campo que esta lectura no conoce no la cambia, igual que antes de que existiera el modo.
+  const identidad = c.identidad;
   if (cierraMs <= ahora) return { ok: false, motivo: "vencida", campo: "cierra_ms" };
-  return { ok: true, evento, red, cierraMs, sorteoMs, premios: premios.length, organizadora };
+  return {
+    ok: true,
+    evento,
+    red,
+    cierraMs,
+    sorteoMs,
+    premios: premios.length,
+    organizadora,
+    ...(identidad === "persona" ? { identidad: "persona" as const } : {}),
+  };
 }
 
 /** Lo más largo que se guarda del nombre de la empresa en la lista de Tus campañas. */
@@ -247,6 +271,14 @@ export function listaDeLaCampana(cuentas: readonly string[]): string[] {
 export function listaDeLaSala(sql: Ejecutar): string[] {
   const filas = sql<{ cuenta: string }>("SELECT cuenta FROM equipos");
   return listaDeLaCampana(filas.map((fila) => fila.cuenta));
+}
+
+/**
+ * Si la sala es de una campaña de personas: la clave `identidad` se escribe solo al crearla con ese modo. Una sala sin la clave,
+ * y cualquiera anterior a este modo, es de cuentas.
+ */
+export function esCampanaDePersonas(sql: Ejecutar): boolean {
+  return sql<{ v: string }>("SELECT v FROM sala WHERE k = 'identidad'")[0]?.v === "persona";
 }
 
 export type MotivoDeSelloRechazado =
@@ -680,6 +712,29 @@ export function contarRechazo(sql: Ejecutar, grupo: string, ficha: string, ahora
     grupo,
     ventana,
   );
+}
+
+/** La clave del contador de personas: la misma tabla de la conexión, con un prefijo que no puede chocar con un grupo de cuentas. */
+const grupoDePersonas = (grupo: string): string => `p${grupo}`;
+
+/** Cuándo termina la ventana de rechazos en la que cae `ahora`. */
+export const finDeVentanaDeRechazos = (ahora: number): number => (Math.floor(ahora / VENTANA_CAMPANA_MS) + 1) * VENTANA_CAMPANA_MS;
+
+/** Si la conexión ya pasó el tope de tokens falsos de esta ventana. Solo lee. */
+export function conexionDePersonasApurada(sql: Ejecutar, grupo: string, ahora: number): boolean {
+  const ventana = Math.floor(ahora / VENTANA_CAMPANA_MS);
+  const n = sql<{ n: number }>("SELECT n FROM campana_rechazos WHERE grupo = ? AND ventana = ?", grupoDePersonas(grupo), ventana)[0]?.n ?? 0;
+  return n >= RECHAZOS_DE_PERSONAS_POR_CONEXION;
+}
+
+/**
+ * Anota un token de Google que la sala rechazó: la ficha cuenta (repetirla se frena sola) y la conexión suma en su contador
+ * propio de personas, que nunca toca el de cuentas. Pasado el tope de la conexión ya no escribe nada: cada ficha nueva sería una
+ * fila de más y el que manda tokens falsos no puede hacer crecer la tabla sin límite.
+ */
+export function contarRechazoDePersona(sql: Ejecutar, grupo: string, ficha: string, ahora: number): void {
+  if (conexionDePersonasApurada(sql, grupo, ahora)) return;
+  contarRechazo(sql, grupoDePersonas(grupo), ficha, ahora, true);
 }
 
 /**
@@ -1164,4 +1219,16 @@ export function estadoDeCelular(sql: Ejecutar, cuenta: string, llave: string): E
   }
   if (sql("SELECT cuenta FROM campana_avisos WHERE cuenta = ?", cuenta)[0]) estado.avisado = true;
   return estado;
+}
+
+/**
+ * Lo que ve un celular de sí mismo en una campaña de personas, con la huella de su llave sola: no tiene cuenta que mandar. La
+ * sala busca la línea que ese celular anotó (o la que quitó) y contesta lo mismo que `estadoDeCelular`. Una llave que no es de
+ * nadie ve solo lo público y `anotada: false`, igual que una llave ajena en una campaña de cuentas. Si la misma llave aparece en
+ * varias filas (una sola compu usada por varias personas) vale la última que se anotó.
+ */
+export function estadoDeCelularPorLlave(sql: Ejecutar, llave: string): EstadoDeCelular {
+  const equipo = sql<{ cuenta: string }>("SELECT cuenta FROM equipos WHERE llave = ? ORDER BY n DESC LIMIT 1", llave)[0];
+  const salida = sql<{ cuenta: string }>("SELECT cuenta FROM campana_quitadas WHERE llave = ? LIMIT 1", llave)[0];
+  return estadoDeCelular(sql, equipo?.cuenta ?? salida?.cuenta ?? "", llave);
 }

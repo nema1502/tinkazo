@@ -34,6 +34,7 @@ const CLAVES_DE_ALTA: Record<Exclude<MotivoDeAlta, "quitada">, string> = {
   sesion: "cpErrSesion",
   "solo-google": "cpErrSoloGoogle",
   red: "cpErrRed",
+  apagada: "cpPersonaNoAbre",
   otro: "cpErrOtro",
 };
 
@@ -426,7 +427,7 @@ export function pintarGano(
   raiz.append(izq);
   const accion = caja("cmp-accion");
   raiz.append(accion);
-  parrafo(accion, datos.variante?.linea ?? deps.tx("cpParaRecibir"), "cmp-apoyo");
+  parrafo(accion, datos.variante?.linea ?? deps.tx(deps.persona ? "cpParaRecibirPersona" : "cpParaRecibir"), "cmp-apoyo");
   const llevar = datos.variante?.llevar;
   if (!llevar) {
     boton(accion, deps.tx("cpRecibir"), "primary", deps.recibir);
@@ -473,6 +474,21 @@ export function pintarOtra(
     { titulo: deps.tx("cpOtraPersona"), apoyo: [deps.tx("cpGracias")] },
     datos.comprobante ? { texto: deps.tx("cpComoSeEligio"), enlace: datos.comprobante } : null,
   );
+}
+
+/**
+ * Lo que pasa cuando quien ganó una campaña de personas toca Recibir mi premio: por ahora, una pantalla corta, un título y una
+ * línea, que dice que el premio se entrega con quien organiza. Reclamar y cobrar desde el celular es de otra etapa, que
+ * reemplaza esta función por el camino de verdad. Quien recarga vuelve a Ganaste.
+ */
+export function pintarEntrega(raizPrincipal: HTMLElement, deps: DepsDelCelular): void {
+  const raiz = seccion(raizPrincipal, "#cmp-estado", "cmp-estado cmp-entrega cmp-solo");
+  if (!raiz) return;
+  const hero = caja("cmp-izq cmp-hero");
+  hero.append(llama());
+  titulo(hero, deps.tx("cpEntregaT"));
+  parrafo(hero, deps.tx("cpEntregaL"), "cmp-apoyo");
+  raiz.append(hero);
 }
 
 /** La salida de la lista siempre explica el motivo que informó la sala. */

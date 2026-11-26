@@ -10,7 +10,7 @@
  * para que quien llama los use en memoria. Nada del token, del correo ni del identificador va a un registro, y el motivo
  * de un rechazo es siempre uno de una lista corta y fija. Nunca lanza.
  */
-import { deB64url } from "./firma";
+import { aB64url, deB64url } from "./firma";
 
 /** Donde Google publica las llaves públicas con las que firma los tokens de identidad. */
 export const URL_DE_LLAVES_DE_GOOGLE = "https://www.googleapis.com/oauth2/v3/certs";
@@ -79,8 +79,8 @@ const RECUERDO_MAXIMO_MS = 24 * 3_600_000;
  */
 const ESPERA_ENTRE_PEDIDOS_MS = 30_000;
 /**
- * Si Google no contesta, tampoco se le pide en cada token. Con llaves vigentes rige la espera larga: quien trae una llave
- * conocida no se entera. Sin llaves se espera poco, porque nadie entra mientras tanto.
+ * Si Google no contesta, tampoco se le pide en cada token. Con llaves recordadas, vigentes o vencidas, rige la espera larga:
+ * quien trae una llave conocida no se entera. Sin llaves se espera poco, porque nadie entra mientras tanto.
  */
 const ESPERA_TRAS_FALLO_SIN_LLAVES_MS = 3_000;
 const MAX_LARGO_TOKEN = 6_000;
@@ -182,16 +182,53 @@ async function pedirLlaves(memoria: MemoriaDeLlaves, pedir: PedirLlaves, ahora: 
   }
 }
 
+/** Cuánto se espera al pedido compartido más allá del corte propio del pedido, por si el reloj de ese pedido murió. */
+const MARGEN_DEL_PEDIDO_COMPARTIDO_MS = 500;
+/**
+ * Con Google sin contestar, las llaves recordadas siguen sirviendo hasta tanto después de su vencimiento. Google rota sus
+ * llaves con días de solape, así que las anteriores firman bien todavía, y el token se sigue comprobando entero.
+ */
+const VIDA_DE_LLAVES_VENCIDAS_MS = 6 * 3_600_000;
+
+/**
+ * Espera el pedido en vuelo con un reloj propio. El corte del pedido vive en la conexión que lo lanzó: si esa conexión se
+ * cancela, su reloj y su pedido pueden morir sin resolver la promesa, y quien espera detrás se quedaría para siempre. Si
+ * gana el reloj de quien espera, el pedido se suelta de la memoria y cuenta como fallido. Nunca lanza.
+ */
+async function esperarPedido(memoria: MemoriaDeLlaves, pedido: Promise<boolean>, ahora: () => number, tiempoMaxMs: number): Promise<boolean> {
+  let reloj: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const tope = new Promise<null>((resolve) => {
+      reloj = setTimeout(() => resolve(null), tiempoMaxMs + MARGEN_DEL_PEDIDO_COMPARTIDO_MS);
+    });
+    const resultado = await Promise.race([pedido, tope]);
+    if (resultado === null) {
+      if (memoria.enCurso === pedido) memoria.enCurso = null;
+      memoria.fallo = ahora();
+      return false;
+    }
+    return resultado;
+  } catch {
+    return false;
+  } finally {
+    if (reloj !== undefined) clearTimeout(reloj);
+  }
+}
+
 /**
  * La llave de `kid`, de la memoria o pedida a Google, y a lo sumo un pedido por verificación. Devuelve la llave, `null` si
  * Google no tiene esa llave o `"no-disponible"` si no se pudieron conseguir las llaves.
  *
  * Los pedidos en vuelo se comparten entre quienes verifican a la vez: en un Worker, el pedido que quedó atrás por un corte
- * de otra conexión da un rechazo para todos, y el siguiente intento lo repite.
+ * de otra conexión da un rechazo para todos, y el siguiente intento lo repite. Quien espera un pedido ajeno tiene su propio
+ * reloj. Si Google no contesta, las llaves recordadas que ya vencieron se siguen usando por unas horas.
  */
 async function llaveDe(kid: string, memoria: MemoriaDeLlaves, pedir: PedirLlaves, ahora: () => number, tiempoMaxMs: number): Promise<CryptoKey | null | "no-disponible"> {
   const hora = ahora();
-  const vigente = memoria.llaves.size > 0 && hora < memoria.vence;
+  const hayLlaves = memoria.llaves.size > 0;
+  const vigente = hayLlaves && hora < memoria.vence;
+  // Las llaves vencidas que Google no pudo renovar: sirven la llave conocida y nunca dan por inexistente a una desconocida.
+  const deRespaldo = (): CryptoKey | "no-disponible" => (hayLlaves && hora < memoria.vence + VIDA_DE_LLAVES_VENCIDAS_MS ? memoria.llaves.get(kid) : undefined) ?? "no-disponible";
   if (vigente) {
     const hay = memoria.llaves.get(kid);
     if (hay) return hay;
@@ -199,17 +236,20 @@ async function llaveDe(kid: string, memoria: MemoriaDeLlaves, pedir: PedirLlaves
     // como bueno o como fallido.
     if (hora - memoria.pedidas < ESPERA_ENTRE_PEDIDOS_MS) return null;
     if (memoria.fallo !== null && hora - memoria.fallo < ESPERA_ENTRE_PEDIDOS_MS) return null;
-  } else if (memoria.enCurso === null && memoria.fallo !== null && hora - memoria.fallo < ESPERA_TRAS_FALLO_SIN_LLAVES_MS) {
-    return "no-disponible";
+  } else if (memoria.enCurso === null && memoria.fallo !== null && hora - memoria.fallo < (hayLlaves ? ESPERA_ENTRE_PEDIDOS_MS : ESPERA_TRAS_FALLO_SIN_LLAVES_MS)) {
+    // Con llaves de respaldo quien trae una llave conocida no espera a Google y se le pide poco. Sin llaves, nadie entra.
+    return deRespaldo();
   }
-  if (memoria.enCurso === null) {
-    const pedido = pedirLlaves(memoria, pedir, ahora, tiempoMaxMs).finally(() => {
+  let enVuelo = memoria.enCurso;
+  if (enVuelo === null) {
+    const pedido: Promise<boolean> = pedirLlaves(memoria, pedir, ahora, tiempoMaxMs).finally(() => {
       if (memoria.enCurso === pedido) memoria.enCurso = null;
     });
     memoria.enCurso = pedido;
+    enVuelo = pedido;
   }
-  const quedaron = await memoria.enCurso;
-  if (!quedaron) return "no-disponible";
+  const quedaron = await esperarPedido(memoria, enVuelo, ahora, tiempoMaxMs);
+  if (!quedaron) return vigente ? "no-disponible" : deRespaldo();
   return memoria.llaves.get(kid) ?? null;
 }
 
@@ -244,6 +284,9 @@ async function verificar(token: string, opciones: OpcionesDeIdentidad): Promise<
   // El algoritmo lo fija la sala, no el token: cualquier otro, incluido `none`, se rechaza sin pedir llaves.
   if (cabecera.alg !== "RS256") return rechazo("firma");
   if (f === "") return rechazo("firma");
+  // La firma tiene una sola escritura: el último carácter de una firma de 256 bytes lleva cuatro bits que sobran y el decodificador
+  // los acepta con cualquier valor. Sin esta comprobación un mismo token tendría hasta dieciséis textos y cada uno una ficha propia.
+  if (aB64url(deB64url(f)) !== f) return rechazo("mal-formado");
 
   const ahora = opciones.ahora ?? Date.now;
   const llave = await llaveDe(kid, opciones.memoria ?? memoriaDelWorker, opciones.pedir ?? ((url, init) => fetch(url, init)), ahora, opciones.tiempoMaxMs ?? TIEMPO_MAX_LLAVES_MS);

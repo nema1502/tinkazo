@@ -269,6 +269,71 @@ vaya a rechazar (un `sorteo_ms` que falta, un enlace de red que no es de esa red
 llave privada dentro del repositorio, ni en la copia principal cuando se corre desde una copia de trabajo anidada, ni por un
 enlace simbólico o una junction.
 
+### Campañas de personas: anotarse sin billetera
+
+Quien solo se anota en una campaña no necesita una billetera. Una campaña lo pide con `"identidad": "persona"` en su texto
+firmado. Solo el valor exacto `"persona"` la vuelve de personas. Sin el campo, con `"cuenta"` o con cualquier otra cosa (un valor
+nulo, otro texto) la campaña es la de siempre y ninguna ruta cambia: la sala lee el texto como lo leía antes de que existiera el
+campo, y un campo que no conoce no lo cambia.
+
+Nacen apagadas. Hacen falta dos variables en `wrangler.toml`: `DIFERIDA` en `"1"` y un `GOOGLE_CLIENT_ID` (el identificador de
+cliente de Google de Tinkazo, que es público). Si falta una, crear una campaña de personas da `503 personas-apagadas`, activarla
+al pagar da `400 forma` con el campo `identidad`, y el alta de una ya creada da `503 personas-apagadas`. La consulta propia sigue
+andando (es de solo lectura): apagar el modo en pleno evento no deja a quien ya se anotó sin saber si ganó.
+La sala guarda el modo en la clave `identidad` de la sala, solo en esas campañas.
+
+- **El alta** es `POST /v1/sala/<id>/campana/alta` con `{"google","d","llave","p"?}`. `google` es el token de identidad que
+  entrega el botón de Google, y la sala lo verifica sola con `identidad-google.ts`: firma contra las llaves públicas de Google,
+  emisor, audiencia igual al `GOOGLE_CLIENT_ID`, caducidad y correo verificado. No le pregunta nada al proveedor de cuentas y
+  nunca contesta `sin-billetera`. Valen los mismos topes, el mismo pase del QR, el mismo cupo, la misma fase y el mismo cierre por
+  hora que en una campaña de cuentas. Un token rechazado da `401 sesion` y suma a los rechazos de su ficha y a un contador propio de
+  la conexión, de mil por ventana de diez minutos, muy por encima de las 150 personas de un salón. Nunca suma al tope de la
+  conexión de cuentas (300), que es de todo el salón detrás de la misma red. Pasado el tope de mil, la sala no frena a nadie: el
+  Worker verifica el token primero, que es local, y contesta `401 sesion` a los falsos sin llamar a la sala ni escribir una fila más.
+  Quien trae un token bueno entra igual que antes, aunque comparta red con quien manda los falsos. El aviso de que la conexión
+  pasó el tope vive solo en la memoria del Worker, que nunca se escribe, con una clave que es una huella con una sal que el Worker
+  inventa al arrancar: no queda ninguna dirección. Se renueva con cada respuesta de la sala. Un token bien firmado por Google pero
+  hecho para otra aplicación (el `GOOGLE_CLIENT_ID` de la sala no es el del sitio) da `503 personas-configuracion` y suma como
+  cualquier otro token que no sirve, a su ficha y al contador propio de la conexión, así que quien los fabrica con una aplicación
+  suya se frena solo. Con la conexión apurada se contesta sin llamar a la sala. Quien trae un token bueno entra igual. El celular
+  dice que el sorteo no abre desde ahí. Google sin
+  contestar da `502 google` y no suma. Si Google no contesta, las llaves ya recordadas siguen sirviendo hasta seis horas después
+  de su vencimiento. La respuesta es `201 {"anotada":true}` o, si la misma cuenta de Google ya
+  estaba, `200 {"anotada":true,"ya":true}`: no lleva la línea de la persona ni nada que la identifique.
+- **Una entrada por persona.** La misma cuenta de Google no se anota dos veces en la misma campaña, tampoco desde otro celular:
+  la sala la reconoce por su línea, el celular nuevo pasa a ser el suyo y recibe `ya`.
+- **Lo que se sella.** En la fila de la lista va la línea de la persona (`linea-persona.ts`, ver `docs/premios.md`) en la misma
+  columna donde una campaña de cuentas guarda su cuenta. La lista sale igual que siempre: sin repetidas, ordenada como texto,
+  una línea por fila. Quitar a alguien, cerrar, sellar, sortear y el resultado andan igual, y el resultado nombra a quienes
+  ganaron por su línea. Quien organiza marca el aviso de una ganadora por su línea (`campana/avisar` con `{"cuenta":"p1:..."}`),
+  y la sala solo acepta una línea en una campaña de personas.
+- **Saber si estoy anotada.** El celular no tiene cuenta que mandar: `POST campana/yo` con `{"llave"}` sola. La sala busca la fila
+  que anotó esa llave y contesta lo mismo que con una cuenta y su llave. Quien no tiene la llave de una fila no ve nada de esa
+  fila. En una campaña de cuentas, un pedido sin `cuenta` sigue siendo `400 forma`. Lo mismo en una sala que no existe (cerrada,
+  vencida o que nunca se creó): el alta con `google`, la consulta propia con la llave sola y el aviso por una línea dan `400 forma`,
+  que es lo que daban en toda sala de hoy antes del modo. Desde afuera no se distingue una sala de personas que se cerró de una que
+  nunca existió, y el celular sale por el estado público, que da `404 no-existe`.
+- **Comprobación antes de un evento.** `GET /v1/personas/estado` contesta `{"prendido","cliente"}`: si las dos variables están
+  puestas y cuál es el `GOOGLE_CLIENT_ID` de la sala. Tiene que ser el mismo que `VITE_GOOGLE_CLIENT_ID` del sitio: si no, nadie
+  entra. El identificador es público.
+- **Lo que no se guarda.** Ni el correo, ni el identificador de Google, ni el token quedan en una tabla, en una respuesta pública
+  o en el registro: del token solo sale la línea, que viene de un HMAC con la sal de la sala. El registro lleva el motivo de un
+  rechazo (`google-rechazado`), nunca el token.
+- **El correo a quien gana no se manda** en estas campañas, y el estado público lo dice con `"correo": false`. La línea no dice a
+  quién escribir y la sala no guarda ningún dato que lo diga. Avisar por correo, y el reclamo del premio, son de otra etapa.
+- **Límite de este modo, a resolver antes de prenderlo en un evento con premios.** Quien gana y cierra la página no recibe ningún
+  aviso: se entera solo si su celular sigue abierto y consulta con su llave, o si quien organiza lo ve en su pantalla. Además la
+  línea sale de la sal de la sala, y esa sal se borra con ella a las 24 horas de crearla: pasado ese plazo nada permite volver de
+  una línea ganadora a una persona. Avisar a quien ya cerró la página exige guardar un dato que lleve de vuelta a la persona,
+  aunque sea cifrado y hasta el fin del reclamo, y eso choca con la regla de no guardar nada que la identifique. Reclamar el premio
+  exige además que la sala siga viva mientras dure el reclamo. Esta etapa no hace ninguna de las dos cosas a propósito. Mientras no
+  se decida cómo se entera quien gana, `DIFERIDA` queda en `"0"` en los eventos con premios.
+- **El interruptor apagado en medio de un evento** no toca lo que ya está anotado: la sala sigue mostrando el estado, el panel de
+  quien organiza sigue cerrando, sellando y guardando el resultado. Solo dejan de andar el alta y la consulta propia.
+
+La prueba `src/sala/campana-paridad-cuenta.test.ts` compara cada ruta de una campaña de cuentas, con sus cabeceras y su cuerpo,
+contra un archivo grabado con la sala de antes de este modo. `src/sala/campana-persona.test.ts` prueba el modo nuevo.
+
 ### Activar una campaña al pagar (`POST /v1/activar`)
 
 Hasta ahora una campaña solo nacía si Tinkazo firmaba su archivo a mano con la llave de siempre. La activación al pagar deja que

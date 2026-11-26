@@ -16,6 +16,7 @@ import { direccionDelPanel } from "./campana/direccion-del-panel";
 import { comisionDelBuild } from "./stellar/comision-config";
 import { comisionDelArmado } from "./campana/crear/costo";
 import { entornoDelBuild } from "./stellar/venta-piloto";
+import { anotarseSinBilleteraActivo } from "./campana/persona-bandera";
 
 const raiz = document.querySelector<HTMLElement>("#ccp");
 const aviso = document.querySelector<HTMLElement>("#ccp-aviso");
@@ -103,6 +104,8 @@ function depsReales(): DepsDelCreador {
     comision: comisionDelArmado(cobro),
     origen: location.origin,
     tema: parametros.get("theme"),
+    // Anotarse sin billetera: solo con el interruptor del sitio y el parámetro en la dirección. Sin los dos, la campaña de siempre.
+    ...(anotarseSinBilleteraActivo() && parametros.get("identidad") === "persona" ? { identidad: "persona" as const } : {}),
     cuadro: (f) => {
       if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => f());
       else window.setTimeout(f, 16);

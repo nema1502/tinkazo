@@ -72,6 +72,21 @@ export function llaveDelCelular(sala: string, almacen: Pick<Storage, "getItem" |
   return llave;
 }
 
+/**
+ * Suelta la llave de este celular para una sala: la próxima vez que se pida, sale una nueva. Es lo que hace quien dice que
+ * este celular no es suyo en una campaña sin cuenta, donde la llave es lo único que une al celular con una anotación.
+ */
+export function olvidarLlaveDelCelular(sala: string, almacen: Pick<Storage, "getItem" | "setItem"> = localStorage): void {
+  try {
+    const x = JSON.parse(almacen.getItem(CLAVE_LLAVES) ?? "[]") as unknown;
+    if (!Array.isArray(x)) return;
+    const resto = x.filter((e): e is [string, string] => Array.isArray(e) && typeof e[0] === "string" && typeof e[1] === "string" && e[0] !== sala);
+    almacen.setItem(CLAVE_LLAVES, JSON.stringify(resto));
+  } catch {
+    /* sin almacenamiento o con algo roto: no hay nada que soltar */
+  }
+}
+
 /** El premio con que se sugiere el primer sorteo del equipo. */
 export const PREMIO_SUGERIDO = "¿Quién presenta primero?";
 

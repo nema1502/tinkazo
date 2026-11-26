@@ -27,6 +27,13 @@ vi.mock("../../workers/sala/src/cadena", () => ({ leerSorteoEnLaRed: async () =>
  * Si una respuesta cambia, aunque sea una cabecera, esta prueba falla.
  *
  * Para volver a grabar el archivo, solo contra el código de la rama principal: `GRABAR_PARIDAD=1`.
+ *
+ * Cómo se comprueba de dónde sale lo grabado: se saca el código de un commit de la rama principal a una carpeta aparte
+ * (`git archive <commit> src workers docs package.json tsconfig.json vite.config.ts`), se copia esta prueba a `src/sala`, se
+ * enlazan las dependencias y se corre con `GRABAR_PARIDAD=1`. El archivo que sale en esa carpeta se compara con este, sin contar
+ * los fines de línea. El 25 de noviembre de 2026 se regrabó así desde el estado actual de la rama principal (691885bd) y desde el
+ * punto donde nació esta rama (e7ab071d): las dos veces salió igual, byte por byte, a este archivo (SHA-256
+ * 6a85d381191d35a0c58ec40f48de284d2409065bc6c2b6ee17ffb2c81a1dfd9a, con fines de línea LF). Por eso no depende de esta rama.
  */
 const AHORA = Date.UTC(2026, 10, 25, 15, 0, 0);
 const RONDA = 40_000_000;
@@ -127,8 +134,10 @@ async function recorrido(mundo: MundoDeSala, conPase: boolean): Promise<string[]
   await rastro.ver("crear: sin premios", await mundo.pedir("/v1/campana", { cuerpo: archivo({ premios: [] }) }));
   await rastro.ver("crear: GET", await mundo.pedir("/v1/campana", { metodo: "GET" }));
   const buena = await mundo.pedir("/v1/campana", { cuerpo: archivo() });
-  const creada = JSON.parse(await rastro.ver("crear: buena", buena.clone())) as { id: string; token: string };
+  const creada = (await buena.clone().json()) as { id: string; token: string };
+  // El id y el token cambian en cada corrida: se conocen antes de anotar la respuesta para que salgan con un nombre fijo.
   rastro.conocer({ id: creada.id, token: creada.token });
+  await rastro.ver("crear: buena", buena);
   await rastro.ver("crear: repetida", await mundo.pedir("/v1/campana", { cuerpo: archivo() }));
   const id = creada.id;
   const auth = { Authorization: `Bearer ${creada.token}` };
@@ -246,7 +255,8 @@ async function recorrido(mundo: MundoDeSala, conPase: boolean): Promise<string[]
   // Cerrar y sellar.
   await rastro.ver("fase: cerrar", await mundo.pedir(sala("/campana/fase"), { metodo: "PUT", cuerpo: { fase: "cerrada" }, cabeceras: auth }));
   await alta("alta: con la lista cerrada", celular(persona(mundo, 12)));
-  await quitar("quitar: con la lista cerrada", { n: 5, motivo: "otro" });
+  // La cuarta fila es la de la sesión sin cuenta que el proveedor sí conocía: queda afuera y la lista es la de cuatro.
+  await quitar("quitar: con la lista cerrada", { n: 4, motivo: "otro" });
   await rastro.ver("fase: reabrir", await mundo.pedir(sala("/campana/fase"), { metodo: "PUT", cuerpo: { fase: "abierta", cierraMs: AHORA + 7_200_000 }, cabeceras: auth }));
   await alta("alta: eli reabierta", celular(eli));
   await rastro.ver("fase: cerrar de nuevo", await mundo.pedir(sala("/campana/fase"), { metodo: "PUT", cuerpo: { fase: "cerrada" }, cabeceras: auth }));
@@ -366,7 +376,7 @@ async function recorridoDelCorreo(mundo: MundoDeSala): Promise<string[]> {
   lectura.valor = { sello: { ...sello, sorteado: true }, ganadores: [2, 0] };
   await rastro.ver("correo: resultado", await mundo.pedir(sala("/campana/resultado"), { metodo: "PUT", cuerpo: { sorteo: SORTEO, comprobante: COMPROBANTE }, cabeceras: auth }));
   await mundo.esperarSegundoPlano();
-  rastro.nota("correo: búsquedas", mundo.proveedor.busquedas);
+  rastro.nota("correo: búsquedas", [...mundo.proveedor.busquedas].sort());
   rastro.nota("correo: enviados", enviados.map((m) => ({ to: m.to, subject: m.subject })).sort((a, b) => (a.to < b.to ? -1 : 1)));
   rastro.nota("correo: marcas", foto(mundo, id));
   await rastro.ver("correo: yo", await mundo.pedir(sala("/campana/yo"), { cuerpo: { cuenta: orden[2], llave: gente.find((p) => p.cuenta === orden[2])?.llave } }));
@@ -411,6 +421,23 @@ describe("el modo cuenta responde igual que la rama principal", () => {
       antes.forEach((linea, i) => expect(ahoraDe[i], `${recorrida}, paso ${i}`).toBe(linea));
     }
     expect(Object.keys(ahora).sort()).toEqual(Object.keys(base).sort());
+  }, 120_000);
+
+  it("con los interruptores de personas prendidos, que es como queda producción, una campaña de cuentas responde lo mismo", async () => {
+    if (process.env.GRABAR_PARIDAD === "1") return;
+    const prendidos = { DIFERIDA: "1", GOOGLE_CLIENT_ID: "cliente-de-prueba.apps.example.org" };
+    const base = JSON.parse(readFileSync(BASE, "utf8")) as Record<string, string[]>;
+    const ahora: Record<string, string[]> = {
+      sinPase: await recorrido(await montarMundo(prendidos), false),
+      conPase: await recorrido(await montarMundo({ ...prendidos, PASE: "1" }), true),
+      correo: await recorridoDelCorreo(await montarMundo({ ...prendidos, CORREO_GANADORAS: "1", CORREO_DE: "sorteos@example.org" })),
+    };
+    for (const recorrida of Object.keys(base)) {
+      const antes = base[recorrida] as string[];
+      const ahoraDe = ahora[recorrida] ?? [];
+      expect(ahoraDe.length, `${recorrida}: cantidad de pasos`).toBe(antes.length);
+      antes.forEach((linea, i) => expect(ahoraDe[i], `${recorrida}, paso ${i}`).toBe(linea));
+    }
   }, 120_000);
 
   it("el recorrido grabado tiene de verdad respuestas de todas las rutas", () => {

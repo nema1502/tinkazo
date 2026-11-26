@@ -96,6 +96,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm build
+      # La página del celular la abren 150 teléfonos con datos: su peso tiene tope (scripts/lib/peso-participar.mjs).
+      - name: Peso de la página del celular
+        run: node scripts/peso-participar.mjs
       # Las tarjetas de historia afirman hechos con fuente primaria. Una fuente
       # caída es un dato inventado a los seis meses, así que se comprueba acá.
       - name: Fuentes de las tarjetas de historia

@@ -169,6 +169,21 @@ describe("lo que se rechaza", () => {
     }
   });
 
+  it("una firma con bits sobrantes distintos de cero no es canónica: mal formado, y el token bueno sigue entrando", async () => {
+    const b = banco();
+    const t = await firmar();
+    expect((await verificarIdentidadDeGoogle(t, b.opciones)).ok).toBe(true);
+    // La firma de 256 bytes son 342 letras y la última lleva cuatro bits que sobran: cambiarlos no cambia los bytes.
+    const alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const ultima = t.at(-1) as string;
+    for (const salto of [1, 2, 4, 8]) {
+      const otra = alfabeto[alfabeto.indexOf(ultima) ^ salto] as string;
+      expect(otra).not.toBe(ultima);
+      const distinto = `${t.slice(0, -1)}${otra}`;
+      expect(await verificarIdentidadDeGoogle(distinto, b.opciones), `salto ${salto}`).toEqual({ ok: false, motivo: "mal-formado" });
+    }
+  });
+
   it("un token vencido: vencido", async () => {
     const b = banco();
     const t = await firmar({ payload: { exp: AHORA / 1000 - 1 } });
@@ -484,12 +499,58 @@ describe("cuando las llaves no están disponibles", () => {
     expect((await verificarIdentidadDeGoogle(await firmar({ par: google2, payload: { exp: b.reloj.ms / 1000 + 100 } }), b.opciones)).ok).toBe(true);
   });
 
-  it("si las llaves ya recordadas no sirven y Google no contesta, no se acepta nada", async () => {
+  it("con las llaves vencidas y Google caído, las llaves viejas siguen sirviendo a quien trae una llave conocida", async () => {
+    const b = banco([google], "public, max-age=60");
+    await verificarIdentidadDeGoogle(await firmar(), b.opciones);
+    b.reloj.ms += 120_000;
+    let pedidos = 0;
+    const o = { ...b.opciones, pedir: async (): Promise<RespuestaDeLlaves> => { pedidos++; throw new Error("sin red"); } };
+    const nuevoToken = (): Promise<string> => firmar({ payload: { exp: b.reloj.ms / 1000 + 100 } });
+    expect((await verificarIdentidadDeGoogle(await nuevoToken(), o)).ok).toBe(true);
+    // Mientras Google no contesta no se le pide en cada token.
+    for (let i = 0; i < 10; i++) expect((await verificarIdentidadDeGoogle(await nuevoToken(), o)).ok).toBe(true);
+    expect(pedidos).toBe(1);
+  });
+
+  it("con las llaves vencidas y Google caído, una llave desconocida no entra: llaves-no-disponibles", async () => {
     const b = banco([google], "public, max-age=60");
     await verificarIdentidadDeGoogle(await firmar(), b.opciones);
     b.reloj.ms += 120_000;
     const o = { ...b.opciones, pedir: async () => { throw new Error("sin red"); } };
+    expect(await verificarIdentidadDeGoogle(await firmar({ par: google2, payload: { exp: b.reloj.ms / 1000 + 100 } }), o)).toEqual(motivo);
+  });
+
+  it("las llaves viejas sirven un tiempo limitado: pasadas seis horas del vencimiento, no se acepta nada", async () => {
+    const b = banco([google], "public, max-age=60");
+    await verificarIdentidadDeGoogle(await firmar(), b.opciones);
+    const o = { ...b.opciones, pedir: async () => { throw new Error("sin red"); } };
+    b.reloj.ms += 60_000 + 5 * 3_600_000;
+    expect((await verificarIdentidadDeGoogle(await firmar({ payload: { exp: b.reloj.ms / 1000 + 100 } }), o)).ok).toBe(true);
+    b.reloj.ms += 2 * 3_600_000;
     expect(await verificarIdentidadDeGoogle(await firmar({ payload: { exp: b.reloj.ms / 1000 + 100 } }), o)).toEqual(motivo);
+  });
+
+  it("si Google vuelve con las llaves vencidas, se renuevan y todo sigue igual", async () => {
+    const b = banco([google], "public, max-age=60");
+    await verificarIdentidadDeGoogle(await firmar(), b.opciones);
+    b.reloj.ms += 120_000;
+    b.publicar([google2]);
+    expect((await verificarIdentidadDeGoogle(await firmar({ par: google2, payload: { exp: b.reloj.ms / 1000 + 100 } }), b.opciones)).ok).toBe(true);
+    expect(b.pedidos()).toBe(2);
+  });
+
+  it("un pedido compartido que nunca contesta no deja colgado a nadie más: el segundo verificador termina", async () => {
+    const b = banco();
+    // El pedido de otra conexión quedó en vuelo y su reloj murió con ella: la promesa no se resuelve nunca.
+    b.opciones.memoria!.enCurso = new Promise<boolean>(() => {});
+    const o: OpcionesDeIdentidad = { ...b.opciones, tiempoMaxMs: 30 };
+    const t0 = Date.now();
+    expect(await verificarIdentidadDeGoogle(await firmar(), o)).toEqual(motivo);
+    expect(Date.now() - t0).toBeLessThan(2000);
+    // Y la memoria se libera: el siguiente intento, pasada la espera corta, vuelve a pedir y entra.
+    expect(b.opciones.memoria!.enCurso).toBeNull();
+    b.reloj.ms += 5_000;
+    expect((await verificarIdentidadDeGoogle(await firmar(), o)).ok).toBe(true);
   });
 
   it("ignora las llaves rotas de la lista y usa las buenas", async () => {

@@ -192,6 +192,16 @@ export async function miEstado(
   correoConfirmado = false,
 ): Promise<EstadoPropio | "red" | "terminada"> {
   const cuerpo = JSON.stringify(correoConfirmado ? { cuenta, llave, c: true } : { cuenta, llave });
+  return consultarYo(servicio, sala, cuerpo, dep);
+}
+
+/** El pedido de `yo` con su cuerpo ya escrito, y la lectura de lo que contesta la sala. Lo comparten las dos formas de campaña. */
+export async function consultarYo(
+  servicio: string,
+  sala: string,
+  cuerpo: string,
+  dep: Dependencias = {},
+): Promise<EstadoPropio | "red" | "terminada"> {
   const r = await pedir(dep, direccionDe(servicio, sala, "/yo"), { method: "POST", body: cuerpo }, TOPE_PEDIDO_MS);
   if (!r) return "red";
   if (r.estado === 404) return "terminada";
@@ -212,19 +222,21 @@ export async function resultadoDeCampana(
   servicio: string,
   sala: string,
   dep: Dependencias = {},
+  /** Qué forma tiene cada ganadora: una cuenta, o una línea de persona en las campañas de personas. */
+  valida: (x: unknown) => boolean = cuentaValida,
 ): Promise<{ ganadoras: string[]; comprobante: string | null } | null | "red" | "terminada"> {
   const r = await pedir(dep, direccionDe(servicio, sala, "/resultado"), { method: "GET" }, TOPE_PEDIDO_MS);
   if (!r) return "red";
   const c = r.cuerpo;
   if (r.estado === 404) return esObjeto(c) && c.error === "sin-resultado" ? null : "terminada";
-  if (r.estado !== 200 || !esObjeto(c) || !Array.isArray(c.ganadoras) || !c.ganadoras.every(cuentaValida)) return "red";
+  if (r.estado !== 200 || !esObjeto(c) || !Array.isArray(c.ganadoras) || !c.ganadoras.every((g) => valida(g))) return "red";
   const comprobante = typeof c.comprobante === "string" && c.comprobante.startsWith("/verificar.html") ? c.comprobante : null;
-  return { ganadoras: [...c.ganadoras], comprobante };
+  return { ganadoras: [...(c.ganadoras as string[])], comprobante };
 }
 
 type Familia = keyof typeof ESPERAS_MS;
 
-type Lectura =
+export type Lectura =
   | { tipo: "listo"; cuenta: string; ya: boolean }
   | { tipo: "final"; motivo: MotivoDeAlta; porRechazos?: true }
   | { tipo: "otra-vez"; familia: Familia; aviso: "mucha" | "creando"; alFinal: "wifi" | "cuentas" | "proveedor" };
@@ -237,7 +249,7 @@ const delProveedor: Lectura = { tipo: "otra-vez", familia: "pollar", aviso: "muc
  * no dice con su forma (un 500 o un 503 con texto o con una página, que contesta la plataforma cuando el objeto de la sala
  * se reinicia o está lleno) es pasajero: el alta se puede repetir sin riesgo, porque la sala contesta `ya`.
  */
-function leerAlta(estado: number, cuerpo: unknown): Lectura {
+export function leerAlta(estado: number, cuerpo: unknown): Lectura {
   const error = esObjeto(cuerpo) && typeof cuerpo.error === "string" ? cuerpo.error : null;
   if (estado === 201 || estado === 200) {
     const cuenta = esObjeto(cuerpo) ? cuerpo.cuenta : undefined;
@@ -307,6 +319,23 @@ export async function anotarmeEnCampana(
   alReintentar: (aviso: "mucha" | "creando") => void = () => undefined,
   opciones: OpcionesDeAlta = {},
 ): Promise<AltaEnCampana> {
+  const cuerpoJson = JSON.stringify({ token: cuerpo.token, d: cuerpo.d, llave: cuerpo.llave, p: cuerpo.p });
+  return anotarConLector(servicio, sala, cuerpoJson, leerAlta, dep, alReintentar, opciones);
+}
+
+/**
+ * El alta con sus reintentos, para cualquier forma de campaña: lo único que cambia es el cuerpo que se manda y cómo se lee lo
+ * que contesta la sala (`leer`). Las esperas, los topes y el cuidado de no repetir un toque son los mismos.
+ */
+export async function anotarConLector(
+  servicio: string,
+  sala: string,
+  cuerpoJson: string,
+  leer: (estado: number, cuerpo: unknown) => Lectura,
+  dep: DependenciasDeCampana = {},
+  alReintentar: (aviso: "mucha" | "creando") => void = () => undefined,
+  opciones: OpcionesDeAlta = {},
+): Promise<AltaEnCampana> {
   const ahora = dep.ahora ?? ((): number => Date.now());
   const azar = dep.azar ?? Math.random;
   const inicio = opciones.inicio ?? ahora();
@@ -314,7 +343,6 @@ export async function anotarmeEnCampana(
   const anterior = sosiego?.finalDeFamiliaEn ?? null;
   const sosegado = anterior !== null && ahora() - anterior < SOSIEGO_MS;
   const url = direccionDe(servicio, sala, "/alta");
-  const cuerpoJson = JSON.stringify({ token: cuerpo.token, d: cuerpo.d, llave: cuerpo.llave, p: cuerpo.p });
   const pasoElToque = (): boolean => ahora() - inicio >= TOPE_TOQUE_MS;
   const terminar = (resultado: AltaEnCampana, deFamilia: boolean): AltaEnCampana => {
     if (sosiego) sosiego.finalDeFamiliaEn = deFamilia ? ahora() : null;
@@ -333,7 +361,7 @@ export async function anotarmeEnCampana(
       if (pasoElToque()) return terminar({ ok: false, motivo: "red" }, false);
       continue;
     }
-    const lectura = leerAlta(r.estado, r.cuerpo);
+    const lectura = leer(r.estado, r.cuerpo);
     if (lectura.tipo === "listo") {
       return terminar({ ok: true, cuenta: lectura.cuenta, ya: lectura.ya && !sinRespuesta }, false);
     }
