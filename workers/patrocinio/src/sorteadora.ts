@@ -8,6 +8,8 @@
  *        409 {motivo:"ronda-no-lista", reintentarEn}
  *        503 {motivo:"fondo"|"apagado"}   502 {motivo:"red"}   429 {motivo:"cupo-cuenta"|"cupo-ip"}
  *        503 {motivo:"ocupado"}: la sorteadora estaba con otro sorteo. No reservó, firmó ni mandó nada, y no lo va a mandar.
+ *        503 {motivo:"tarde"}: el pedido ya llevaba más de `EDAD_MAXIMA_DEL_PEDIDO_MS` desde que llegó. Lo mismo que ocupado,
+ *        pero la causa es del servicio: su red anduvo lenta.
  *
  * La sorteadora atiende un sorteo a la vez y no hace cola: un pedido admitido nunca espera detrás de otro, así que el
  * tiempo de respuesta lo ponen sus propias llamadas a la red.
@@ -36,6 +38,12 @@ export const REINTENTAR_RONDA_MS = 5_000;
 export const INCLUSION_INTERNA = 100;
 /** Cuánto vale el `draw` armado por el servidor, en segundos. */
 export const VENTANA_SORTEO_S = 240;
+/**
+ * Lo más que puede llevar un pedido de sorteo, desde que llegó, para que el servicio empiece a mandarlo. El sitio espera la
+ * respuesta 20 s (dos pedidos de 10 s que se suman al mismo trabajo). Después de la última mirada falta mandar: con el
+ * primer RPC colgado son sus 8 s de tope más lo que tarda el segundo. Nueve más nueve deja unos 2 s para la ida y la vuelta.
+ */
+export const EDAD_MAXIMA_DEL_PEDIDO_MS = 9_000;
 /**
  * Después de que la red toma un `draw` (PENDING), la sorteadora sigue ocupada hasta que entre: Stellar Core guarda una
  * sola transacción pendiente por cuenta de origen (desde el protocolo 19), y la siguiente vuelve con TRY_AGAIN_LATER.

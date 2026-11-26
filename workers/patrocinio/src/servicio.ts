@@ -32,7 +32,7 @@ import { type Autoridad, esCuenta, evaluar } from "./lista-blanca";
 import type { Planes } from "./plan";
 import { type Consulta, type CuentaEnRed, ErrorDeRed, type Red } from "./red";
 import { selloQueEntroTarde } from "./sello-tarde";
-import { CODIGO_RONDA_NO_LISTA, CODIGO_YA_SORTEADO, REINTENTAR_RONDA_MS, type Sorteadora, VENTANA_SORTEO_S, leerFirma, leerNumeroDeSorteo, leerSorteo } from "./sorteadora";
+import { CODIGO_RONDA_NO_LISTA, CODIGO_YA_SORTEADO, EDAD_MAXIMA_DEL_PEDIDO_MS, REINTENTAR_RONDA_MS, type Sorteadora, VENTANA_SORTEO_S, leerFirma, leerNumeroDeSorteo, leerSorteo } from "./sorteadora";
 
 export type Modo = "portero" | "pollar" | "apagado";
 
@@ -424,10 +424,10 @@ export class Portero {
    *      pagado el portero (una fila de `sellos_portero` con el mismo organizador, huella y ronda): si no, 403;
    *   2. ya sorteado, `{ya:true}`; ya pedido y en camino, el mismo hash;
    *   3. simula el `draw`: ahí el contrato comprueba la firma, así que una que no pasa da 400 sin reservar ni pagar nada;
-   *   4. la admisión: si la sorteadora está con otro sorteo, `503 ocupado`, sin reservar, firmar ni mandar nada. Si no, la
-   *      toma (`Sorteadora.tomar`): la secuencia, la firma, la reserva contra el organizador (su tope de sorteos del mes y
-   *      lo guardado para su sello), el fee-bump de siempre y el envío. Con la secuencia vieja, relee la cuenta y reintenta
-   *      una vez;
+   *   4. la admisión: si el pedido ya lleva más de `EDAD_MAXIMA_DEL_PEDIDO_MS`, `503 tarde`. Si la sorteadora está con otro
+   *      sorteo, `503 ocupado`. En los dos, sin reservar, firmar ni mandar nada. Si no, la toma (`Sorteadora.tomar`): la
+   *      secuencia, la firma, otra vez la edad, la reserva contra el organizador (su tope de sorteos del mes y lo guardado
+   *      para su sello), el fee-bump de siempre y el envío. Con la secuencia vieja, relee la cuenta y reintenta una vez;
    *   5. tomado el envío, la respuesta sale con el hash y la sorteadora sigue ocupada hasta que este entre (la red guarda
    *      una sola transacción pendiente por cuenta) o hasta que pase el plazo, y entonces relee la secuencia. Lo mismo
    *      después de un corte al mandar, porque no se sabe si llegó.
@@ -453,7 +453,7 @@ export class Portero {
     const clave = `${id}:${firmaHex.toLowerCase()}`;
     const enCurso = this.vuelos.get(clave);
     if (enCurso) return enCurso;
-    const vuelo = this.sortearUnaVez(s, id, firma);
+    const vuelo = this.sortearUnaVez(s, id, firma, this.reloj());
     this.vuelos.set(clave, vuelo);
     const deEste = id.toString();
     const soltar = (): void => {
@@ -471,8 +471,11 @@ export class Portero {
     return vuelo;
   }
 
-  /** El trabajo de un pedido de sorteo, ya con el cuerpo leído. Lo comparten los pedidos iguales (`vuelos`). */
-  private async sortearUnaVez(s: Sorteadora, id: bigint, firma: Uint8Array): Promise<Respuesta> {
+  /**
+   * El trabajo de un pedido de sorteo, ya con el cuerpo leído. Lo comparten los pedidos iguales (`vuelos`). `llegada` es la
+   * hora en que llegó el primero de ellos.
+   */
+  private async sortearUnaVez(s: Sorteadora, id: bigint, firma: Uint8Array, llegada: number): Promise<Respuesta> {
     let selloHash: string;
     let organizador: string;
     let sim;
@@ -504,8 +507,11 @@ export class Portero {
     // Los topes del organizador se piden antes de tomar la sorteadora: ahí puede haber una espera corta (el plan del equipo).
     const lim = await this.limitesDe(organizador);
 
-    // La admisión, sin await hasta tomar la sorteadora: si está con otro sorteo, mandándolo o esperando que entre, ocupado en
-    // el acto, sin reservar, firmar ni mandar nada. Como el repetido ya se miró, ningún `draw` de este sello iba en camino.
+    // La admisión, sin await hasta tomar la sorteadora: un pedido que ya lleva demasiado no se empieza (`tarde`), y si la
+    // sorteadora está con otro sorteo, mandándolo o esperando que entre, ocupado en el acto, sin reservar, firmar ni mandar
+    // nada. Como el repetido ya se miró, ningún `draw` de este sello iba en camino.
+    const demasiado = this.tarde(llegada);
+    if (demasiado) return demasiado;
     const trabajo = s.tomar(id.toString(), this.reloj(), async (retener) => {
       for (let intento = 0; intento < 2; intento++) {
         const ahora = this.reloj();
@@ -519,7 +525,10 @@ export class Portero {
         if (actual === null) return r(503, { motivo: "fondo", detalle: "sorteadora" });
         const venceS = Math.floor(ahora / 1000) + Math.min(VENTANA_SORTEO_S, this.cfg.ventanaMaxS);
         const firmada = await s.firmar(s.armar(id, firma, actual, datos, venceS));
-        // Otro pedido del mismo sorteo pudo pasar por la cola mientras simulábamos: desde acá hasta reservar, sin await.
+        // Desde acá hasta reservar, sin await. Un pedido que ya lleva demasiado no se empieza a mandar.
+        const yaTarde = this.tarde(llegada);
+        if (yaTarde) return yaTarde;
+        // Otro pedido del mismo sorteo pudo pasar mientras simulábamos.
         const previo = this.yaPedido(selloHash);
         if (previo) return previo;
         const res = this.cupos.reservar({ hash: firmada.hash, cuenta: organizador, metodo: "draw", estimado, vence: venceS, selloHash }, ahora, lim);
@@ -586,6 +595,17 @@ export class Portero {
     const o = s.ocupada();
     this.registrar("sorteo-ocupado", { desdeMs: o ? Math.max(0, this.reloj() - o.desde) : 0 });
     return r(503, { motivo: "ocupado" });
+  }
+
+  /**
+   * Si un pedido de sorteo ya lleva más de `EDAD_MAXIMA_DEL_PEDIDO_MS` desde que llegó el primero de su trabajo: `503 tarde`,
+   * sin reservar ni mandar nada. Pasa cuando las llamadas del servicio a su red tardan (un RPC colgado suma 8 s a cada una).
+   */
+  private tarde(llegada: number): Respuesta | null {
+    const edadMs = this.reloj() - llegada;
+    if (edadMs <= EDAD_MAXIMA_DEL_PEDIDO_MS) return null;
+    this.registrar("sorteo-tarde", { edadMs });
+    return r(503, { motivo: "tarde" });
   }
 
   /**
