@@ -222,11 +222,11 @@ describe("campaña de personas: los códigos de entrega", () => {
     expect(filas().map((f) => f.codigo)).toEqual(["1111", "2222"]);
   });
 
-  it("una tanda que quedó vieja no pisa a la nueva: la respuesta tardía se descarta", async () => {
+  it("una serie de pedidos vieja no pisa a la nueva: la respuesta tardía se descarta", async () => {
     const vieja = diferida<string[]>();
     m.respuestasALosCodigos = [() => vieja.promesa, ["1111", "2222"]];
     await revelar();
-    // El panel retoma la misma sala: arranca otra tanda y la de antes queda sin vigencia.
+    // El panel retoma la misma sala: arranca otra serie y la de antes queda sin vigencia.
     m.sellado = null;
     m.fase = "sorteada";
     if (m.entrada) m.entrada = { ...m.entrada, resultado: "hecho" };

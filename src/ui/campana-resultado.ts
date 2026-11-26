@@ -180,7 +180,7 @@ interface CodigosEnMano {
   codigos: readonly string[] | null;
   /** Se pidieron todas las veces y no se pudieron leer: el panel ofrece pedirlos de nuevo. */
   fallaron: boolean;
-  /** Hay una tanda de pedidos en marcha. */
+  /** Hay una serie de pedidos en marcha. */
   pidiendo: boolean;
   repintar: () => void;
 }
