@@ -429,7 +429,8 @@ export class Portero {
    *      lo guardado para su sello), el fee-bump de siempre y el envío. Con la secuencia vieja, relee la cuenta y reintenta
    *      una vez;
    *   5. tomado el envío, la respuesta sale con el hash y la sorteadora sigue ocupada hasta que este entre (la red guarda
-   *      una sola transacción pendiente por cuenta) o hasta que pase el plazo, y entonces relee la secuencia.
+   *      una sola transacción pendiente por cuenta) o hasta que pase el plazo, y entonces relee la secuencia. Lo mismo
+   *      después de un corte al mandar, porque no se sabe si llegó.
    *
    * Los pedidos iguales (mismo sorteo y firma) comparten un solo trabajo (`vuelos`).
    *
@@ -543,10 +544,13 @@ export class Portero {
         try {
           envio = await this.red.enviar(envuelta);
         } catch (e) {
-          // No se sabe si llegó: queda reservada para la alarma, y la secuencia se vuelve a leer.
+          // No se sabe si llegó: queda reservada para la alarma y la secuencia se vuelve a leer. Si llegó, la red tiene una
+          // pendiente de la sorteadora: hasta que aparezca, o hasta el plazo, la sorteadora sigue ocupada como después de un
+          // envío tomado, y el sorteo siguiente recibe ocupado en vez de mandar con la misma secuencia.
           s.olvidar();
           this.alQuedarEnElAire();
           this.registrar("error-envio", { hash: corto(firmada.hash), error: e instanceof ErrorDeRed ? e.message.slice(0, 80) : "desconocido" });
+          retener(s.esperarQueEntre(firmada.hash));
           if (e instanceof ErrorDeRed) return r(502, { motivo: "red", detalle: e.message });
           throw e;
         }
