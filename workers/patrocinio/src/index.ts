@@ -38,6 +38,9 @@
  * Con la clave de administración (Authorization: Bearer <ADMIN_TOKEN>):
  *   POST /v1/patrocinio/apagar | encender | pollar     PUT /v1/patrocinio/ajustes {"clave","valor"}
  *   GET  /v1/patrocinio/estado                         GET /v1/patrocinio/exportar
+ * Con la clave de solo lectura (Authorization: Bearer <TOKEN_LECTURA>, issue #219): solo GET /v1/patrocinio/estado;
+ * la de administración también abre el estado. Si las dos claves se cargan iguales, la bitácora lo anota
+ * como `error-config` `claves-iguales`, igual que con las claves de cupones:
  *
  * Solo en mainnet con ALTAS=1, con dos claves, ver `admin.ts`: cupones y altas a mano con CUPONES_TOKEN,
  * y pausar o reanudar las altas con ADMIN_TOKEN:
@@ -79,6 +82,7 @@ import { RpcRed } from "./red";
 import { type AccionAlta, type AccionCompra, type AccionPago, type PedidoAlta, PuertaAltas, atenderAlta, atenderCarga, memoriaEnAjustes } from "./rutas-altas";
 import { type Firmante, Portero, type Respuesta, firmanteDe } from "./servicio";
 import { haciaHorizon } from "./servidores";
+import { atenderLineaBase, RUTA_LINEA_BASE } from "./linea-base";
 import { Sorteadora, atenderSorteo, leerSorteo } from "./sorteadora";
 
 /**
@@ -97,6 +101,8 @@ interface EnvPortero extends Env {
   CUENTA_PATROCINADORA?: string;
   /** El enlace de envío de correo de Cloudflare (`[[env.mainnet.send_email]]`), para el correo de bienvenida. */
   CORREO?: unknown;
+  /** La clave de solo lectura: abre apenas `GET /v1/patrocinio/estado`. Secreto, del mismo largo mínimo que la de administración. */
+  TOKEN_LECTURA?: string;
 }
 
 export class Patrocinio extends DurableObject<EnvPortero> {
@@ -246,6 +252,10 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       const faltaSecretos = [...(cfg.altas && !pollar ? ["pollar-llave"] : []), ...(cfg.altas && (this.env.CUPON_SECRETO ?? "").length < 32 ? ["cupon-secreto"] : [])];
       if (faltaSecretos.length) console.error(JSON.stringify({ evento: "error-config", faltaAltas: faltaSecretos }));
     }
+    // La clave de lectura pegada igual a la de administración: quien solo miraría podría apagar. Se anota como error de
+    // configuración, como con el par cupones/administración (nombres fijos, sin valores).
+    if ((this.env.TOKEN_LECTURA ?? "").length >= ADMIN_MINIMO && this.env.TOKEN_LECTURA === this.env.ADMIN_TOKEN)
+      console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["claves-iguales"] }));
     const falta = this.portero.faltaDeConfig();
     if (falta.length) console.error(JSON.stringify({ evento: "error-config", falta }));
     // Lo que se prendió de las altas y no se puede usar (nombres fijos, sin valores): no apaga al portero, solo eso.
@@ -727,13 +737,31 @@ const pagoClasicoPorIp = new PorIp();
 /** Las consultas de `/v1/carga/cupo`, con el suyo: consultar la carga no le gasta consultas al cupo. */
 const cargaPorIp = new PorIp();
 
-/** Si `dado` es la clave de administración, en tiempo constante. Sin clave cargada (o de menos de 32 caracteres) siempre da false. */
-async function esAdmin(dado: string, env: Env): Promise<boolean> {
-  const secreto = env.ADMIN_TOKEN ?? "";
+/**
+ * Si `dado` es `valor`, en tiempo constante: se comparan las huellas SHA-256 de los dos (siempre de 32 bytes) juntando todas las
+ * diferencias en lugar de cortar en la primera. Sin secreto cargado (o de menos de 32 caracteres) o sin dato, siempre false.
+ * No usa `timingSafeEqual` de Cloudflare, para que se pueda probar en Node (como `esLaSala`).
+ */
+async function esSecreto(dado: string, valor: string | undefined): Promise<boolean> {
+  const secreto = valor ?? "";
   if (secreto.length < ADMIN_MINIMO || !dado) return false;
   const huella = (s: string) => crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   const [a, b] = await Promise.all([huella(dado), huella(secreto)]);
-  return crypto.subtle.timingSafeEqual(a, b);
+  const x = new Uint8Array(a);
+  const y = new Uint8Array(b);
+  let diferencia = x.length ^ y.length;
+  for (let i = 0; i < x.length; i++) diferencia |= (x[i] ?? 0) ^ (y[i] ?? 0);
+  return diferencia === 0;
+}
+
+/** Si `dado` es la clave de administración, en tiempo constante. Sin clave cargada (o de menos de 32 caracteres) siempre da false. */
+async function esAdmin(dado: string, env: Env): Promise<boolean> {
+  return esSecreto(dado, env.ADMIN_TOKEN);
+}
+
+/** Si `dado` es la clave de solo lectura (abre apenas el estado), en tiempo constante como `esAdmin`. */
+async function esLectura(dado: string, env: EnvPortero): Promise<boolean> {
+  return esSecreto(dado, env.TOKEN_LECTURA);
 }
 
 export default {
@@ -788,6 +816,9 @@ export default {
       if (r) return r;
     }
 
+    // La línea base de la red (issue #220): lectura sin llaves, la misma base que el detector de GitHub.
+    if (url.pathname === RUTA_LINEA_BASE && request.method === "GET") return atenderLineaBase(request);
+
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origen, url.pathname.endsWith("/cupo")) });
 
     // La consulta del cupo: abierta, solo lectura.
@@ -798,13 +829,17 @@ export default {
       return json(r.cuerpo, r.estado, cors(origen, true));
     }
 
-    // Administración: con la clave, y si no hay clave cargada, el camino no existe.
+    // Administración: con la clave, y si no hay clave cargada, el camino no existe. La de solo lectura abre apenas el estado.
     const admin = /^\/v1\/patrocinio\/(apagar|encender|pollar|ajustes|estado|exportar)$/.exec(url.pathname);
     if (admin?.[1]) {
-      if ((env.ADMIN_TOKEN ?? "").length < ADMIN_MINIMO) return json({ motivo: "no-existe" }, 404);
+      const esEstado = admin[1] === "estado";
+      const deAdmin = (env.ADMIN_TOKEN ?? "").length >= ADMIN_MINIMO;
+      const deLectura = (env.TOKEN_LECTURA ?? "").length >= ADMIN_MINIMO;
+      if ((esEstado ? !deAdmin && !deLectura : !deAdmin)) return json({ motivo: "no-existe" }, 404);
       const m = /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "");
-      if (!(await esAdmin(m?.[1] ?? "", env))) return json({ motivo: "clave" }, 401);
-      const lee = admin[1] === "estado" || admin[1] === "exportar";
+      const clave = m?.[1] ?? "";
+      if (!((await esAdmin(clave, env)) || (esEstado && (await esLectura(clave, env))))) return json({ motivo: "clave" }, 401);
+      const lee = esEstado || admin[1] === "exportar";
       if (lee ? request.method !== "GET" : admin[1] === "ajustes" ? request.method !== "PUT" : request.method !== "POST") return json({ motivo: "metodo" }, 405);
       let datos: { clave?: string; valor?: number } | undefined;
       if (admin[1] === "ajustes") {

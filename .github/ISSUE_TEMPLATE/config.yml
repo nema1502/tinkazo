@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Una falla de seguridad
+    url: https://github.com/nema1502/tinkazo/blob/main/SECURITY.md
+    about: No la cuentes en un issue público. Este enlace lleva a la política de seguridad, que dice cómo avisar por correo a hola@tinkazo.app. En este repositorio no hay un reporte privado para abrir desde GitHub.
+  - name: Una duda sobre cómo funciona Tinkazo
+    url: https://tinkazo.app/como-funciona.html
+    about: Cómo funciona un sorteo y cómo se comprueba. Para lo demás, escribinos a hola@tinkazo.app.

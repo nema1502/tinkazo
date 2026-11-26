@@ -239,8 +239,9 @@ export interface Env extends VariablesDeActivar, VariablesDeLlaveAuto {
   /** En "0" se apaga la exigencia del pase, solo como salida de emergencia el día del evento. */
   PASE?: string;
   /**
-   * Solo entra quien el proveedor dice, exactamente, que es de Google. El valor "suave" es un interruptor de emergencia:
-   * también deja entrar (y cuenta aparte) a quien el proveedor no dice por dónde entró. Cualquier otro valor es estricto.
+   * Solo entra quien el proveedor dice que es de Google, sin importar mayúsculas ni espacios alrededor. El valor "suave" es
+   * un interruptor de emergencia: también deja entrar (y cuenta aparte) a quien el proveedor no dice por dónde entró.
+   * Cualquier otro valor es estricto.
    */
   SOLO_GOOGLE?: string;
   /** Los RPC de la red principal, separados por comas. Se prueban en ese orden. */
@@ -851,14 +852,15 @@ export class Sala extends DurableObject<Env> {
 
   /**
    * Una sesión que el proveedor rechazó. La ficha siempre cuenta; la conexión, solo la primera vez que se ve esa ficha
-   * (repetirla no cuesta otra llamada), así una persona no deja afuera a las demás. Los rechazos de antes de llamar
-   * (forma, pase, fase) no pasan por acá.
+   * (repetirla no cuesta otra llamada), así una persona no deja afuera a las demás. Con `contarConexion` en falso (la
+   * sesión buena que todavía espera su cuenta) cuenta solo la ficha. Los rechazos de antes de llamar (forma, pase, fase)
+   * no pasan por acá.
    */
-  async rechazo(ip: string, token: string): Promise<Resultado> {
+  async rechazo(ip: string, token: string, contarConexion = true): Promise<Resultado> {
     if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
     const grupo = await grupoDeConexion(this.sql, ip);
     const ficha = await huellaDeFicha(this.sql, token);
-    contarRechazo(this.sql, grupo, ficha, Date.now());
+    contarRechazo(this.sql, grupo, ficha, Date.now(), contarConexion);
     return { ok: true };
   }
 
@@ -1513,6 +1515,7 @@ function depsDeTus(env: Env, ip: string, ahora: number): DepsDeTus {
       ip,
       ahora,
       proveedor: pollarDeLaSala(env),
+      registrar,
       topes: {
         antes: (conexion, ficha, conocida) => cupos.cuentaAntes(conexion, ficha, conocida),
         rechazo: (conexion, ficha) => cupos.cuentaRechazo(conexion, ficha),
@@ -2015,6 +2018,8 @@ export default {
         // Solo entra quien el proveedor dice que es de Google. El modo suave es solo un interruptor de emergencia.
         const via = viaPermitida(sesion.via, modoSoloGoogle(env.SOLO_GOOGLE));
         if (!via.ok) {
+          // Una línea con lo que mandó el proveedor (ya saneado, sin nada de la persona): si todos quedaran afuera, se ve por qué.
+          registrar("via-rechazada", { valor: sesion.viaCruda ?? "sin-campo", modo: modoSoloGoogle(env.SOLO_GOOGLE) });
           await sala.rechazo(ip, token);
           return falla({ motivo: "solo-google" }, h);
         }
@@ -2027,7 +2032,9 @@ export default {
           if (!billetera.ok) return falla({ motivo: "pollar" }, h);
           if (billetera.cuenta === null) {
             // Costó dos llamadas al proveedor: cuenta como un rechazo de esa ficha, así repetirla no lo llama sin límite.
-            await sala.rechazo(ip, token);
+            // La sesión es buena y solo espera su cuenta: no suma al tope de la conexión, que llenarían solas las
+            // personas con cuenta nueva detrás de la misma wifi.
+            await sala.rechazo(ip, token, false);
             return falla({ motivo: "sin-billetera" }, h);
           }
           cuenta = billetera.cuenta;

@@ -20,7 +20,8 @@ describe("scheduled: la vuelta del reloj", () => {
     vi.useFakeTimers();
     vi.setSystemTime(T0);
     await worker.scheduled({ scheduledTime: T0, cron: "*/10 * * * *" }, m.env, { waitUntil: () => undefined });
-    expect(llamados).toEqual([`${PORTERO}/v1/patrocinio/estado`]);
+    // La vuelta del portero y, al lado, la de la red (issue #220): el cron las corre juntas.
+    expect(llamados).toEqual([`${PORTERO}/v1/patrocinio/estado`, `${PORTERO}/v1/patrocinio/linea-base`]);
     expect(m.correo.enviados).toHaveLength(1);
     expect((await m.memoria()).ultimaVuelta).toBe(new Date(T0).toISOString());
   });

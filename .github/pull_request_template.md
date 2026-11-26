@@ -1,0 +1,44 @@
+<!-- Escribí en español. Borrá los comentarios y las secciones que no apliquen. -->
+
+## Qué cambia
+
+<!-- Dos o tres líneas, desde quien usa lo que se arregla o se agrega. -->
+
+## Por qué
+
+<!-- El problema real que resuelve. -->
+
+## Issue
+
+<!-- Escribí Closes #N solo si el issue queda hecho entero. Si queda algo pendiente, escribí Refs #N. -->
+
+## Zona
+
+- [ ] Frente
+- [ ] Servicios
+- [ ] Dirección (se preguntó antes en el issue)
+
+## Cómo se comprobó
+
+- [ ] `pnpm typecheck`, `pnpm test` y `pnpm build` en verde
+- [ ] Cada texto visible nuevo está en español y en inglés
+- [ ] Si toca texto que lee la gente: `pnpm check:escritura`, `pnpm check:glosario` y `pnpm audit:palabras`
+- [ ] Si toca un juego, la batería de ese juego
+- [ ] Si toca las páginas de lectura, `pnpm check:paginas`
+- [ ] Si toca el contrato, `cargo test --workspace`
+
+<!-- Pegá acá lo que corriste y lo que dio. -->
+
+## Capturas
+
+<!-- Solo si cambia algo que se ve: escritorio y celular, tema claro y oscuro. Sin nombres ni correos de personas reales. -->
+
+## Qué despliega o configura al unirse
+
+<!-- Unir a main publica el sitio en tinkazo.app. Escribí Nada solo si cambia únicamente el sitio y no hay servicio, secreto, variable ni orden de despliegue. Si los hay, decilo acá. -->
+
+## Antes de pedir la revisión
+
+- [ ] La rama sale de `main` al día y el pedido apunta a `main`
+- [ ] No subí secretos, archivos `.env`, exportaciones de invitados ni datos de personas
+- [ ] No toqué zonas de otra persona sin preguntar en el issue

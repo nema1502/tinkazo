@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" data-titulo-clave="titPortada" data-desc-clave="descPortada">
+<html lang="es" data-campanas="%VITE_CAMPANAS%" data-titulo-clave="titPortada" data-desc-clave="descPortada">
 <head>
 <meta charset="utf-8" />
 <!-- viewport-fit=cover: el estadio ocupa la pantalla entera, también detrás de la muesca; la zona segura (env(safe-area-inset-*)) se respeta en la cabecera y en lo que se proyecta. interactive-widget: el teclado achica la página en vez de tapar el botón (Chrome de Android). -->
@@ -46,13 +46,15 @@
     <nav class="topnav" aria-label="páginas">
       <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
       <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
+      <!-- La misma entrada, con el nombre corto, en la fila del celular: ahí Más la esconde y quien arma una campaña no la encontraba. Solo se muestra de 412 a 760 px (styles.css). Va antes de Más, como se ve. -->
+      <a href="/crear-campana.html" class="nav-empresas-cel" data-campana-enlace data-i="navEmpresasC">Empresas</a>
       <div class="mas">
         <button type="button" class="mas-btn" aria-expanded="false" aria-controls="mas-lista" data-i="navMas">Más</button>
         <div class="mas-lista" id="mas-lista">
           <a href="/juegos.html" data-i="navJuegos">Juegos</a>
           <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
-          <!-- Para quien arma la campaña de una empresa: se ve solo con las campañas abiertas, desde src/main.ts. Solo en el Más del celular. -->
-          <a href="/crear-campana.html" data-campana-enlace hidden data-i="navEmpresas">Para empresas</a>
+          <!-- Para quien arma la campaña de una empresa: se ve solo con las campañas abiertas (el atributo data-campanas de html, puesto al construir, y styles.css). En escritorio va en la fila y en el celular, dentro de Más. Lleva los dos nombres y la hoja muestra uno: entre 1101 y 1439 px la fila de una línea no tiene lugar para el largo y dice Empresas, y en los demás anchos dice Para empresas. El que no se ve va con display none, así el lector de pantalla lee uno solo. -->
+          <a href="/crear-campana.html" data-campana-enlace><span class="nav-emp-l" data-i="navEmpresas">Para empresas</span><span class="nav-emp-c" data-i="navEmpresasC">Empresas</span></a>
         </div>
       </div>
     </nav>
@@ -78,9 +80,6 @@
            (main.ts y entrar() en wallet-ui.ts). El ensayo, al lado, no pide nada. -->
       <div class="hero-ctas">
         <a class="primary cta cta-entrar" href="#sortear" data-cta-entrar><span class="g-ico" aria-hidden="true"></span><span class="cta-t" data-i="ctaHero">Entrar y sortear gratis</span></a>
-        <button class="ghost" type="button" data-entrar-ensayo data-i="ctaEnsayo">Probar con un ejemplo</button>
-        <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con quienes pasan. No graba nada ni pide cuenta. -->
-        <button class="ghost" type="button" data-entrar-stand data-i="ctaStand">Tengo un stand</button>
       </div>
       <p class="hero-otras"><button class="enlace" type="button" data-otras-formas data-i="ctaOtras">Otras formas de entrar</button></p>
       <p class="hero-note"><a class="enlace" href="#confiar" data-i="ctaJusto">¿Cómo sé que es justo?</a></p>
@@ -88,20 +87,79 @@
            Va debajo de los botones para no empujarlos fuera de la primera pantalla. docs/marca.md, "Marcas de otros". -->
       <p class="built-on"><a class="built-on-link" href="https://stellar.org" target="_blank" rel="noopener"><span class="built-on-text" data-i="builtOn">Hecho con</span><img class="built-on-logo built-on-logo-light" src="/terceros/stellar/stellar-logo-negro-511x128.webp" width="80" height="20" alt="Stellar" /><img class="built-on-logo built-on-logo-dark" src="/terceros/stellar/stellar-logo-blanco-511x128.webp" width="80" height="20" alt="Stellar" /></a></p>
     </div>
-    <a class="hero-shot" href="/?demo=race&amp;lead=3" aria-label="Ver una demo" data-i-aria="ctaDemo">
+    <!-- Repite la puerta de Mirá cómo es y cambia de lugar según la pantalla: para el teclado y el lector de pantalla basta la puerta. -->
+    <a class="hero-shot" href="/?demo=race&amp;lead=3" aria-label="Ver una demo" data-i-aria="ctaDemo" tabindex="-1" aria-hidden="true">
       <picture>
         <source srcset="/juegos/race-light.webp" media="(prefers-color-scheme: light)" />
         <img src="/juegos/race.webp" width="900" height="506" alt="" />
       </picture>
       <span class="mascot" aria-hidden="true"><svg viewBox="-1 -3 24 28"><use href="#llama" fill="currentColor"/></svg></span>
     </a>
+    <!-- Las tres puertas: una tarjeta por lo que viene a hacer cada quien. La acción principal de la portada sigue siendo el
+         botón de arriba. La de las empresas se ve solo con las campañas abiertas (el atributo data-campanas de html) y, sin ella, quedan dos. -->
+    <div class="puertas" id="puertas">
+      <article class="puerta puerta-lista">
+        <div class="puerta-media"><img class="pj-img pj-osc" src="/juegos/portada/pinata.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/pinata-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /></div>
+        <h2 class="puerta-t" data-i="ptListaT">Mirá cómo es</h2>
+        <p class="puerta-b" data-i="ptListaB">Un sorteo de ejemplo en pantalla grande.</p>
+        <button class="ghost puerta-a" type="button" data-entrar-ensayo data-i="ctaEnsayo">Probar con un ejemplo</button>
+      </article>
+      <article class="puerta puerta-stand">
+        <div class="puerta-media"><img class="pj-img pj-osc" src="/juegos/portada/sapo.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/sapo-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /></div>
+        <h2 class="puerta-t" data-i="ptStandT">Para tu stand o tu feria</h2>
+        <p class="puerta-b" data-i="ptStandB">La gente se suma con el celular y mira la ronda.</p>
+        <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con quienes pasan. No graba nada ni pide cuenta. -->
+        <button class="ghost puerta-a" type="button" data-entrar-stand data-i="ctaStand">Tengo un stand</button>
+      </article>
+      <article class="puerta puerta-empresa" data-campana-enlace>
+        <div class="puerta-media">
+          <!-- En el celular la puerta es un renglón y la tarjeta de ejemplo se cambia por este regalo (styles.css, Las tres puertas). -->
+          <span class="puerta-ico" aria-hidden="true"><svg viewBox="0 0 48 48" width="40" height="40" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"><rect x="7" y="19" width="34" height="23"/><rect x="4" y="12" width="40" height="7"/><path d="M24 12v30"/><path d="M24 12c-3-8-12-8-12-3 0 4 7 3 12 3zM24 12c3-8 12-8 12-3 0 4-7 3-12 3z"/></svg></span>
+          <!-- Una tarjeta de campaña de ejemplo, hecha con HTML y CSS: la marca es inventada y dice que es un ejemplo. -->
+          <div class="cp-ejemplo">
+            <span class="cp-franja" aria-hidden="true"></span>
+            <div class="cp-cuerpo">
+              <div class="cp-marca">
+                <span class="cp-logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16"/><circle cx="9" cy="10" r="2"/><path d="M3 18l6-5 4 3 3-2 5 4"/></svg></span>
+                <span class="cp-nombres"><strong data-i="peMarca">Tu marca</strong><span data-i="peLugar">Tu evento</span></span>
+                <span class="cp-rotulo" data-i="peRotulo">Ejemplo</span>
+              </div>
+              <p class="cp-premio"><span data-i="pePremioN">3 premios de</span><strong data-i="pePremioM">40 dólares digitales</strong></p>
+<div class="cp-pie">
+                <p class="cp-estado"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-4 3-6 6.5-6s6.5 2 6.5 6"/><path d="M19 6v6M16 9h6"/></svg><span data-i="peEstado">Abierta</span></p>
+                <p class="cp-gente" data-i="peGente">Participar es gratis</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <h2 class="puerta-t" data-i="ptEmpresaT">Para tu empresa</h2>
+        <p class="puerta-b" data-i="ptEmpresaB">Un premio en dólares digitales entre tu gente. Participar es gratis.</p>
+        <a class="ghost puerta-a" href="/crear-campana.html" data-i="ptEmpresaA">Armar una campaña</a>
+      </article>
+    </div>
   </section>
 
   <h2 class="sr-only portada-only" data-i="howTitle">¿Cómo funciona?</h2>
   <div class="steps portada-only">
-    <article><span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1b">Pegás los nombres, o subís el CSV de Luma o de una hoja de cálculo. Tu gente no instala nada ni crea cuenta, y para comprobar el resultado tampoco hace falta nada. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.</p></article>
-    <article><span class="num">02</span><h3 data-i="s2t">Sellá la lista</h3><p data-i="s2b">Queda cerrada: si después se agrega o se saca a alguien, se nota.</p></article>
-    <article><span class="num">03</span><h3 data-i="s3t">Elegí el juego y sorteá</h3><p data-i="s3b">Elegí uno de los diez juegos para el show: quién gana lo decide un número que nadie puede elegir.</p></article>
+    <article>
+      <div class="paso-media paso-lista" aria-hidden="true"><svg viewBox="0 0 64 64" focusable="false"><rect x="7" y="8" width="50" height="48" fill="var(--card)" stroke="var(--ink)" stroke-width="3"/><circle cx="19" cy="21" r="4.5" fill="var(--magenta)" stroke="var(--ink)" stroke-width="2"/><rect x="28" y="18" width="22" height="6" fill="var(--ink)"/><circle cx="19" cy="33" r="4.5" fill="var(--yellow)" stroke="var(--ink)" stroke-width="2"/><rect x="28" y="30" width="16" height="6" fill="var(--ink)"/><circle cx="19" cy="45" r="4.5" fill="var(--teal)" stroke="var(--ink)" stroke-width="2"/><rect x="28" y="42" width="20" height="6" fill="var(--ink)"/></svg></div>
+      <div class="paso-txt">
+        <span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1c">Pegá los nombres o subí el CSV de Luma.</p>
+        <details class="paso-mas"><summary data-i="pasoMas">Más detalle</summary><p data-i="s1b">Pegás los nombres, o subís el CSV de Luma o de una hoja de cálculo. Tu gente no instala nada ni crea cuenta, y para comprobar el resultado tampoco hace falta nada. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.</p></details>
+      </div>
+    </article>
+    <article>
+      <div class="paso-media paso-sello" aria-hidden="true"><svg viewBox="0 0 64 64" focusable="false"><circle cx="32" cy="32" r="25" fill="var(--yellow)" stroke="var(--ink)" stroke-width="3"/><circle cx="32" cy="32" r="19" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 4"/><g transform="translate(19 19) scale(1)" fill="#191919"><use href="#llama"/></g><rect x="38" y="38" width="18" height="15" fill="var(--card)" stroke="var(--ink)" stroke-width="3"/><path d="M42 38v-4a5 5 0 0 1 10 0v4" fill="none" stroke="#191919" stroke-width="3"/></svg></div>
+      <div class="paso-txt">
+        <span class="num">02</span><h3 data-i="s2t">Sellá la lista</h3><p data-i="s2b">Queda cerrada antes del sorteo: nadie la puede cambiar sin que se note.</p>
+      </div>
+    </article>
+    <article>
+      <div class="paso-media paso-juego" aria-hidden="true"><svg viewBox="0 0 64 64" focusable="false"><rect x="25" y="6" width="14" height="9" fill="var(--yellow)" stroke="var(--ink)" stroke-width="3"/><ellipse cx="32" cy="22" rx="23" ry="7" fill="var(--orange)" stroke="var(--ink)" stroke-width="3"/><path d="M9 22L32 58 55 22" fill="var(--magenta)" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/><path d="M17 33h30" stroke="var(--ink)" stroke-width="3"/><circle cx="32" cy="58" r="2" fill="var(--ink)"/></svg></div>
+      <div class="paso-txt">
+        <span class="num">03</span><h3 data-i="s3t">Elegí el juego</h3><p data-i="s3b">Gana quien sale de un número que nadie elige.</p>
+      </div>
+    </article>
   </div>
 
   <section class="portada-sec portada-only" id="juegos">
@@ -174,8 +232,8 @@
       <a class="primary cta cta-entrar" href="#sortear" data-cta-entrar><span class="g-ico" aria-hidden="true"></span><span class="cta-t" data-i="ctaHero">Entrar y sortear gratis</span></a>
       <button class="ghost" type="button" data-entrar-ensayo data-i="ctaEnsayo">Probar con un ejemplo</button>
     </div>
-    <!-- Para quien arma la campaña de una empresa: se ve solo con las campañas abiertas (VITE_CAMPANAS), desde src/main.ts. -->
-    <p class="portada-fin-empresa" data-campana-enlace hidden><a class="enlace" href="/crear-campana.html" data-i="ctaEmpresa">¿Sos una empresa? Armá tu campaña</a></p>
+    <!-- Para quien arma la campaña de una empresa: se ve solo con las campañas abiertas (el atributo data-campanas de html, de VITE_CAMPANAS). -->
+    <p class="portada-fin-empresa" data-campana-enlace><a class="enlace" href="/crear-campana.html" data-i="ctaEmpresa">¿Sos una empresa? Armá tu campaña</a></p>
   </section>
 
   <p class="demo-banner app-only" data-i="demoBanner">Demo con una lista de ejemplo: no se registra nada.</p>
@@ -274,8 +332,8 @@
       <!-- Un sorteo sellado en este navegador que quedó sin sortear (una recarga en la espera): se ofrece retomarlo. Lo arma history.ts. -->
       <aside class="again-note pendiente" id="pendiente" role="status" style="display:none"></aside>
       <!-- El modo, a la vista (src/ui/turnos.ts): Sortear premios o Orden de turnos, con dos botones grandes. Es una elección
-           previa, chica frente a Pegar lista y a Sellar la lista, y con la lista cerrada se queda quieta. Escondido salvo con
-           la bandera VITE_MODOS o con ?modo= en la dirección (src/modos/bandera.ts). Varias participaciones por persona no es
+           previa, chica frente a Pegar lista y a Sellar la lista, y con la lista cerrada se queda quieta. A la vista con
+           la bandera VITE_MODOS, prendida por defecto desde el cambio 7e414660, o con ?modo= en la dirección (src/modos/bandera.ts). Varias participaciones por persona no es
            un modo: vale en los dos y se marca debajo de la lista. -->
       <div class="modo-elegir turnos-opcion" id="turnos-opcion" hidden>
         <p class="kicker modo-rotulo" id="modo-rotulo" data-i="modoRotulo">¿Qué vas a hacer?</p>
@@ -447,6 +505,14 @@
         <div class="premio-lugares" id="prize-lugares" hidden></div>
         <!-- Si lo escrito no entra entero en lo que se sella, lo dice acá y Sellar la lista no sigue hasta que se acorte. -->
         <p class="note aviso-premio" id="prize-largo" role="status" hidden></p>
+        <!-- Un premio escrito como monto (50 USD) avisa que una campaña de empresa se lo paga a quien gana (src/ui/premio-plata.ts).
+             Se cierra y no frena Sellar la lista. El enlace de abajo se ve solo con las campañas abiertas. -->
+        <div class="aviso-plata" id="prize-plata" role="status" hidden>
+          <p data-i="plAviso">¿El premio es dinero? Con una campaña, quien gana lo recibe en dólares digitales.</p>
+          <a class="enlace" href="/crear-campana.html" target="_blank" rel="noopener" data-i="ptEmpresaA">Armar una campaña</a>
+          <button class="aviso-plata-x" id="prize-plata-x" type="button" aria-label="Cerrar aviso" data-i-aria="plCerrar"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <p class="note premio-campana" data-campana-enlace><a class="enlace" href="/crear-campana.html" target="_blank" rel="noopener" data-i="plEnlace">¿El premio es en dólares digitales? Armá una campaña.</a></p>
       </div>
       <div class="row mas-fila">
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>
@@ -746,6 +812,8 @@
     <a href="/marca.html" data-i="navMarca">Marca</a>
     <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
     <a href="/precios.html" data-i="navPrecios">Precios</a>
+    <!-- Se ve solo con las campañas abiertas, igual que el de la cabecera (el atributo data-campanas de html y styles.css). -->
+    <a href="/crear-campana.html" data-campana-enlace data-i="navEmpresas">Para empresas</a>
     <a href="/terminos.html" data-i="navTerminos">Términos</a>
     <a href="/sorteo-para-meetup.html" data-i="navMeetup">Sorteo para meetup</a>
     <a href="/sorteo-en-clase.html" data-i="navClase">Sorteo en clase</a>

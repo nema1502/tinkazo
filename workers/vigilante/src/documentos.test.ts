@@ -22,7 +22,7 @@ const vuelta = leer("workers/vigilante/src/vuelta.ts");
 const seccion = hoja.slice(hoja.indexOf("\n## El vigilante"));
 
 /** Los secretos que carga `wrangler secret put`, con los que lee el código: el único lugar donde se listan. */
-const SECRETOS = ["PORTERO_ADMIN_TOKEN", "AVISAR_A", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"];
+const SECRETOS = ["PORTERO_ADMIN_TOKEN", "PORTERO_TOKEN_LECTURA", "AVISAR_A", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"];
 const BINDINGS = ["MEMORIA", "CORREO"];
 
 /** Los campos de `interface Entorno` del código. */
@@ -428,5 +428,57 @@ describe("el umbral de las cuentas nuevas por hora: el valor de siempre se dice 
     expect(readme).toMatch(/no se suma/);
     expect(wrangler).toMatch(/no se suma/);
     expect(readme).toMatch(/activaciones está apagado/);
+  });
+});
+
+describe("la clave de solo lectura del portero (issue 219) en la hoja de operación y en el aviso", () => {
+  const filas = seccion.split("\n").filter((l) => l.startsWith("|"));
+
+  it("la fila de la clave que falta habla también de la clave de solo lectura y del orden en que se carga", () => {
+    const fila = filas.find((l) => l.includes("**Al vigilante le falta la clave del portero**")) ?? "";
+    expect(fila).toContain("PORTERO_TOKEN_LECTURA");
+    expect(fila).toContain("PORTERO_ADMIN_TOKEN");
+    expect(fila).toMatch(/en qué orden se carga/);
+  });
+
+  it("el aviso de la clave que falta dice las dos claves posibles, y no solo la de operar", () => {
+    const codigo = leer("workers/vigilante/src/mensaje.ts");
+    const entrada = codigo.slice(codigo.indexOf('"vigilante-sin-clave": {'));
+    const hacer = entrada.slice(entrada.indexOf("hacer:"), entrada.indexOf("\n  },", entrada.indexOf("hacer:")));
+    expect(hacer).toContain("PORTERO_TOKEN_LECTURA");
+    expect(hacer).toContain("PORTERO_ADMIN_TOKEN");
+  });
+
+  it("la tabla de secretos cierra todas sus filas", () => {
+    const tabla = seccion.split("\n").filter((l) => /^\s+\| `[A-Z_]+` \|/.test(l));
+    expect(tabla.length).toBeGreaterThanOrEqual(5);
+    for (const fila of tabla) expect(fila.trimEnd().endsWith("|"), fila.slice(0, 40)).toBe(true);
+  });
+});
+
+describe("el aviso del protocolo y de los costos de la red (issue 220)", () => {
+  const filas = seccion.split("\n").filter((l) => l.startsWith("|"));
+
+  it("la hoja tiene una fila por cada asunto del aviso de la red, con qué se hace", () => {
+    for (const asunto of ["La red de Stellar cambió de protocolo", "La red de Stellar cambió los costos"]) {
+      const fila = filas.find((l) => l.includes(`**${asunto}`)) ?? "";
+      expect(fila, asunto).not.toBe("");
+      expect(fila, asunto).toContain("--actualizar-base");
+      expect(fila, asunto).toMatch(/portero/);
+    }
+  });
+
+  it("los asuntos de la hoja son los que salen del código", () => {
+    const codigo = leer("workers/vigilante/src/protocolo.ts");
+    expect(codigo).toContain("La red de Stellar cambió de protocolo");
+    expect(codigo).toContain("La red de Stellar cambió los costos");
+  });
+
+  it("la hoja dice por qué canales sale ese aviso y que cuenta como avisado si llegó por alguno", () => {
+    const aviso = filas.find((l) => l.includes("**La red de Stellar cambió de protocolo")) ?? "";
+    expect(aviso).toMatch(/correo/);
+    expect(aviso).toMatch(/Telegram/);
+    expect(readme).toMatch(/por al menos un canal/);
+    expect(readme).not.toMatch(/solo cuenta como avisado si salió por todos los canales/);
   });
 });

@@ -142,6 +142,7 @@ export function mundoFalso(o: OpcionesDelMundo = {}): MundoFalso {
     CORREO: correo,
     PORTERO_URL: PORTERO,
     PORTERO_ADMIN_TOKEN: CLAVE_DE_OPERAR,
+    PORTERO_TOKEN_LECTURA: CLAVE_DE_OPERAR,  // la clave de lectura del portero (#219): se carga igual en el mundo de prueba
     AVISAR_A: DESTINO,
     CORREO_USUARIO: "avisos",
     CORREO_DOMINIO: "tinkazo.app",

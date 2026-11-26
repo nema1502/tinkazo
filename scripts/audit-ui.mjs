@@ -32,11 +32,12 @@
  *
  * Uso:
  *   node scripts/audit-ui.mjs [--base http://localhost:4173] [--out DIR]
- *                             [--pantalla laptop-100] [--sin-juegos]
+ *                             [--pantalla laptop-100|cabecera] [--sin-juegos]
  *
  *   CDP_PORT=<puerto> si otra auditoría tiene el Chrome por defecto.
  */
 
+import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
@@ -45,6 +46,25 @@ import { emitirJson } from "./lib/resumen.mjs";
 import { ABRIR_OTRAS_FORMAS_JS, HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { CUENTA_FALSA, freighterFalsa } from "./lib/freighter-falsa.mjs";
 import { UMBRALES, sondaTexto } from "./lib/texto-minimo.mjs";
+import { esLaLinea, frasesDeLaLinea } from "./lib/linea-sellar.mjs";
+import {
+  AGRANDAR_LETRA,
+  ANCHOS_CABECERA,
+  ANCHOS_CELULAR,
+  FORZAR_LETRA_ANCHA,
+  SONDA_FILA_CABECERA,
+  SONDA_FILA_CELULAR,
+  SONDA_LISTA_MAS,
+  cuentaAbiertaJs,
+  evaluarFilaCabecera,
+  evaluarFilaCelular,
+  evaluarListaMas,
+} from "./lib/cabecera-fila.mjs";
+
+// La línea bajo Entrar para sellar tranquiliza a quien organiza. Se compara la frase COMPLETA, en español y en inglés, leída del
+// diccionario (src/i18n.ts): así el auditor sigue al texto cuando se retoca y no deja pasar otra frase que empiece igual.
+// src/auditor-interfaz.test.ts cuida esta lectura.
+const FRASES_LINEA_SELLAR = frasesDeLaLinea(readFileSync(new URL("../src/i18n.ts", import.meta.url), "utf8"));
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -914,7 +934,7 @@ async function run() {
           );
           check(
             `${etiqueta} ${tema}: sin cuenta, "Entrar para sellar" es la acción principal y su línea tranquiliza`,
-            f.ariaSellar === "true" && f.textoSellar === "Entrar para sellar" && f.principalSellar && f.lineaVisible && f.lineaTexto === "Tu gente no necesita crear cuenta.",
+            f.ariaSellar === "true" && f.textoSellar === "Entrar para sellar" && f.principalSellar && f.lineaVisible && esLaLinea(FRASES_LINEA_SELLAR, f.lineaTexto, "es"),
             `aria-disabled ${f.ariaSellar}, "${f.textoSellar}", principal ${f.principalSellar}, línea ${f.lineaVisible ? "visible" : "oculta"}: "${f.lineaTexto}"`,
           );
           const sq = JSON.parse(await sinCuenta.eval(PROBE));
@@ -1105,6 +1125,70 @@ async function run() {
           check(`proyector ${w}x${h}: sin excepciones`, e.exceptions.length === 0, e.exceptions.slice(0, 2).join(" | "));
         } finally {
           await e.send("Page.close").catch(() => undefined);
+        }
+      }
+    }
+    // La cabecera de escritorio en una sola fila, en el modo Oficial (la marca más ancha), con las campañas abiertas, con la letra
+    // ancha del peor caso y con la cuenta abierta (la de quien organiza, que es la más ancha), en español y en inglés, en los cuatro
+    // saltos de la cabecera (1101, 1200, 1280 y 1440 px). Con cinco entradas en la fila, el grupo de la derecha (idioma, marca y cuenta)
+    // cayó a una segunda fila y nada lo avisó. La cuenta abierta se arma a mano (cuentaAbiertaJs) porque en modo Oficial no hay forma
+    // de abrir una sesión de verdad sin Google: es una estimación del ancho, y la medida con la sesión real la hace audit-flujo.mjs.
+    // La evaluación vive en `lib/cabecera-fila.mjs`, con su prueba.
+    if (!soloPantalla || soloPantalla === "cabecera") {
+      for (const tema of ["dark", "light"]) {
+        for (const idioma of ["es", "en"]) {
+          for (const ancho of ANCHOS_CABECERA) {
+            const c = await browser.open("about:blank");
+            try {
+              await c.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: 800, deviceScaleFactor: 1, mobile: false, screenWidth: ancho, screenHeight: 800 });
+              await sinSesionGuardada(c);
+              await c.send("Page.navigate", { url: `${base}/?theme=${tema}&red=oficial&lang=${idioma}` });
+              await c.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded' && !!document.querySelector('header .header-lado') && !!document.querySelector('#wallet-box .cuenta-chip')", 20000);
+              // La cuenta abierta con un nombre de pila largo, en lugar del chip de Entrar.
+              const puesta = await c.eval(cuentaAbiertaJs(idioma));
+              // Con la letra ancha del peor caso (la de las máquinas de GitHub), no la de esta máquina: ver lib/cabecera-fila.mjs.
+              const cambiados = await c.eval(FORZAR_LETRA_ANCHA);
+              await sleep(400);
+              const medida = JSON.parse(await c.eval(SONDA_FILA_CABECERA));
+              const r = !puesta
+                ? { ok: false, detalle: "no se pudo poner la cuenta abierta en la cabecera: la medida no sería la de quien organiza" }
+                : cambiados > 0
+                  ? evaluarFilaCabecera(medida)
+                  : { ok: false, detalle: "no se pudo poner la letra ancha en la cabecera: la medida no sería la del peor caso" };
+              check(`cabecera ${ancho} px ${tema} ${idioma} en modo Oficial con la cuenta abierta: el grupo de la derecha queda en la fila del logo`, r.ok, r.detalle);
+              await c.screenshot(join(outDir, `ui-cabecera-${ancho}-${idioma}-${tema}.png`));
+            } finally {
+              await c.send("Page.close").catch(() => undefined);
+            }
+          }
+        }
+      }
+    }
+    // La fila del celular con Empresas (cuatro entradas desde 412 px): con la letra ancha de las máquinas de GitHub y con la letra del
+    // sistema agrandada al 120 % (lo común en Android), en español y en inglés. La flecha de Más no puede quedar pegada al borde ni
+    // empujar la página de costado. Empresas puede achicarse con puntos suspensivos: es lo que la fila hace cuando no hay lugar.
+    if (!soloPantalla || soloPantalla === "cabecera") {
+      for (const idioma of ["es", "en"]) {
+        for (const ancho of ANCHOS_CELULAR) {
+          for (const [nombre, preparar] of [["letra ancha", FORZAR_LETRA_ANCHA], ["letra del sistema al 120 %", AGRANDAR_LETRA]]) {
+            const c = await browser.open("about:blank");
+            try {
+              await c.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: 800, deviceScaleFactor: 2, mobile: true, screenWidth: ancho, screenHeight: 800 });
+              await sinSesionGuardada(c);
+              await c.send("Page.navigate", { url: `${base}/?theme=dark&red=oficial&lang=${idioma}` });
+              await c.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded' && !!document.querySelector('header .topnav .mas-btn')", 20000);
+              await c.eval(preparar);
+              await sleep(400);
+              const r = evaluarFilaCelular(JSON.parse(await c.eval(SONDA_FILA_CELULAR)));
+              check(`cabecera celular ${ancho} px ${idioma} con ${nombre}: la flecha de Más queda a la vista y Empresas en la fila`, r.ok, r.detalle);
+              await c.screenshot(join(outDir, `ui-cabecera-celular-${ancho}-${idioma}-${nombre.startsWith("letra ancha") ? "ancha" : "x120"}.png`));
+              // Y la lista que abre Más: la regla que aprieta el relleno de la fila no puede quitarle a sus renglones los 16 px de aire.
+              const lista = evaluarListaMas(JSON.parse(await c.eval(SONDA_LISTA_MAS)));
+              check(`cabecera celular ${ancho} px ${idioma} con ${nombre}: la lista de Más conserva el relleno de sus renglones`, lista.ok, lista.detalle);
+            } finally {
+              await c.send("Page.close").catch(() => undefined);
+            }
+          }
         }
       }
     }

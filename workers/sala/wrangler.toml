@@ -35,9 +35,10 @@ RPC_MAINNET = "https://mainnet.sorobanrpc.com,https://rpc.lightsail.network"
 POLLAR_APP_ID = "cmw6osdl600080imq38rz1vvu"
 # El pase del QR se exige. En "0" se apaga, solo si algo falla el día del evento.
 PASE = "1"
-# "estricto": entra solo quien el proveedor dice, exactamente, que es de Google. Es el valor por defecto: cualquier otro valor
-# (o ninguno) también es estricto. "suave" es solo un interruptor de emergencia: deja entrar y cuenta aparte a quien el
-# proveedor no dice por dónde entró. Una vía que no es Google no entra en ningún modo.
+# "estricto": entra solo quien el proveedor dice que es de Google, sin importar mayúsculas ni espacios alrededor (GOOGLE,
+# Google y google valen). Es el valor por defecto: cualquier otro valor (o ninguno) también es estricto. "suave" es solo
+# un interruptor de emergencia: deja entrar y cuenta aparte a quien el proveedor no dice por dónde entró. Una vía que no
+# es Google no entra en ningún modo.
 SOLO_GOOGLE = "estricto"
 # El aviso por correo a quien gana nace apagado: solo con "1" la sala lo manda. El remitente es una dirección del dominio ya
 # habilitado para el envío.

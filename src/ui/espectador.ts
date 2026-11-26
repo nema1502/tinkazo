@@ -365,6 +365,9 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
   };
   const tecla = (e: KeyboardEvent): void => {
     if (e.key !== "Escape") return;
+    // Escape mantenida apretada repite el evento: la primera pulsación pudo cerrar el diálogo de compartir y las que siguen
+    // no deben sacar de la vista en vivo. Para salir hay que soltarla y apretarla de nuevo.
+    if (e.repeat) return;
     // Mientras corre el show, Escape no cierra la vista (ni salta el juego: el show se mira entero).
     if (fase === "show" || fase === "numero" || fase === "grabando") return;
     // Con el diálogo de compartir abierto, Escape lo cierra a él: al cerrarse, la vista en vivo sigue como estaba.

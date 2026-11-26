@@ -15,6 +15,7 @@ import { iniciarCupo } from "./ui/cupo-patrocinio";
 import { iniciarCupon } from "./ui/cupon-enlace-entorno";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
+import { montarAvisoDePlata } from "./ui/premio-plata";
 import { montarGanadores, ponerGanadores } from "./ui/ganadores";
 import { abrirConElModoPedido, montarTurnos } from "./ui/turnos";
 import { MAX_WINNERS } from "./protocol/select";
@@ -225,8 +226,9 @@ iniciarLogo();
 iniciarLogoEnElEstadio();
 bindParticipants();
 montarPremios();
+montarAvisoDePlata();
 montarGanadores();
-// «Orden de turnos»: escondido salvo con la bandera VITE_MODOS o con ?modo=turnos (src/modos/bandera.ts).
+// «Orden de turnos»: a la vista con la bandera VITE_MODOS, prendida por defecto desde el cambio 7e414660, o con ?modo=turnos (src/modos/bandera.ts).
 montarTurnos();
 // Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad. La salida dejó
 // la página arriba (`scrollRestoration` en manual): desde acá, recargar vuelve a donde se estaba, como siempre.
@@ -247,7 +249,7 @@ initEnsayo();
 initStandSala();
 // Los juegos interactivos (botón de la portada: src/sala/organizador.ts).
 initOrganizadorInteractivo();
-// Los equipos con cupón (bandera VITE_EQUIPOS, apagada por defecto): sin la bandera no se agrega nada.
+// Los equipos con cupón (bandera VITE_EQUIPOS, prendida por defecto desde el cambio 7e414660): sin la bandera no se agrega nada.
 if (equiposActivo()) {
   reponerEtiquetas();
   void import("./ui/equipos-sala").then((m) => m.initEquiposSala());
@@ -640,7 +642,7 @@ if (location.hash.startsWith("#participante=")) {
 }
 // Las campañas de empresas (detrás de VITE_CAMPANAS): la entrada de quien ganó y la pestaña que deja la ventana de Google.
 if (campanasActivo()) {
-  // El enlace de la portada a armar la campaña de una empresa se ve solo con las campañas abiertas.
-  for (const enlace of document.querySelectorAll<HTMLElement>("[data-campana-enlace]")) enlace.hidden = false;
+  // Los enlaces a armar la campaña de una empresa los muestra o esconde el atributo data-campanas de html (index.html y styles.css) desde
+  // el primer pintado: ningún guion los destapa.
   void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);
 }

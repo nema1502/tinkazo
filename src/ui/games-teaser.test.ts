@@ -286,3 +286,63 @@ describe("el aspecto de la presentación vive en la hoja de estilos", () => {
     expect(css).toMatch(/\.espera\[data-sin-teaser\]\s+\.espera-teaser-caja\s*\{\s*display:\s*none/);
   });
 });
+
+describe("la imagen de cada tarjeta no mueve nada si tarda o falla", () => {
+  const css = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  it("cada imagen trae su ancho y su alto reservados, para que al cargar la tarjeta no cambie de tamaño", () => {
+    const c = caja();
+    presentarTeaser(c, "race", ["Ana", "Beto"]);
+    for (const img of c.querySelectorAll("img")) {
+      expect(img.getAttribute("width")).toBe("76");
+      expect(img.getAttribute("height")).toBe("43");
+    }
+    // La hoja de estilos reserva la misma medida y no deja que la tarjeta la achique.
+    const regla = /\.espera-teaser-tarjeta \.sel-img\s*\{([^}]*)\}/u.exec(css)?.[1] ?? "";
+    expect(regla).toMatch(/width:\s*76px/);
+    expect(regla).toMatch(/height:\s*43px/);
+    expect(regla).toMatch(/flex-shrink:\s*0/);
+  });
+
+  it("si la imagen falla en la red, se esconde sin quitarla: la tarjeta conserva su tamaño, su nombre y no queda ícono roto", () => {
+    const c = caja();
+    presentarTeaser(c, "race", ["Ana", "Beto"]);
+    const imgs = [...c.querySelectorAll<HTMLImageElement>("img")];
+    expect(imgs).toHaveLength(2);
+    expect(imgs[0]?.hasAttribute("data-fallo")).toBe(false);
+    imgs[0]?.dispatchEvent(new Event("error"));
+    expect(imgs[0]?.hasAttribute("data-fallo")).toBe(true);
+    // La otra sigue a la vista y la tarjeta que falló sigue presentando a su persona.
+    expect(imgs[1]?.hasAttribute("data-fallo")).toBe(false);
+    expect(tarjetas(c).map((t) => t.dataset.nombre)).toEqual(["Ana", "Beto"]);
+    expect(tarjetas(c)[0]?.textContent).toContain("1 de 2");
+    expect(css).toMatch(/\.espera-teaser-tarjeta \.sel-img\[data-fallo\]\s*\{[^}]*visibility:\s*hidden/);
+  });
+
+  it("rearmar lo mismo no toca las tarjetas: la imagen que falló sigue siendo el mismo nodo y sigue escondida", () => {
+    const c = caja();
+    presentarTeaser(c, "race", ["Ana"]);
+    const antes = c.querySelector("img");
+    antes?.dispatchEvent(new Event("error"));
+    presentarTeaser(c, "race", ["Ana"]);
+    const despues = c.querySelector("img");
+    expect(antes).not.toBeNull();
+    expect(despues).toBe(antes);
+    expect(despues?.hasAttribute("data-fallo")).toBe(true);
+  });
+
+  it("los juegos que salieron del selector y siguen abriendo con demo no tienen captura: la presentación sale sin imagen y sin errores", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    for (const juego of ["quien", "trueque", "tombola", "pasanaku", "stellar", "luz", "ledger", "rockets", "totora"]) {
+      const c = caja();
+      expect(() => presentarTeaser(c, juego, ["Ana", "Beto"]), juego).not.toThrow();
+      expect(tarjetas(c).map((t) => t.dataset.nombre), juego).toEqual(["Ana", "Beto"]);
+      expect(c.querySelector("img"), juego).toBeNull();
+    }
+    expect(error).not.toHaveBeenCalled();
+    expect(aviso).not.toHaveBeenCalled();
+    error.mockRestore();
+    aviso.mockRestore();
+  });
+});

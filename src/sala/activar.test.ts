@@ -310,6 +310,34 @@ describe("la sesión", () => {
     expect(await r.json()).toEqual({ error: "no-google" });
   });
 
+  it("cuando rechaza por la vía deja una sola línea con el valor saneado y el modo, y nada de la persona", async () => {
+    const espia = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const correo = personaDePrueba(m.mundo, 5, { authProvider: "EMAIL" });
+      m.horizon.pagos = [m.pagoCompleto(EVENTO, { from: correo.cuenta })];
+      const r = await m.activar({ texto: JSON.stringify(m.campana({ organizadora: correo.cuenta })), sesion: correo.token });
+      expect(r.status).toBe(403);
+      expect(await r.json()).toEqual({ error: "no-google" });
+      const lineas = espia.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("via-rechazada"));
+      expect(lineas).toEqual([JSON.stringify({ evento: "via-rechazada", datos: { valor: "email", modo: "estricto" } })]);
+      for (const secreto of [correo.token, correo.cuenta, correo.usuario, "190.129.10.20"]) expect(lineas[0]).not.toContain(secreto);
+    } finally {
+      espia.mockRestore();
+    }
+  });
+
+  it("una sesión de Google no deja la línea de la vía rechazada", async () => {
+    const espia = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const google = personaDePrueba(m.mundo, 5, { authProvider: "GOOGLE" });
+      m.horizon.pagos = [m.pagoCompleto(EVENTO, { from: google.cuenta })];
+      await m.activar({ texto: JSON.stringify(m.campana({ organizadora: google.cuenta })), sesion: google.token });
+      expect(espia.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("via-rechazada"))).toEqual([]);
+    } finally {
+      espia.mockRestore();
+    }
+  });
+
   it("una sesión que no dice por dónde entró tampoco pasa en modo estricto", async () => {
     const sinDato = personaDePrueba(m.mundo, 6, { authProvider: undefined });
     const r = await m.activar({ texto: JSON.stringify(m.campana({ organizadora: sinDato.cuenta })), sesion: sinDato.token });

@@ -140,14 +140,32 @@
   .lead { font-size: 18px; color: var(--ink2); max-width: 560px; font-weight: 500; }
   .mascot { color: var(--magenta); transform: rotate(3deg); }
   .mascot svg { width: 150px; height: 130px; filter: drop-shadow(6px 6px 0 var(--ink)); }
-  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; margin: 14px 0 52px; }
-  .steps article { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 20px; }
+  /* Los tres pasos van sin caja ni sombra: un dibujo chico al lado del título y la línea. Así explican sin competir con las
+     puertas de arriba, que son las que llevan a una acción. */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 28px; margin: 6px 0 44px; }
+  /* Desde 761 px los tres pasos van en una fila. Con 260 px por columna entre 767 y 875 px quedaban dos arriba y el tercero
+     solo abajo, con media fila vacía. El ancho útil es el de la ventana menos 40 px de relleno (y la barra de recorrer, si hay):
+     a 761 px son 721 px, y tres columnas de 220 px con dos huecos de 20 px piden 700 px. Por debajo de 761 px no cambia nada. */
+  @media (min-width: 761px) { .steps { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px 20px; } }
+  .steps article { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 16px; align-items: start; padding: 8px 0; }
+  /* En una tableta vertical (761 a 900 px) los tres pasos van en fila pero cada columna mide unos 220 a 270 px: con el dibujo al
+     lado el texto quedaba en unos 140 px, y el detalle plegado del primer paso abría una columna angosta de unos veinte renglones.
+     Ahí el dibujo va arriba del texto y el texto usa el ancho entero de su columna. */
+  @media (min-width: 761px) and (max-width: 900px) { .steps article { grid-template-columns: minmax(0, 1fr); row-gap: 8px; } }
   .steps article:nth-child(1) .num { background: var(--magenta); }
   .steps article:nth-child(2) .num { background: var(--orange); }
   .steps article:nth-child(3) .num { background: var(--purple); color: var(--on-purple); }
   .num { display: inline-block; color: var(--on-accent); border: 2px solid var(--ink); font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 16px; padding: 2px 10px; transform: rotate(-2deg); }
-  .steps h3 { font-size: 17px; margin-top: 10px; font-weight: 800; }
-  .steps p { font-size: var(--letra-sec); color: var(--ink2); margin-top: 6px; }
+  .steps h3 { font-size: 18px; margin-top: 8px; font-weight: 800; }
+  .steps p { font-size: var(--letra-sec); color: var(--ink2); margin-top: 4px; }
+  /* Cada paso trae su dibujo: la lista, el sello con la llama y un trompo. Del mismo estilo, de 64 px. */
+  .steps .paso-media { width: 64px; height: 64px; border: 2px solid var(--ink); background: var(--field); overflow: hidden; }
+  .steps .paso-media svg { width: 100%; height: 100%; display: block; }
+  .steps .paso-txt { min-width: 0; }
+  /* El detalle de un paso va plegado: la portada dice una línea y quien quiere más la abre. */
+  .steps .paso-mas summary { cursor: pointer; display: flex; align-items: center; min-height: 44px; font-size: var(--letra-sec); font-weight: 700; color: var(--ink2); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; list-style: none; }
+  .steps .paso-mas summary::-webkit-details-marker { display: none; }
+  .steps .paso-mas p { margin-top: 0; padding-bottom: 6px; }
   section.block { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); margin-bottom: 34px; }
   .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 22px; border-bottom: var(--bw) solid var(--ink); flex-wrap: wrap; }
   .head h2 { font-size: var(--letra-prin); font-weight: 800; }
@@ -1092,6 +1110,8 @@
     font-size: clamp(14px, 1.4vw, 18px);
   }
   .espera-teaser-tarjeta .sel-img { display: block; width: 76px; height: 43px; object-fit: cover; border-radius: 6px; background: var(--field); flex-shrink: 0; }
+  /* La captura que no llegó se esconde pero conserva su lugar: la tarjeta no cambia de tamaño ni empuja el reloj. */
+  .espera-teaser-tarjeta .sel-img[data-fallo] { visibility: hidden; }
   .espera-teaser-tarjeta b { overflow-wrap: anywhere; }
   .espera-nadie { font-size: clamp(14px, 1.7vw, 22px); font-weight: 800; color: var(--ink); max-width: 46ch; text-wrap: balance; }
   .espera-ensayo {
@@ -1658,6 +1678,8 @@
     /* Con cantidad impar, el último enlace ocupa las dos columnas: solo abajo a
        la izquierda se leía como un renglón suelto. */
     footer .pies a:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    /* Con las campañas cerradas Para empresas sigue en el marcado, escondido: cuenta como hijo y los visibles quedan impares. */
+    html[data-campanas]:not([data-campanas="1"]):not([data-campanas="true"]) footer .pies a:last-child { grid-column: 1 / -1; }
   }
 
   /* ------------------------------------------------ la ventana de importar
@@ -1809,15 +1831,48 @@
      la fila lleva cuatro entradas y esta sobra. menu.ts lo sigue agregando siempre
      y acá se esconde, así el texto no se pierde. */
   @media (min-width: 761px) { .topnav .mas-lista a[href="/#como-se-usa"] { display: none; } }
-  /* Para empresas va solo en Más del celular, y solo con las campañas abiertas (el atributo hidden lo saca main.ts). En la
-     laptop la fila no tiene Más ni lugar para una quinta entrada: ahí la invitación es la del final de la portada. */
-  .topnav .mas-lista a[data-campana-enlace][hidden] { display: none; }
-  @media (min-width: 761px) { .topnav .mas-lista a[data-campana-enlace] { display: none; } }
-  /* En la fila quedan cuatro: Sortear, Mis sorteos, Juegos y Cómo funciona (8 de noviembre
-     de 2026; Seguridad y Precios bajaron al pie). Con las siete de antes, entre 1101 y
-     1279 px y con la cuenta abierta, se apretaban contra el nombre. Un poco menos de aire
-     en cada una alcanza. */
+  /* Todo lo de las empresas (la cabecera, la puerta y el final de la portada, el aviso de Sortear y el pie) se ve solo con las
+     campañas abiertas, y eso se decide antes del primer pintado: index.html lleva en el elemento html el valor de VITE_CAMPANAS
+     (data-campanas), puesto al construir, y esta regla esconde lo marcado cuando no vale 1 ni true, que es lo que acepta
+     src/campana/bandera.ts. Sin la variable o con la bandera cerrada no se ve ninguno y no queda hueco. Nada nace con hidden ni
+     espera a un guion: la portada no salta de dos a tres puertas ni la cabecera se mueve en cada visita. Desde el 25 de noviembre
+     de 2026 Para empresas tampoco se esconde en la laptop: era la entrada de quien arma una campaña y casi siempre lo hace desde
+     una compu. */
+  html[data-campanas]:not([data-campanas="1"]):not([data-campanas="true"]) [data-campana-enlace] { display: none; }
+  /* El nombre corto de Para empresas va en la fila del celular, de 412 a 760 px, antes de Más. Ahí sale de Más para no repetirse.
+     Por debajo de 412 px la fila no tiene lugar y sigue dentro de Más: la fila no hace salto de línea ni desborda, y con una letra
+     más ancha que la de un teléfono (la de las máquinas de GitHub) Más quedaba cortado contra el borde a 375 px y su flecha a 390, y a 400 px la flecha quedaba a 7 px del borde. */
+  .topnav a.nav-empresas-cel { display: none; }
+  /* Con la letra del sistema agrandada (un teléfono con el texto al 110 % o más) cuatro entradas no entran en 380 px. Empresas
+     es la única que cede: se achica con puntos suspensivos hasta 44 px y Más, con su flecha, nunca se corre del borde. Para que
+     funcione el puntos suspensivos es un bloque de un renglón de 41 px (más los 3 px del borde de abajo, los 44 de siempre). */
+  @media (min-width: 412px) and (max-width: 760px) {
+    .topnav a.nav-empresas-cel { display: block; line-height: 41px; flex: 0 1 auto; min-width: 44px; overflow: hidden; text-overflow: ellipsis; }
+    .topnav .mas-lista a[data-campana-enlace] { display: none; }
+  }
+  /* Y de 412 a 520 px, con las campañas abiertas, la fila aprieta el relleno de sus cuatro entradas y el aire junto a Sortear: unos
+     veinte píxeles que, en los celulares de 412 y 414 px, son la diferencia entre entrar con la letra del sistema al 120 % o no.
+     Cerradas las campañas la fila lleva tres entradas y queda como era. Los selectores son de hijos directos (>): los renglones de la
+     lista que abre Más también cuelgan de .topnav y, con un espacio, esta regla les quitaba su relleno de 16 px. */
+  @media (min-width: 412px) and (max-width: 520px) {
+    html[data-campanas="1"] header .topnav > a, html[data-campanas="true"] header .topnav > a,
+    html[data-campanas="1"] header .topnav .mas-btn, html[data-campanas="true"] header .topnav .mas-btn { padding-inline: 5px; }
+    html[data-campanas="1"] header .topnav > a.nav-app, html[data-campanas="true"] header .topnav > a.nav-app { margin-right: 4px; }
+  }
+  /* En la fila quedan cinco: Sortear, Mis sorteos, Juegos, Cómo funciona y Para empresas (la quinta se sumó el 25 de noviembre
+     de 2026; Seguridad y Precios bajaron al pie el 8 de noviembre). Con siete, entre 1101 y 1279 px y con la cuenta abierta,
+     se apretaban contra el nombre. Un poco menos de aire en cada una alcanza. */
   @media (min-width: 1101px) and (max-width: 1439px) { .topnav a { padding: 0 8px; } }
+  /* El enlace de las empresas lleva los dos nombres y se ve uno. Con cinco entradas, entre 1101 y 1439 px la fila de una línea no
+     deja lugar al grupo de la derecha (idioma, marca del modo y cuenta) si dice Para empresas: con la marca Oficial y la cuenta
+     abierta el grupo caía a una segunda fila, debajo del logo, el mismo defecto del 26 de octubre. Ahí dice Empresas. Por
+     debajo de 1101 px la fila va en su propia línea y desde 1440 px sobra lugar: dice Para empresas. El nombre que no se ve va con
+     display none, así el lector de pantalla lee uno solo. La fila del celular (nav-empresas-cel) tiene su propio nombre corto. */
+  .topnav a .nav-emp-c { display: none; }
+  @media (min-width: 1101px) and (max-width: 1439px) {
+    .topnav a .nav-emp-l { display: none; }
+    .topnav a .nav-emp-c { display: inline; }
+  }
   /* Con la cuenta (26 de octubre de 2026): la insignia de la red y el chip de la cuenta no entraban en la fila de 1240 px
      y la cuenta caía a una segunda fila, a la izquierda, debajo del logo: donde nadie la mira. Desde 1440 px la fila es más
      ancha y entra todo. */
@@ -1827,8 +1882,7 @@
      cortado a 390 px (hallazgo H2). Botón y lista miden 44 px de alto como
      mínimo. Entre 761 y 1100 px las cuatro entradas entran en la fila. */
   @media (max-width: 760px) {
-    .topnav > a[href="/#mis-sorteos"] { order: 2; }
-    .topnav .mas { display: block; position: relative; order: 3; }
+    .topnav .mas { display: block; position: relative; }
     .topnav .mas-btn {
       display: inline-flex; align-items: center; gap: 7px; min-height: 44px; min-width: 44px; padding: 0 11px;
       background: none; border: 0; border-bottom: 3px solid transparent; color: var(--ink);
@@ -2083,8 +2137,9 @@
   .note a, .txstatus a, .entity a, main > section > a.sec-link { color: inherit; text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
   /* El hero muestra el producto: una partida de verdad, con la llama encima. */
-  .hero-portada { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 40px; }
+  .hero-portada { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 24px 40px; }
   /* A 64 px el título de doce palabras caía en tres renglones y dejaba "grande." solo en el de abajo (1920x1080): a 56 entra en dos. */
+  .hero-portada { padding-top: 28px; row-gap: 18px; }
   .hero-portada h1 { font-size: clamp(38px, 6.4vw, 56px); }
   .hero-shot { position: relative; display: block; }
   .hero-shot img { width: 100%; height: auto; display: block; border: var(--bw) solid var(--ink); box-shadow: var(--sh); transform: rotate(1.2deg); transition: transform 0.15s ease; }
@@ -2092,8 +2147,17 @@
   .hero-shot .mascot { position: absolute; left: -30px; bottom: -34px; }
   .hero-shot .mascot svg { width: 104px; height: 90px; }
   @media (max-width: 700px) {
-    .hero-portada { grid-template-columns: 1fr; gap: 26px; }
-    .hero-portada .hero-shot { display: block; }
+    .hero-portada { grid-template-columns: 1fr; gap: 18px; padding-top: 20px; }
+    /* En el celular el orden es el del HTML: el título, la línea, el botón de entrar, su renglón de Otras formas de entrar (que
+       mientras se entra lleva Cancelar) y después las puertas. La imagen es lo único que se mueve, y es un enlace repetido de
+       la puerta de Mirá cómo es: por defecto va al final, después de las puertas, para que el botón principal quede arriba. */
+    .hero-portada .hero-shot { order: 2; margin-top: 6px; }
+  }
+  /* En un celular angosto y alto sobra lugar: la imagen del show va arriba, antes del título, y el botón principal sigue entero
+     en la primera pantalla. La imagen mide el ancho por 0,562, así que más ancho la hace más alta: el botón termina en unos 675 px
+     a 520 de ancho y en unos 790 a 700. Por eso el corte mira también el ancho. */
+  @media (max-width: 520px) and (min-height: 741px) {
+    .hero-portada .hero-shot { order: -1; margin-top: 0; margin-bottom: 4px; }
   }
   /* En una laptop el botón de sortear tiene que verse sin bajar. Con 1366×768
      al 100%, a Chrome le quedan unos 625 píxeles de alto, y el título en cuatro
@@ -2108,11 +2172,100 @@
      "Probar con un ejemplo" debajo (auditor del primer sorteo, 22 de octubre de 2026). */
   @media (max-width: 700px) and (max-height: 740px) {
     .hero-portada { padding-top: 14px; }
+    .hero-portada { gap: 12px; }
     .hero-portada .hero-copy { gap: 12px; }
     .hero-portada h1 { font-size: clamp(30px, 8.4vw, 38px); }
     .hero-portada .lead { font-size: var(--letra-sec); line-height: 1.45; }
   }
   .portada-juegos .pj-ver { font-size: 14px; }
+
+  /* Las tres puertas de la portada (25 de noviembre de 2026): una tarjeta por lo que viene a hacer cada quien, con su imagen,
+     un título, una línea y su acción. Van dentro del hero y ocupan el ancho entero. La de las empresas se ve solo con las campañas
+     abiertas: sin ellas quedan dos tarjetas que se reparten el ancho, sin hueco. */
+  .puertas { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: stretch; margin-top: 0; }
+  /* Con las campañas abiertas (data-campanas de html) son tres. Cerradas, la tarjeta de las empresas no se ve (display: none) y las
+     dos que quedan se reparten el ancho, sin hueco. */
+  @media (min-width: 860px) {
+    html[data-campanas="1"] .puertas, html[data-campanas="true"] .puertas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  .puerta {
+    display: flex; flex-direction: column; gap: 8px; padding: 14px; background: var(--card); color: var(--ink);
+    border: var(--bw) solid var(--ink); box-shadow: var(--sh); min-width: 0; position: relative;
+  }
+  /* Lado a lado, la imagen es más baja que la del hero: los botones de las puertas entran en la primera pantalla de una laptop. */
+  .puerta-media { position: relative; flex: 1 0 auto; aspect-ratio: 21 / 9; border: 2px solid var(--ink); background: var(--field); overflow: hidden; margin-bottom: 4px; }
+  .puerta-media .pj-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .puerta-media .pj-osc { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .puerta-media .pj-osc { display: block; }
+    :root:not([data-theme="light"]) .puerta-media .pj-cla { display: none; }
+  }
+  :root[data-theme="dark"] .puerta-media .pj-osc { display: block; }
+  :root[data-theme="dark"] .puerta-media .pj-cla { display: none; }
+  .puerta-t { font-size: 22px; font-weight: 900; line-height: 1.15; letter-spacing: -0.01em; }
+  .puerta-b { color: var(--ink2); font-size: var(--letra-sec); }
+  /* Lado a lado, la línea reserva dos renglones: los tres títulos y los tres botones quedan a la misma altura. */
+  @media (min-width: 860px) { .puerta-b { min-height: 3em; } }
+  /* La imagen se estira y absorbe el alto que sobra: con tres tarjetas de alto parejo, los botones quedan en la misma línea. */
+  .puerta .puerta-a { min-height: 44px; margin-top: 2px; display: inline-flex; align-items: center; justify-content: center; text-align: center; width: 100%; }
+  /* La tarjeta entera es el enlace: el área de toque del botón se estira a toda la tarjeta, así tocar la imagen también funciona. */
+  .puerta .puerta-a::after { content: ""; position: absolute; inset: 0; }
+  /* El botón no se mueve al pasar el mouse: con transform sería el bloque contenedor de su ::after y la tarjeta entera dejaría de ser
+     el área de toque (parpadeo). El realce de la puerta lo da .puerta:hover. */
+  .puerta .puerta-a:hover:not(:disabled), .puerta a.puerta-a:hover { transform: none; box-shadow: var(--sh-sm); }
+  .puerta:has(.puerta-a:focus-visible) { outline: 3px solid var(--purple-ink); outline-offset: 3px; }
+  .puerta-ico { display: none; }
+
+  /* La tarjeta de campaña de ejemplo: la marca es inventada y dice que es un ejemplo. El estado va con ícono y texto, y la
+     cuenta de personas, sin nombres. Es lo que verá quien se anote, a pequeña escala. */
+  .puerta-empresa .puerta-media { aspect-ratio: auto; overflow: visible; border: 0; background: none; margin-bottom: 4px; }
+  .cp-ejemplo { display: flex; flex-direction: column; height: 100%; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+  .cp-franja { display: block; height: 12px; background: var(--orange); border-bottom: 2px solid var(--ink); flex: none; }
+  .cp-cuerpo { display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 10px 12px; flex: 1 1 auto; }
+  .cp-marca { display: flex; align-items: center; gap: 10px; }
+  .cp-logo {
+    flex: none; display: grid; place-items: center; width: 42px; height: 42px; color: var(--muted);
+    background: var(--field); border: 2px dashed var(--muted);
+  }
+  .cp-nombres { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; flex: 1 1 auto; }
+  .cp-nombres strong { font-size: 17px; font-weight: 900; }
+  .cp-nombres span { font-size: 16px; color: var(--ink2); }
+  .cp-rotulo { flex: none; align-self: flex-start; background: var(--purple); color: var(--on-purple); font-size: 16px; font-weight: 800; padding: 2px 8px; border: 2px solid var(--ink); }
+  .cp-premio { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; line-height: 1.2; }
+  .cp-pie { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .cp-premio span { font-size: 16px; color: var(--ink2); font-weight: 700; }
+  .cp-premio strong { font-size: 20px; font-weight: 900; }
+  .cp-estado {
+    display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 16px; font-weight: 800;
+    background: var(--yellow); color: #191919; border: 2px solid var(--ink); padding: 3px 10px 3px 6px;
+  }
+  .cp-gente { font-size: 16px; color: var(--ink2); line-height: 1.25; }
+  @media (max-width: 359px) { .cp-nombres span { display: none; } }
+  @media (hover: hover) {
+    .puerta { transition: transform 0.12s ease, box-shadow 0.12s ease; }
+    .puerta:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 var(--ink); }
+  }
+  @media (prefers-reduced-motion: reduce) { .puerta, .puerta:hover { transition: none; transform: none; } }
+  /* En un celular o una tableta cada puerta es un renglón: una miniatura de 64 px, el título y la acción, sin la línea. El renglón
+     entero es el enlace. La tarjeta de ejemplo de las empresas se cambia por un regalo. Las tarjetas grandes quedan en escritorio. */
+  /* Los renglones ocupan el ancho del contenido, a la izquierda, alineados con el título y el botón de arriba. */
+  @media (max-width: 859px) {
+    .puertas { grid-template-columns: minmax(0, 1fr); width: 100%; gap: 8px; }
+  }
+  @media (max-width: 859px), (min-width: 860px) and (max-height: 820px) {
+    .puerta { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 14px; row-gap: 0; align-items: center; align-content: center; padding: 6px 12px 6px 6px; border-width: 2px; box-shadow: var(--sh-sm); }
+    .puerta-media, .puerta-empresa .puerta-media { grid-row: 1 / span 2; width: 64px; height: 64px; aspect-ratio: auto; flex: none; margin: 0; border: 2px solid var(--ink); background: var(--field); overflow: hidden; }
+    .puerta-t { grid-column: 2; font-size: 18px; }
+    .puerta-b { display: none; }
+    .puerta .puerta-a, .puerta .puerta-a:hover:not(:disabled) {
+      grid-column: 2; width: auto; justify-self: start; min-height: 44px; margin: 0; padding: 2px 0 0; align-items: flex-start; border: 0; background: none; box-shadow: none; transform: none;
+      font-size: 16px; font-weight: 700; color: var(--purple-ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; text-align: start;
+    }
+    .puerta-empresa .cp-ejemplo { display: none; }
+    .puerta-empresa .puerta-media { background: var(--yellow); }
+    .puerta-ico { display: grid; place-items: center; width: 100%; height: 100%; color: #191919; }
+    .puerta-ico svg { width: 38px; height: 38px; }
+  }
 
   /* La demo se presenta: una franja arriba y una invitación al final. */
   .demo-banner { display: none; }
@@ -2956,6 +3109,18 @@
   .premio-lugares[hidden] { display: none; }
   /* Los premios no entran en lo que se sella: es un aviso, no una ayuda gris, y el campo que no entra queda marcado. */
   .note.aviso-premio { color: var(--ink); font-weight: 700; border-left: 4px solid var(--orange); padding-left: 10px; }
+  /* El aviso del premio en plata: una pista que se cierra, con el enlace a la campaña. Va en tinta y papel, sin color de acción:
+     la acción principal del paso sigue siendo Sellar la lista. */
+  .aviso-plata { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 10px; padding: 6px 4px 6px 12px; border-left: 4px solid var(--teal); background: var(--field); }
+  .aviso-plata[hidden] { display: none; }
+  .aviso-plata p { flex: 1 1 220px; margin: 0; font-size: var(--letra-sec); color: var(--ink); }
+  .aviso-plata .enlace { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; }
+  .aviso-plata-x { flex: none; width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 0; color: var(--ink); font-size: 26px; line-height: 1; cursor: pointer; }
+  .aviso-plata-x:hover { background: var(--line); }
+  /* El enlace discreto de siempre se va mientras el aviso dice lo mismo. */
+  .aviso-plata:not([hidden]) ~ .premio-campana { display: none; }
+  .premio-campana { margin-top: 6px; }
+  .premio-campana a { display: inline-flex; align-items: center; min-height: 44px; color: var(--purple-ink); }
   #prize[aria-invalid="true"], .premio-lugares input[aria-invalid="true"] { box-shadow: 0 0 0 3px var(--orange); }
 
   /* Cuántos ganan (src/ui/ganadores.ts), a la vista junto a Sellar la lista. Todo son botones: menos, más y los atajos
@@ -4027,7 +4192,7 @@
   .espera-juegos.pase .espera-juego-op.pase-atras { opacity: 0.5; transform: scale(0.96); z-index: 1; }
   @media (prefers-reduced-motion: reduce) { .espera-juegos.pase .espera-juego-op { transition: none; } }
 
-  /* --- El temblor de los dos botones del hero (estilos-atencion.ts): tras ~8 s
+  /* --- El temblor del botón principal de la portada y del par del cierre (estilos-atencion.ts): tras ~8 s
      sin interactuar, una sacudida sutil de ~0,5 s con dos vaivenes. --- */
   @keyframes temblor-atencion {
     0%, 100% { transform: none; }

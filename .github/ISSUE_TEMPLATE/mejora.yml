@@ -1,0 +1,36 @@
+name: Una mejora o un pedido
+description: Algo que Tinkazo podría hacer mejor, o algo nuevo que haría falta
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por proponer. Un pedido concreto y chico es más fácil de revisar. Si es grande, contalo igual y vemos cómo partirlo.
+  - type: textarea
+    id: que-pasa
+    attributes:
+      label: Qué pasa hoy
+      description: La situación de hoy, sin proponer todavía la solución.
+    validations:
+      required: true
+  - type: textarea
+    id: por-que
+    attributes:
+      label: Por qué importa
+      description: A quién le cambia algo y cuándo se nota. Un ejemplo vale más que una explicación.
+    validations:
+      required: true
+  - type: textarea
+    id: que-se-quiere
+    attributes:
+      label: Qué se quiere
+      description: Lo que tendría que ser distinto cuando esté hecho. Si tenés un dibujo o una captura, adjuntala.
+    validations:
+      required: true
+  - type: checkboxes
+    id: cuidado
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: No puse secretos, llaves ni datos de otras personas
+          required: true

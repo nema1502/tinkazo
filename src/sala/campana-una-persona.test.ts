@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ENVIOS_CAMPANA_POR_CONEXION, RECHAZOS_POR_FICHA } from "../../workers/sala/src/campana";
+import { ENVIOS_CAMPANA_POR_CONEXION, RECHAZOS_POR_CONEXION, RECHAZOS_POR_FICHA } from "../../workers/sala/src/campana";
 import {
   altaDe,
   campanaAbierta,
   montarMundo,
   personaDePrueba,
+  sesionDePrueba,
   type MundoDeSala,
   type PersonaDePrueba,
   type SalaDeCampana,
@@ -107,6 +108,32 @@ describe("una sola persona no deja afuera a las demás", () => {
     for (let i = 0; i < 3 * RECHAZOS_POR_FICHA; i++) await altaDe(mundo, sala.id, persona);
     expect((await altaDe(mundo, sala.id, personaDePrueba(mundo, 4))).status).toBe(201);
   });
+
+  it("con más sesiones sin cuenta que el tope de rechazos de la conexión, todas esperan su cuenta y la persona que sigue entra", async () => {
+    // Un recinto entero con cuentas nuevas detrás de la misma wifi: cada sesión es buena y solo falta su cuenta.
+    for (let i = 0; i <= RECHAZOS_POR_CONEXION; i++) {
+      const persona = personaDePrueba(mundo, 1000 + i, { wallet: null });
+      mundo.proveedor.billeteras.set(persona.usuario, null);
+      const r = await altaDe(mundo, sala.id, persona);
+      expect(r.status).toBe(409);
+      expect(await r.json()).toEqual({ error: "sin-billetera" });
+    }
+    const conCuenta = await altaDe(mundo, sala.id, personaDePrueba(mundo, 2000));
+    expect(conCuenta.status).toBe(201);
+  }, 60_000);
+
+  it("con tantas sesiones que el proveedor rechaza de verdad como el tope de la conexión, la que sigue recibe rechazos", async () => {
+    for (let i = 0; i < RECHAZOS_POR_CONEXION; i++) {
+      // Una sesión que el proveedor no conoce: lo que cuenta es que costó una llamada y la rechazó.
+      const token = sesionDePrueba(`desconocida${i}`);
+      const r = await altaDe(mundo, sala.id, { ...personaDePrueba(mundo, 3000 + i), token });
+      expect(r.status).toBeGreaterThanOrEqual(400);
+      expect(r.status).not.toBe(429);
+    }
+    const siguiente = await altaDe(mundo, sala.id, personaDePrueba(mundo, 4000));
+    expect(siguiente.status).toBe(429);
+    expect(await siguiente.json()).toEqual({ error: "rechazos" });
+  }, 60_000);
 
   it("dos pedidos a la vez de la misma persona anotan una sola vez", async () => {
     const persona = personaDePrueba(mundo, 5);

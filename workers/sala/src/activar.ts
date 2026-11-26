@@ -397,6 +397,8 @@ export interface DepsDeVerificar {
   /** El proveedor de cuentas de la sala (el mismo del alta), o null si no está configurado. */
   proveedor: Pick<Pollar, "verificar" | "billeteraDe"> | null;
   topes: { antes: TopesDeActivar["antes"]; rechazo: TopesDeActivar["rechazo"] };
+  /** Deja un código fijo en el registro: nunca una cuenta, una sesión ni un nombre. */
+  registrar?: (evento: string, datos?: Record<string, string | number>) => void;
 }
 
 /**
@@ -426,6 +428,8 @@ export async function verificarQuienOrganiza(sesion: string, d: DepsDeVerificar)
   // entró no firma campañas ni recibe acceso en el portero.
   const via = viaPermitida(verificada.via, "estricto");
   if (!via.ok) {
+    // Una línea con lo que mandó el proveedor (ya saneado, sin nada de la persona): si todos quedaran afuera, se ve por qué.
+    d.registrar?.("via-rechazada", { valor: verificada.viaCruda ?? "sin-campo", modo: "estricto" });
     await d.topes.rechazo(d.ip, sesion);
     return { ok: false, respuesta: error(403, "no-google") };
   }
@@ -453,6 +457,8 @@ export interface DepsDeCuenta {
   ahora: number;
   proveedor: Pick<Pollar, "verificar" | "billeteraDe" | "conocida"> | null;
   topes: TopesDeCuenta;
+  /** Deja un código fijo en el registro: nunca una cuenta, una sesión ni un nombre. */
+  registrar?: (evento: string, datos?: Record<string, string | number>) => void;
 }
 
 /**
@@ -483,6 +489,7 @@ export async function verificarCuentaDeCampanas(
     ip: d.ip,
     proveedor: d.proveedor,
     topes: { antes: (ip, ficha) => d.topes.antes(ip, ficha, conocida), rechazo: (ip, ficha) => d.topes.rechazo(ip, ficha) },
+    registrar: d.registrar,
   });
   if (!quien.ok) return quien;
   if (quien.cuenta === null) return { ok: false, respuesta: error(409, "sin-billetera") };

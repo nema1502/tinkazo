@@ -9,8 +9,10 @@
 // `main`), con la clave de operar por `env` y nunca dentro del comando, y que vigilar-red.yml ya
 // no la nombre. Y que recuerde lo que ya avisó en la caché de Actions, con las mismas acciones
 // (y los mismos SHA) que vigilar-red.yml: si no, falla en cada corrida mientras dure el problema.
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -80,6 +82,34 @@ describe("vigilar-red.yml: la alerta del fondo del portero", () => {
   });
 });
 
+describe("vigilar-red.yml: la comprobación de las banderas del sitio", () => {
+  const texto = readFileSync(WORKFLOW, "utf8");
+  const PASO_BANDERAS = "Banderas del sitio publicado";
+
+  it("el paso está una sola vez y corre el guion", () => {
+    expect(texto.split(/\r?\n/).filter((r) => r.includes(`name: ${PASO_BANDERAS}`))).toHaveLength(1);
+    expect(renglonesDelPaso(texto, PASO_BANDERAS).join("\n")).toContain("node scripts/check-banderas.mjs");
+  });
+
+  it("corre una vez al día, también si falla un paso anterior, y antes del latido", () => {
+    const condicion = condicionDelPaso(texto, PASO_BANDERAS);
+    expect(condicion).toMatch(/^always\(\)\s*&&\s*\(.*\)$/);
+    expect(condicion).toContain("github.event.schedule == '7 12 * * *'");
+    expect(condicion).toContain("inputs.diario");
+    expect(texto.indexOf(`name: ${PASO_BANDERAS}`)).toBeLessThan(texto.indexOf("name: Latido para el servicio de alarma"));
+  });
+
+  it("baja docs/operacion.md, que es donde está la tabla", () => {
+    expect(texto).toMatch(/sparse-checkout: \|[\s\S]*?docs\/operacion\.md/);
+  });
+
+  it("no corre en la revisión de cada pedido: depende de producción", () => {
+    const ci = readFileSync(resolve(aqui, "..", "..", ".github", "workflows", "ci.yml"), "utf8");
+    expect(ci).not.toContain("check-banderas");
+    expect(ci).not.toContain("check:banderas");
+  });
+});
+
 describe("condicionDelPaso", () => {
   const paso = (prefijo, condicion) =>
     [
@@ -144,6 +174,8 @@ describe("vigilar-portero.yml: el portero de mainnet", () => {
 
   it("la clave va por env desde los secretos, nunca adentro del comando, y mira pm.tinkazo.app", () => {
     const paso = renglonesDelPaso(texto, PASO).join("\n");
+    // Con la clave de solo lectura (issue #219): si está cargada es la que viaja a /estado; la de operar queda de respaldo.
+    expect(paso).toMatch(/PORTERO_TOKEN_LECTURA:\s*\$\{\{\s*secrets\.PORTERO_MAINNET_TOKEN_LECTURA\s*\}\}/);
     expect(paso).toMatch(/PORTERO_ADMIN_TOKEN:\s*\$\{\{\s*secrets\.PORTERO_MAINNET_ADMIN_TOKEN\s*\}\}/);
     expect(paso).toContain("https://pm.tinkazo.app");
     const run = paso.slice(paso.indexOf("run:"));
@@ -151,12 +183,87 @@ describe("vigilar-portero.yml: el portero de mainnet", () => {
     expect(run).toContain("/v1/patrocinio/estado");
     expect(run).toContain("node scripts/lib/vigilar-portero.mjs");
     // Es el único secreto del archivo: no se le pasa al checkout ni a ningún otro paso.
-    expect(vivo.match(/secrets\./g)).toHaveLength(1);
+    // Dos secrets ahora: la clave de lectura (#219) y la de operar, con su env cada una.
+    expect(vivo.match(/secrets\./g)).toHaveLength(2);
   });
 
-  it("sin la clave no falla: avisa y sale con 0", () => {
+  it("sin ninguna de las dos claves no falla: avisa y sale con 0", () => {
     const run = renglonesDelPaso(texto, PASO).join("\n");
-    expect(run).toMatch(/if \[ -z "\$PORTERO_ADMIN_TOKEN" \]; then[\s\S]*exit 0/);
+    expect(run).toMatch(/CLAVE="\$\{PORTERO_TOKEN_LECTURA:-\$PORTERO_ADMIN_TOKEN\}"/);
+    expect(run).toMatch(/if \[ -z "\$CLAVE" \]; then[\s\S]*exit 0/);
+  });
+});
+
+/**
+ * El comportamiento de la clave, corriendo el paso de verdad con un curl y un node de mentira: qué clave viaja a
+ * /estado según cuáles estén cargadas. No toca la red ni ningún secreto: los valores son de prueba.
+ */
+const hayBash = spawnSync("bash", ["-c", "exit 0"]).status === 0;
+describe.skipIf(!hayBash)("vigilar-portero.yml: qué clave viaja al portero", () => {
+  const texto = readFileSync(WORKFLOW_PORTERO, "utf8");
+  const paso = renglonesDelPaso(texto, "Portero de mainnet").join("\n");
+  const run = paso
+    .slice(paso.indexOf("run: |") + "run: |".length)
+    .split("\n")
+    .map((r) => r.replace(/^ {10}/, ""))
+    .join("\n");
+  const LECTURA = "lectura-de-prueba";
+  const OPERAR = "operar-de-prueba";
+
+  /** Corre el paso con esas claves cargadas. Devuelve lo que dijo, cómo terminó y la clave con la que llamó a /estado. */
+  function correrPaso(claves) {
+    const carpeta = mkdtempSync(join(tmpdir(), "vigilar-portero-"));
+    try {
+      const bin = join(carpeta, "bin");
+      mkdirSync(bin);
+      // El curl de mentira anota el encabezado de autorización y deja un archivo de respuesta.
+      writeFileSync(join(bin, "curl"), '#!/bin/sh\nwhile [ $# -gt 0 ]; do\n  case "$1" in\n    -H) echo "$2" >> "$LLAMADAS"; shift ;;\n    -o) echo "{}" > "$2"; shift ;;\n  esac\n  shift\ndone\n', { mode: 0o755 });
+      writeFileSync(join(bin, "node"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+      const llamadas = join(carpeta, "llamadas.txt");
+      writeFileSync(llamadas, "");
+      const r = spawnSync("bash", ["-c", run], {
+        cwd: carpeta,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${bin}${delimiter}${process.env.PATH}`,
+          LLAMADAS: llamadas,
+          PORTERO_URL: "https://portero.example.org",
+          GITHUB_STEP_SUMMARY: join(carpeta, "resumen.md"),
+          USAR_MEMORIA: "true",
+          PORTERO_TOKEN_LECTURA: claves.lectura ?? "",
+          PORTERO_ADMIN_TOKEN: claves.operar ?? "",
+        },
+      });
+      return { codigo: r.status, salida: `${r.stdout}${r.stderr}`, encabezados: readFileSync(llamadas, "utf8").split("\n").filter(Boolean) };
+    } finally {
+      rmSync(carpeta, { recursive: true, force: true });
+    }
+  }
+
+  it("con las dos cargadas viaja la de solo lectura y la de operar no sale", () => {
+    const r = correrPaso({ lectura: LECTURA, operar: OPERAR });
+    expect(r.codigo).toBe(0);
+    expect(r.encabezados).toEqual([`Authorization: Bearer ${LECTURA}`]);
+  });
+
+  it("solo con la de operar, viaja esa: el flujo sigue como antes de que existiera la de lectura", () => {
+    const r = correrPaso({ operar: OPERAR });
+    expect(r.codigo).toBe(0);
+    expect(r.encabezados).toEqual([`Authorization: Bearer ${OPERAR}`]);
+  });
+
+  it("solo con la de lectura, viaja esa", () => {
+    const r = correrPaso({ lectura: LECTURA });
+    expect(r.codigo).toBe(0);
+    expect(r.encabezados).toEqual([`Authorization: Bearer ${LECTURA}`]);
+  });
+
+  it("sin ninguna no llama al portero, lo dice y sale con 0", () => {
+    const r = correrPaso({});
+    expect(r.codigo).toBe(0);
+    expect(r.encabezados).toEqual([]);
+    expect(r.salida).toContain("el portero de mainnet no se mira");
   });
 });
 

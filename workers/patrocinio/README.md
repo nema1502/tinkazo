@@ -6,7 +6,7 @@ Es un script aparte del de los enlaces (`tinkazo-enlaces`) y del de la sala (`ti
 
 **Comprobar un sorteo no depende de este servicio.** `verificar.html` no lo llama. Si se cae, no se puede sellar con patrocinio, pero todo lo ya hecho se sigue comprobando, y quien paga su comisión (Varial, antes Freighter, o una cuenta con saldo) no pasa por acá.
 
-**Estado:** desplegado en testnet en `p.tinkazo.app`. El sitio lo usa en `tinkazo.app` y `www.tinkazo.app` cuando el build no trae `VITE_PATROCINIO_URL` (`src/stellar/patrocinio-config.ts`): nunca en localhost ni en vistas previas, y solo en testnet. Con esa dirección por defecto el portero no es condición para sellar: si no contesta o no entiende `/cupo`, el sitio paga como antes con Pollar; si contesta que está apagado, sin fondo o sin configuración, se respeta. Con la variable puesta a mano sigue cerrado ante la duda.
+**Estado:** desplegado en testnet en `p.tinkazo.app`. El sitio lo usa en `tinkazo.app` y `www.tinkazo.app` cuando el build no trae `VITE_PATROCINIO_URL` (`src/stellar/patrocinio-config.ts`): nunca en localhost ni en vistas previas, y solo en testnet. El sitio publicado abre en Oficial (`VITE_STELLAR_NETWORK` en la tabla de banderas de [operacion.md](../../docs/operacion.md)), así que usa el portero de la red principal (`VITE_PATROCINIO_URL_MAINNET`, en `pm.tinkazo.app`) y no este. Con esa dirección por defecto el portero no es condición para sellar: si no contesta o no entiende `/cupo`, el sitio paga como antes con Pollar; si contesta que está apagado, sin fondo o sin configuración, se respeta. Con la variable puesta a mano sigue cerrado ante la duda.
 
 ## Cómo funciona
 
@@ -218,9 +218,15 @@ Con `Authorization: Bearer <ADMIN_TOKEN>` (secreto de 32 caracteres o más; si n
 
 `APAGADO=1` como variable apaga aunque el objeto diga otra cosa.
 
+## Lectura del estado
+
+Con `Authorization: Bearer <TOKEN_LECTURA>` (secreto de 32 caracteres o más, distinto del de administración, issue #219) se abre **solo** `GET /v1/patrocinio/estado`: quien solo mira el estado no puede apagar, cambiar ajustes ni exportar tablas, y cualquier otra ruta de administración le da `401`. La clave de administración también abre el estado, como siempre. Si las dos se cargan iguales, el registro lo anota como `error-config` `claves-iguales`.
+
+**En qué orden se carga.** La clave de lectura se carga primero en el portero, después en el vigilante y al final en GitHub. Si se carga en el vigilante o en GitHub antes de que el portero la conozca, el portero la rechaza con `401` y la vigilancia avisa de una caída que no existe. Para cargarla en el portero: `npx wrangler@4.160.0 secret put TOKEN_LECTURA --env mainnet`, desde esta carpeta. El vigilante la guarda como `PORTERO_TOKEN_LECTURA` y el flujo `vigilar-portero.yml` como `PORTERO_MAINNET_TOKEN_LECTURA`. Sin ellas siguen usando la de administración, así que borrar la de lectura de cualquiera de los dos devuelve todo a como estaba. Los pasos completos, con cómo se comprueba cada uno, están en la hoja de operación, en «La clave de solo lectura del portero: en qué orden se carga».
+
 ## Los pagos de premios, los retiros y el alta de quien ganó
 
-Solo en mainnet, con `ALTAS = "1"` y cada forma con su variable (`PAGOS_PREMIO`, `RETIROS` y `ALTAS_PREMIO`), las tres apagadas por defecto: apagadas, las rutas de abajo dan `404 no-existe`, `/cupo` y `/estado` no cambian y la alarma no tiene nada nuevo que mirar. Qué son, cómo se prenden, se pausan y se ensayan está en la hoja de operación ([operacion.md](../../docs/operacion.md), «Los pagos de premios, los retiros y el alta de quien ganó»). Acá, el contrato.
+Solo en mainnet, con `ALTAS = "1"` y cada forma con su variable (`PAGOS_PREMIO`, `RETIROS` y `ALTAS_PREMIO`), las tres apagadas por defecto en el código y prendidas en `[env.mainnet.vars]` del repositorio desde el cambio `c2aec150`: apagadas, las rutas de abajo dan `404 no-existe`, `/cupo` y `/estado` no cambian y la alarma no tiene nada nuevo que mirar. Qué son, cómo se prenden, se pausan y se ensayan está en la hoja de operación ([operacion.md](../../docs/operacion.md), «Los pagos de premios, los retiros y el alta de quien ganó»). Acá, el contrato.
 
 ### `POST /v1/patrocinio/pago`
 
@@ -586,3 +592,15 @@ Nace apagado. Se prende con `ALTAS = "1"`, `SORTEO_SERVIDOR = "1"`, `CUENTA_SORT
 - El contador de pedidos por dirección y la lista de cuentas vistas (400 días) no se pueden consultar desde afuera.
 - Falta ver con la custodia de mainnet de Pollar (dos firmas de dos, si se confirma) que una cuenta real firme como se espera; la lectura de firmantes y umbrales ya está probada con cuentas de testnet con la maestra en cero.
 - La oferta de inclusión del fee-bump es fija (`INCLUSION_BUMP_STROOPS`); no lee `getFeeStats`. Si la red sube mucho el precio de inclusión, la red rechaza el fee-bump (`txInsufficientFee`), el portero devuelve el cupo y da `400 rechazada`.
+
+## La línea base de la red, servida (issue 220)
+
+`GET /v1/patrocinio/linea-base` da, sin llaves y para cualquiera, la línea base del protocolo y de los 17 parámetros de costo de Soroban que compara `scripts/vigilar-red.mjs` (el detector de GitHub): el mismo archivo `scripts/vigilar-red.base.json`, importado por `src/linea-base.ts`, así que la línea base es una sola en el repositorio y no hay una segunda copia que diverge. La pide el vigilante cada diez minutos para su comparación del protocolo y los costos.
+
+- Es de lectura: cualquier otro método responde `405`. La respuesta se puede cachear un minuto (`Cache-Control: public, max-age=60`): el contenido no cambia cada segundo, solo el día que se commitea una base nueva.
+- `src/linea-base.ts` trae `RUTA_LINEA_BASE` y `atenderLineaBase(request)`, probado en `src/linea-base.test.ts` en Node.
+- El despacho de la ruta va en `src/index.ts`, en el despachador de rutas del Worker, al lado de las demás (junto con el paso del protocolo del vigilante, issue 220):
+
+```ts
+if (url.pathname === RUTA_LINEA_BASE && request.method === "GET") return atenderLineaBase(request);
+```

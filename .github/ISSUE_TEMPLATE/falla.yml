@@ -1,0 +1,57 @@
+name: Algo falla
+description: Algo del sitio, de un juego, de la verificación o de un servicio no anda como debería
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por avisar. Si lo que encontraste es una falla de seguridad, no la cuentes acá: mirá cómo avisar en privado en la [política de seguridad](https://github.com/nema1502/tinkazo/blob/main/SECURITY.md).
+  - type: textarea
+    id: que-pasa
+    attributes:
+      label: Qué pasa
+      description: Contalo como si se lo explicaras a alguien que no estaba. Qué viste y qué esperabas ver.
+    validations:
+      required: true
+  - type: textarea
+    id: como-repetirlo
+    attributes:
+      label: Cómo se repite
+      description: Los pasos, en orden. Si no sabés cómo repetirlo, escribí que pasó una sola vez y cuándo. Si la falla es de un sorteo, decí el número de sorteo o la dirección del contrato. No pegues el enlace del comprobante, porque lleva los nombres de la lista. Si hace falta, te lo pedimos en privado.
+      placeholder: |
+        1. Abro...
+        2. Toco...
+        3. Veo...
+    validations:
+      required: true
+  - type: dropdown
+    id: donde
+    attributes:
+      label: Dónde pasa
+      options:
+        - El sitio en modo Oficial
+        - El sitio en modo Prueba
+        - La página de verificación
+        - Un juego
+        - Una página de lectura
+        - Un servicio (enlaces, sala, cuenta o música)
+        - No sé
+    validations:
+      required: true
+  - type: input
+    id: aparato
+    attributes:
+      label: Aparato y navegador
+      description: Por ejemplo, celular Android con Chrome, o computadora con Firefox. Si sabés el idioma y el tema (claro u oscuro), decilo.
+  - type: textarea
+    id: capturas
+    attributes:
+      label: Capturas
+      description: Arrastrá las imágenes acá. Que no se vean nombres ni correos de personas reales.
+  - type: checkboxes
+    id: cuidado
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: No puse secretos, llaves, enlaces de comprobantes ni datos de otras personas
+          required: true

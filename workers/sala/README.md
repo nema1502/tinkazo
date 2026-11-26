@@ -186,23 +186,30 @@ este orden:
    acá, sin llamar al proveedor.
 3. Comprueba que exista la configuración del proveedor y verifica la sesión fuera del objeto persistente.
 4. Una falla del proveedor da `502 pollar`; una sesión inválida da `401 sesion` y una de otra app da `403 otra-app`.
-5. Solo entra quien el proveedor dice, exactamente, que es de Google (una lista de lo permitido): cualquier otra vía, o un
-   campo que no viene, da `403 solo-google`. En el modo suave, que es un interruptor de emergencia, entra además quien no dice
+5. Solo entra quien el proveedor dice que es de Google, escrito como lo escriba (una lista de lo permitido): cualquier otra vía, o un
+   campo que no viene, da `403 solo-google` y deja una línea `via-rechazada` en el registro (ver `SOLO_GOOGLE`). En el modo suave, que es un interruptor de emergencia, entra además quien no dice
    por dónde entró y se cuenta aparte.
 6. Si la persona ya estaba, reconoce su nueva llave y contesta `200 {"cuenta","ya":true}` sin duplicarla. Cada persona
    tiene su propio tope de 6 reingresos por hora: pasado, contesta `429 {"error":"cupo-conexion"}` con `Retry-After` y no toca nada.
 7. Si la sesión no trae cuenta, la consulta al proveedor; una falla da `502 pollar` y la ausencia da `409 sin-billetera`, que
-   cuenta como un rechazo de esa ficha (costó dos llamadas): la misma sesión sin billetera se consulta como mucho 5 veces en
-   diez minutos. El celular no tiene que reintentar más que eso con la misma sesión.
+   cuenta como un rechazo de esa ficha (costó dos llamadas) y no como un rechazo de la conexión: la misma sesión sin billetera
+   se consulta como mucho 5 veces en diez minutos. El celular no tiene que reintentar más que eso con la misma sesión.
 8. Vuelve a comprobar fase y pase, y anota en un bloque sin esperas. Un alta nueva contesta `201 {"cuenta"}`.
 
 Hay una persona por cuenta y una cuenta por persona. Se guardan la huella HMAC-SHA256 del id del proveedor con una sal de la
 sala y la huella SHA-256 de la llave del celular. El token, el id, el nombre y el correo no se guardan, no se escriben en la
 consola y no vuelven en las respuestas. Las altas nuevas tienen un tope de 300 por minuto en la sala. Por conexión y cada diez
-minutos, los topes son 400 personas nuevas, 800 envíos verificados y 300 sesiones rechazadas por el proveedor. Una ficha (la
+minutos, los topes son 800 envíos verificados y 300 sesiones rechazadas por el proveedor. Las que esperan su cuenta
+(`409 sin-billetera`) no cuentan para la conexión: la sesión es buena, solo falta su cuenta, y con cuentas nuevas detrás de la
+misma wifi llenarían ese tope sin ningún abuso. Esas sí cuentan para su ficha. Una ficha (la
 sesión, guardada solo como huella con sal) suma una sola vez a ese tope de la conexión, y por sí sola puede ser rechazada
 5 veces en diez minutos: la sexta ni llega al proveedor. Así una persona que repite una ficha mala no deja afuera a las demás.
 Quien salió con su motivo y repite su alta tampoco suma a los envíos de la conexión. Una sala admite 300 personas.
+
+Lo que acota el camino de `409 sin-billetera`, que no tiene tope propio por conexión: cada ficha puede esperar su cuenta
+5 veces por ventana (la sexta ni llega al proveedor), y cada ficha distinta es una sesión válida de esta aplicación, que cuesta
+un ingreso real con Google, limitado por el proveedor por dirección de red. Además la cuenta de cada persona se crea sola en
+segundos, y desde entonces esa sesión ya no puede dar `sin-billetera`. No se sumó un contador por conexión para este camino.
 
 Lo que estos topes no frenan: quien manda 300 fichas distintas y falsas desde la misma conexión del recinto en diez minutos
 agota el tope de rechazos de esa conexión, y las personas nuevas de esa conexión esperan hasta que termine la ventana. Cada una
@@ -224,11 +231,19 @@ La configuración no secreta vive en `wrangler.toml`:
 - `RPC_MAINNET`: los RPC de la red principal, separados por comas. La sala los prueba en orden al sellar y al guardar.
 - `PASE`: `1` exige el pase del QR. `0` lo apaga únicamente como salida de emergencia durante el evento.
 - `SOLO_GOOGLE`: `estricto` (el valor del repositorio y el que vale si la variable falta o trae cualquier otra cosa) deja
-  entrar solo a quien el proveedor dice, exactamente, que es de Google. `suave` es un interruptor de emergencia: también deja
+  entrar solo a quien el proveedor dice que es de Google, escrito como lo escriba. `suave` es un interruptor de emergencia: también deja
   entrar, y cuenta aparte, a quien el proveedor no dice por dónde entró. Una vía que no es Google no entra en ningún modo.
   El nombre del campo del verify (`authProvider`) y el valor que dice Google (`google`) están en una sola constante,
-  `VIA_DE_LA_SESION` en `workers/patrocinio/src/pollar.ts`, y son una suposición hasta confirmarlos con una respuesta real.
-  Si no coinciden, en modo estricto no entra nadie.
+  `VIA_DE_LA_SESION` en `workers/patrocinio/src/pollar.ts`. Se compara sin importar mayúsculas ni espacios alrededor
+  (`google`, `GOOGLE` y `Google` valen), pero lo que escribe el verify con una cuenta de Google todavía no se midió con una
+  respuesta real. Si no coincide, en modo estricto no entra nadie.
+  Cada rechazo por la vía deja una línea en el registro, `{"evento":"via-rechazada","datos":{"valor","modo"}}`, con lo que mandó el
+  proveedor (sin espacios al principio ni al final, minúsculas, solo letras, números y `.` `-` `_` `:`, hasta 32 caracteres, con `~`
+  al final si al limpiarlo se perdió algo, o `sin-campo`, `no-es-texto` o `vacio`) y nada de la persona: ni cuenta, ni correo, ni
+  sesión, ni dirección de red. Se mira con `npx wrangler@4.160.0 tail --config wrangler.toml --search via-rechazada`. Esta regla
+  vive en el módulo del proveedor de cuentas, que la sala empaqueta: para que valga hay que desplegar solo la sala. El portero no
+  la lee y recibe el cambio en su próximo despliegue normal. Si el valor que aparece no es `google`, no se cambia nada en vivo
+  sin la palabra de quien mantiene el proyecto, y el arreglo es la constante `VIA_DE_LA_SESION`.
 
 `POLLAR_SECRETO` es la misma llave secreta del portero de la red principal y no se escribe en el repositorio. Se carga desde
 esta carpeta con:

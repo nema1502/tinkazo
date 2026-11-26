@@ -179,7 +179,7 @@ Las rutas nuevas:
 
 ## Si el proveedor de cuentas corta el ingreso: el plan B del ingreso
 
-- **Qué es.** `VITE_INGRESO_PLAN_B` es una bandera del build, apagada por defecto. Con `1` y solo en el modo Prueba, cuando entrar con Google o con un correo falla por algo que no es de la persona (Pollar contesta con error, tarda de más o no deja crear la cuenta), el aviso suma el botón Sortear sin cuenta. Lleva al modo libre: la lista se cierra en el navegador, no queda sello en Stellar, el sorteo no aparece en Mis sorteos y el comprobante dice que falta un testigo. En Oficial nunca aparece, y siempre lo elige la persona.
+- **Qué es.** `VITE_INGRESO_PLAN_B` es una bandera del build, apagada por defecto y prendida hoy en el build de producción (ver la tabla de banderas más abajo). Solo se aplica en el modo Prueba, así que en Oficial no se ve. Con `1` y solo en el modo Prueba, cuando entrar con Google o con un correo falla por algo que no es de la persona (Pollar contesta con error, tarda de más o no deja crear la cuenta), el aviso suma el botón Sortear sin cuenta. Lleva al modo libre: la lista se cierra en el navegador, no queda sello en Stellar, el sorteo no aparece en Mis sorteos y el comprobante dice que falta un testigo. En Oficial nunca aparece, y siempre lo elige la persona.
 - **Cuándo se prende.** Solo si durante un evento el ingreso falla para varias personas a la vez (por ejemplo, al llegar al tope de cuentas del plan de Pollar) y reintentar no lo arregla. En Vercel, la variable `VITE_INGRESO_PLAN_B=1` en Production y una publicación nueva: se lee al construir, así que el cambio llega con la publicación y no al instante.
 - **Cómo se apaga.** Vaciar la variable (o poner `0`) y publicar de nuevo. Con la bandera apagada la elección ya hecha deja de valer y el botón de sellar vuelve a pedir la cuenta.
 
@@ -199,7 +199,7 @@ Las rutas nuevas:
 
 ## Los pagos de premios, los retiros y el alta de quien ganó
 
-Además de los sellos y los sorteos, el portero de mainnet puede pagar la comisión de la red de dos pagos de dólares digitales y dar de alta a quien ganó un premio. Son tres cosas aparte, cada una con su variable en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml`. Nacen apagadas y solo valen en la red principal y con `ALTAS = "1"`. Con las tres apagadas el portero hace lo de siempre: las rutas nuevas dan `404 no-existe` y `estado` y `cupo` no traen nada nuevo.
+Además de los sellos y los sorteos, el portero de mainnet puede pagar la comisión de la red de dos pagos de dólares digitales y dar de alta a quien ganó un premio. Son tres cosas aparte, cada una con su variable en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml`. Nacen apagadas en el código y solo valen en la red principal y con `ALTAS = "1"`. En el repositorio las tres están en `"1"` en `[env.mainnet.vars]` desde el cambio `c2aec150`. Con las tres apagadas el portero hace lo de siempre: las rutas nuevas dan `404 no-existe` y `estado` y `cupo` no traen nada nuevo.
 
 - **El pago de un premio** (`POST /v1/patrocinio/pago` con `{"forma":"premio","xdr":...}`). Quien organizó un sorteo le paga a quien ganó, desde su propia cuenta, con la nota `tk:premio:<sorteo>:<puesto>`. No lleva sesión: la firma de la cuenta que paga prueba quién es. El portero lo paga solo si esa cuenta está en su libro, el sorteo es suyo, ya se sorteó, el puesto existe, el sello lo pagó el portero, el `draw` de ese mismo sorteo también lo pagó el portero con ese sello (un sello respalda un solo sorteo: otro igual sellado por fuera no tiene premios por acá) y ese puesto no se pagó antes por esta ruta.
 - **El retiro con su costo** (`forma: "retiro"`). Una persona saca dólares digitales de su cuenta a otra, y en la misma transacción paga el costo de `COSTO_RETIRO` a `CUENTA_COBROS`. Vale desde cualquier cuenta. El portero reconoce ese costo por la transacción que él mismo pagó: no cae a los pagos sueltos ni se confunde con una orden, y la nota de un retiro nunca se lee como la de una orden.
@@ -209,9 +209,9 @@ La comisión de la red la paga la cuenta que paga los sellos, con un presupuesto
 
 | Variable | Hoy | Qué hace |
 |---|---|---|
-| `PAGOS_PREMIO` | `"0"` | Con `"1"`, el pago de un premio. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `pagos-premio` y queda apagada |
-| `RETIROS` | `"0"` | Con `"1"`, el retiro con su costo. Pide `ALTAS = "1"`, `CUENTA_COBROS` propia y `COSTO_RETIRO` bien escrito. Si falta algo, `faltaAltas` dice `retiros` o `costo-retiro` |
-| `ALTAS_PREMIO` | `"0"` | Con `"1"`, el alta de quien ganó. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `alta-premio` |
+| `PAGOS_PREMIO` | `"1"` | Con `"1"`, el pago de un premio. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `pagos-premio` y queda apagada |
+| `RETIROS` | `"1"` | Con `"1"`, el retiro con su costo. Pide `ALTAS = "1"`, `CUENTA_COBROS` propia y `COSTO_RETIRO` bien escrito. Si falta algo, `faltaAltas` dice `retiros` o `costo-retiro` |
+| `ALTAS_PREMIO` | `"1"` | Con `"1"`, el alta de quien ganó. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `alta-premio` |
 | `COSTO_RETIRO` | `"0.50"` | El costo exacto del retiro, en USDC con punto, de 0,01 a 5. Manda sobre el del sitio: si no son iguales, el portero rechaza todo retiro y nunca cobra de más. Vacío, en 0, en 6, con coma o con letras, el retiro no se prende y `faltaAltas` dice `costo-retiro` |
 | `TOPE_PAGOS_STROOPS` | `"20000000"` | El presupuesto de las comisiones de los pagos en 24 horas: 2 XLM, aparte del de los sellos. **Solo dígitos** y hasta `"100000000"` (10 XLM): mal escrita apaga los pagos y `faltaAltas` dice `tope-pagos`, también con las formas apagadas |
 | `PAGOS_RECHAZADOS_DIA` | `"20"` | Cuántos pagos de cada forma que la red rechazó al aplicarse (y que pagaron comisión) se aceptan en 24 horas entre todas las cuentas. Lo que está en el aire tiene su propio tope, en el código. **Solo dígitos** y hasta `"100"`: mal escrita apaga los pagos y `faltaAltas` dice `pagos-rechazos` |
@@ -274,6 +274,64 @@ Solo se puede en la red principal. Hace falta una vista previa del sitio que pag
 
 Mueve 3 dólares digitales entre cuentas propias (1 queda en cobros), unos cientos de stroops de XLM, una activación y unas siete firmas (unos 180 créditos). Si sale bien, se deja reanudado o pausado según decida quien mantiene el proyecto. Si la vista previa del sitio no está a tiempo, el paso 1 se hace con `curl` y el token de la sesión de quien organiza, copiado de la vista previa y sin escribirlo en ningún archivo, y la cuenta nueva se activa con la vista previa del paso.
 
+## Las banderas del sitio y su estado en producción
+
+Las funciones del sitio se prenden con variables `VITE_` que se leen al construir y quedan escritas en su código. Esta tabla dice cuáles trae hoy el sitio publicado. **Leído del sitio publicado el 25 de noviembre de 2026**, del código que sirve tinkazo.app, y vigilado cada día por `pnpm check:banderas`, que baja el sitio, saca el valor de cada variable y falla si una fila ya no coincide o si el sitio trae una variable que la tabla no nombra.
+
+**Quien prende o apaga una bandera en producción actualiza esta tabla en el mismo cambio. Si no, la vigilancia del día siguiente falla.**
+
+- **Sin la variable.** Lo que pasa cuando no está definida. Una variable ausente no es una bandera apagada: `VITE_EQUIPOS`, `VITE_MODOS`, `VITE_FOTO_JUEGO` y las pistas de música nacen prendidas (`VITE_EQUIPOS` y `VITE_MODOS` desde el cambio `7e414660`), y solo un valor de apagado las frena. Las demás nacen apagadas.
+- **En producción.** El valor escrito, `sin definir` si el sitio no la trae, o `definida` si la trae y su valor es un monto, una dirección o una llave pública: de esas la tabla no escribe el valor y la comprobación solo mira que exista.
+- **Desde cuándo.** Las variables viven en Vercel y ningún archivo del repositorio registra el día en que se pusieron. La única fuente de una fecha es la lista de variables de Vercel, leída el 25 de noviembre de 2026, que dice cuándo figura creada cada una. Muestra la antigüedad en días enteros, así que cada fecha puede correrse un día. Es la fecha de la variable en Vercel y no la de la publicación que empezó a usarla. `VITE_PAGOS`, `VITE_PAGAR_CON_GOOGLE`, `VITE_VOTO_POR_CONTENIDO`, `VITE_RAMPA` y `VITE_CAMPANAS` figuran creadas alrededor del 18 de noviembre de 2026, `VITE_STELLAR_NETWORK` y `VITE_REGALO` alrededor del 20, `VITE_EQUIPOS`, `VITE_MODOS` y `VITE_INGRESO_PLAN_B` alrededor del 12 y `VITE_ALTA` alrededor del 11. De las demás no hay fecha. Una fecha de otro documento sobre una de estas banderas tiene que citar su fuente: el cambio de git que la movió, o esta lectura.
+- **Qué no entra.** Las variables `VITE_VERCEL_` las pone el sistema de publicación y no son banderas.
+- **Cómo se cambia una fila.** Se cambia la variable en Vercel, se publica de nuevo y en el mismo pedido se corrige la tabla. Si no, la vigilancia diaria falla.
+
+| Variable | Sin la variable | En producción | Qué cambia |
+|---|---|---|---|
+| `VITE_STELLAR_NETWORK` | abre en Prueba | `mainnet` | La red con que abre el sitio: con `mainnet` abre en Oficial |
+| `VITE_ALTA` | apagada, solo con `1` | `1` | El acceso por cupón o por pago en la red principal. Exige `VITE_PATROCINIO_URL_MAINNET` |
+| `VITE_ALTA_LIBRE` | apagada, solo con `1` | `sin definir` | Salida de emergencia: activar una cuenta sin acceso confirmado. No vale junto con `VITE_ALTA` |
+| `VITE_ALTA_PAGO` | apagada, solo con `1` | `sin definir` | La compra de sorteos |
+| `VITE_PAGO_CON_SALDO` | apagada, solo con `1` | `sin definir` | Pagar un paquete con el saldo de la cuenta |
+| `VITE_COMPRA_QR` | apagada, solo con `1` | `sin definir` | Comprar un paquete con el QR del banco |
+| `VITE_VENTA_ABIERTA` | apagada, solo con `1` | `sin definir` | La venta a la vista de todos. Sin ella, las tres anteriores valen solo en el piloto |
+| `VITE_SORTEO_SERVIDOR` | apagada, solo con `1` | `sin definir` | El sorteo lo manda el servidor |
+| `VITE_REGALO` | apagada, solo con `1` | `1` | Los primeros 3 sorteos oficiales gratis |
+| `VITE_CAMPANAS` | apagada, con `1` o `true` | `1` | La campaña de una empresa: panel, página del celular y entrada de quien ganó |
+| `VITE_EQUIPOS` | prendida, se apaga con `0` o `false` | `1` | Los equipos con cupón |
+| `VITE_MODOS` | prendida, se apaga con `0` o `false` | `1` | El selector de modos del sorteo |
+| `VITE_FOTO_JUEGO` | prendida, se apaga con `0` o `false` | `sin definir` | La foto con el dibujo del juego al compartir |
+| `VITE_MUSICA` | pistas prendidas, solo `sintetizada` las apaga | `sin definir` | La música de los juegos: pistas o sintetizada |
+| `VITE_VIDEO_DESCARGA` | apagada, solo con `1` | `sin definir` | La descarga del video del sorteo |
+| `VITE_INGRESO_PLAN_B` | apagada, solo con `1` | `1` | El plan B del ingreso. Solo se aplica en el modo Prueba: en Oficial no se ve |
+| `VITE_PAGOS` | apagada, solo con `1` | `1` | Pagar premio y el panel de ganadores |
+| `VITE_PAGOS_ACTIVO` | el USDC de prueba de Circle | `sin definir` | El activo de los premios en testnet |
+| `VITE_PAGOS_CUENTAS` | ninguna cuenta | `sin definir` | Cuentas que pagan premios sin ser la que selló |
+| `VITE_PAGAR_CON_GOOGLE` | apagada, solo con `1` | `1` | Cargar y pagar el premio desde la cuenta de Google |
+| `VITE_VOTO_POR_CONTENIDO` | apagada, solo con `1` | `1` | La cuenta de Google vota solo la transacción que armó la página |
+| `VITE_RAMPA` | apagada | `premios` | Tus dólares digitales: ver el saldo y recibir un premio |
+| `VITE_RAMPA_CUENTAS` | sin lista de cuentas | `sin definir` | El piloto de la carga con bolivianos |
+| `VITE_RAMPA_MINIMO` | sin mínimo, solo en localhost | `sin definir` | Un mínimo de prueba, solo en localhost |
+| `VITE_RAMPA_DEMO` | apagada, solo en localhost | `sin definir` | Una demostración de la carga, solo en localhost |
+| `VITE_RAMPA_REGISTRO` | apagada, solo con `1` | `sin definir` | El registro de la carga en la consola |
+| `VITE_RAMPA_PRACTICA` | apagada, solo en localhost | `sin definir` | La práctica de la carga, solo en localhost |
+| `VITE_MONEDAS` | apagada | `sin definir` | Monedas, tiendita y Canjear para quien organiza |
+| `VITE_CUENTA_URL` | sin dirección | `sin definir` | Dónde está el servicio de cuenta |
+| `VITE_CUENTA_PLANES` | sin cuenta | `sin definir` | La cuenta que cobra el plan del equipo |
+| `VITE_PLAN_EQUIPO` | apagada | `sin definir` | La compra del plan del equipo |
+| `VITE_ENLACES` | el servicio de enlaces de siempre | `sin definir` | Otro servicio de enlaces cortos |
+| `VITE_PATROCINIO_URL` | sin dirección | `sin definir` | La dirección vieja del portero, que vale solo en Prueba |
+| `VITE_PATROCINIO_URL_TESTNET` | sin dirección | `sin definir` | El portero de la red de prueba |
+| `VITE_PATROCINIO_URL_MAINNET` | sin dirección | `definida` | El portero de la red principal |
+| `VITE_POLLAR_PUBLISHABLE_KEY` | sin entrada con Google | `definida` | La llave publicable del proveedor de cuentas |
+| `VITE_POLLAR_PUBLISHABLE_KEY_MAINNET` | cae a la de siempre | `definida` | La misma llave, para la red principal |
+| `VITE_POLLAR_PUBLISHABLE_KEY_TESTNET` | cae a la de siempre | `sin definir` | La misma llave, para la red de prueba |
+| `VITE_RETIRO_COSTO` | no se cobra el retiro | `definida` | El costo del retiro |
+| `VITE_RETIRO_CUENTA` | no se cobra el retiro | `definida` | La cuenta que recibe el costo del retiro |
+| `VITE_COMISION_PB` | no se cobra a las campañas | `definida` | Los puntos básicos que se cobran a una campaña |
+| `VITE_COMISION_MINIMO` | no se cobra a las campañas | `definida` | Lo menos que se cobra a una campaña |
+| `VITE_COMISION_CUENTA` | no se cobra a las campañas | `definida` | La cuenta que recibe el cobro a las campañas |
+
 ## La campaña de una empresa
 
 Es el sorteo de una empresa por QR: la empresa pone el premio, la gente se anota desde el celular con su cuenta de Google y quien organiza lo maneja desde un panel de la herramienta, que se abre con `?campana`. Junta cuatro piezas: el portero (comisiones, altas y pagos), el servicio de conteo, la sala de campaña (`workers/sala`, en `s.tinkazo.app`) y el sitio. Esta sección dice cómo se prepara, qué se despliega y en qué orden, qué se prueba antes, qué se hace el día y qué queda para después. Lo del portero (el pago de un premio, el retiro con su costo y el alta de quien ganó) no se repite: está en la sección anterior, Los pagos de premios, los retiros y el alta de quien ganó, y acá se enlaza. El contrato de la sala, ruta por ruta, está en [workers/sala/README.md](../workers/sala/README.md), en Las salas de campaña firmadas.
@@ -302,7 +360,7 @@ node scripts/campana-firmar.mjs --nueva-llave-prueba
 
 ### Qué se despliega, en qué orden y por qué
 
-El código del sitio sube antes, con todas las banderas apagadas: así ya está publicado cuando la sala nueva exista, y con las banderas apagadas la campaña no se ve. Después va este orden, y cada paso se comprueba antes de seguir. Con gente adentro no se despliega el portero ni el sitio. La sala solo se despliega para los cortes 3 a 5 de Cómo cortar una campaña: la lista, las fases y la alarma están guardadas en el almacenamiento de la sala y sobreviven, y los celulares siguen preguntando solos y se ponen al día en menos de un minuto.
+Para una campaña nueva, el código del sitio sube antes, con las banderas de esa campaña apagadas: así ya está publicado cuando la sala nueva exista, y con las banderas apagadas la campaña no se ve. Hoy `VITE_CAMPANAS` y las de pagos ya están prendidas, como dice la tabla de banderas. Después va este orden, y cada paso se comprueba antes de seguir. Con gente adentro no se despliega el portero ni el sitio. La sala solo se despliega para los cortes 3 a 5 de Cómo cortar una campaña: la lista, las fases y la alarma están guardadas en el almacenamiento de la sala y sobreviven, y los celulares siguen preguntando solos y se ponen al día en menos de un minuto.
 
 1. **El portero**, con los tres pagos desplegados apagados y pausados, y después prendidos y pausados. Es lo primero porque el sello y el sorteo de la campaña, el alta de quien ganó y los pagos pasan por él, y porque cada despliegue suyo reinicia su memoria. Se hace como dice Cómo se prenden, en la sección de los pagos: dos despliegues y un exporte antes de cada uno.
 2. **El servicio de conteo** (`workers/enlaces`, en `c.tinkazo.app`). Va antes que las banderas del voto porque la lista cerrada de lo que cuenta incluye el error `cofirmaDistinta`, el que sale cuando el voto por contenido frena una firma. Un conteo anterior rechaza ese aviso entero y justo la falla que más importa no se vería.
@@ -357,7 +415,13 @@ Se hacen antes del evento, con una empresa inventada y otro evento firmado, en d
 3. Un segundo celular con otra cuenta de Google: el contador del panel sube a 2 en pocos segundos. Repetir la primera cuenta en el segundo celular: dice que ya estaba.
 4. Una página del QR abierta más de 16 minutos antes de tocar Acepto: pide escanear de nuevo.
 5. Abrir el enlace desde dentro de Instagram o de una app parecida: la página avisa que hay que abrirlo en el navegador.
-6. **Confirmar que Google entra como Google.** El campo que dice por dónde entró la sesión (`authProvider`) y el valor que dice Google (`google`) están en una sola constante, `VIA_DE_LA_SESION` en `workers/patrocinio/src/pollar.ts`, y son una suposición hasta confirmarlos con una respuesta real: esta prueba es esa confirmación. Si un celular con Google dice Para este sorteo hay que entrar con Google, la constante es otra: se cambia, se sube y se vuelve a desplegar la sala. `suave` no lo arregla, solo cubre el campo que falta.
+6. **Confirmar que Google entra como Google.** El campo que dice por dónde entró la sesión (`authProvider`) y el valor que dice Google (`google`) están en una sola constante, `VIA_DE_LA_SESION` en `workers/patrocinio/src/pollar.ts`. Se compara sin importar mayúsculas ni espacios alrededor, así que `google`, `GOOGLE` y `Google` valen, pero lo que escribe el verify con una cuenta de Google todavía no se midió con una respuesta real: esta prueba es esa confirmación. Si un celular con Google dice Para este sorteo hay que entrar con Google, la constante es otra: se cambia, se sube y se vuelve a desplegar la sala. `suave` no lo arregla, solo cubre el campo que falta.
+
+   **Para que valga hay que desplegar solo la sala.** El reconocimiento de la vía vive en el módulo del proveedor de cuentas (`workers/patrocinio/src/pollar.ts`) y la sala empaqueta su propia copia: el cambio vale en cuanto se despliega la sala, desde `workers/sala`, con `npx wrangler@4.160.0 deploy`. El portero de la red principal no hace falta tocarlo, porque no lee la vía: recibe el campo nuevo en su próximo despliegue normal, y esta hoja pide no desplegarlo durante un evento.
+
+   **Cómo mirar qué mandó el proveedor durante un evento.** Cada vez que la sala rechaza un alta o una activación por la vía deja una línea en su registro, y solo esa vez: `{"evento":"via-rechazada","datos":{"valor":"...","modo":"estricto"}}`. Se mira desde `workers/sala` con `npx wrangler@4.160.0 tail --config wrangler.toml --search via-rechazada`. El valor es lo que mandó el proveedor, sin espacios al principio ni al final, en minúsculas y solo con letras, números y `.` `-` `_` `:`, cortado a 32 caracteres. Si al limpiarlo se perdió algo (un espacio de en medio, un carácter invisible, un signo o lo que pasaba del tope), termina con `~`: `google~` es algo que se parece a Google pero la sala rechaza, y `google` a secas es lo que la sala acepta. Si el campo falta, no es texto o viene vacío, el valor es una marca fija: `sin-campo`, `no-es-texto` o `vacio`. No lleva cuenta, correo, sesión ni dirección de red.
+
+   **Si aparece un valor que no es `google`** (por ejemplo `google.com` o `google-oauth2`), no se cambia nada en vivo sin la palabra de quien mantiene el proyecto. El arreglo es el valor de la constante `VIA_DE_LA_SESION`, un cambio chico que se sube y se despliega solo en la sala. Un valor con `~` al final trae algo raro adentro del texto: se mira qué mandó el proveedor antes de tocar la constante.
 
 También se prueba la sala contra producción con `node probar.mjs https://s.tinkazo.app`, desde `workers/sala`: crea dos salas comunes que se cierran o vencen solas, y el bloque de campañas se saltea solo contra producción.
 
@@ -382,12 +446,12 @@ En cada paso, mirar `estado` del portero (la sección de los pagos explica sus r
 
 1. Abrir `/?campana&red=oficial` con la cuenta que sella (si el archivo trae `organizadora`, el panel pide entrar con la cuenta que termina en las últimas letras de esa dirección), elegir el archivo firmado, mirar la vista previa y abrir la inscripción. Esa acción crea la sala.
 2. Mostrar en grande. La pantalla grande no muestra ningún nombre: solo el QR, cuántas personas se anotaron y cuánto falta para que cierre. Se dice en voz alta: escaneá con la cámara, no desde Instagram. Si hace falta más tiempo, 15 minutos más.
-3. Durante la inscripción, mirar el contador y la lista del panel. Quitar a quien no cumple, con su motivo: repetida, no está en el evento, lo pidió u otro. Salir es para siempre en esa sala, y solo se puede mientras la lista está abierta o cerrada.
-4. Cerrar la lista, con señal estable. El panel dice con cuántas personas cierra y pide confirmar, y los celulares pasan a La lista ya cerró. Desde ahí, Volver a abrir la lista la deshace y Armar otra campaña arranca la siguiente, pero pregunta antes de dejar la sala: con la lista cerrada o con avisos pendientes a los celulares, dejarla sin querer los deja sin su resultado.
-5. Pasar la lista al sorteo. Antes, mirar que la sesión de Google siga viva: si pide entrar, se entra ahora, y nunca entre sortear y pagar, porque la vuelta de la ventana de Google recarga la página y se pierde el panel de pago de la pantalla.
+3. Durante la inscripción, mirar el contador y la lista del panel. Quitar a quien no cumple, con su motivo: repetida, no está en el evento, lo pidió u otro. Salir es para siempre en esa sala. El botón Quitar está mientras la lista esté abierta o cerrada y todavía no se haya trabado para el sorteo: desde que se empieza a sellar, ya no aparece.
+4. Cerrar la lista, con señal estable. El panel dice con cuántas personas cierra y pide confirmar, y los celulares pasan a La lista ya cerró. Desde ahí, Volver a abrir la lista la deshace, pero solo mientras la lista no esté trabada para el sorteo (en cuanto se empieza a sellar, el botón desaparece). Elegir otro archivo deja la sala y pregunta antes. Con la lista cerrada, al confirmar se abre el selector de archivo de la campaña siguiente. Desde la lista sellada o sorteada, al confirmar se vuelve a la pantalla de elegir el archivo, sin abrir el selector. Cuando pregunta por los avisos a los celulares, la pregunta lleva una sola línea bajo el título: Si la dejás ahora, los celulares que todavía no recibieron su aviso se quedan sin verlo. Es la misma en los tres estados y no dice qué aviso falta, porque el panel no siempre lo sabe (después de recargar, sin conexión o mientras lee). No sale si la sala ya se borró, y la pregunta de la inscripción abierta o de la vista previa tampoco la lleva.
+5. Con la lista cerrada, el panel la lee entera y la pasa solo al sorteo. El botón Pasar la lista al sorteo aparece cuando hay que retomarla (por ejemplo después de recargar). También aparece cuando la sala no aceptó el sello y la línea del panel lo dice con una de estas cuatro frases: No llegamos a tiempo. Sellá de nuevo. La lista cambió. Volvé a pasarla. El sorteo tiene que tener N ganadoras, como dice la campaña. Se selló otra lista. Pasala de nuevo. Si lo que la sala no aceptó fue la cuenta que sella, el botón es Cambiar de cuenta. Si la lectura de la lista falló o se cortó la conexión, el botón dice Probar de nuevo y la vuelve a leer. Antes de que la pase, mirar que la sesión de Google siga viva: si pide entrar, se entra ahora, y nunca entre sortear y pagar, porque la vuelta de la ventana de Google recarga la página y se pierde el panel de pago de la pantalla.
 6. Sellar la lista, con tiempo: la campaña sella con la ronda a 90 segundos. La sala comprueba el sello en la red y avisa a los celulares. Si la sala dice que no llegó a tiempo (`ronda-pasada`), se sella de nuevo, y eso gasta otro sorteo. Desde sellada, la sala no vuelve atrás.
-7. Sortear y dejar la pestaña quieta. La sala guarda el resultado que lee de la red, no el que le diga el panel. Si el aviso falla, el panel ofrece Avisar a los celulares.
-8. El panel pide el alta de cada ganadora al portero, y cada fila dice Puede recibir o No se pudo preparar, con Probar de nuevo cuando reintentar puede cambiar algo. Con un no final (`no-es-nuestro`, `sorteo-ajeno`, `puesto-usado` y los demás) no hay reintento y la línea pide avisar a Tinkazo. Si el alta de quien ganó estaba pausada, recargar el panel vuelve a preguntar. A cada una la acompaña una persona de apoyo a Recibir mi premio, en el mismo navegador, y si pide entrar, con Google y la misma cuenta, nunca con el correo, que da otra cuenta. Avisar a cada persona desde el panel.
+7. Sortear y dejar la pestaña quieta. La sala guarda el resultado que lee de la red, no el que le diga el panel. Si el aviso falla, el panel ofrece Avisar el resultado a los celulares. Con el sorteo hecho, Elegir otro archivo vuelve a la pantalla de elegir sin preguntar solo si el resultado ya llegó a la sala y todas las ganadoras fueron avisadas, o si la sala ya se borró.
+8. El panel pide el alta de cada ganadora al portero, y cada fila dice Puede recibir o No se pudo preparar, con Probar de nuevo cuando reintentar puede cambiar algo. Con un no final (`no-es-nuestro`, `sorteo-ajeno`, `puesto-usado` y los demás) no hay reintento y la línea pide avisar a Tinkazo. Si el alta de quien ganó estaba pausada, recargar el panel vuelve a preguntar. A cada una la acompaña una persona de apoyo a Recibir mi premio, en el mismo navegador, y si pide entrar, con Google y la misma cuenta, nunca con el correo, que da otra cuenta. Avisar a cada persona desde el panel, con el botón Avisar a y el nombre de cada una.
 9. Pagar. En la pantalla del resultado, Pagar premio, mirando el monto antes de firmar. Si la cuenta de quien ganó todavía no activó, el panel lo dice y ofrece avisarle. No cerrar ni recargar la pestaña hasta que todas las filas digan Pagado.
 
 **Qué mirar durante el evento**, cada media hora:
@@ -403,7 +467,7 @@ De menos a más, y siempre sin desplegar el portero durante el evento:
 1. **Cerrar la lista antes de hora**, con quienes ya están: Cerrar la lista en el panel. Es lo primero si algo falta, como créditos o lugares de usuarios.
 2. **Pausar los pagos**, o solo la forma que falla, con `/v1/admin/pagos/pausar` (Cómo cortar, de menos a más, más arriba). Frena lo nuevo y deja pasar el reenvío de un pago ya reservado.
 3. **El pase.** Si el pase deja afuera a gente, `PASE = "0"` en `[vars]` de `workers/sala/wrangler.toml` y desplegar solo la sala. El celular entra sin pase y el estado dice que vale siempre. Se vuelve a `"1"` después. Hay que dejar anotado de qué commit salió el último despliegue de la sala, para poder desplegar desde esa copia.
-4. **`SOLO_GOOGLE = "suave"`**, solo si las sesiones de Google no dicen por dónde entraron y nadie puede anotarse. Abre solo el alta de las personas: quien organiza sigue necesitando Google para activar o recuperar una campaña.
+4. **`SOLO_GOOGLE = "suave"`**, solo si las sesiones de Google no dicen por dónde entraron y nadie puede anotarse (la línea `via-rechazada` del registro dice qué llegó, ver la confirmación de Google más arriba). Abre solo el alta de las personas: quien organiza sigue necesitando Google para activar o recuperar una campaña.
 5. **El correo**: `CORREO_GANADORAS = "0"` y desplegar la sala. Las marcas ya escritas no se tocan.
 
 Las banderas del sitio se leen al construir: apagarlas pide una publicación nueva, así que no son un corte de emergencia.
@@ -449,7 +513,7 @@ El build no sale con una sola o con dos de las tres, con la cuenta repetida, sin
 
 **Qué hace falta antes (no es código):**
 
-1. El portero de la red principal con `RETIROS = "1"` y `PAGOS_PREMIO = "1"`: es un cambio en `workers/patrocinio/wrangler.toml` y un despliegue del portero, que pide la palabra de quien mantiene el proyecto. **Hoy `RETIROS` está en `"0"`: sin eso, el panel muestra el pago desde otra billetera como único camino.**
+1. El portero de la red principal con `RETIROS = "1"` y `PAGOS_PREMIO = "1"`: es un cambio en `workers/patrocinio/wrangler.toml` y un despliegue del portero, que pide la palabra de quien mantiene el proyecto. **En el repositorio `RETIROS` está en `"1"` desde el cambio `c2aec150`. Con `"0"`, el panel muestra el pago desde otra billetera como único camino.**
 2. La cuenta que cobra, creada en la red principal con su línea del USDC de Circle. Sin la línea, el retiro da `no-recibe`.
 3. Créditos de Pollar para la firma del retiro.
 
@@ -592,12 +656,25 @@ Hace falta la palabra de quien mantiene el proyecto. Desplegar el vigilante no t
 
    | Secreto | De dónde sale |
    |---|---|
+   | `PORTERO_TOKEN_LECTURA` | Opcional, y solo después de que el portero ya la tenga: mirar «La clave de solo lectura del portero: en qué orden se carga», más abajo. Es la clave de solo lectura del portero (issue #219): abre apenas `GET /v1/patrocinio/estado`. El vigilante y el flujo de GitHub la usan si está cargada. Sin ella usan la de operar como siempre. `npx wrangler@4.160.0 secret put PORTERO_TOKEN_LECTURA` |
    | `PORTERO_ADMIN_TOKEN` | La clave de operar del portero de mainnet: el mismo valor que su `ADMIN_TOKEN` (el que el flujo de GitHub guarda como `PORTERO_MAINNET_ADMIN_TOKEN`). `npx wrangler@4.160.0 secret put PORTERO_ADMIN_TOKEN` |
    | `AVISAR_A` | La dirección verificada del paso 1. Si son varias, separadas por comas. `npx wrangler@4.160.0 secret put AVISAR_A` |
    | `TELEGRAM_BOT_TOKEN` | Opcional. El bot que se crea hablando con BotFather en Telegram. `npx wrangler@4.160.0 secret put TELEGRAM_BOT_TOKEN` |
    | `TELEGRAM_CHAT_ID` | Opcional. El número del chat al que escribe el bot (se le manda un mensaje al bot y se mira en `getUpdates`). `npx wrangler@4.160.0 secret put TELEGRAM_CHAT_ID` |
 
    Telegram queda apagado si falta cualquiera de los dos. La dirección de aviso no se escribe en el repositorio. Cada `secret put` publica una versión nueva del Worker en el momento.
+
+### La clave de solo lectura del portero: en qué orden se carga
+
+La clave de solo lectura (issue #219) deja que el vigilante y el flujo de GitHub miren `estado` sin tener la clave que puede apagar el portero. Son tres lugares y **el orden importa**: si el vigilante o GitHub tienen la clave antes de que el portero la conozca, el portero contesta `401` a cada vuelta y la vigilancia avisa de una caída que no existe: en el vigilante llega «Al vigilante le falta la clave del portero» y en GitHub el flujo dice que el portero no contestó bien. Hace falta la palabra de quien mantiene el proyecto, y no se hace antes de los eventos ni durante uno: cargar un secreto del portero publica una versión nueva del Worker en el momento.
+
+1. **En el portero.** Desde `workers/patrocinio`, una clave nueva de 32 caracteres o más y **distinta** de la de operar (por ejemplo `openssl rand -hex 32`): `npx wrangler@4.160.0 secret put TOKEN_LECTURA --env mainnet`. Antes de seguir, comprobar con la clave nueva: `GET /v1/patrocinio/estado` tiene que dar `200`, y `POST /v1/patrocinio/apagar` tiene que dar `401` sin apagar nada. Si el `estado` da `401`, no seguir. En el registro del portero no tiene que aparecer `claves-iguales`.
+2. **En el vigilante.** Desde `workers/vigilante`: `npx wrangler@4.160.0 secret put PORTERO_TOKEN_LECTURA`, con el mismo valor. Esperar la vuelta siguiente (diez minutos): la ruta pública tiene que seguir mostrando `salioBien: true`.
+3. **En GitHub, al final.** El secreto `PORTERO_MAINNET_TOKEN_LECTURA`, en el Environment `vigilancia` (el mismo lugar donde está `PORTERO_MAINNET_ADMIN_TOKEN`). Después, lanzar una vez a mano `vigilar-portero.yml` desde `main` y mirar que lea `estado`.
+
+Para volver atrás, en cualquier momento y sin tocar el portero: borrar `PORTERO_TOKEN_LECTURA` del vigilante (`npx wrangler@4.160.0 secret delete PORTERO_TOKEN_LECTURA`) y el secreto de GitHub. Los dos vuelven a usar la clave de operar, que sigue abriendo todo. Si el vigilante ya avisó que le falta la clave, a la vuelta siguiente llega el «Arreglado». Para sacar la clave de lectura del portero, primero se borra de los otros dos y al final del portero, en el orden contrario.
+
+El mismo orden vale para el aviso de la red (issue #220): el portero va antes que el vigilante, porque el vigilante lee del portero la línea base en `GET /v1/patrocinio/linea-base`. Sin ella el paso de la red no mira nada y lo deja en el registro como `protocolo-sin-base`.
 
 ### Cómo se prueba que anda
 
@@ -643,7 +720,9 @@ El asunto es lo que se ve en la pantalla bloqueada del celular. Cada correo trae
 | **Muchas activaciones en una hora** | Hoy no sale: el aviso por activaciones está apagado hasta confirmar el nombre de ese cobro contra una lectura real de Pollar. Si se prendiera, vale lo mismo que el de cuentas nuevas | Pausar las altas del portero no frena esto: frena el canje de cupones y el alta de quien ganó, pero las cuentas las crea Pollar cuando alguien entra con Google. Mirar en el panel de Pollar quién entró en esa hora y cuántos créditos bajaron (cada cuenta nueva gasta unos 15 créditos, y 100 créditos son 1 dólar). Si no es una ola de gente de un evento, avisar a quien mantiene el proyecto: lo único que corta la creación está en el panel de Pollar (la aplicación de mainnet deja de crear la billetera al entrar, o se le sacan los dominios permitidos) y frena también a quien entra de verdad, así que lo decide quien mantiene el proyecto y se anota el valor de antes. Quien ya tiene cuenta sigue sellando y sorteando |
 | **Muchas cuentas nuevas y activaciones en una hora** | Los dos motivos a la vez. Hoy no sale, por lo mismo | Pausar las altas del portero no frena esto: frena el canje de cupones y el alta de quien ganó, pero las cuentas las crea Pollar cuando alguien entra con Google. Mirar en el panel de Pollar quién entró en esa hora y cuántos créditos bajaron (cada cuenta nueva gasta unos 15 créditos, y 100 créditos son 1 dólar). Si no es una ola de gente de un evento, avisar a quien mantiene el proyecto: lo único que corta la creación está en el panel de Pollar (la aplicación de mainnet deja de crear la billetera al entrar, o se le sacan los dominios permitidos) y frena también a quien entra de verdad, así que lo decide quien mantiene el proyecto y se anota el valor de antes. Quien ya tiene cuenta sigue sellando y sorteando |
 | **No se están contando las cuentas nuevas** | El portero contesta, pero dos vueltas seguidas (unos 20 minutos) no pudo contar las cuentas nuevas con la consulta de uso de Pollar (tardó de más, falló o contestó algo que no se entiende). Mientras tanto una ola de cuentas no avisa | Mirar `estado` y las cuentas nuevas en el panel de Pollar. Si hay un evento, vigilar las altas a mano hasta que vuelva el conteo |
-| **Al vigilante le falta la clave del portero** | No tiene la clave de operar, o el portero ya no la acepta (rotada) | Cargarla de nuevo: `npx wrangler@4.160.0 secret put PORTERO_ADMIN_TOKEN` |
+| **Al vigilante le falta la clave del portero** | No tiene la clave, o el portero ya no la acepta (rotada, o la de solo lectura se cargó en el vigilante antes que en el portero) | Si hay una clave de solo lectura cargada que el portero no conoce: borrarla del vigilante (`npx wrangler@4.160.0 secret delete PORTERO_TOKEN_LECTURA`) y seguir el orden de «La clave de solo lectura del portero: en qué orden se carga». Si no: cargar de nuevo la de operar, `npx wrangler@4.160.0 secret put PORTERO_ADMIN_TOKEN` |
+| **La red de Stellar cambió de protocolo (testnet o mainnet)** | La red subió de versión de protocolo y por lo menos un parámetro de costo ya no es el de la línea base guardada en el portero. Sale una vez por cambio, por correo y por Telegram si está prendido, con el antes y el luego de cada parámetro. Cuenta como avisado si llegó por al menos un canal | Leer el correo. Si el cambio es esperado: `node scripts/vigilar-red.mjs --actualizar-base --red <la red>`, subir `scripts/vigilar-red.base.json` y volver a desplegar el portero con la línea nueva (con la palabra de quien mantiene el proyecto, y no durante un evento). Si no se esperaba, mirar los costos del sello y del sorteo en `estado` y en las herramientas de la red antes del próximo evento. Mientras no se actualice la base, el aviso no se repite |
+| **La red de Stellar cambió los costos (testnet o mainnet)** | El protocolo es el mismo, pero cambió algún parámetro de costo de Soroban (lo que cuesta sellar y sortear) | Leer el correo y, si el cambio es esperado, actualizar la base con `node scripts/vigilar-red.mjs --actualizar-base --red <la red>` y desplegar el portero con la línea nueva. Si el costo subió mucho, avisar a quien carga el saldo de la cuenta que paga, porque la comisión por sello sube con él |
 
 Si las cifras de un correo dicen al menos junto a los cobros sin explicar, la lista de cobros de Pollar vino llena y la cifra puede quedarse corta: ese día, mirar `estado` a mano cada hora. Si dicen que los créditos se leyeron hace unos minutos, Pollar no está contestando y el portero usa el último saldo que leyó (hasta diez minutos, después los canjes nuevos se pausan solos).
 
