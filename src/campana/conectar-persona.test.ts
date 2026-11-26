@@ -7,6 +7,8 @@ import { campanaDeEjemplo } from "./ejemplo";
 import type { BotonDeGoogleDeVerdad } from "./google";
 import { SIN_CUENTA } from "./memoria";
 
+const esperaReal = globalThis.setTimeout;
+
 const SERVICIO = "https://servicio.example.org";
 const SALA = "ABCDEFGH";
 const CLAVE = "abcdefghijklmnopqrstuv";
@@ -108,17 +110,29 @@ function montar(guion: Record<string, Paso[]>, o: { enLinea?: boolean; memoria?:
   return { deps, llamadas, memoria, entrar, bloqueos, cada, esperas };
 }
 
-/** Deja correr el reloj falso hasta que todo lo pendiente termine. */
-async function correr<T>(promesa: Promise<T>, ms = 300_000): Promise<T> {
-  await vi.advanceTimersByTimeAsync(ms);
+/**
+ * Hace avanzar el reloj falso, de a `paso`, hasta que la promesa termine. El cifrado del nombre es de WebCrypto y se resuelve
+ * en tiempo real, no con el reloj falso: en una máquina cargada puede llegar después de varios avances, y un reloj que ya no
+ * avanza deja el pedido esperando para siempre. Entre un avance y otro se deja pasar un instante real.
+ */
+async function avanzarHasta<T>(promesa: Promise<T>, paso: number): Promise<T> {
+  let terminada = false;
+  const marcar = (): void => {
+    terminada = true;
+  };
+  promesa.then(marcar, marcar);
+  for (let vuelta = 0; vuelta < 400 && !terminada; vuelta += 1) {
+    await vi.advanceTimersByTimeAsync(paso);
+    if (!terminada) await new Promise<void>((resolver) => esperaReal(resolver, 2));
+  }
   return promesa;
 }
 
-/** Como `correr`, pero en pasos: entre uno y otro el reloj falso deja avanzar lo que no depende de él. */
-async function correrDeAPoco<T>(promesa: Promise<T>): Promise<T> {
-  for (let i = 0; i < 12; i += 1) await vi.advanceTimersByTimeAsync(5_000);
-  return promesa;
-}
+/** Deja correr el reloj falso hasta que todo lo pendiente termine. */
+const correr = <T>(promesa: Promise<T>, ms = 300_000): Promise<T> => avanzarHasta(promesa, ms);
+
+/** Como `correr`, pero en pasos más cortos: entre uno y otro el reloj falso deja avanzar lo que no depende de él. */
+const correrDeAPoco = <T>(promesa: Promise<T>): Promise<T> => avanzarHasta(promesa, 5_000);
 
 beforeEach(() => {
   vi.useFakeTimers();
