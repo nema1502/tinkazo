@@ -1139,7 +1139,7 @@ export class Sala extends DurableObject<Env> {
     try {
       return await codigosDeEntrega(sal, ganadoras);
     } catch {
-      // El error no dice ninguna línea, pero tampoco hace falta: sin códigos, la pantalla sigue con la entrega en mano.
+      // Una sal o una línea que no sirven no pueden pasar en una sala sana. Sin códigos, la pantalla sigue con la entrega en mano.
       return null;
     }
   }

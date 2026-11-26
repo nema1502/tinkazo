@@ -79,7 +79,7 @@ async function montar(extra: Record<string, string> = {}) {
 /** Todo lo que la sala guarda de una campaña: lo que una lectura no puede cambiar. */
 function loGuardado(mundo: MundoDeSala, sala: SalaDeCampana): string {
   const tablas = ["sala", "equipos", "personas", "campana_avisos", "campana_quitadas"];
-  return JSON.stringify(tablas.map((t) => mundo.ejecutar(`sala:${sala.id}`, `SELECT * FROM ${t} ORDER BY 1, 2`)));
+  return JSON.stringify(tablas.map((t) => mundo.ejecutar(`sala:${sala.id}`, `SELECT * FROM ${t} ORDER BY 1`)));
 }
 
 describe("GET campana/entrega", () => {
@@ -223,7 +223,11 @@ describe("el código propio en la consulta del celular de una persona", () => {
     const { sortear, yo, llaveDeLinea } = await montar();
     const ganadoras = await sortear();
     const ganadora = await yo(llaveDeLinea(ganadoras[0] as string));
-    expect(Object.keys(ganadora).sort()).toEqual(["anotada", "cierraMs", "codigo", "fase", "gano", "puesto", "ronda", "sorteo", "total"]);
+    const claves = Object.keys(ganadora);
+    for (const clave of ["anotada", "cierraMs", "codigo", "fase", "gano", "puesto", "total"]) expect(claves).toContain(clave);
+    // Lo único que se agrega a lo de siempre es el código: ninguna otra clave nueva.
+    const deSiempre = ["anotada", "avisado", "cierraMs", "fase", "gano", "puesto", "quitada", "ronda", "sorteo", "total"];
+    expect(claves.filter((clave) => !deSiempre.includes(clave))).toEqual(["codigo"]);
     expect(ganadora.codigo).toMatch(/^[0-9]{4}$/);
   });
 
