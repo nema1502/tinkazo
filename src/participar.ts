@@ -6,7 +6,7 @@ import "./campana/campana.css";
 import { cargaOpcional } from "./carga-opcional";
 import { enNavegadorDeApp } from "./navegador";
 import { getLang, initialLang, onLangChange, setLang, texto } from "./idioma";
-import { leerEnlaceDeCampana } from "./campana/enlace";
+import { leerEnlaceDeLaPagina } from "./campana/enlace";
 import { campanasActivo } from "./campana/bandera";
 import { montarCelular, type DepsDelCelular, type VistaDelCelular } from "./campana/celular";
 import { cargarConUnReintento, depsConectadas, type BaseDelCelular } from "./campana/conectar";
@@ -194,15 +194,15 @@ async function montarDePersona(
     mostrarCarga("persona-apagada", () => undefined);
     return;
   }
-  let piezas: [typeof import("./campana/conectar-persona"), typeof import("./campana/google")];
+  let piezas: [typeof import("./campana/conectar-persona"), typeof import("./campana/google"), typeof import("./campana/aislar")];
   try {
-    piezas = await Promise.all([import("./campana/conectar-persona"), import("./campana/google")]);
+    piezas = await Promise.all([import("./campana/conectar-persona"), import("./campana/google"), import("./campana/aislar")]);
   } catch {
     mostrarCarga("sin-red", () => void cargar());
     return;
   }
   if (!raiz || montaje !== montajes) return;
-  const [{ depsDePersona }, { botonDeGoogle }] = piezas;
+  const [{ depsDePersona }, { botonDeGoogle, cargarElGuionDeGoogle }, { aislarDelGuion, enlaceCompleto }] = piezas;
   const deps = depsDePersona({
     base,
     campana,
@@ -210,11 +210,20 @@ async function montarDePersona(
     sala: enlace.sala,
     clave: enlace.clave,
     pase: enlace.pase,
-    google: botonDeGoogle({ clienteId, idioma: getLang, oscuro: temaOscuro }),
+    google: botonDeGoogle({
+      clienteId,
+      idioma: getLang,
+      oscuro: temaOscuro,
+      // Antes de que el guion de Google entre a la página: sin referencia y con la dirección limpia (ver `aislar.ts`).
+      cargar: () => {
+        aislarDelGuion();
+        return cargarElGuionDeGoogle();
+      },
+    }),
     memoria: leerMemoriaDeCampana(),
     red: network.name,
     enLinea: () => navigator.onLine !== false,
-    enlace: () => location.href,
+    enlace: () => enlaceCompleto(),
     ...(typeof navigator.locks?.request === "function"
       ? { bloquear: <T>(nombre: string, trabajo: () => Promise<T>): Promise<T> => navigator.locks.request(nombre, trabajo) }
       : {}),
@@ -280,7 +289,8 @@ async function cargar(): Promise<void> {
     montarVista(campanaDeEjemplo(Date.now()), true, null);
     return;
   }
-  const enlace = leerEnlaceDeCampana(location.search, location.hash);
+  // Con el guion de Google en una campaña de personas la dirección queda limpia: el enlace sale de la dirección o, si ya se limpió, del historial.
+  const enlace = leerEnlaceDeLaPagina();
   if (!enlace?.sala || !enlace.clave) {
     mostrarCarga("no-esta", () => undefined);
     return;

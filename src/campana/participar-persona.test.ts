@@ -234,6 +234,23 @@ describe("participar.html: una campaña de personas", () => {
     expect(guardado).not.toContain("ana@example.org");
   });
 
+  it("al bajar el guion de Google la dirección queda sin la sala, el pase y la clave, y recargar sigue abriendo la campaña", async () => {
+    await abrir();
+    expect(guiones).toHaveLength(1);
+    expect(document.head.querySelector('meta[name="referrer"]')?.getAttribute("content")).toBe("no-referrer");
+    expect(location.search).toBe("");
+    expect(location.hash).toBe("");
+    // Recargar: la dirección ya no trae nada y la página lee la campaña del historial de la pestaña.
+    vi.resetModules();
+    document.body.innerHTML = main;
+    guiones = [];
+    gis.renderButton.mockClear();
+    await import("../participar");
+    await asentar();
+    expect(gis.renderButton).toHaveBeenCalledTimes(1);
+    expect(llamadas.filter((l) => l.ruta === "campana")).toHaveLength(2);
+  });
+
   it("al entrar con Google no anota todavía: Hola muestra el nombre y los pedidos de la empresa", async () => {
     ponerSala({
       campana: [envuelta(campanaCruda({
