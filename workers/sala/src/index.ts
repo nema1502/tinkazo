@@ -134,11 +134,14 @@ import {
   cambioValido,
   cierreValido,
   confirmarEventoSql,
+  conexionDePersonasApurada,
   contarRechazo,
+  contarRechazoDePersona,
   crearTablaDeEventos,
   crearTablasDeCampana,
   esFase,
   esMotivoDeSalida,
+  finDeVentanaDeRechazos,
   estadoDeCelular as leerEstadoDeCelular,
   ganadorasGuardadas,
   grupoDeConexion,
@@ -1012,7 +1015,7 @@ export class Sala extends DurableObject<Env> {
     token: string,
     llave: string,
     d?: string,
-  ): Promise<Resultado<{ ya: boolean }>> {
+  ): Promise<Resultado<{ ya: boolean; apurada: boolean }>> {
     const no = this.sinPersonas();
     if (no) return no;
     // Sin pase la respuesta es la misma que en una campaña de cuentas: no depende de la fase.
@@ -1031,7 +1034,21 @@ export class Sala extends DurableObject<Env> {
       ...(d !== undefined ? { d } : {}),
     });
     if (r.ok && r.nombre) this.avisarNombre(r.cuenta, r.nombre);
-    return r.ok ? { ok: true, ya: r.cuenta !== null } : r;
+    // Si la conexión ya mandó demasiados tokens falsos: el Worker verifica primero y deja de gastar llamadas con los que no valen.
+    return r.ok ? { ok: true, ya: r.cuenta !== null, apurada: conexionDePersonasApurada(this.sql, grupo, ahora) } : r;
+  }
+
+  /**
+   * Un token de Google que el Worker verificó y no sirvió (firma, emisor, caducidad, correo). Cuenta para su ficha y para el tope
+   * propio de personas de la conexión, que no frena a nadie con un token bueno.
+   */
+  async rechazoDePersona(ip: string, token: string): Promise<Resultado> {
+    const no = this.sinSalaDePersonas();
+    if (no) return no;
+    const grupo = await grupoDeConexion(this.sql, ip);
+    const ficha = await huellaDeFicha(this.sql, token);
+    contarRechazoDePersona(this.sql, grupo, ficha, Date.now());
+    return { ok: true };
   }
 
   /**
@@ -1808,6 +1825,7 @@ function cuerpoDeEstadoDeCelular(r: EstadoDeCelular): Record<string, unknown> {
  */
 async function altaDePersona(
   env: Env,
+  id: string,
   sala: ReturnType<Env["SALA"]["get"]>,
   cuerpo: { google?: unknown; d?: unknown; llave?: unknown; p?: unknown },
   ip: string,
@@ -1825,11 +1843,22 @@ async function altaDePersona(
     p = cuerpo.p;
   }
   const exigirPase = env.PASE !== "0";
+  const clave = `${id}|${grupoDeIp(ip)}`;
+  const opciones = { clienteId: clienteDeGoogle(env) };
+  // Una conexión que ya mandó mil tokens falsos: se verifica primero, que es local y no cuesta ninguna llamada a la sala. Un token
+  // falso se contesta acá, sin llamar a nadie ni escribir nada. Uno bueno sigue por el camino de siempre, así que nadie de su
+  // misma red queda afuera.
+  let quien: Awaited<ReturnType<typeof verificarIdentidadDeGoogle>> | null = null;
+  if (conexionApurada(clave, Date.now())) {
+    quien = await verificarIdentidadDeGoogle(google, opciones);
+    if (!quien.ok && quien.motivo !== "llaves-no-disponibles" && quien.motivo !== "audiencia") return falla({ motivo: "sesion" }, h);
+  }
   // Antes de verificar nada: que sea una campaña de personas prendida, la fase, el pase, los topes y el reingreso con una ficha reciente.
   const antes = await sala.prealtaDePersona(ip, p, exigirPase, google, llave, d);
   if (!antes.ok) return falla(antes, h);
+  if (antes.apurada) apurarConexion(clave, finDeVentanaDeRechazos(Date.now()));
   if (antes.ya) return json({ anotada: true, ya: true }, 200, h);
-  const quien = await verificarIdentidadDeGoogle(google, { clienteId: clienteDeGoogle(env) });
+  quien ??= await verificarIdentidadDeGoogle(google, opciones);
   if (!quien.ok) {
     // Google no contestó: no es un rechazo de la sesión, y repetir sirve.
     if (quien.motivo === "llaves-no-disponibles") return falla({ motivo: "google" }, h);
@@ -1838,9 +1867,9 @@ async function altaDePersona(
     // Un token de Google bien firmado pero hecho para otra aplicación: el identificador de la sala y el del sitio no son el mismo.
     // Es un error nuestro, no de la persona: no se cuenta en ningún tope y el celular lo lee como que no abre desde acá.
     if (quien.motivo === "audiencia") return falla({ motivo: "personas-configuracion" }, h);
-    // La verificación es local y no cuesta una llamada: el rechazo frena a quien repite esa ficha, y nunca suma al tope de la
-    // conexión, que es de todo el salón detrás de la misma red.
-    await sala.rechazo(ip, google, false);
+    // La verificación es local y no cuesta una llamada: el rechazo frena a quien repite esa ficha y suma al tope propio de
+    // personas de la conexión (mil por ventana), nunca al de cuentas, que es de todo el salón detrás de la misma red.
+    await sala.rechazoDePersona(ip, google);
     return falla({ motivo: "sesion" }, h);
   }
   const vence = venceDelToken(google, Date.now());
@@ -1850,6 +1879,33 @@ async function altaDePersona(
   const r = await sala.anotarPersonaDeGoogle({ usuario: quien.usuario, d, llave, ip, p, exigirPase, token: google, vence });
   if (!r.ok) return falla(r, h);
   return r.ya ? json({ anotada: true, ya: true }, 200, h) : json({ anotada: true }, 201, h);
+}
+
+/**
+ * Las conexiones (una sala y el bloque de red de quien llama) que ya pasaron el tope de tokens falsos de la ventana, hasta cuándo.
+ * Solo vive en la memoria de este Worker y no guarda ninguna dirección entera de más de un bloque: sirve para no llamar a la sala por
+ * cada token falso. Si el Worker se recicla se vuelve a enterar con la próxima respuesta de la sala.
+ */
+const conexionesApuradas = new Map<string, number>();
+const MAX_CONEXIONES_APURADAS = 200;
+
+function conexionApurada(clave: string, ahora: number): boolean {
+  const hasta = conexionesApuradas.get(clave);
+  if (hasta === undefined) return false;
+  if (hasta > ahora) return true;
+  conexionesApuradas.delete(clave);
+  return false;
+}
+
+function apurarConexion(clave: string, hasta: number): void {
+  if (conexionesApuradas.size >= MAX_CONEXIONES_APURADAS && !conexionesApuradas.has(clave)) {
+    const ahora = Date.now();
+    for (const [otra, vence] of conexionesApuradas) if (vence <= ahora) conexionesApuradas.delete(otra);
+    // Si quedan todas vigentes, se suelta la más vieja: quien siga mandando falsos la vuelve a marcar con la próxima respuesta.
+    const masVieja = conexionesApuradas.keys().next();
+    if (conexionesApuradas.size >= MAX_CONEXIONES_APURADAS && !masVieja.done) conexionesApuradas.delete(masVieja.value);
+  }
+  conexionesApuradas.set(clave, hasta);
 }
 
 export default {
@@ -2239,7 +2295,7 @@ export default {
         // Con el token de Google y sin el del proveedor es el alta de una campaña de personas. Todo lo que trae el pedido de una
         // campaña de cuentas sigue por el camino de siempre.
         if (typeof cuerpo.google === "string" && cuerpo.token === undefined) {
-          return altaDePersona(env, salaDe(id), cuerpo, req.headers.get("CF-Connecting-IP") ?? "sin-ip", h);
+          return altaDePersona(env, id, salaDe(id), cuerpo, req.headers.get("CF-Connecting-IP") ?? "sin-ip", h);
         }
         const token = cuerpo.token;
         const d = cuerpo.d;

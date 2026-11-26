@@ -31,6 +31,13 @@ export const VENTANA_CAMPANA_MS = 10 * 60_000;
  * Cada ficha cuenta una sola vez acá (ver `RECHAZOS_POR_FICHA`) y lo que se rechaza antes de llamar al proveedor no cuenta.
  */
 export const RECHAZOS_POR_CONEXION = 300;
+/**
+ * Tokens de Google que la sala rechazó, por conexión y por ventana, en las campañas de personas. Verificar un token es local y no
+ * cuesta una llamada al proveedor, así que este tope no protege a un tercero: protege a la sala de quien manda tokens falsos sin
+ * parar (cada uno inventa una ficha nueva). Está muy por encima de las 150 personas de un salón. Pasado el tope, la sala no deja
+ * de atender a nadie: solo le dice al Worker que verifique primero, y quien trae un token bueno entra igual que antes.
+ */
+export const RECHAZOS_DE_PERSONAS_POR_CONEXION = 1_000;
 /** Rechazos de una misma ficha por ventana. Repetir una ficha mala no sirve: cuando se pasa, ni se le pregunta al proveedor. */
 export const RECHAZOS_POR_FICHA = 5;
 /** Veces que una misma persona ya anotada puede volver a entrar (otro celular, otra pestaña) en una hora. */
@@ -705,6 +712,29 @@ export function contarRechazo(sql: Ejecutar, grupo: string, ficha: string, ahora
     grupo,
     ventana,
   );
+}
+
+/** La clave del contador de personas: la misma tabla de la conexión, con un prefijo que no puede chocar con un grupo de cuentas. */
+const grupoDePersonas = (grupo: string): string => `p${grupo}`;
+
+/** Cuándo termina la ventana de rechazos en la que cae `ahora`. */
+export const finDeVentanaDeRechazos = (ahora: number): number => (Math.floor(ahora / VENTANA_CAMPANA_MS) + 1) * VENTANA_CAMPANA_MS;
+
+/** Si la conexión ya pasó el tope de tokens falsos de esta ventana. Solo lee. */
+export function conexionDePersonasApurada(sql: Ejecutar, grupo: string, ahora: number): boolean {
+  const ventana = Math.floor(ahora / VENTANA_CAMPANA_MS);
+  const n = sql<{ n: number }>("SELECT n FROM campana_rechazos WHERE grupo = ? AND ventana = ?", grupoDePersonas(grupo), ventana)[0]?.n ?? 0;
+  return n >= RECHAZOS_DE_PERSONAS_POR_CONEXION;
+}
+
+/**
+ * Anota un token de Google que la sala rechazó: la ficha cuenta (repetirla se frena sola) y la conexión suma en su contador
+ * propio de personas, que nunca toca el de cuentas. Pasado el tope de la conexión ya no escribe nada: cada ficha nueva sería una
+ * fila de más y el que manda tokens falsos no puede hacer crecer la tabla sin límite.
+ */
+export function contarRechazoDePersona(sql: Ejecutar, grupo: string, ficha: string, ahora: number): void {
+  if (conexionDePersonasApurada(sql, grupo, ahora)) return;
+  contarRechazo(sql, grupoDePersonas(grupo), ficha, ahora, true);
 }
 
 /**

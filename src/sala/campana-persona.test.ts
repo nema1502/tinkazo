@@ -543,12 +543,38 @@ describe("el alta de una persona con Google", () => {
       const r = await altaGoogle(mundo, sala, await tokenDeGoogle(n, { payload: { email_verified: false } }), { llave: llaveDe(n) });
       expect(r.status).toBe(401);
     }
-    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM campana_rechazos")).toEqual([{ c: 0 }]);
+    // El tope de la conexión de cuentas (300) no se toca: los rechazos de personas suman en su propio contador, de mil.
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT n FROM campana_rechazos")).toEqual([{ n: 310 }]);
     for (let n = 1; n <= 3; n++) {
       const r = await altaGoogle(mundo, sala, await tokenDeGoogle(n), { llave: llaveDe(n) });
       expect(r.status, `persona ${n}`).toBe(201);
     }
   }, 60_000);
+
+  it("quien manda más de mil tokens falsos no le cuesta más a la sala ni deja afuera a los demás de su red", async () => {
+    // Tokens con forma de token y firma falsa: cada uno es una ficha nueva, y no hace falta firmar mil con una llave de verdad.
+    const [cabecera, , firma] = (await tokenDeGoogle(1)).split(".");
+    const falso = (n: number): string =>
+      `${cabecera}.${aTexto({ iss: "https://accounts.google.com", aud: CLIENTE, sub: sub(n), email: correo(n), email_verified: true, iat: AHORA / 1000 - 10, exp: AHORA / 1000 + 3000 })}.${firma}`;
+    const contar = (tabla: string): unknown => mundo.ejecutar(`sala:${sala.id}`, `SELECT COUNT(*) AS c FROM ${tabla}`);
+    for (let n = 1000; n < 2000; n++) {
+      expect((await altaGoogle(mundo, sala, falso(n), { llave: llaveDe(n) })).status, `falso ${n}`).toBe(401);
+    }
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT n FROM campana_rechazos")).toEqual([{ n: 1000 }]);
+    expect(contar("campana_rechazos_ficha")).toEqual([{ c: 1000 }]);
+    // Pasado el tope los falsos se siguen rechazando igual, pero ya no escriben ninguna fila más.
+    for (let n = 2000; n < 2030; n++) {
+      expect((await altaGoogle(mundo, sala, falso(n), { llave: llaveDe(n) })).status, `falso ${n}`).toBe(401);
+    }
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT n FROM campana_rechazos")).toEqual([{ n: 1000 }]);
+    expect(contar("campana_rechazos_ficha")).toEqual([{ c: 1000 }]);
+    // Y las personas de la misma red con un token bueno entran como siempre, antes y después.
+    for (let n = 1; n <= 3; n++) {
+      const r = await altaGoogle(mundo, sala, await tokenDeGoogle(n), { llave: llaveDe(n) });
+      expect(r.status, `persona ${n}`).toBe(201);
+    }
+    expect(filas(mundo, sala)).toHaveLength(3);
+  }, 120_000);
 
   it("nada que identifique a la persona queda guardado, se contesta o se escribe en un registro", async () => {
     const dicho: string[] = [];
