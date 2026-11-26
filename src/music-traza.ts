@@ -229,6 +229,13 @@ export interface OpcionesDeTraza {
   estadoInicial?: string;
   /** La dirección de la página (`?instant=1`, por ejemplo). */
   busqueda?: string;
+  /**
+   * Los `setTimeout` de la música (los rasgueos del remate se arman con uno) corren con el mismo reloj falso: cada uno
+   * sale en el primer tick cuya hora ya lo alcanzó, como en el navegador, donde un temporizador no llega antes de que
+   * el hilo vuelva. Al terminar el show corren todos los que quedaron (los que la música ya no debe dejar sonar).
+   * Apagado por omisión, para que las trazas de siempre no cambien.
+   */
+  temporizadores?: boolean;
 }
 
 /**
@@ -259,6 +266,23 @@ export async function trazaDeShows(juego: string, shows: ShowSeguido[], opciones
     const sound = await import("./sound");
     const m = await import("./music");
     if (opciones.antes) await opciones.antes();
+    const pendientes: { cuando: number; fn: () => void }[] = [];
+    if (opciones.temporizadores) {
+      vi.spyOn(window, "setTimeout").mockImplementation(((fn: () => void, ms?: number) => {
+        pendientes.push({ cuando: reloj.ms + (ms ?? 0), fn });
+        return pendientes.length;
+      }) as unknown as typeof window.setTimeout);
+    }
+    /** Corre los temporizadores que la hora ya alcanzó, del más viejo al más nuevo (o todos, si `todos`). */
+    const correrVencidos = (todos = false): void => {
+      for (;;) {
+        pendientes.sort((a, b) => a.cuando - b.cuando);
+        const siguiente = pendientes[0];
+        if (!siguiente || (!todos && siguiente.cuando > reloj.ms)) return;
+        pendientes.shift();
+        siguiente.fn();
+      }
+    };
     c.poner(reloj.ms / 1000);
     sound.sonidoDelJuego(juego as never);
     for (const show of shows) {
@@ -271,14 +295,18 @@ export async function trazaDeShows(juego: string, shows: ShowSeguido[], opciones
           c.estado(paso.alVolver);
           document.dispatchEvent(new Event("visibilitychange"));
         }
+        // Con los temporizadores, el tramo de cada tick incluye lo que arman los que vencen y lo que pide el juego.
+        const antesDelTick = c.eventos.length;
+        if (opciones.temporizadores) correrVencidos();
         paso.antes?.(m);
-        const desde = c.eventos.length;
+        const desde = opciones.temporizadores ? antesDelTick : c.eventos.length;
         (tick as (() => void) | null)?.();
         porTick.push({ ahora: reloj.ms / 1000, escondida, desde, hasta: c.eventos.length });
       }
       if (show.parar !== false) m.stopMusic();
     }
     if (shows.length > 0 && shows[shows.length - 1]?.parar === false) m.stopMusic();
+    if (opciones.temporizadores) correrVencidos(true);
   } finally {
     vi.restoreAllMocks();
     w.AudioContext = ctorViejo;
