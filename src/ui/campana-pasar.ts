@@ -11,6 +11,7 @@
  * Una sola corrida a la vez: si llega otra llamada mientras corre, queda una pendiente y se corre al terminar. Reabrir o
  * dejar la campaña cancela la que está en curso, que no toca nada de lo que ya no le corresponde.
  */
+import { formaDeLista } from "../campana/forma-de-lista";
 import { type DatosDeAnotada, listaYEtiquetas } from "../campana/lista";
 import {
   type SorteoDeCampana,
@@ -262,4 +263,44 @@ export function crearPaso(d: DepsDelPaso): PasoDeLaCampana {
       pendiente = null;
     },
   };
+}
+
+/** Lo que el panel ya tiene de cada anotada: su número, su línea, el nombre descifrado y si el filtro lo tapa. */
+export interface FilaParaReponer {
+  n: number;
+  cuenta: string;
+  nombre: string | null;
+  /** El filtro la marcó y quien organiza no tocó Mostrar. */
+  revisar: boolean;
+}
+
+/** Lo de afuera de reponer los nombres: el cuadro, la entrada y las etiquetas de esta pestaña. */
+export type DepsDeLaReposicion = Pick<DepsDelPaso, "entrada" | "huella" | "listaDelCuadro" | "ponerEtiquetas" | "persona"> & {
+  /** Si esta pestaña ya tiene etiquetas. */
+  hayEtiquetas: () => boolean;
+};
+
+/**
+ * Repone los nombres de una campaña de personas ya pasada al volver a abrirla en el mismo navegador, cuando la pestaña los
+ * perdió. Es solo para listas de personas: con cuentas no hace nada, como antes.
+ *
+ * Se arman con lo que el panel ya recibió de la sala, sin pedir nada, y solo si esas filas son la lista que está en el cuadro y la
+ * que tiene la huella guardada de la campaña: así nunca se ponen los nombres de otra lista. Los arma `listaYEtiquetas`, igual
+ * que al pasar la lista. Devuelve si puso las etiquetas.
+ */
+export function reponerLasEtiquetas(d: DepsDeLaReposicion, s: SalaDeCampana, filas: readonly FilaParaReponer[]): boolean {
+  if (d.hayEtiquetas() || filas.length === 0) return false;
+  if (formaDeLista(filas.map((f) => f.cuenta)) !== "persona") return false;
+  const guardada = d.entrada(s.red, s.evento);
+  if (guardada === null || guardada.huella === "" || guardada.huella !== d.huella(d.listaDelCuadro())) return false;
+  const porCuenta = new Map<string, DatosDeAnotada>();
+  for (const f of filas) porCuenta.set(f.cuenta, { n: f.n, nombre: f.nombre ?? "", revisar: f.revisar, mostrar: false });
+  const armada = listaYEtiquetas(
+    filas.map((f) => f.cuenta),
+    porCuenta,
+    d.persona,
+  );
+  if (!armada || d.huella(armada.lineas) !== guardada.huella) return false;
+  d.ponerEtiquetas(armada.etiquetas, "personas");
+  return true;
 }

@@ -8,7 +8,7 @@ import { cifrarEquipo } from "../equipos/datos";
 import type { SalaDeCampana } from "../sala/campana-org";
 import type { EquipoDeSala } from "../sala/cliente";
 import { montoDelPremio } from "../stellar/pagos";
-import { type ContextoDelPaso, type DepsDelPaso, crearPaso } from "./campana-pasar";
+import { type ContextoDelPaso, type DepsDeLaReposicion, type DepsDelPaso, type FilaParaReponer, crearPaso, reponerLasEtiquetas } from "./campana-pasar";
 
 /**
  * Pasar la lista cerrada al cuadro del sorteo, con la sala, el cuadro y el reloj de mentira. Los textos que se comparan
@@ -517,5 +517,105 @@ describe("una lista mezclada de cuentas y líneas de persona", () => {
     expect(await paso.correr(SALA, contexto(m))).toBe("lista-rara");
     expect(await paso.correr(SALA, contexto(m))).toBe("pasada");
     expect(ultimo(m)).toEqual({ paso: "en-el-sorteo", n: 2 });
+  });
+});
+
+describe("reponer los nombres de una campaña de personas ya pasada", () => {
+  /** Lo que el panel tiene de cada anotada: el nombre ya descifrado, o nada, y si el filtro lo marcó. */
+  const delPanel = (n: number, nombre: string | null, revisar = false, cuenta = lineaDePrueba(n)): FilaParaReponer => ({ n, cuenta, nombre, revisar });
+
+  /** Las etiquetas que arma el paso al pasar la lista, con tres nombres, uno repetido, uno tapado y uno vacío. */
+  async function alPasarLaLista(m: Mundo): Promise<Map<string, string>> {
+    m.nombres.set("d1", { nombre: "Ana", revisar: false });
+    m.nombres.set("d2", { nombre: "Beto", revisar: true });
+    m.nombres.set("d4", { nombre: "ana", revisar: false });
+    m.filas = [[filaDePersona(1), filaDePersona(2), filaDePersona(3), filaDePersona(4)]];
+    let armadas = new Map<string, string>();
+    const poner = m.d.ponerEtiquetas;
+    m.d.ponerEtiquetas = (e, de) => {
+      armadas = new Map(e);
+      poner(e, de);
+    };
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    m.d.ponerEtiquetas = poner;
+    return armadas;
+  }
+
+  const panelDeLoMismo = (): FilaParaReponer[] => [delPanel(4, "ana"), delPanel(3, null), delPanel(2, "Beto", true), delPanel(1, "Ana")];
+
+  function reposicion(m: Mundo, hay = false): { d: DepsDeLaReposicion; puestas: { e: Map<string, string>; de: string | undefined }[] } {
+    const puestas: { e: Map<string, string>; de: string | undefined }[] = [];
+    const d: DepsDeLaReposicion = {
+      entrada: m.d.entrada,
+      huella: m.d.huella,
+      listaDelCuadro: m.d.listaDelCuadro,
+      persona: m.d.persona,
+      hayEtiquetas: () => hay,
+      ponerEtiquetas: (e, de) => void puestas.push({ e: new Map(e), de }),
+    };
+    return { d, puestas };
+  }
+
+  it("arma los mismos nombres que al pasar la lista, como de personas", async () => {
+    const m = mundo();
+    const alPasar = await alPasarLaLista(m);
+    expect([...alPasar.values()].sort()).toEqual(["Ana", "Persona 2", "Persona 3", "ana (2)"].sort());
+    const { d, puestas } = reposicion(m);
+    expect(reponerLasEtiquetas(d, SALA, panelDeLoMismo())).toBe(true);
+    expect(puestas).toHaveLength(1);
+    expect(puestas[0]?.de).toBe("personas");
+    expect(puestas[0]?.e).toEqual(alPasar);
+  });
+
+  it("no toca nada si la pestaña ya tiene etiquetas", async () => {
+    const m = mundo();
+    await alPasarLaLista(m);
+    const { d, puestas } = reposicion(m, true);
+    expect(reponerLasEtiquetas(d, SALA, panelDeLoMismo())).toBe(false);
+    expect(puestas).toHaveLength(0);
+  });
+
+  it("con una lista de cuentas no hace nada, aunque el cuadro y la entrada coincidan", () => {
+    const m = mundo();
+    const lineas = [cuentaDePrueba(1), cuentaDePrueba(2)];
+    m.cuadro.lista = lineas.join("
+");
+    m.entradas.set("testnet/evento-uno", entradaDe(m.d.huella(lineas)));
+    const { d, puestas } = reposicion(m);
+    const filas = [delPanel(1, "Ana", false, cuentaDePrueba(1)), delPanel(2, "Nora", false, cuentaDePrueba(2))];
+    expect(reponerLasEtiquetas(d, SALA, filas)).toBe(false);
+    expect(puestas).toHaveLength(0);
+  });
+
+  it("sin entrada, o con otra lista en el cuadro, no hace nada", async () => {
+    const m = mundo();
+    await alPasarLaLista(m);
+    const sinEntrada = reposicion(m);
+    m.entradas.clear();
+    expect(reponerLasEtiquetas(sinEntrada.d, SALA, panelDeLoMismo())).toBe(false);
+    const m2 = mundo();
+    await alPasarLaLista(m2);
+    m2.cuadro.lista = lineaDePrueba(1);
+    const otra = reposicion(m2);
+    expect(reponerLasEtiquetas(otra.d, SALA, panelDeLoMismo())).toBe(false);
+    expect(sinEntrada.puestas).toHaveLength(0);
+    expect(otra.puestas).toHaveLength(0);
+  });
+
+  it("si las filas del panel no son la lista del cuadro, no pone nombres de otra lista", async () => {
+    const m = mundo();
+    await alPasarLaLista(m);
+    const { d, puestas } = reposicion(m);
+    expect(reponerLasEtiquetas(d, SALA, panelDeLoMismo().slice(1))).toBe(false);
+    expect(puestas).toHaveLength(0);
+  });
+
+  it("con una mezcla de cuentas y líneas, o sin filas, no hace nada", async () => {
+    const m = mundo();
+    await alPasarLaLista(m);
+    const { d, puestas } = reposicion(m);
+    expect(reponerLasEtiquetas(d, SALA, [...panelDeLoMismo().slice(1), delPanel(1, "Ana", false, cuentaDePrueba(1))])).toBe(false);
+    expect(reponerLasEtiquetas(d, SALA, [])).toBe(false);
+    expect(puestas).toHaveLength(0);
   });
 });

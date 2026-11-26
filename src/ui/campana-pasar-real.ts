@@ -8,7 +8,7 @@ import { conSorteoSinResolver, entradaDelEvento, guardarSorteoDeCampana, salaDeC
 import { premioParaElCuadro } from "../campana/formato";
 import { ponerPaso } from "../campana/puente";
 import { descifrarEquipo, revisarEquipo } from "../equipos/datos";
-import { ponerEtiquetas } from "../equipos/etiquetas";
+import { hayEtiquetas, ponerEtiquetas } from "../equipos/etiquetas";
 import { getLang, t } from "../i18n";
 import { bytesToHex } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
@@ -20,7 +20,7 @@ import { listaBloqueada, parseNames, setList } from "./participants";
 import { actualizarLugares, ponerPremio } from "./premios";
 import { modoTurnosActivo, ponerModoTurnos } from "./turnos";
 import { claveDeSellar, currentSession } from "./wallet-ui";
-import { type DepsDelPaso, type PasoDeLaCampana, type ContextoDelPaso, crearPaso } from "./campana-pasar";
+import { type DepsDelPaso, type FilaParaReponer, type PasoDeLaCampana, type ContextoDelPaso, crearPaso, reponerLasEtiquetas } from "./campana-pasar";
 import type { SalaDeCampana } from "../sala/campana-org";
 
 const huellaDe = (lineas: readonly string[]): string => bytesToHex(listHash([...lineas]));
@@ -93,6 +93,14 @@ export function pasoReal(): PasoDeLaCampana {
 export async function alCerrarReal(s: SalaDeCampana, _filas: unknown, ctx?: ContextoDelPaso): Promise<void> {
   if (!ctx) return;
   await pasoReal().correr(s, ctx);
+}
+
+/**
+ * Al retomar en este navegador una campaña de personas ya pasada, repone los nombres si la pestaña los perdió, con las filas
+ * que el panel ya recibió entera. Con una lista de cuentas no hace nada.
+ */
+export function reponerEtiquetasReal(s: SalaDeCampana, filas: readonly FilaParaReponer[]): void {
+  reponerLasEtiquetas({ ...depsDelPasoReales(), hayEtiquetas }, s, filas);
 }
 
 /** La lista que hubiera en el cuadro sin sellar ya no es la de la campaña: se vacía y su entrada pierde la huella. */
