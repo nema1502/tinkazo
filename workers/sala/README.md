@@ -108,6 +108,7 @@ con los bits sobrantes del final distintos de cero no es canónica y no verifica
 | `GET /v1/sala/<id>/campana/resultado` | Devuelve `{"sorteo","ganadoras","comprobante"}`, o `404` mientras no hay | Sin token. Se recuerda 2 segundos en el borde |
 | `POST /v1/sala/<id>/campana/quitar` | JSON `{"n","motivo"}`: saca a una persona antes del sello. `204` | Con el token. Hasta 200 bytes |
 | `POST /v1/sala/<id>/campana/avisar` | JSON `{"cuenta"}`: avisa a una ganadora después del sorteo. `204` | Con el token. Hasta 200 bytes |
+| `GET /v1/sala/<id>/campana/entrega` | `{"codigos"}`: el código de entrega de cuatro cifras de cada ganadora, en orden de puesto. Solo en una campaña de personas ya sorteada | Con el token. Nunca se recuerda (`no-store`). No escribe nada |
 | `POST /v1/sala/<id>/campana/alta` | Sesión, datos cifrados, llave y pase. `201`, o `200` si ya estaba. Si ya estaba y la lista todavía acepta altas, el nombre cifrado de su fila pasa al nuevo (con la clave de la compu nueva) y sube su versión | Desde el sitio. Hasta 6.000 bytes |
 | `POST /v1/sala/<id>/campana/yo` | `{"cuenta","llave"}`: fase, total, cierre y si ese celular está anotado. Con la lista sellada o sorteada suma `"sorteo"` y `"ronda"`, como el estado | Solo lectura. Hasta 300 bytes. Con `"c": true` y la marca prendida (ver abajo) deja de ser lectura y pide un origen del sitio |
 
@@ -277,10 +278,19 @@ nulo, otro texto) la campaña es la de siempre y ninguna ruta cambia: la sala le
 campo, y un campo que no conoce no lo cambia.
 
 Nacen apagadas. Hacen falta dos variables en `wrangler.toml`: `DIFERIDA` en `"1"` y un `GOOGLE_CLIENT_ID` (el identificador de
-cliente de Google de Tinkazo, que es público). Si falta una, crear una campaña de personas da `503 personas-apagadas`, activarla
-al pagar da `400 forma` con el campo `identidad`, y el alta de una ya creada da `503 personas-apagadas`. La consulta propia sigue
-andando (es de solo lectura): apagar el modo en pleno evento no deja a quien ya se anotó sin saber si ganó.
-La sala guarda el modo en la clave `identidad` de la sala, solo en esas campañas.
+cliente de Google de Tinkazo, que es público). Si falta una, crear una campaña de personas da `503 personas-apagadas` y el alta
+en una ya creada da lo mismo. Todo lo demás de una campaña en curso sigue andando para poder terminarla: la consulta propia (es de
+solo lectura: apagar el modo en pleno evento no deja a quien ya se anotó sin saber si ganó), quitar, cerrar, sellar, guardar el
+resultado y avisar. La sala guarda el modo en la clave `identidad` de la sala, solo en esas campañas.
+
+La activación al pagar nunca las firma, con los interruptores como estén: `POST /v1/activar` con `identidad` da `400 forma` con
+el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
+
+- **El premio en mano.** El texto firmado puede traer `"premio_en_mano": {"es","en"}`, cada uno de 1 a 60 caracteres, de una sola
+  línea, con algo escrito y sin caracteres invisibles. Solo vale con `"identidad": "persona"` y con todos los `premios` en `"0"`:
+  sin la identidad de persona da `400 forma` con el campo `premio_en_mano`, y con algún monto distinto de `"0"` da `400 forma` con
+  el campo `premios`. La sala no guarda ni usa el texto: solo lo deja pasar. Una campaña de personas con montos y sin
+  `premio_en_mano` se sigue aceptando al leerla. La activación al pagar tampoco acepta `premio_en_mano`.
 
 - **El alta** es `POST /v1/sala/<id>/campana/alta` con `{"google","d","llave","p"?}`. `google` es el token de identidad que
   entrega el botón de Google, y la sala lo verifica sola con `identidad-google.ts`: firma contra las llaves públicas de Google,
@@ -307,6 +317,15 @@ La sala guarda el modo en la clave `identidad` de la sala, solo en esas campaña
   una línea por fila. Quitar a alguien, cerrar, sellar, sortear y el resultado andan igual, y el resultado nombra a quienes
   ganaron por su línea. Quien organiza marca el aviso de una ganadora por su línea (`campana/avisar` con `{"cuenta":"p1:..."}`),
   y la sala solo acepta una línea en una campaña de personas.
+- **El código de entrega.** Para comprobar en el stand que quien se presenta es quien ganó, cada ganadora tiene un código de
+  cuatro cifras que sale de su línea con la sal de la sala (`codigosDeEntrega` en `linea-persona.ts`, con sus vectores en la sección
+  `entrega` de `docs/vectors-persona.json`): el HMAC-SHA256 de la sal con `entrega:<vuelta>:<línea>`, sus primeros cuatro bytes como
+  entero módulo 10.000. Si el código ya salió para una ganadora de más adelante en el puesto, esa pasa a la vuelta siguiente: en una
+  lista no hay dos iguales. No se guarda: se calcula en cada pedido y no se escribe en ningún registro. Lo ve quien organiza con
+  `GET campana/entrega` (token de la sala, `200 {"codigos":["0421",...]}` en orden de puesto, `no-store`: `404 no-existe`,
+  `403 token`, `409 no-es-de-personas` en una campaña de cuentas y `409 fase` antes del sorteo) y cada ganadora en la consulta de
+  su celular (`campana/yo`), que suma `"codigo"` solo para quien ganó y con el de su puesto. Los interruptores de las personas no
+  lo frenan.
 - **Saber si estoy anotada.** El celular no tiene cuenta que mandar: `POST campana/yo` con `{"llave"}` sola. La sala busca la fila
   que anotó esa llave y contesta lo mismo que con una cuenta y su llave. Quien no tiene la llave de una fila no ve nada de esa
   fila. En una campaña de cuentas, un pedido sin `cuenta` sigue siendo `400 forma`. Lo mismo en una sala que no existe (cerrada,
@@ -328,8 +347,9 @@ La sala guarda el modo en la clave `identidad` de la sala, solo en esas campaña
   aunque sea cifrado y hasta el fin del reclamo, y eso choca con la regla de no guardar nada que la identifique. Reclamar el premio
   exige además que la sala siga viva mientras dure el reclamo. Esta etapa no hace ninguna de las dos cosas a propósito. Mientras no
   se decida cómo se entera quien gana, `DIFERIDA` queda en `"0"` en los eventos con premios.
-- **El interruptor apagado en medio de un evento** no toca lo que ya está anotado: la sala sigue mostrando el estado, el panel de
-  quien organiza sigue cerrando, sellando y guardando el resultado. Solo dejan de andar el alta y la consulta propia.
+- **El interruptor apagado en medio de un evento** no toca lo que ya está anotado: la sala sigue mostrando el estado, la consulta
+  propia de cada celular y el panel de quien organiza sigue quitando, cerrando, sellando, guardando el resultado y avisando.
+  Solo dejan de andar crear campañas de personas y el alta de gente nueva.
 
 La prueba `src/sala/campana-paridad-cuenta.test.ts` compara cada ruta de una campaña de cuentas, con sus cabeceras y su cuerpo,
 contra un archivo grabado con la sala de antes de este modo. `src/sala/campana-persona.test.ts` prueba el modo nuevo.

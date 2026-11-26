@@ -854,13 +854,13 @@ describe("activar una campaña de personas", () => {
     expect(await r.json()).toMatchObject({ error: "forma", campo: "identidad" });
   });
 
-  it("con los interruptores, la activa y el texto firmado conserva el campo", async () => {
+  it("con los interruptores tampoco: las campañas de personas las firma solo Tinkazo", async () => {
     const m = await montarMundoDeActivar({ DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE });
     vi.setSystemTime(HORA_DE_LA_PRUEBA);
     m.horizon.pagos = [m.pagoCompleto("casa-andina-k7p2")];
     const r = await m.activar({ texto: JSON.stringify(m.campana({ identidad: "persona" })), sesion: m.organizadora.token });
-    expect(r.status).toBe(200);
-    expect(((await r.json()) as { texto: string }).texto).toBe(JSON.stringify(m.campana({ identidad: "persona" })));
+    expect(r.status).toBe(400);
+    expect(await r.json()).toMatchObject({ error: "forma", campo: "identidad" });
   });
 
   it("un valor de identidad que no es persona se activa como la campaña de siempre, con los interruptores como estén", async () => {
