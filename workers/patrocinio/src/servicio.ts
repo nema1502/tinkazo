@@ -547,7 +547,8 @@ export class Portero {
         } catch (e) {
           this.cupos.devolver(firmada.hash);
           this.registrar("error-interno", { donde: "envolver-sorteo", hash: corto(firmada.hash), error: String(e).slice(0, 120) });
-          return r(500, { motivo: "interno" });
+          // Falló antes de mandar y lo reservado ya se devolvió: es el único error interno que dice que no mandó nada.
+          return r(500, { motivo: "interno", detalle: "sin-mandar" });
         }
         let envio;
         try {
