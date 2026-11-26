@@ -108,6 +108,7 @@ con los bits sobrantes del final distintos de cero no es canónica y no verifica
 | `GET /v1/sala/<id>/campana/resultado` | Devuelve `{"sorteo","ganadoras","comprobante"}`, o `404` mientras no hay | Sin token. Se recuerda 2 segundos en el borde |
 | `POST /v1/sala/<id>/campana/quitar` | JSON `{"n","motivo"}`: saca a una persona antes del sello. `204` | Con el token. Hasta 200 bytes |
 | `POST /v1/sala/<id>/campana/avisar` | JSON `{"cuenta"}`: avisa a una ganadora después del sorteo. `204` | Con el token. Hasta 200 bytes |
+| `GET /v1/sala/<id>/campana/entrega` | `{"codigos"}`: el código de entrega de cuatro cifras de cada ganadora, en orden de puesto. Solo en una campaña de personas ya sorteada | Con el token. Nunca se recuerda (`no-store`). No escribe nada |
 | `POST /v1/sala/<id>/campana/alta` | Sesión, datos cifrados, llave y pase. `201`, o `200` si ya estaba. Si ya estaba y la lista todavía acepta altas, el nombre cifrado de su fila pasa al nuevo (con la clave de la compu nueva) y sube su versión | Desde el sitio. Hasta 6.000 bytes |
 | `POST /v1/sala/<id>/campana/yo` | `{"cuenta","llave"}`: fase, total, cierre y si ese celular está anotado. Con la lista sellada o sorteada suma `"sorteo"` y `"ronda"`, como el estado | Solo lectura. Hasta 300 bytes. Con `"c": true` y la marca prendida (ver abajo) deja de ser lectura y pide un origen del sitio |
 
@@ -304,6 +305,13 @@ el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
   una línea por fila. Quitar a alguien, cerrar, sellar, sortear y el resultado andan igual, y el resultado nombra a quienes
   ganaron por su línea. Quien organiza marca el aviso de una ganadora por su línea (`campana/avisar` con `{"cuenta":"p1:..."}`),
   y la sala solo acepta una línea en una campaña de personas.
+- **El código de entrega.** Para comprobar en el stand que quien se presenta es quien ganó, cada ganadora tiene un código de
+  cuatro cifras que sale de su línea con la sal de la sala (`codigosDeEntrega` en `linea-persona.ts`, con sus vectores en la sección
+  `entrega` de `docs/vectors-persona.json`): el HMAC-SHA256 de la sal con `entrega:<vuelta>:<línea>`, sus primeros cuatro bytes como
+  entero módulo 10.000. Si el código ya salió para una ganadora de más adelante en el puesto, esa pasa a la vuelta siguiente: en una
+  lista no hay dos iguales. No se guarda: se calcula en cada pedido y no se escribe en ningún registro. Lo ve quien organiza con
+  `GET campana/entrega` (token de la sala, `200 {"codigos":["0421",...]}` en orden de puesto, `no-store`: `404 no-existe`,
+  `403 token`, `409 no-es-de-personas` en una campaña de cuentas y `409 fase` antes del sorteo). Los interruptores de las personas no lo frenan.
 - **Saber si estoy anotada.** El celular no tiene cuenta que mandar: `POST campana/yo` con `{"llave"}` sola. La sala busca la fila
   que anotó esa llave y contesta lo mismo que con una cuenta y su llave. Quien no tiene la llave de una fila no ve nada de esa
   fila. En una campaña de cuentas, un pedido sin `cuenta` sigue siendo `400 forma`.

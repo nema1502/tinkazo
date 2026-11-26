@@ -47,6 +47,10 @@
  *   PUT    /v1/sala/<id>/campana/resultado Authorization: Bearer <token> JSON {"sorteo","comprobante"} → 204
  *                                           (con el correo prendido, además le avisa a quien ganó, sin que la respuesta lo espere)
  *   GET    /v1/sala/<id>/campana/resultado sin token → 200 {"sorteo","ganadoras","comprobante"} (se recuerda 2 segundos en el borde)
+ *   GET    /v1/sala/<id>/campana/entrega   Authorization: Bearer <token> → 200 {"codigos"}: el código de entrega de cuatro cifras de cada
+ *                                           ganadora, en orden de puesto (solo en una campaña de personas ya sorteada: 409 no-es-de-personas
+ *                                           en una de cuentas y 409 fase antes del sorteo). Se calcula en cada pedido, no se guarda y nunca
+ *                                           se recuerda en el borde: Cache-Control: no-store
  *   POST   /v1/sala/<id>/campana/quitar    Authorization: Bearer <token> JSON {"n","motivo"} → 204
  *   POST   /v1/sala/<id>/campana/avisar    Authorization: Bearer <token> JSON {"cuenta"} → 204
  *   POST   /v1/sala/<id>/campana/alta      JSON {"token","d","llave","p"?} → 201 {"cuenta"} o 200 {"cuenta","ya"}
@@ -237,7 +241,7 @@ import {
 import type { AvisoDeToma, DepsDeTus, ResumenDeSala } from "./tus-campanas";
 import { Pollar, formaDeToken, pollarDe } from "../../patrocinio/src/pollar";
 import { verificarIdentidadDeGoogle } from "./identidad-google";
-import { esLineaDePersona, lineaDePersona } from "./linea-persona";
+import { codigosDeEntrega, esLineaDePersona, lineaDePersona } from "./linea-persona";
 import { clienteDeGoogle, personasPrendido, venceDelToken } from "./personas";
 import type { VariablesDePersonas } from "./personas";
 import deployments from "../../../src/stellar/deployments.json";
@@ -648,6 +652,8 @@ export type Resultado<T = object> =
         | "sin-resultado"
         | "no-esta"
         | "no-gano"
+        | "no-es-de-personas"
+        | "sin-codigos"
         | "personas-apagadas";
     }
   | { ok: false; motivo: "cupo-conexion" | "rechazos"; esperaS: number };
@@ -1103,6 +1109,33 @@ export class Sala extends DurableObject<Env> {
     if (!this.dato("huella") || !this.esCampana() || !this.esDePersonas()) return { ok: false, motivo: "forma" };
     const huella = await huellaDeLlave(llave);
     return { ok: true, ...estadoDeCelularPorLlave(this.sql, huella) };
+  }
+
+  /**
+   * Los códigos de entrega de las ganadoras de una campaña de personas, en orden de puesto: solo quien tiene el token de la sala.
+   * No escribe nada y no mira los interruptores de las personas: una campaña en curso se termina igual. Se calculan con la sal de
+   * la sala cada vez que se piden y nunca se guardan ni se registran.
+   */
+  async codigosDeEntrega(token: string): Promise<Resultado<{ codigos: string[] }>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    if (!this.esDePersonas()) return { ok: false, motivo: "no-es-de-personas" };
+    const ganadoras = ganadorasGuardadas(this.sql);
+    if (this.dato("fase") !== "sorteada" || ganadoras.length === 0) return { ok: false, motivo: "fase" };
+    const codigos = await this.codigosDe(ganadoras);
+    return codigos === null ? { ok: false, motivo: "sin-codigos" } : { ok: true, codigos };
+  }
+
+  /** Los códigos de esas ganadoras con la sal de la sala, o nada si no se pueden calcular. La sal se lee: acá nunca se inventa. */
+  private async codigosDe(ganadoras: string[]): Promise<string[] | null> {
+    const sal = this.dato("sal-campana");
+    if (sal === null) return null;
+    try {
+      return await codigosDeEntrega(sal, ganadoras);
+    } catch {
+      // El error no dice ninguna línea, pero tampoco hace falta: sin códigos, la pantalla sigue con la entrega en mano.
+      return null;
+    }
   }
 
   /** Cuántas altas de campaña explican firmas, por día: solo cifras, sin ningún dato de persona. Lo lee la vigilancia. */
@@ -1741,6 +1774,8 @@ const MOTIVOS: Record<string, number> = {
   distinto: 409,
   "no-esta": 404,
   "no-gano": 400,
+  "no-es-de-personas": 409,
+  "sin-codigos": 500,
   "sin-billetera": 409,
   "personas-apagadas": 503,
   google: 502,
@@ -2162,6 +2197,12 @@ export default {
         const cuerpoDelResultado = { sorteo: r.sorteo, ganadoras: r.ganadoras, comprobante: r.comprobante };
         ctx.waitUntil(guardarEnLaCache(url, 200, cuerpoDelResultado));
         return json(cuerpoDelResultado, 200, { ...h, "Cache-Control": CABECERA_DE_CACHE });
+      }
+
+      // Los códigos de entrega: solo quien organiza, siempre al día y nunca en la caché del borde ni del navegador.
+      if (partes[3] === "campana" && partes[4] === "entrega" && partes.length === 5 && req.method === "GET") {
+        const r = await salaDe(id).codigosDeEntrega(bearer(req));
+        return r.ok ? json({ codigos: r.codigos }, 200, { ...h, "Cache-Control": "no-store" }) : falla(r, { ...h, "Cache-Control": "no-store" });
       }
 
       // Quitar deja constancia del motivo y avisar marca a una ganadora. Las dos escrituras piden el token.
