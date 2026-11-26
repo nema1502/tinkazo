@@ -1,6 +1,6 @@
 /** Pantallas de quien ya entró: solo pintan los datos recibidos y avisan las acciones de la persona. */
 
-import { horaTexto, premiosTexto } from "./formato";
+import { horaTexto, textoDelPremio } from "./formato";
 import type { MemoriaDeCampana } from "./memoria";
 import type { PasoDeCampana, TipoDePaso } from "./modelo";
 import { caja, conDestacado, llama, marcaDeTilde, rotulosChicos } from "./piezas";
@@ -353,7 +353,7 @@ export function pintarAdentro(
   // Es la pantalla que queda abierta una hora: arriba dice de quién es el sorteo y qué se sortea.
   izq.append(rotulosChicos([
     sustituir(deps.tx("cpTitulo"), { empresa: deps.campana.empresa.nombre }),
-    premiosTexto(deps.campana.premios, idioma),
+    textoDelPremio(deps.campana, idioma),
   ]));
   izq.append(marcaDeTilde());
   titulo(izq, deps.tx(datos.ya ? "cpYaEstabas" : "cpAdentro"));
@@ -412,7 +412,8 @@ export function pintarGano(
   const izq = caja("cmp-izq cmp-hero");
   izq.append(marcaDeTilde());
   titulo(izq, deps.tx("cpGanaste"));
-  const premio = premiosTexto(deps.campana.premios.slice(0, 1), deps.idioma());
+  // Quien ganó se lleva un premio: con premio en mano es el texto solo, sin el para cuántas personas.
+  const premio = textoDelPremio({ ...deps.campana, premios: deps.campana.premios.slice(0, 1) }, deps.idioma());
   parrafo(izq, sustituir(deps.tx("cpPremioDe"), {
     premio,
     empresa: deps.campana.empresa.nombre,
