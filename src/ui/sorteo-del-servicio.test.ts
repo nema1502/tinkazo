@@ -555,6 +555,21 @@ describe("el servicio no pudo hablar con su red", () => {
   });
 });
 
+describe("un pedido sin tiempo en la etapa no sale", () => {
+  it("la pestaña vuelve de segundo plano con la etapa vencida: no se pide otra vez, se mira la red y sigue el camino de siempre", async () => {
+    const m = armar({ pedir: async () => ({ accion: "espera" }), leer: async () => null });
+    // Cada espera deja pasar 30 segundos del reloj de pared: al terminar la primera, la etapa de pedir ya venció.
+    const saltar = (ms: number): Promise<void> => {
+      vi.setSystemTime(Date.now() + 30_000);
+      return dormir(ms);
+    };
+    const r = await correr(sortearPorElServicio({ raffleId: 7n, firma96: FIRMA, ahora, dormir: saltar }, m.fuentes));
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(m.pedir).toHaveBeenCalledTimes(1);
+    expect(m.leer).toHaveBeenCalled();
+  });
+});
+
 describe("la vuelta por un sello gemelo no estira la espera de la sala", () => {
   it("si la vuelta ya no cabe en el minuto de la sala, se sigue por el camino de siempre y se pide una sola vez", async () => {
     const m = armar({

@@ -130,11 +130,11 @@ function fuentes(o: Partial<Fuentes>): Fuentes {
 }
 
 /** Corre con el reloj simulado hasta que termina. */
-async function correr(f: Fuentes, id = 7n): Promise<FinDelServicio> {
+async function correr(f: Fuentes, id = 7n, dormir?: (ms: number) => Promise<void>): Promise<FinDelServicio> {
   vi.useFakeTimers();
   try {
     let fin: FinDelServicio | undefined;
-    void sortearPorElServicio({ raffleId: id, firma96: FIRMA }, f).then((r) => (fin = r));
+    void sortearPorElServicio({ raffleId: id, firma96: FIRMA, ...(dormir ? { dormir } : {}) }, f).then((r) => (fin = r));
     for (let ms = 0; ms < 900_000 && !fin; ms += 250) await vi.advanceTimersByTimeAsync(250);
     if (!fin) throw new Error("la prueba no terminó");
     return fin;
@@ -349,6 +349,19 @@ describe("la reserva que el servicio puede tener viva", () => {
     ["un error interno que no llegó a mandar", { accion: "hoy", marca: false, disyuntor: false, olvidar: false, disyuntorCorto: true }],
   ])("%s: no hay reserva", async (_n, resp) => {
     await correr(fuentes({ pedir: async () => resp }));
+    expect(reservaDelServicioViva(7n)).toBe(false);
+  });
+
+  it("un pedido que no se manda por falta de tiempo en la etapa no deja reserva", async () => {
+    let pedidos = 0;
+    // Cada espera deja pasar 30 segundos del reloj de pared: la etapa de pedir vence antes del segundo pedido.
+    const saltar = (ms: number): Promise<void> => {
+      vi.setSystemTime(Date.now() + 30_000);
+      return new Promise((r) => setTimeout(r, ms));
+    };
+    const r = await correr(fuentes({ pedir: async () => (pedidos++, { accion: "espera" } as RespuestaDelSorteo) }), 7n, saltar);
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(pedidos).toBe(1);
     expect(reservaDelServicioViva(7n)).toBe(false);
   });
 

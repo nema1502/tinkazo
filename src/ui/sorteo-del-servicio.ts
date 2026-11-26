@@ -584,6 +584,12 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
     let siguiente: FinDelServicio | "otra-vez" | null = null;
     while (siguiente === null) {
       const topePedido = Math.min(TOPE_DEL_PEDIDO_MS, hastaServicio - ahora());
+      if (topePedido <= 0) {
+        // La pestaña volvió de segundo plano con la etapa ya vencida. Un pedido sin tiempo no se manda: podría llegar al servicio
+        // y salir después de que esta pestaña siguió de largo. Lo que hayan dejado los pedidos de antes se mira en la red.
+        siguiente = await duda();
+        break;
+      }
       const ac = new AbortController();
       let porTope = false;
       let r: RespuestaDelSorteo;
