@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RespuestaDelSorteo } from "../stellar/sorteo-servidor-api";
+import { leerRespuestaDelSorteo, type RespuestaDelSorteo } from "../stellar/sorteo-servidor-api";
 import { DISYUNTOR_CORTO_MS, DISYUNTOR_MS, type Fuentes, type FinDelServicio, fuentesDeVerdad, loTomaElServicio, reiniciarElServicio, reservaDelServicioViva, sortearPorElServicio } from "./sorteo-del-servicio";
 
 /**
@@ -218,6 +218,42 @@ describe("lo que deja de lado al servicio y por cuánto", () => {
   });
 });
 
+describe("los noes seguros del servicio no dejan marca ni reserva", () => {
+  const respuesta = (estado: number, cuerpo: unknown) => async (): Promise<RespuestaDelSorteo> => leerRespuestaDelSorteo(estado, cuerpo);
+
+  it("ocupado: camino de siempre, y el servicio sigue valiendo para este sorteo y para los demás", async () => {
+    const r = await correr(fuentes({ pedir: respuesta(503, { motivo: "ocupado" }) }));
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(loTomaElServicio(7n, false)).toBe(true);
+    expect(loTomaElServicio(8n, false)).toBe(true);
+    expect(reservaDelServicioViva(7n)).toBe(false);
+  });
+
+  it("tarde: deja de lado al servicio diez minutos, sin marcar el sorteo y sin reserva", async () => {
+    const r = await correr(fuentes({ pedir: respuesta(503, { motivo: "tarde" }) }));
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(loTomaElServicio(8n, false)).toBe(false);
+    expect(loTomaElServicio(8n, false, () => Date.now() + DISYUNTOR_MS + 60_000)).toBe(true);
+    expect(loTomaElServicio(7n, false, () => Date.now() + DISYUNTOR_MS + 60_000)).toBe(true);
+    expect(reservaDelServicioViva(7n)).toBe(false);
+  });
+
+  it("un error interno que dice que no mandó: deja de lado al servicio un minuto, sin marca y sin reserva", async () => {
+    const r = await correr(fuentes({ pedir: respuesta(500, { motivo: "interno", detalle: "sin-mandar" }) }));
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(loTomaElServicio(8n, false)).toBe(false);
+    expect(loTomaElServicio(8n, false, () => Date.now() + DISYUNTOR_CORTO_MS + 60_000)).toBe(true);
+    expect(loTomaElServicio(7n, false, () => Date.now() + DISYUNTOR_CORTO_MS + 60_000)).toBe(true);
+    expect(reservaDelServicioViva(7n)).toBe(false);
+  });
+
+  it("un error interno sin ese detalle puede haber mandado: se mira la red y la reserva queda", async () => {
+    const r = await correr(fuentes({ pedir: respuesta(500, { motivo: "interno" }) }));
+    expect(r).toEqual({ estado: "camino-de-hoy" });
+    expect(reservaDelServicioViva(7n)).toBe(true);
+  });
+});
+
 describe("con la red sin poder leerse no se manda nada más por el camino de siempre", () => {
   const sinMarca = (): void => {
     expect(loTomaElServicio(7n, false)).toBe(true);
@@ -307,6 +343,9 @@ describe("la reserva que el servicio puede tener viva", () => {
     ["un no del servicio antes de reservar", { accion: "hoy", marca: true, disyuntor: false, olvidar: false }],
     ["la red ocupada, que devuelve la reserva", { accion: "espera", causa: "ocupada" }],
     ["la ronda que no llega", { accion: "espera", causa: "ronda" }],
+    ["el servicio ocupado con otro sorteo", { accion: "hoy", marca: false, disyuntor: false, olvidar: false }],
+    ["el servicio que no empezó a tiempo", { accion: "hoy", marca: false, disyuntor: true, olvidar: false }],
+    ["un error interno que no llegó a mandar", { accion: "hoy", marca: false, disyuntor: false, olvidar: false, disyuntorCorto: true }],
   ])("%s: no hay reserva", async (_n, resp) => {
     await correr(fuentes({ pedir: async () => resp }));
     expect(reservaDelServicioViva(7n)).toBe(false);
