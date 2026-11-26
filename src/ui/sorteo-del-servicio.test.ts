@@ -168,8 +168,9 @@ describe("el servicio manda y la red confirma", () => {
   });
 
   it("si el gemelo vuelve a pasar, camino de siempre y el sorteo queda marcado", async () => {
+    // El segundo es un repetido y no un propio: un propio que entró con el contrato vacío se da por hecho con su valor.
     const m = armar({
-      pedir: async (n) => (n === 0 ? mandado(H1, false) : mandado(H2)),
+      pedir: async (n) => (n === 0 ? mandado(H1, false) : mandado(H2, false)),
       consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "scval" }),
       leer: async () => null,
     });
@@ -193,6 +194,19 @@ describe("el servicio manda y la red confirma", () => {
     expect(m.pedir).toHaveBeenCalledTimes(1);
     expect(transcurrido()).toBeGreaterThanOrEqual(30_000);
     expect(transcurrido()).toBeLessThanOrEqual(95_000);
+  });
+
+  it("una transacción de este sorteo que entró y un contrato que todavía se lee vacío: se muestra lo que devolvió, con el enlace", async () => {
+    const m = armar({
+      pedir: async () => mandado(H1),
+      consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "scval" }),
+      leer: async () => null,
+    });
+    const pasos: [string, string?][] = [];
+    const r = await correr(sortear(m, pasos));
+    expect(r).toEqual({ estado: "listo", valor: { ...GANADORES, txHash: H1 }, yaEstaba: false });
+    expect(pasos).toContainEqual(["confirmed", H1]);
+    expect(m.pedir).toHaveBeenCalledTimes(1);
   });
 
   it("PENDING y después FAILED: con el contrato sin el sorteo, camino de siempre", async () => {
