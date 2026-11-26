@@ -198,8 +198,10 @@ const CUPON_QUE_NO_SIRVE: ReadonlySet<string> = new Set(["forma", "cupon-no-exis
 
 /** Cada cuánto, y hasta cuándo en total, se mira si ya está el pedido de crear la cuenta después del canje. */
 export const PEDIDO_CADA_MS = 2_000;
-/** Lo más que se espera el pedido: como los 40 segundos de antes (veinte vueltas de dos), medidos con la hora de verdad. */
-export const PEDIDO_TOPE_MS = 45_000;
+/** Lo más que se espera el pedido en la cadena del regalo, medido con la hora de verdad (no contando vueltas). */
+export const PEDIDO_TOPE_MS = 30_000;
+/** Cuánto se tolera que una lectura del pedido empiece después del tope (la pausa que cae justo en el borde) y aun así valga. */
+const PEDIDO_MARGEN_MS = 1_000;
 
 /**
  * El canje en curso, fuera del paso: un doble toque, o cerrar y volver a abrir el paso mientras el servidor contesta,
@@ -292,7 +294,7 @@ const CADA_LECTURA_MS = 4_000;
 const SONDEO_SIN_PEDIDO_MS = 20_000;
 /**
  * Lo más que se ve la ruedita al activar la cuenta, medido desde el toque (o, en la cadena del regalo y del cupón, desde
- * que empieza el paso de activar). Pasado ese tiempo se dice que tarda, y se sigue mirando callado `ESPERA_CALLADA_MS`
+ * que empieza la cadena, con la espera del pedido, el voto y la lectura final adentro). Pasado ese tiempo se dice que tarda, y se sigue mirando callado `ESPERA_CALLADA_MS`
  * más: si la cuenta aparece, la pantalla avanza sola. Todos los topes de este paso se miden con la hora (`Date.now`) y
  * no contando vueltas: una pestaña congelada en segundo plano no estira ninguna espera.
  */
@@ -479,6 +481,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     cadena: false,
     /** Lo que sigue al canje y no salió: «Probar de nuevo» sigue desde ahí. */
     fallo: null as PasoDelCanje | null,
+    /** Cuántas veces seguidas lo que sigue al regalo terminó sin ver el pedido: a la segunda se pide cerrar sesión. */
+    sinPedidoVeces: 0,
     /** Por qué no salió: con el regalo, el texto de la falla sale de acá. */
     fallaDeLaCadena: null as FallaDeLaCadena | null,
     /**
@@ -583,7 +587,10 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   let toqueN = 0;
   /** En esta página la persona tocó para activar: solo entonces, al quedar lista la cuenta, se le avisa al portero. */
   let huboIntentoDeActivar = false;
+  /** La relectura del acceso ya salió bien (no vuelve a pedirse) o está en vuelo, y si ya se reintentó una vez tras una falla. */
   let accesoReleido = false;
+  let releyendoAcceso = false;
+  let reintentoDelAcceso = false;
   /**
    * El toque cuya falla (tarda, no se pudo, rara o el servicio) no se borra con una lectura de fondo: solo «Probar de nuevo»,
    * un toque nuevo o encontrar la cuenta lista la sacan. La de red sí se va cuando una lectura contesta.
@@ -1732,16 +1739,25 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
    */
   async function releerElAccesoTrasActivar(): Promise<void> {
     // Una sola vez y solo si en esta página hubo un intento de activar: una cuenta que ya estaba lista no suma pedidos.
-    if (!acceso || !huboIntentoDeActivar || accesoReleido) return;
-    accesoReleido = true;
+    if (!acceso || !huboIntentoDeActivar || accesoReleido || releyendoAcceso) return;
+    releyendoAcceso = true;
+    let salio = false;
     try {
       const r = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
+      salio = r.ok;
       if (r.ok && !cerrado && !acc.cadena) {
         aplicarAcceso(r);
         pintar();
       }
     } catch {
       /* de fondo: lo que no contestó no cambia lo que se ve */
+    }
+    releyendoAcceso = false;
+    // Solo cuenta como hecha la lectura que contestó. Si falló (el Wi-Fi del lugar), se vuelve a pedir una vez más.
+    if (salio) accesoReleido = true;
+    else if (!reintentoDelAcceso && !cerrado) {
+      reintentoDelAcceso = true;
+      despues(() => void releerElAccesoTrasActivar(), CADA_LECTURA_MS);
     }
     acceso.refrescarCupo();
   }
@@ -1769,15 +1785,16 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
    * Después del canje, con la cuenta que se abre en el momento: el pedido de crear la cuenta, cada 2 segundos y hasta
    * `PEDIDO_TOPE_MS` medidos con la hora (no contando vueltas), sin pedirle a la billetera que relea de verdad (el kit ya la
    * mira solo), salvo al volver a la pestaña. Con la pestaña congelada, al volver se lee en el acto. «hay» si el pedido
-   * aparece en una lectura que empezó dentro del tiempo, aunque termine un poco después: una lectura que empieza pasado el
-   * tope no vota, porque el toque que la pidió es de hace rato, y se dice que falta para que la persona toque «Probar de
-   * nuevo». «sin-lectura»: ninguna lectura contestó.
+   * aparece en una lectura que empezó dentro del tiempo, aunque termine un poco después. «tarde»: el pedido ya está, pero
+   * la lectura que lo vio empezó pasado el tope (la pestaña estuvo congelada): no vota, porque el toque que la pidió es de
+   * hace rato, y se dice que tarda para que la persona toque «Probar de nuevo» y vote con su toque. «no»: se leyó y no
+   * está. «sin-lectura»: ninguna lectura contestó. La última vuelta empieza a lo sumo en el tope: la pausa se acorta.
    */
-  async function esperarPedido(): Promise<"hay" | "lista" | "no" | "sin-lectura"> {
+  async function esperarPedido(): Promise<"hay" | "lista" | "no" | "tarde" | "sin-lectura"> {
     const hasta = Date.now() + PEDIDO_TOPE_MS;
     let leyo = false;
     for (let i = 0; ; i++) {
-      const despertada = i > 0 ? await pausa(PEDIDO_CADA_MS) : false;
+      const despertada = i > 0 ? await pausa(Math.min(PEDIDO_CADA_MS, Math.max(hasta - Date.now(), 1))) : false;
       let e: EstadoOficial | null = null;
       const empezo = Date.now();
       try {
@@ -1793,7 +1810,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         leyo = true;
         st.est = e;
         if (e.activacion === "lista") return "lista";
-        if (e.activacion === "falta") return empezo < hasta ? "hay" : "no";
+        if (e.activacion === "falta") return empezo <= hasta + PEDIDO_MARGEN_MS ? "hay" : "tarde";
       }
       if (Date.now() >= hasta) return leyo ? "no" : "sin-lectura";
     }
@@ -2019,11 +2036,12 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
    * la cadena termina. Sin respuesta, o sin la cuenta, lanza `sin-acceso`, y «Probar de nuevo» pregunta otra vez antes
    * de votar.
    */
-  async function accesoParaVotar(): Promise<"si" | "no"> {
+  async function accesoParaVotar(hasta: number): Promise<"si" | "no"> {
     if (!acceso) throw new Error("sin-acceso");
     let e: ResultadoDeAlta<EstadoDeAlta>;
     try {
-      e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
+      // Nunca más allá de la hora en que termina la espera visible de la cadena.
+      e = await conTopeSimple(acceso.estado(), Math.max(1, Math.min(TOPE_LECTURA_SERVIDOR_MS, hasta - Date.now())));
     } catch (x) {
       // Sin respuesta a tiempo: tarda. Un corte de la red: no hay conexión. Cada uno con su texto.
       throw new Error(mensaje(x) !== "tope" && esDeRed(x) ? "sin-acceso-red" : "sin-acceso");
@@ -2069,8 +2087,11 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     st.aviso = null;
     let paso: PasoDelCanje = desde;
     let activo = yaActivada;
-    /** Hasta cuándo se ve la ruedita en el paso de activar: 45 segundos desde que empieza, con la hora de verdad. */
-    let rueda = 0;
+    /**
+     * Hasta cuándo se ve la ruedita en toda la cadena: 45 segundos desde que empieza, con la hora de verdad. Adentro van la
+     * espera del pedido, el voto y la lectura final del acceso. Pasado ese tiempo se dice que tarda.
+     */
+    const rueda = Date.now() + TOPE_ACTIVAR_MS;
     try {
       if (paso === "pedido") {
         correr("activando");
@@ -2078,16 +2099,15 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         const p = await esperarPedido();
         if (cerrado) return;
         if (p === "no") throw new Error("sin-pedido");
-        if (p === "sin-lectura") throw new Error("tarda");
+        if (p === "sin-lectura" || p === "tarde") throw new Error("tarda");
         paso = p === "lista" ? "estado" : "activar";
       }
       if (paso === "activar") {
         correr("activando");
         pintar();
-        rueda = Date.now() + TOPE_ACTIVAR_MS;
         // Falla cerrado: el voto le cuesta créditos a Tinkazo. Antes de pedirlo, el servidor confirma con la sesión de
         // ahora que esta misma cuenta tiene acceso. Si el acceso quedó en otra cuenta, o el servidor no lo ve, no se vota.
-        if ((await accesoParaVotar()) === "no") return;
+        if ((await accesoParaVotar(rueda)) === "no") return;
         if (cerrado) return;
         // Pasado el tope no se vota: la persona toca «Probar de nuevo» y empieza de nuevo.
         if (Date.now() >= rueda) throw new Error("tarda");
@@ -2102,7 +2122,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       }
       correr("revisando");
       pintar();
-      const e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
+      // La lectura final entra en los 45 segundos de la cadena: si no alcanza, se dice que tarda y «Probar de nuevo» solo lee.
+      const e = await conTopeSimple(acceso.estado(), Math.max(1, Math.min(TOPE_LECTURA_SERVIDOR_MS, rueda - Date.now())));
       if (cerrado) return;
       if (!e.ok) {
         if (e.clave === "clErrSesion") st.falla = "sesion";
@@ -2144,11 +2165,17 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         return;
       }
       acc.fallo = paso;
-      acc.fallaDeLaCadena = fallaDeLaCadena(x);
+      let porQue = fallaDeLaCadena(x);
+      if (porQue === "sin-pedido") {
+        // A la segunda vez seguida sin ver el pedido, esperar más no arregla nada: se pide cerrar sesión y entrar de nuevo.
+        acc.sinPedidoVeces += 1;
+        if (acc.sinPedidoVeces >= 2) porQue = "sin-pedido-fin";
+      }
+      acc.fallaDeLaCadena = porQue;
       pintar();
       // El voto pudo salir y la cuenta todavía no aparece: se sigue mirando callado un minuto, y si aparece, la pantalla
       // avanza sola desde leer el acceso. Nunca vota.
-      if (paso === "activar" && m === "tarda" && rueda > 0) {
+      if (paso === "activar" && m === "tarda") {
         leerEnSilencio(toque, rueda + ESPERA_CALLADA_MS, () => {
           if (acc.fallo !== "activar" || acc.cadena) return;
           st.est = { ...st.est, activacion: "lista" };

@@ -41,7 +41,7 @@ export type { PanelDePago } from "./pago-vista";
 export type ModoDelAcceso = "libre" | "cerrado" | "servidor";
 
 /** Las fallas de lo que sigue al canje o al regalo que tienen su propio texto. */
-export type FallaDeLaCadena = "tarda" | "red" | "sin-pedido" | "fallo";
+export type FallaDeLaCadena = "tarda" | "red" | "sin-pedido" | "sin-pedido-fin" | "fallo";
 
 /** Lo que el paso sabe del acceso al modo Oficial y del cupón. Sin esto, `libre`: el paso de siempre. */
 export interface AccesoEnLaVista {
@@ -555,6 +555,7 @@ const TEXTO_DE_LA_CADENA: Readonly<Record<FallaDeLaCadena, string>> = {
   tarda: "clErrTarda",
   red: "clErrRed",
   "sin-pedido": "clErrSinPedido",
+  "sin-pedido-fin": "clErrSinPedidoFin",
   fallo: "clErrFallo",
 };
 
@@ -660,7 +661,9 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
   if (a.fallaTrasCanje) {
     // Con el regalo no hay cupón que nombrar: lo que no salió es activar la cuenta, y el texto dice por qué.
     const clave = a.delRegalo ? TEXTO_DE_LA_CADENA[a.fallaDeLaCadena ?? "fallo"] : "altaCuponGuardado";
-    return { caja: { ...base, estado: "no-salio", error: textos([clave]) }, principal: boton("seguir-cupon", "clProbarDeNuevo") };
+    // Dos veces seguidas sin ver el pedido, esperar no arregla nada: la salida es cerrar sesión y entrar de nuevo.
+    const fin = a.delRegalo && a.fallaDeLaCadena === "sin-pedido-fin";
+    return { caja: { ...base, estado: "no-salio", error: textos([clave]) }, principal: fin ? principalDeLaFalla("sin-pedido-fin") : boton("seguir-cupon", "clProbarDeNuevo") };
   }
   // Lo que sigue al canje: esperar el pedido, activar y volver a preguntar.
   if (a.cadena) {

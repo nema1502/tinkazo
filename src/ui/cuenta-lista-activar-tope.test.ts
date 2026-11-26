@@ -11,7 +11,8 @@ import { type AccesoDelPaso, type CuentaDelPaso, GUARDA_DE_TOQUE_MS, type Opcion
  * altas de mentira: sin red.
  * - Una billetera que no contesta no deja la ruedita para siempre: a los 45 segundos del toque, «Está tardando».
  * - Si el voto salió y la cuenta no aparece, se sigue mirando callado y la pantalla avanza sola si aparece.
- * - El pedido de crear la cuenta se espera 45 segundos, y su falta tiene su propio texto.
+ * - El pedido de crear la cuenta se espera 30 segundos, la cadena entera no pasa de 45 con la ruedita, y la falta del
+ *   pedido tiene su propio texto (a la segunda vez seguida, pide cerrar sesión).
  * - Volver a la pestaña lee enseguida, y nunca vota.
  * - La relectura del acceso al activar se hace una sola vez, y solo si hubo un intento.
  */
@@ -285,6 +286,34 @@ describe("«Activar mi cuenta» directo, con la cuenta ya con acceso", () => {
 });
 
 describe("la relectura del acceso al activar", () => {
+  it("si la primera relectura no contesta, se vuelve a pedir una sola vez y después no más", async () => {
+    const srv = servidorFalso(false);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    expect(srv.estado).toHaveBeenCalledTimes(1);
+    srv.estado.mockImplementationOnce(async () => ({ ok: false as const, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 }));
+    principal().click();
+    await pasa(1_000);
+    expect(parte()).toBe("proteger");
+    expect(srv.estado).toHaveBeenCalledTimes(2);
+    await pasa(5_000);
+    expect(srv.estado).toHaveBeenCalledTimes(3);
+    cf.avisar();
+    await pasa(60_000);
+    expect(srv.estado).toHaveBeenCalledTimes(3);
+  });
+
+  it("si las dos relecturas fallan, no se insiste más", async () => {
+    const srv = servidorFalso(false);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    srv.estado.mockImplementation(async () => ({ ok: false as const, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 }));
+    principal().click();
+    await pasa(1_000);
+    await pasa(60_000);
+    expect(srv.estado.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+
   it("una cuenta que ya estaba lista al abrir no le suma ningún pedido al portero", async () => {
     const srv = servidorFalso(false);
     const cf = cuentaFalsa({ activacion: "lista" });
@@ -311,13 +340,13 @@ describe("la relectura del acceso al activar", () => {
 });
 
 describe("la cadena del regalo", () => {
-  it("sin pedido: a los 45 segundos dice que se está preparando, y «Probar de nuevo» no vuelve a pedir el regalo", async () => {
+  it("sin pedido: a los 30 segundos dice que se está preparando, y «Probar de nuevo» no vuelve a pedir el regalo", async () => {
     const srv = servidorFalso(true);
     const cf = cuentaFalsa();
     await abrir(srv, cf);
     cf.e.est = { ...NUEVA, activacion: "preparando" };
     principal().click();
-    await pasa(44_000);
+    await pasa(29_000);
     expect(alerta()).toBe("");
     await pasa(3_000);
     expect(alerta()).toContain(t("clErrSinPedido"));
@@ -337,7 +366,7 @@ describe("la cadena del regalo", () => {
     await abrir(srv, cf);
     cf.e.est = { ...NUEVA, activacion: "preparando" };
     principal().click();
-    await pasa(48_000);
+    await pasa(33_000);
     expect(alerta()).toContain(t("clErrSinPedido"));
     cf.e.est = { ...NUEVA };
     principal().click();
@@ -360,14 +389,14 @@ describe("la cadena del regalo", () => {
     expect(cf.cuenta.estadoOficial.mock.calls.filter((c) => c[0] === true).length).toBe(0);
   });
 
-  it("un pedido que aparece pasados los 30 segundos se encuentra solo, sin un toque más", async () => {
+  it("un pedido que aparece pasados los 25 segundos se encuentra solo, sin un toque más", async () => {
     const srv = servidorFalso(true);
     const cf = cuentaFalsa();
     await abrir(srv, cf);
     cf.e.est = { ...NUEVA, activacion: "preparando" };
     principal().click();
-    setTimeout(() => (cf.e.est = { ...NUEVA }), 38_000);
-    await pasa(45_000);
+    setTimeout(() => (cf.e.est = { ...NUEVA }), 25_000);
+    await pasa(35_000);
     expect(alerta()).toBe("");
     expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
     expect(srv.reclamar).toHaveBeenCalledTimes(1);
@@ -380,16 +409,134 @@ describe("la cadena del regalo", () => {
     cf.e.est = { ...NUEVA, activacion: "preparando" };
     const t0 = Date.now();
     cf.cuenta.estadoOficial.mockImplementation(async () => {
-      // La lectura que corre justo antes del tope tarda un segundo y medio, termina pasado el tope y trae el pedido.
-      if (Date.now() >= t0 + 43_000) {
+      // La última lectura empieza justo en el tope, tarda un segundo y medio, termina pasado el tope y trae el pedido.
+      if (Date.now() >= t0 + 29_000) {
         await new Promise((r) => setTimeout(r, 1_500));
         return { ...NUEVA };
       }
       return { ...cf.e.est };
     });
     principal().click();
-    await pasa(52_000);
+    await pasa(40_000);
     expect(alerta()).not.toContain(t("clErrSinPedido"));
+    expect(alerta()).not.toContain(t("clErrTarda"));
+    expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
+  });
+
+  it("la última vuelta de la espera del pedido empieza en el tope, no dos segundos después", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    cf.e.est = { ...NUEVA, activacion: "preparando" };
+    const horas: number[] = [];
+    cf.cuenta.estadoOficial.mockImplementation(async () => {
+      horas.push(Date.now());
+      return { ...cf.e.est };
+    });
+    const inicio = Date.now();
+    principal().click();
+    // Con vueltas de dos segundos y un tope de 30, la última lectura cae justo en el tope: 31 segundos de cuenta desde el toque.
+    await pasa(31_000);
+    expect(Math.max(...horas) - inicio).toBeLessThanOrEqual(30_000 + 1_000);
+    expect(alerta()).toContain(t("clErrSinPedido"));
+  });
+
+  it("el pedido que ya estaba y se ve recién después del tope no vota solo: dice que tarda y el voto sale con el toque de «Probar de nuevo»", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    cf.e.est = { ...NUEVA, activacion: "preparando" };
+    // La lectura que llega después del tope (la pestaña estuvo congelada) ve el pedido.
+    cf.cuenta.estadoOficial.mockImplementation(async () => {
+      if (Date.now() >= t0 + 31_500) return { ...NUEVA };
+      return { ...cf.e.est };
+    });
+    const t0 = Date.now();
+    principal().click();
+    await pasa(4_000);
+    congelar(60_000);
+    volverALaPestana();
+    await pasa(100);
+    expect(cf.activarCuenta).not.toHaveBeenCalled();
+    expect(alerta()).toContain(t("clErrTarda"));
+    expect(alerta()).not.toContain(t("clErrSinPedido"));
+    await pasa();
+    principal().click();
+    await pasa(2_500);
+    expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
+    expect(srv.reclamar).toHaveBeenCalledTimes(1);
+  });
+
+  it("dos veces seguidas sin ver el pedido: la segunda pide cerrar sesión y entrar de nuevo, con ese botón", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    cf.e.est = { ...NUEVA, activacion: "preparando" };
+    principal().click();
+    await pasa(32_000);
+    expect(alerta()).toContain(t("clErrSinPedido"));
+    expect(alerta()).not.toContain(t("clErrSinPedidoFin"));
+    expect(principal().textContent).toBe(t("clProbarDeNuevo"));
+    principal().click();
+    await pasa(32_000);
+    expect(alerta()).toContain(t("clErrSinPedidoFin"));
+    expect(principal().dataset.accion).toBe("salir-y-entrar");
+    expect(principal().textContent).toBe(t("clSalirYEntrar"));
+    expect(cf.activarCuenta).not.toHaveBeenCalled();
+  });
+
+  it("la cadena entera no pasa de 45 segundos con la ruedita: el pedido llega a los 25 y la billetera no contesta", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa({}, () => new Promise<ResultadoDeActivar>(() => undefined));
+    await abrir(srv, cf);
+    cf.e.est = { ...NUEVA, activacion: "preparando" };
+    principal().click();
+    setTimeout(() => (cf.e.est = { ...NUEVA }), 25_000);
+    await pasa(44_000);
+    expect(alerta()).toBe("");
+    expect(principal().disabled).toBe(true);
+    await pasa(2_000);
+    expect(alerta()).toContain(t("clErrTarda"));
+    expect(principal().textContent).toBe(t("clProbarDeNuevo"));
+    expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
+  });
+
+  it("la pregunta del acceso antes del voto entra en los 45 segundos: el pedido llega a los 25 y el servidor no contesta", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    cf.e.est = { ...NUEVA, activacion: "preparando" };
+    srv.reclamar.mockImplementationOnce(async () => {
+      srv.estado.mockImplementation(() => new Promise<never>(() => undefined));
+      srv.s.acceso = "admin";
+      srv.s.bienvenida = null;
+      return ok({ ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: { fecha: VENCE, cuantos: 3 } }, regalo: "dado", sigue: "activar" });
+    });
+    principal().click();
+    setTimeout(() => (cf.e.est = { ...NUEVA }), 25_000);
+    await pasa(44_000);
+    expect(alerta()).toBe("");
+    await pasa(2_000);
+    expect(alerta()).toContain(t("clErrTarda"));
+    expect(cf.activarCuenta).not.toHaveBeenCalled();
+  });
+
+  it("la lectura final del acceso entra en los 45 segundos: la cuenta se activa a los 40 y el servidor no contesta", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa({}, async () => {
+      await new Promise((r) => setTimeout(r, 40_000));
+      cf.e.est = { ...cf.e.est, activacion: "lista" };
+      srv.estado.mockImplementation(() => new Promise<never>(() => undefined));
+      return "activada" as const;
+    });
+    await abrir(srv, cf);
+    principal().click();
+    await pasa(44_000);
+    expect(alerta()).toBe("");
+    await pasa(2_000);
+    expect(alerta()).toContain(t("clErrTarda"));
+    expect(alerta()).not.toContain(t("clErrFallo"));
+    expect(principal().textContent).toBe(t("clProbarDeNuevo"));
     expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
   });
 
@@ -533,7 +680,9 @@ describe("volver a la pestaña", () => {
     volverALaPestana();
     await pasa(50);
     expect(cf.activarCuenta).not.toHaveBeenCalled();
-    expect(alerta()).toContain(t("clErrSinPedido"));
+    // El pedido está, pero la lectura que lo vio es de después del tope: dice que tarda, no que no hay pedido.
+    expect(alerta()).toContain(t("clErrTarda"));
+    expect(alerta()).not.toContain(t("clErrSinPedido"));
     expect(principal().textContent).toBe(t("clProbarDeNuevo"));
     // Lo vota la persona, con su toque (pasada la guarda que ignora un toque recién cambiada la pantalla).
     await pasa();
