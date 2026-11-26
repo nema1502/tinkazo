@@ -578,8 +578,7 @@ describe("reponer los nombres de una campaña de personas ya pasada", () => {
   it("con una lista de cuentas no hace nada, aunque el cuadro y la entrada coincidan", () => {
     const m = mundo();
     const lineas = [cuentaDePrueba(1), cuentaDePrueba(2)];
-    m.cuadro.lista = lineas.join("
-");
+    m.cuadro.lista = lineas.join("\n");
     m.entradas.set("testnet/evento-uno", entradaDe(m.d.huella(lineas)));
     const { d, puestas } = reposicion(m);
     const filas = [delPanel(1, "Ana", false, cuentaDePrueba(1)), delPanel(2, "Nora", false, cuentaDePrueba(2))];
