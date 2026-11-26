@@ -476,14 +476,17 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
        * de este sorteo, vale lo que devolvió en la red. Si no, se sigue leyendo un rato y no se manda nada más.
        */
       const entro = async (valor: unknown): Promise<FinDelServicio | "otra-vez"> => {
-        const hasta = ahora() + TOPE_DE_LAS_LECTURAS_DEL_QUE_ENTRO_MS;
+        // También después de entrar, el tope es el de siempre: 90 segundos desde la entrada. La primera lectura se hace siempre,
+        // como en la duda: una pestaña que vuelve de segundo plano pasada esa hora igual mira el contrato una vez.
+        const fin = inicio + TOPE_DE_LA_DUDA_SIN_RED_MS;
+        const hasta = Math.min(ahora() + TOPE_DE_LAS_LECTURAS_DEL_QUE_ENTRO_MS, fin);
         let devuelto: Promise<Ganadores | null> | undefined;
         /** Lo que devolvió en la red la transacción de este sorteo, leído una sola vez. */
         const valorPropio = (): Promise<Ganadores | null> => (devuelto ??= Promise.resolve().then(() => f.valorDe(valor)).catch(() => null));
         let vacias = 0;
         let ultimoError: unknown = null;
-        for (;;) {
-          const l = await leer(Number.POSITIVE_INFINITY, TOPE_DE_LECTURA_DEL_QUE_ENTRO_MS);
+        for (let vuelta = 0; ; vuelta++) {
+          const l = await leer(vuelta === 0 ? Number.POSITIVE_INFINITY : fin, TOPE_DE_LECTURA_DEL_QUE_ENTRO_MS);
           if (l.ok && l.v) {
             const propio = esPropio ? await valorPropio() : null;
             const coincide = !!propio && mismosNumeros(propio.winners, l.v.winners) && propio.randomness.toLowerCase() === l.v.randomness.toLowerCase();
@@ -518,7 +521,7 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
             return caminoDeHoy({ marca: true });
           }
           if (ahora() >= hasta) return sinConfirmar(ultimoError, hashDelError);
-          await esperar(l.ok ? ENTRE_LECTURAS_DEL_QUE_ENTRO_MS : LEER_CADA_MS);
+          await esperar(Math.min(l.ok ? ENTRE_LECTURAS_DEL_QUE_ENTRO_MS : LEER_CADA_MS, Math.max(0, hasta - ahora())));
         }
       };
 
