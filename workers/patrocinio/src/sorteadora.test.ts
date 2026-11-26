@@ -194,8 +194,10 @@ async function firmanteContado(): Promise<Firmante> {
 async function montar(env: Parameters<typeof leerConfig>[0] = {}) {
   red = new RedSorteo();
   cupos = new Cupos(sqlDePrueba());
-  lineas = [];
-  const registrar = registrador({ log: (l) => lineas.push(l), error: (l) => lineas.push(l) });
+  // Cada prueba anota en su propia lista: la sorteadora de una prueba anterior puede seguir esperando y anotar tarde.
+  const propias: string[] = [];
+  lineas = propias;
+  const registrar = registrador({ log: (l) => propias.push(l), error: (l) => propias.push(l) });
   const cfg = { ...leerConfig({ RED: "mainnet", ALTAS: "1", SORTEO_SERVIDOR: "1", CUENTA_SORTEADORA: sorteadora.publicKey(), MAX_SELLOS_MES: "100", ...env }), contractId: CONTRATO, passphrase: Networks.TESTNET };
   cfgActual = cfg;
   registrarActual = registrar;
