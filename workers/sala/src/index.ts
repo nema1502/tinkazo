@@ -47,8 +47,8 @@
  *   PUT    /v1/sala/<id>/campana/resultado Authorization: Bearer <token> JSON {"sorteo","comprobante"} → 204
  *                                           (con el correo prendido, además le avisa a quien ganó, sin que la respuesta lo espere)
  *   GET    /v1/sala/<id>/campana/resultado sin token → 200 {"sorteo","ganadoras","comprobante"} (se recuerda 2 segundos en el borde)
- *   GET    /v1/sala/<id>/campana/entrega   Authorization: Bearer <token> → 200 {"codigos"}: el código de entrega de cuatro cifras de cada
- *                                           ganadora, en orden de puesto (solo en una campaña de personas ya sorteada: 409 no-es-de-personas
+ *   GET    /v1/sala/<id>/campana/entrega   Authorization: Bearer <token>, contesta 200 {"codigos"}: el código de entrega de cuatro
+ *                                           cifras de cada ganadora, en orden de puesto (solo en una campaña de personas ya sorteada: 409 no-es-de-personas
  *                                           en una de cuentas y 409 fase antes del sorteo). Se calcula en cada pedido, no se guarda y nunca
  *                                           se recuerda en el borde: Cache-Control: no-store
  *   POST   /v1/sala/<id>/campana/quitar    Authorization: Bearer <token> JSON {"n","motivo"} → 204
