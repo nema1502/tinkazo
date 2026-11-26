@@ -243,7 +243,7 @@ import type { AvisoDeToma, DepsDeTus, ResumenDeSala } from "./tus-campanas";
 import { Pollar, formaDeToken, pollarDe } from "../../patrocinio/src/pollar";
 import { verificarIdentidadDeGoogle } from "./identidad-google";
 import { esLineaDePersona, lineaDePersona } from "./linea-persona";
-import { clienteDeGoogle, personasPrendido, venceDelToken } from "./personas";
+import { clavePorConexion, clienteDeGoogle, personasPrendido, venceDelToken } from "./personas";
 import type { VariablesDePersonas } from "./personas";
 import deployments from "../../../src/stellar/deployments.json";
 
@@ -1843,15 +1843,16 @@ async function altaDePersona(
     p = cuerpo.p;
   }
   const exigirPase = env.PASE !== "0";
-  const clave = `${id}|${grupoDeIp(ip)}`;
+  const clave = await clavePorConexion(salDelWorker(), id, ip);
   const opciones = { clienteId: clienteDeGoogle(env) };
   // Una conexión que ya mandó mil tokens falsos: se verifica primero, que es local y no cuesta ninguna llamada a la sala. Un token
-  // falso se contesta acá, sin llamar a nadie ni escribir nada. Uno bueno sigue por el camino de siempre, así que nadie de su
-  // misma red queda afuera.
+  // falso, o hecho para otra aplicación, se contesta acá, sin llamar a nadie ni escribir nada. Uno bueno sigue por el camino de
+  // siempre, así que nadie de su misma red queda afuera.
   let quien: Awaited<ReturnType<typeof verificarIdentidadDeGoogle>> | null = null;
   if (conexionApurada(clave, Date.now())) {
     quien = await verificarIdentidadDeGoogle(google, opciones);
-    if (!quien.ok && quien.motivo !== "llaves-no-disponibles" && quien.motivo !== "audiencia") return falla({ motivo: "sesion" }, h);
+    if (!quien.ok && quien.motivo === "audiencia") return falla({ motivo: "personas-configuracion" }, h);
+    if (!quien.ok && quien.motivo !== "llaves-no-disponibles") return falla({ motivo: "sesion" }, h);
   }
   // Antes de verificar nada: que sea una campaña de personas prendida, la fase, el pase, los topes y el reingreso con una ficha reciente.
   const antes = await sala.prealtaDePersona(ip, p, exigirPase, google, llave, d);
@@ -1864,13 +1865,13 @@ async function altaDePersona(
     if (quien.motivo === "llaves-no-disponibles") return falla({ motivo: "google" }, h);
     // Solo el motivo, de una lista fija: nunca el token ni nada de la persona.
     registrar("google-rechazado", { motivo: quien.motivo });
-    // Un token de Google bien firmado pero hecho para otra aplicación: el identificador de la sala y el del sitio no son el mismo.
-    // Es un error nuestro, no de la persona: no se cuenta en ningún tope y el celular lo lee como que no abre desde acá.
-    if (quien.motivo === "audiencia") return falla({ motivo: "personas-configuracion" }, h);
     // La verificación es local y no cuesta una llamada: el rechazo frena a quien repite esa ficha y suma al tope propio de
     // personas de la conexión (mil por ventana), nunca al de cuentas, que es de todo el salón detrás de la misma red.
     await sala.rechazoDePersona(ip, google);
-    return falla({ motivo: "sesion" }, h);
+    // Un token de Google bien firmado pero hecho para otra aplicación: el identificador de la sala y el del sitio no son el mismo.
+    // El celular lo lee como que no abre desde acá. Una persona de verdad nunca manda uno, así que cuenta como cualquier otro
+    // token que no sirve: quien los fabrica con una aplicación propia se frena solo y nadie con un token bueno queda afuera.
+    return falla({ motivo: quien.motivo === "audiencia" ? "personas-configuracion" : "sesion" }, h);
   }
   const vence = venceDelToken(google, Date.now());
   const anterior = await sala.yaEsta(quien.usuario, llave, ip, google, vence, d);
@@ -1883,10 +1884,18 @@ async function altaDePersona(
 
 /**
  * Las conexiones (una sala y el bloque de red de quien llama) que ya pasaron el tope de tokens falsos de la ventana, hasta cuándo.
- * Solo vive en la memoria de este Worker y no guarda ninguna dirección entera de más de un bloque: sirve para no llamar a la sala por
- * cada token falso. Si el Worker se recicla se vuelve a enterar con la próxima respuesta de la sala.
+ * Solo vive en la memoria de este Worker, que nunca se escribe en ningún lado, y la clave es una huella con una sal que el Worker
+ * inventa al arrancar (`clavePorConexion`): no queda ninguna dirección. Sirve para no llamar a la sala por cada token falso. Si el
+ * Worker se recicla se vuelve a enterar con la próxima respuesta de la sala.
  */
 const conexionesApuradas = new Map<string, number>();
+let salDeConexiones: string | null = null;
+
+/** La sal de las claves de `conexionesApuradas`: se inventa la primera vez que hace falta y desaparece con el Worker. */
+function salDelWorker(): string {
+  salDeConexiones ??= Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+  return salDeConexiones;
+}
 const MAX_CONEXIONES_APURADAS = 200;
 
 function conexionApurada(clave: string, ahora: number): boolean {

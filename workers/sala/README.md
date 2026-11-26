@@ -291,8 +291,12 @@ La sala guarda el modo en la clave `identidad` de la sala, solo en esas campaña
   conexión de cuentas (300), que es de todo el salón detrás de la misma red. Pasado el tope de mil, la sala no frena a nadie: el
   Worker verifica el token primero, que es local, y contesta `401 sesion` a los falsos sin llamar a la sala ni escribir una fila más.
   Quien trae un token bueno entra igual que antes, aunque comparta red con quien manda los falsos. El aviso de que la conexión
-  pasó el tope vive en la memoria del Worker y se renueva con cada respuesta de la sala. Un token bien firmado por Google pero hecho para otra aplicación (el `GOOGLE_CLIENT_ID` de la sala no es el del
-  sitio) da `503 personas-configuracion`, no suma a ningún tope y el celular dice que el sorteo no abre desde ahí. Google sin
+  pasó el tope vive solo en la memoria del Worker, que nunca se escribe, con una clave que es una huella con una sal que el Worker
+  inventa al arrancar: no queda ninguna dirección. Se renueva con cada respuesta de la sala. Un token bien firmado por Google pero
+  hecho para otra aplicación (el `GOOGLE_CLIENT_ID` de la sala no es el del sitio) da `503 personas-configuracion` y suma como
+  cualquier otro token que no sirve, a su ficha y al contador propio de la conexión, así que quien los fabrica con una aplicación
+  suya se frena solo. Con la conexión apurada se contesta sin llamar a la sala. Quien trae un token bueno entra igual. El celular
+  dice que el sorteo no abre desde ahí. Google sin
   contestar da `502 google` y no suma. Si Google no contesta, las llaves ya recordadas siguen sirviendo hasta seis horas después
   de su vencimiento. La respuesta es `201 {"anotada":true}` o, si la misma cuenta de Google ya
   estaba, `200 {"anotada":true,"ya":true}`: no lleva la línea de la persona ni nada que la identifique.

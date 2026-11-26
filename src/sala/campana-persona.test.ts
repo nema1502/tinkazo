@@ -5,7 +5,7 @@ import { listHash } from "../protocol/canonical";
 import { leerTextoDeCampana, listaDeLaCampana } from "../../workers/sala/src/campana";
 import { URL_DE_LLAVES_DE_GOOGLE } from "../../workers/sala/src/identidad-google";
 import { esLineaDePersona, lineaDePersona } from "../../workers/sala/src/linea-persona";
-import { clienteDeGoogle, personasPrendido, venceDelToken } from "../../workers/sala/src/personas";
+import { clavePorConexion, clienteDeGoogle, personasPrendido, venceDelToken } from "../../workers/sala/src/personas";
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { HORA_DE_LA_PRUEBA, montarMundoDeActivar } from "./activar-mundo";
 import {
@@ -238,6 +238,25 @@ describe("los interruptores", () => {
     expect(venceDelToken(await tokenDeGoogle(1, { payload: { exp: AHORA / 1000 - 5 } }), AHORA)).toBe(AHORA);
     expect(venceDelToken("no es un token", AHORA)).toBe(AHORA);
     expect(venceDelToken("a.@@@.c", AHORA)).toBe(AHORA);
+  });
+});
+
+describe("la clave de la conexión apurada, que vive en la memoria del Worker", () => {
+  it("no lleva la dirección ni la sala, y es la misma para el mismo bloque de red", async () => {
+    const sal = "sal-de-esta-prueba";
+    const a = await clavePorConexion(sal, "AbCdEf12", "190.129.10.20");
+    expect(a).toMatch(/^[0-9a-f]{32}$/);
+    expect(a).not.toContain("190");
+    expect(a).not.toContain("AbCdEf12");
+    expect(await clavePorConexion(sal, "AbCdEf12", "190.129.10.20")).toBe(a);
+    // Otra dirección, otra sala u otra sal dan otra clave.
+    expect(await clavePorConexion(sal, "AbCdEf12", "190.129.10.21")).not.toBe(a);
+    expect(await clavePorConexion(sal, "ZyXwVu98", "190.129.10.20")).not.toBe(a);
+    expect(await clavePorConexion("otra-sal", "AbCdEf12", "190.129.10.20")).not.toBe(a);
+    // En IPv6 vale el bloque, como en el resto de la sala.
+    const v6 = await clavePorConexion(sal, "AbCdEf12", "2800:cb0:1234:5678:1::1");
+    expect(await clavePorConexion(sal, "AbCdEf12", "2800:cb0:1234:5678:ffff::2")).toBe(v6);
+    expect(v6).not.toContain("2800");
   });
 });
 
@@ -522,19 +541,64 @@ describe("el alta de una persona con Google", () => {
     expect((await mundo.pedir(ruta(sala, "/campana/estado"))).status).toBe(404);
   });
 
-  it("un token de otra aplicación de Google es un error de configuración nuestro: no es un rechazo de la persona y no cuenta en ningún tope", async () => {
-    const ajeno = await tokenDeGoogle(1, { payload: { aud: "otro-cliente.apps.example.org" } });
-    for (let i = 0; i < 12; i++) {
-      const r = await altaGoogle(mundo, sala, ajeno);
+  it("un token de otra aplicación de Google se contesta como error de configuración, y cuenta en su ficha y en el tope propio de personas", async () => {
+    const ajeno = (n: number): Promise<string> => tokenDeGoogle(n, { payload: { aud: "otro-cliente.apps.example.org" } });
+    for (let n = 1; n <= 6; n++) {
+      const r = await altaGoogle(mundo, sala, await ajeno(n), { llave: llaveDe(n) });
       expect(r.status).toBe(503);
       expect(await r.json()).toEqual({ error: "personas-configuracion" });
     }
-    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM campana_rechazos_ficha")).toEqual([{ c: 0 }]);
-    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM campana_rechazos")).toEqual([{ c: 0 }]);
+    const guardado = mundo.ejecutar(`sala:${sala.id}`, "SELECT grupo, n FROM campana_rechazos");
+    expect(guardado).toHaveLength(1);
+    expect(guardado[0]?.n).toBe(6);
+    // Es el contador propio de las personas: el de las cuentas no se toca.
+    expect(String(guardado[0]?.grupo).startsWith("p")).toBe(true);
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM campana_rechazos_ficha")).toEqual([{ c: 6 }]);
+    // Repetir el mismo token se frena por su ficha, como cualquier otro rechazo.
+    const repetido = await ajeno(7);
+    for (let i = 0; i < 5; i++) expect((await altaGoogle(mundo, sala, repetido, { llave: llaveDe(7) })).status).toBe(503);
+    expect((await altaGoogle(mundo, sala, repetido, { llave: llaveDe(7) })).status).toBe(429);
     // Queda dicho en el registro, con el motivo fijo, para quien opera.
     expect(consola.mock.calls.map((c) => String(c[0])).join("\n")).toContain('"motivo":"audiencia"');
     // Y con el identificador bien puesto la persona entra, ya sin ficha gastada.
     expect((await altaGoogle(mundo, sala, await tokenDeGoogle(1))).status).toBe(201);
+  });
+
+  it("con la conexión apurada por tokens de otra aplicación, el Worker contesta sin llamar a la sala y un token bueno de la misma red entra", async () => {
+    const ajeno = (n: number): Promise<string> => tokenDeGoogle(n, { payload: { aud: "otro-cliente.apps.example.org" } });
+    expect((await altaGoogle(mundo, sala, await ajeno(100), { llave: llaveDe(100) })).status).toBe(503);
+    // Se acerca al tope de mil de la conexión sin firmar mil tokens.
+    mundo.ejecutar(`sala:${sala.id}`, "UPDATE campana_rechazos SET n = 999");
+    expect((await altaGoogle(mundo, sala, await ajeno(101), { llave: llaveDe(101) })).status).toBe(503);
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT n FROM campana_rechazos")).toEqual([{ n: 1000 }]);
+    // Esta respuesta de la sala es la que apura la conexión en el Worker.
+    expect((await altaGoogle(mundo, sala, await ajeno(102), { llave: llaveDe(102) })).status).toBe(503);
+    // Desde acá la sala no se entera: ni una llamada.
+    const llamadas: string[] = [];
+    const espacio = mundo.env.SALA as { idFromName(n: string): string; get(id: string): object };
+    mundo.env.SALA = {
+      idFromName: (n: string) => espacio.idFromName(n),
+      get: (id: string) =>
+        new Proxy(espacio.get(id), {
+          get: (t, p) => {
+            const v: unknown = Reflect.get(t, p);
+            return typeof v === "function" ? (...a: unknown[]) => (llamadas.push(String(p)), v.apply(t, a)) : v;
+          },
+        }),
+    };
+    for (let n = 200; n < 205; n++) {
+      const r = await altaGoogle(mundo, sala, await ajeno(n), { llave: llaveDe(n) });
+      expect(r.status, `ajeno ${n}`).toBe(503);
+      expect(await r.json()).toEqual({ error: "personas-configuracion" });
+    }
+    expect(llamadas).toEqual([]);
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT n FROM campana_rechazos")).toEqual([{ n: 1000 }]);
+    // Quien presenta un token bueno de la misma red entra, antes y después de otros pedidos.
+    for (let n = 1; n <= 3; n++) {
+      const r = await altaGoogle(mundo, sala, await tokenDeGoogle(n), { llave: llaveDe(n) });
+      expect(r.status, `persona ${n}`).toBe(201);
+    }
+    expect(filas(mundo, sala)).toHaveLength(3);
   });
 
   it("quien manda cientos de tokens malos no deja afuera a los demás de la misma conexión", async () => {

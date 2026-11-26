@@ -6,6 +6,8 @@
  * Con los interruptores apagados, que es como nacen, la sala no crea ni usa campañas de personas y todo sigue como siempre.
  */
 
+import { grupoDeIp } from "./logica";
+
 /** Las variables del Worker que prenden las campañas de personas. */
 export interface VariablesDePersonas {
   /** Solo con "1" la sala crea y usa campañas de personas. Por defecto "0". */
@@ -25,6 +27,16 @@ export function clienteDeGoogle(env: VariablesDePersonas): string {
  */
 export function personasPrendido(env: VariablesDePersonas): boolean {
   return env.DIFERIDA === "1" && clienteDeGoogle(env) !== "";
+}
+
+/**
+ * La clave con la que el Worker recuerda, en su memoria y nada más, que una conexión (una sala y el bloque de red de quien llama)
+ * ya pasó el tope de tokens falsos. Es una huella con una sal que el Worker inventa al arrancar: ni la dirección ni la sala quedan
+ * en la clave, y la huella cambia cada vez que el Worker se recicla.
+ */
+export async function clavePorConexion(sal: string, salaId: string, ip: string): Promise<string> {
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`conexion|${sal}|${salaId}|${grupoDeIp(ip)}`)));
+  return Array.from(bytes.slice(0, 16), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /**
