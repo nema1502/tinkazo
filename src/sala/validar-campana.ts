@@ -10,7 +10,7 @@ import { network } from "../stellar/config";
 
 export type ValidacionDeCampana =
   | { ok: true }
-  | { ok: false; quien: "sala" | "sitio"; campo: string; motivo: string };
+  | { ok: false; quien: "sala" | "sitio" | "firmador"; campo: string; motivo: string };
 
 /**
  * Si los dos lectores aceptan el texto de la campaña tal como se va a firmar. `ahora` es la hora contra la que se compara el
@@ -23,5 +23,21 @@ export function validarCampanaParaFirmar(texto: string, ahora: number): Validaci
   const datos = JSON.parse(texto) as Record<string, unknown>;
   const sitio = leerCampana({ ...datos, red: network.name });
   if (!sitio.ok) return { ok: false, quien: "sitio", campo: sitio.campo, motivo: sitio.motivo };
+  return { ok: true };
+}
+
+/**
+ * Lo que valida el firmador de Tinkazo: lo que aceptan la sala y el sitio, y además que una campaña de personas lleve su premio
+ * en mano. Una campaña de personas no tiene cuenta a quien pagarle en dólares y las bases prometerían un pago que no hay, así que
+ * la sala y el sitio la leen (para no atar las dos cosas) pero el firmador no la firma. El armador sigue con la validación de
+ * arriba: solo el firmador cierra esta puerta.
+ */
+export function validarCampanaParaElFirmador(texto: string, ahora: number): ValidacionDeCampana {
+  const lectura = validarCampanaParaFirmar(texto, ahora);
+  if (!lectura.ok) return lectura;
+  const datos = JSON.parse(texto) as Record<string, unknown>;
+  if (datos.identidad === "persona" && datos.premio_en_mano === undefined) {
+    return { ok: false, quien: "firmador", campo: "premio_en_mano", motivo: "persona-sin-premio-en-mano" };
+  }
   return { ok: true };
 }
