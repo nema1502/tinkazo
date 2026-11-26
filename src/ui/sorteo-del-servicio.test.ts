@@ -594,6 +594,7 @@ describe("el resultado de una transacción que ya entró", () => {
     });
     const r = await correr(sortear(m));
     expect(pasoDe(r)).toBe("error");
+    expect((r as { error: { txHash?: string } }).error.txHash).toBeUndefined();
     expect(transcurrido()).toBeGreaterThanOrEqual(30_000);
   });
 
