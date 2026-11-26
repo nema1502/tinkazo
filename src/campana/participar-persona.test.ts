@@ -148,6 +148,14 @@ async function abrir(direccion = ENLACE): Promise<void> {
   await asentar();
 }
 
+/**
+ * Sigue dejando pasar el tiempo real de a poco hasta que se cumpla algo. Los módulos de la página se bajan con import() y en
+ * una máquina cargada (la primera prueba del archivo, que los transforma en frío) tardan más de lo que dura un solo asentar.
+ */
+async function hasta(cumple: () => boolean, tope = 60): Promise<void> {
+  for (let vuelta = 0; vuelta < tope && !cumple(); vuelta += 1) await asentar();
+}
+
 const texto = (selector: string): string | undefined => document.querySelector(selector)?.textContent ?? undefined;
 const cuerpoDe = (ruta: string, n = 0): Record<string, unknown> =>
   JSON.parse(String(llamadas.filter((l) => l.ruta === ruta)[n]?.init.body ?? "{}")) as Record<string, unknown>;
@@ -205,6 +213,7 @@ afterEach(() => {
 describe("participar.html: una campaña de personas", () => {
   it("baja el guion oficial de Google, arma el botón con el cliente del sitio y no toca la billetera", async () => {
     await abrir();
+    await hasta(() => guiones.length > 0 && gis.renderButton.mock.calls.length > 0);
     expect(guiones.map((g) => g.src)).toEqual(["https://accounts.google.com/gsi/client"]);
     expect(gis.initialize).toHaveBeenCalledTimes(1);
     expect(gis.initialize.mock.calls[0]?.[0]).toMatchObject({ client_id: CLIENTE, auto_select: false });
