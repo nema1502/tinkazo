@@ -435,8 +435,20 @@ describe("lo incierto nunca manda por los dos caminos", () => {
   });
 });
 
-describe("una cola larga en el servicio no es una falla", () => {
-  it("el primer pedido tarda más de 10 segundos: se vuelve a pedir, el servicio dice que ya lo tiene en camino y se confirma, sin mandar por el camino de siempre", async () => {
+describe("un servicio lento: el segundo pedido se suma al mismo trabajo", () => {
+  it("con el servicio de ahora, el segundo pedido recibe el envío del mismo trabajo y se confirma", async () => {
+    const m = armar({
+      pedir: async (n) => (n === 0 ? new Promise<RespuestaDelSorteo>(() => undefined) : mandado(H1)),
+      consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "x" }),
+      leer: async () => GANADORES,
+    });
+    const r = await correr(sortear(m));
+    expect(m.pedir).toHaveBeenCalledTimes(2);
+    expect(r).toEqual({ estado: "listo", valor: { ...GANADORES, txHash: H1 }, yaEstaba: false });
+    expect(transcurrido()).toBeLessThan(20_000);
+  });
+
+  it("con el servicio de antes, que hace cola, el repetido se confirma sin mandar por el camino de siempre", async () => {
     const m = armar({
       pedir: async (n) => (n === 0 ? new Promise<RespuestaDelSorteo>(() => undefined) : mandado(H1, false)),
       consultar: async () => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "x" }),
