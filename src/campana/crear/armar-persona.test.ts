@@ -82,6 +82,25 @@ describe("armarCampana y la identidad de las personas", () => {
     expect("identidad" in armar(hecho.formulario)).toBe(false);
   });
 
+  it("un archivo de cuentas abierto con la identidad pedida en la dirección sigue siendo de cuentas", () => {
+    const hecho = abrir(JSON.stringify(armar(lleno())));
+    expect(hecho.ok).toBe(true);
+    if (!hecho.ok) return;
+    const a = armar(hecho.formulario, "persona");
+    expect("identidad" in a).toBe(false);
+    expect(a).toEqual(armar(hecho.formulario));
+    // Un formulario nuevo, sin archivo abierto, sí la toma.
+    expect(armar(lleno(), "persona").identidad).toBe("persona");
+  });
+
+  it("un archivo de personas abierto manda con su campo, se pida o no en la dirección", () => {
+    const hecho = abrir(JSON.stringify(armar(lleno(), "persona")));
+    expect(hecho.ok).toBe(true);
+    if (!hecho.ok) return;
+    expect(armar(hecho.formulario, "persona").identidad).toBe("persona");
+    expect(armar(hecho.formulario).identidad).toBe("persona");
+  });
+
   it("un archivo con identidad cuenta es el de siempre", () => {
     const hecho = abrir(JSON.stringify({ ...armar(lleno()), identidad: "cuenta" }));
     expect(hecho.ok).toBe(true);

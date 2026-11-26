@@ -229,8 +229,9 @@ export function armarCampana(f: FormularioDeCampana, o: { bases: Bilingue; ident
     comprobante: guardado?.comprobante ?? null,
   };
   if (guardado?.organizadora) archivo.organizadora = guardado.organizadora;
-  // Anotarse sin billetera: el campo solo va si se pidió o si el archivo que se abrió ya lo traía. Sin él, la campaña es la de siempre.
-  if ((o.identidad ?? guardado?.identidad) === "persona") archivo.identidad = "persona";
+  // Anotarse sin billetera: el campo solo va si se pidió en un formulario nuevo o si el archivo que se abrió ya lo traía. Con un
+  // archivo abierto manda lo que el archivo decía: una campaña de cuentas no cambia por abrirla con la dirección de personas.
+  if ((guardado ? guardado.identidad : o.identidad) === "persona") archivo.identidad = "persona";
   return archivo;
 }
 
