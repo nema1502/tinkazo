@@ -232,6 +232,7 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoCodigoDeEntrega: "Código {codigo}",
     cpoVerCodigos: "Ver los códigos",
     cpoMarcadaAvisada: "Marcada como avisada.",
+    cpoNoSeMarco: "No se pudo marcar. Probá de nuevo o seguí con la entrega.",
   },
   en: {
     cpoTitulo: "Company campaign",
@@ -459,5 +460,6 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoCodigoDeEntrega: "Code {codigo}",
     cpoVerCodigos: "Show the codes",
     cpoMarcadaAvisada: "Marked as notified.",
+    cpoNoSeMarco: "Couldn't mark it. Try again or go on with the handover.",
   },
 };

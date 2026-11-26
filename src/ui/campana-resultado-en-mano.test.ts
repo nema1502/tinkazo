@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { lineaDePrueba } from "../campana/cuentas-de-prueba";
 import type { SorteoDeCampana } from "../campana/en-curso";
 import { accionesDelPuente, botonDelPaso, lineaDelPaso, pasoDelPuente } from "../campana/puente";
-import { alRevelar, registrarLasAcciones, retomarAlArrancar } from "./campana-resultado";
+import { alRevelar, registrarLasAcciones, reiniciarElResultado, retomarAlArrancar } from "./campana-resultado";
 import { type Mundo, RONDA, mundo, suelta, ultimoPaso } from "./campana-resultado-mundo";
 
 /**
@@ -127,13 +127,46 @@ describe("ganadoras que son líneas de persona", () => {
     expect(filasDelPaso().map((f) => f.avisada)).toEqual([false, true]);
   });
 
-  it("si la sala no acepta el aviso, la fila sigue sin marcar", async () => {
+  it("si la sala no acepta el aviso, la fila sigue sin marcar y el paso lo dice", async () => {
     registrarLasAcciones(m.d);
     await revelar();
-    m.respuestaAlAviso = "forma";
+    expect(pasoDelPuente()).not.toHaveProperty("sinAviso");
+    for (const motivo of ["forma", "red", "no-gano", "no-existe"] as const) {
+      m.respuestaAlAviso = motivo;
+      accionesDelPuente().avisarA?.(L1);
+      await suelta();
+      expect(filasDelPaso().map((f) => f.avisada), motivo).toEqual([false, false]);
+      expect(pasoDelPuente(), motivo).toMatchObject({ paso: "resultado", enMano: true, sinAviso: true });
+    }
+  });
+
+  it("tras un aviso que falló, el siguiente que sale bien borra el aviso y deja la marca", async () => {
+    registrarLasAcciones(m.d);
+    await revelar();
+    m.respuestaAlAviso = "red";
     accionesDelPuente().avisarA?.(L1);
     await suelta();
-    expect(filasDelPaso().map((f) => f.avisada)).toEqual([false, false]);
+    expect(pasoDelPuente()).toMatchObject({ sinAviso: true });
+    m.respuestaAlAviso = "ok";
+    accionesDelPuente().avisarA?.(L1);
+    await suelta();
+    expect(pasoDelPuente()).toMatchObject({ paso: "resultado", enMano: true });
+    expect(pasoDelPuente()).not.toHaveProperty("sinAviso");
+    expect(filasDelPaso().map((f) => f.avisada)).toEqual([false, true]);
+  });
+
+  it("un aviso que falla no se queda para el resultado siguiente", async () => {
+    registrarLasAcciones(m.d);
+    await revelar();
+    m.respuestaAlAviso = "red";
+    accionesDelPuente().avisarA?.(L1);
+    await suelta();
+    reiniciarElResultado();
+    conAvisoHecho({ resultado: "hecho" });
+    retomarAlArrancar(m.d);
+    await suelta();
+    expect(pasoDelPuente()).toMatchObject({ paso: "resultado", enMano: true });
+    expect(pasoDelPuente()).not.toHaveProperty("sinAviso");
   });
 
   it("una sola ganadora también es una lista de personas", async () => {

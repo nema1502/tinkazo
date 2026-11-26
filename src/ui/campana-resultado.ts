@@ -185,6 +185,11 @@ interface CodigosEnMano {
   repintar: () => void;
 }
 let codigosEnMano: CodigosEnMano | null = null;
+/**
+ * En una campaña de personas: el último aviso a una ganadora no se pudo marcar. `null` fuera de ese modo, donde esto no existe
+ * y el aviso fallido sigue callado como siempre. Se apaga con el próximo aviso que sale bien.
+ */
+let falloElAviso: boolean | null = null;
 
 /** Para las pruebas: vuelve todo a como estaba. */
 export function reiniciarElResultado(): void {
@@ -195,6 +200,7 @@ export function reiniciarElResultado(): void {
   avisadasPorCelular.clear();
   repintarGanadoras = null;
   codigosEnMano = null;
+  falloElAviso = null;
 }
 
 function cambiarLaEntrada(d: DepsDelResultado, cambio: (e: SorteoDeCampana) => SorteoDeCampana): SorteoDeCampana | null {
@@ -598,15 +604,18 @@ async function mostrarGanadoras(d: DepsDelResultado, sala: SalaDeCampana, sorteo
         otraBilletera: false,
         enMano: true,
         ...(estado.fallaron && estado.codigos === null ? { sinCodigos: true as const } : {}),
+        ...(falloElAviso === true ? { sinAviso: true as const } : {}),
       });
     estado.repintar = repintarEnMano;
     codigosEnMano = estado;
+    if (!mismas || falloElAviso === null) falloElAviso = false;
     repintarGanadoras = repintarEnMano;
     // Primero se pintan las ganadoras: los códigos llegan después y repintan. Sin ellos la fila ya sirve.
     repintarEnMano();
     if (estado.codigos === null) void pedirLosCodigos(d, sala, estado);
     return;
   }
+  falloElAviso = null;
   // Tras una recarga la sesión de Google se retoma aparte: hasta que llegue (o pase el tope) no se dice que es otra billetera.
   let esperandoLaSesion = d.otraBilletera() && (d.billeteraPendiente?.() ?? false);
   const repintar = (): void =>
@@ -707,7 +716,13 @@ export function registrarLasAcciones(d: DepsDelResultado): void {
       if (!s) return;
       void d.avisar(s, cuenta).then((r) => {
         if (r === "token") return ponerPaso({ paso: "tomada" });
-        if (r !== "ok") return;
+        if (r !== "ok") {
+          // En mano el aviso es lo único que hace el botón: si no salió, se dice y el botón sigue para probar de nuevo.
+          if (falloElAviso === null) return;
+          falloElAviso = true;
+          return repintarGanadoras?.();
+        }
+        if (falloElAviso === true) falloElAviso = false;
         avisadasPorCelular.add(cuenta);
         repintarGanadoras?.();
       });

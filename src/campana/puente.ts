@@ -44,9 +44,10 @@ export type PasoDelPuente =
   /**
    * Con `enMano` el premio se entrega en persona: no hay billetera ni pago, la línea es la de entregar y nada habla de recibir.
    * Solo lo pone quien leyó que todas las ganadoras son líneas de persona. `sinCodigos` es que se pidieron los códigos de
-   * entrega todas las veces que se podía y no se pudieron leer: entonces el panel ofrece pedirlos de nuevo.
+   * entrega todas las veces que se podía y no se pudieron leer: entonces el panel ofrece pedirlos de nuevo. `sinAviso` es que
+   * el último aviso a una ganadora no se pudo marcar: el panel lo dice junto a las filas y el botón sigue para probar de nuevo.
    */
-  | { paso: "resultado"; filas: FilaDeGanadora[]; otraBilletera: boolean; enMano?: true; sinCodigos?: true };
+  | { paso: "resultado"; filas: FilaDeGanadora[]; otraBilletera: boolean; enMano?: true; sinCodigos?: true; sinAviso?: true };
 
 /**
  * ¿Le falta al panel avisarle algo a los celulares? Si es así, dejar la campaña ahora los dejaría sin su sello o sin su

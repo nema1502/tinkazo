@@ -69,12 +69,13 @@ const fila = (cuenta: string, nombre: string, cambios: Partial<FilaDeGanadora> =
   ...cambios,
 });
 
-const enMano = (filas: FilaDeGanadora[], sinCodigos = false): PasoDelPuente => ({
+const enMano = (filas: FilaDeGanadora[], sinCodigos = false, sinAviso = false): PasoDelPuente => ({
   paso: "resultado",
   otraBilletera: false,
   enMano: true,
   filas,
   ...(sinCodigos ? { sinCodigos: true as const } : {}),
+  ...(sinAviso ? { sinAviso: true as const } : {}),
 });
 
 const filasDelResultado = (): string[] => [...document.querySelectorAll("#cpo-ganadoras > li")].map((li) => (li.textContent ?? "").trim());
@@ -162,6 +163,20 @@ describe("el resultado en mano en el panel", () => {
     expect(botones(p).map((b) => b.textContent)).not.toContain("Ver los códigos");
   });
 
+  it("si no se pudo marcar, lo dice con una salida y el botón de Avisar sigue a la vista", async () => {
+    const m = mundo();
+    const p = await enSorteada(m);
+    ponerPaso(enMano([fila(L1, "Ana"), fila(L2, "Beto")]));
+    expect(p.raiz.textContent).not.toContain("No se pudo marcar");
+    ponerPaso(enMano([fila(L1, "Ana"), fila(L2, "Beto")], false, true));
+    const aviso = p.raiz.querySelector("#cpo-ganadoras [role=alert]");
+    expect(aviso?.textContent).toBe("No se pudo marcar. Probá de nuevo o seguí con la entrega.");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Avisar a Ana"]);
+    expect(p.raiz.textContent).not.toContain("p1:");
+    ponerPaso(enMano([fila(L1, "Ana", { avisada: true }), fila(L2, "Beto")]));
+    expect(p.raiz.textContent).not.toContain("No se pudo marcar");
+  });
+
   it("en inglés todo sale en inglés", async () => {
     const m = mundo();
     m.idioma = "en";
@@ -171,6 +186,8 @@ describe("el resultado en mano en el panel", () => {
     expect(filasDelResultado()[0]).toContain("Marked as notified.");
     expect(filasDelResultado()[0]).toContain("Code 0042");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Let Winner 2 know"]);
+    ponerPaso(enMano([fila(L1, "Ana"), fila(L2, "Winner 2")], false, true));
+    expect(p.raiz.querySelector("#cpo-ganadoras [role=alert]")?.textContent).toBe("Couldn't mark it. Try again or go on with the handover.");
   });
 
   it("el panel no registra por su cuenta la acción de pedir códigos: la registra quien los pide", () => {

@@ -90,6 +90,7 @@ describe("los textos del premio en mano", () => {
       "cpoCodigoDeEntrega",
       "cpoVerCodigos",
       "cpoMarcadaAvisada",
+      "cpoNoSeMarco",
     ];
     for (const lengua of ["es", "en"] as const) {
       for (const clave of claves) {
@@ -101,7 +102,7 @@ describe("los textos del premio en mano", () => {
   });
 
   it("todas las claves nuevas existen en los dos idiomas", () => {
-    for (const clave of ["cpoEntregaEnMano", "cpoEntregaConCodigo", "cpoGanadoraN", "cpoRepetidaPersona", "cpoCodigoDeEntrega", "cpoVerCodigos", "cpoMarcadaAvisada"]) {
+    for (const clave of ["cpoEntregaEnMano", "cpoEntregaConCodigo", "cpoGanadoraN", "cpoRepetidaPersona", "cpoCodigoDeEntrega", "cpoVerCodigos", "cpoMarcadaAvisada", "cpoNoSeMarco"]) {
       expect(TEXTOS_SALA_CAMPANA.es[clave], clave).toBeDefined();
       expect(TEXTOS_SALA_CAMPANA.en[clave], clave).toBeDefined();
     }

@@ -3080,6 +3080,17 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       li.append(boton(tx("cpoVerCodigos"), "enlace", () => verCodigos()));
       filasDeGanadoras.push(li);
     }
+    // El último aviso no se pudo marcar: se dice arriba de la lista, junto al botón que sigue ahí para probar de nuevo.
+    if (enMano && paso.sinAviso === true) {
+      const li = document.createElement("li");
+      li.className = "cpo-fila";
+      const dicho = document.createElement("p");
+      dicho.className = "cpo-salio";
+      dicho.setAttribute("role", "alert");
+      dicho.textContent = tx("cpoNoSeMarco");
+      li.append(dicho);
+      filasDeGanadoras.unshift(li);
+    }
     ganadorasEl.replaceChildren(...filasDeGanadoras);
   }
 
