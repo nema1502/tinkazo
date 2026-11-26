@@ -119,7 +119,8 @@ describe("GET campana/entrega", () => {
   it("sin token o con un token que no es el de la sala da 403, aunque ya se haya sorteado", async () => {
     const { sala, sortear, entrega } = await montar();
     await sortear();
-    for (const cabeceras of [{}, { Authorization: "Bearer " }, { Authorization: "Bearer no-es-el-token" }, { Authorization: `Bearer ${sala.token}x` }]) {
+    const pruebas: Record<string, string>[] = [{}, { Authorization: "Bearer " }, { Authorization: "Bearer no-es-el-token" }, { Authorization: `Bearer ${sala.token}x` }];
+    for (const cabeceras of pruebas) {
       const r = await entrega(cabeceras);
       expect(r.status, JSON.stringify(cabeceras)).toBe(403);
       expect(await r.json()).toEqual({ error: "token" });
