@@ -424,11 +424,14 @@ export class Portero {
    *      pagado el portero (una fila de `sellos_portero` con el mismo organizador, huella y ronda): si no, 403;
    *   2. ya sorteado, `{ya:true}`; ya pedido y en camino, el mismo hash;
    *   3. simula el `draw`: ahí el contrato comprueba la firma, así que una que no pasa da 400 sin reservar ni pagar nada;
-   *   4. en la cola de la sorteadora, de a uno: la secuencia, la firma, la reserva contra el organizador (su tope de
-   *      sorteos del mes y lo guardado para su sello), el fee-bump de siempre y el envío. Con la secuencia vieja, relee la
-   *      cuenta y reintenta una vez;
-   *   5. tomado el envío, la respuesta sale con el hash, pero la cola no manda el siguiente hasta que este entre (la red
-   *      guarda una sola transacción pendiente por cuenta) o hasta que pase el plazo, y entonces relee la secuencia.
+   *   4. la admisión: si la sorteadora está con otro sorteo, `503 ocupado`, sin reservar, firmar ni mandar nada. Si no, la
+   *      toma (`Sorteadora.tomar`): la secuencia, la firma, la reserva contra el organizador (su tope de sorteos del mes y
+   *      lo guardado para su sello), el fee-bump de siempre y el envío. Con la secuencia vieja, relee la cuenta y reintenta
+   *      una vez;
+   *   5. tomado el envío, la respuesta sale con el hash y la sorteadora sigue ocupada hasta que este entre (la red guarda
+   *      una sola transacción pendiente por cuenta) o hasta que pase el plazo, y entonces relee la secuencia.
+   *
+   * Los pedidos iguales (mismo sorteo y firma) comparten un solo trabajo (`vuelos`).
    *
    * La red ocupada (TRY_AGAIN_LATER, o txInsufficientFee: una secuencia que ya tiene otra pendiente, o la comisión por
    * debajo de lo que pide la red en ese momento) es `502 {motivo:"red", detalle:"ocupada"}`, que el sitio reintenta con
@@ -451,11 +454,19 @@ export class Portero {
     if (enCurso) return enCurso;
     const vuelo = this.sortearUnaVez(s, id, firma);
     this.vuelos.set(clave, vuelo);
-    // Cualquier respuesta, o una falla, cierra el trabajo: el siguiente pedido igual mira el libro.
+    const deEste = id.toString();
     const soltar = (): void => {
       if (this.vuelos.get(clave) === vuelo) this.vuelos.delete(clave);
     };
-    vuelo.then(soltar, soltar);
+    // Si mandó el sorteo, el trabajo sigue mientras la sorteadora espera que entre: un pedido igual en ese rato recibe el
+    // mismo envío. Cualquier otra respuesta, o una falla, lo cierra al responder, y el siguiente pedido igual mira el libro.
+    vuelo.then(
+      (res) => {
+        if (res.estado === 200 && res.cuerpo.status === "PENDING" && s.ocupada()?.sorteo === deEste) void s.libre().then(soltar);
+        else soltar();
+      },
+      soltar,
+    );
     return vuelo;
   }
 
@@ -489,10 +500,12 @@ export class Portero {
     if (sim.minResourceFee > this.topeTx()) return r(400, { motivo: "fee-alta", detalle: "simulacion" });
     const datos = sim.datos;
     const estimado = this.techoDeRecursos(sim.minResourceFee) + 2 * this.cfg.inclusionBump;
-    // Los topes del organizador se piden antes de entrar a la cola: ahí puede haber una espera corta (el plan del equipo).
+    // Los topes del organizador se piden antes de tomar la sorteadora: ahí puede haber una espera corta (el plan del equipo).
     const lim = await this.limitesDe(organizador);
 
-    return s.enCola(async (retener) => {
+    // La admisión, sin await hasta tomar la sorteadora: si está con otro sorteo, mandándolo o esperando que entre, ocupado en
+    // el acto, sin reservar, firmar ni mandar nada. Como el repetido ya se miró, ningún `draw` de este sello iba en camino.
+    const trabajo = s.tomar(id.toString(), this.reloj(), async (retener) => {
       for (let intento = 0; intento < 2; intento++) {
         const ahora = this.reloj();
         let actual: bigint | null;
@@ -541,7 +554,7 @@ export class Portero {
           s.usada(actual);
           this.cupos.marcarEnviado(firmada.hash);
           this.registrar("enviado", { hash: corto(firmada.hash), red: envio.status });
-          // La respuesta sale ya; el siguiente de la cola espera a que este entre. Lo cierra la alarma, como siempre.
+          // La respuesta sale ya y la sorteadora sigue ocupada hasta que este entre. Lo cierra la alarma, como siempre.
           const hash = firmada.hash;
           retener(
             s.esperarQueEntre(hash).then((estado) => {
@@ -565,6 +578,10 @@ export class Portero {
       }
       return r(502, { motivo: "red", detalle: "secuencia" });
     });
+    if (trabajo) return trabajo;
+    const o = s.ocupada();
+    this.registrar("sorteo-ocupado", { desdeMs: o ? Math.max(0, this.reloj() - o.desde) : 0 });
+    return r(503, { motivo: "ocupado" });
   }
 
   /**

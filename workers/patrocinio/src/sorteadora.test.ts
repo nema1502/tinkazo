@@ -13,7 +13,7 @@ import { Cupos } from "./cupos";
 import { verificarFirma } from "./lista-blanca";
 import { PorIp } from "./por-ip";
 import { ErrorDeRed, type Consulta, type CuentaEnRed, type Envio, type Red, type Simulacion } from "./red";
-import { Portero, firmanteDe, type Respuesta } from "./servicio";
+import { Portero, firmanteDe, type Firmante, type Respuesta } from "./servicio";
 import { CODIGO_YA_SORTEADO, Sorteadora, atenderSorteo, leerRetornoDelSorteo } from "./sorteadora";
 import { sqlDePrueba } from "./sqlite-prueba";
 
@@ -89,6 +89,8 @@ class RedSorteo implements Red {
   rechazos: string[] = [];
   /** Se llama en cada espera de la sorteadora (el reloj de la prueba); por defecto, nada. */
   alEsperar: () => void | Promise<void> = () => {};
+  /** Cuántas veces se le preguntó a la red en qué quedó una transacción. */
+  consultas = 0;
 
   /** Cierra el ledger a mano: lo pendiente entra y la secuencia de cada cuenta pasa a la de su transacción. */
   cerrarLedger(): void {
@@ -144,6 +146,7 @@ class RedSorteo implements Red {
     return e;
   }
   async consultar(hash: string): Promise<Consulta> {
+    this.consultas++;
     return this.entraron.has(hash) ? { status: "SUCCESS", feeCharged: 50_000 } : { status: "NOT_FOUND" };
   }
 }
@@ -153,6 +156,25 @@ let red: RedSorteo;
 let cupos: Cupos;
 let p: Portero;
 let lineas: string[];
+/** La sorteadora del portero de la prueba, para mirar si está ocupada. Null si el sorteo del servidor está apagado. */
+let sor: Sorteadora | null = null;
+/** Cuántas veces firmó la sorteadora. */
+let firmasSorteadora = 0;
+/** Lo que hace falta para armar otro objeto sobre los mismos cupos y la misma red (un reinicio). */
+let cfgActual: ReturnType<typeof leerConfig>;
+let registrarActual: ReturnType<typeof registrador>;
+
+/** La llave de la sorteadora, y cuántas veces se la usó. */
+async function firmanteContado(): Promise<Firmante> {
+  const f = await firmanteDe(sorteadora.secret());
+  return {
+    clavePublica: f.clavePublica,
+    firmar: async (m) => {
+      firmasSorteadora++;
+      return f.firmar(m);
+    },
+  };
+}
 
 async function montar(env: Parameters<typeof leerConfig>[0] = {}) {
   red = new RedSorteo();
@@ -160,15 +182,40 @@ async function montar(env: Parameters<typeof leerConfig>[0] = {}) {
   lineas = [];
   const registrar = registrador({ log: (l) => lineas.push(l), error: (l) => lineas.push(l) });
   const cfg = { ...leerConfig({ RED: "mainnet", ALTAS: "1", SORTEO_SERVIDOR: "1", CUENTA_SORTEADORA: sorteadora.publicKey(), MAX_SELLOS_MES: "100", ...env }), contractId: CONTRATO, passphrase: Networks.TESTNET };
+  cfgActual = cfg;
+  registrarActual = registrar;
+  firmasSorteadora = 0;
   // La espera de la sorteadora no usa el reloj de verdad: cada vuelta le avisa a esta red, que decide si cierra el ledger.
   const deEstaRed = red;
   const esperar = async () => {
     await deEstaRed.alEsperar();
   };
-  const s = cfg.sorteoServidor ? new Sorteadora({ passphrase: cfg.passphrase, contractId: CONTRATO, cuenta: sorteadora.publicKey(), red, firmante: await firmanteDe(sorteadora.secret()), esperar }) : null;
+  const s = cfg.sorteoServidor ? new Sorteadora({ passphrase: cfg.passphrase, contractId: CONTRATO, cuenta: sorteadora.publicKey(), red, firmante: await firmanteContado(), esperar }) : null;
+  sor = s;
   p = new Portero(cfg, cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora, () => {}, registrar, null, s);
   red.cuentas.set(sorteadora.publicKey(), { patrocinador: null, balance: 20_000_000n, secuencia: "500" });
 }
+
+/** Otro objeto sobre los mismos cupos y la misma red, con su propia sorteadora: lo que pasa cuando el objeto se reinicia. */
+async function otroObjeto(): Promise<{ p: Portero; sor: Sorteadora }> {
+  const esperar = async () => {
+    await red.alEsperar();
+  };
+  const s = new Sorteadora({ passphrase: cfgActual.passphrase, contractId: CONTRATO, cuenta: sorteadora.publicKey(), red, firmante: await firmanteContado(), esperar });
+  const o = new Portero(cfgActual, cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora, () => {}, registrarActual, null, s);
+  return { p: o, sor: s };
+}
+
+/** Traba la espera de la sorteadora hasta que la prueba la abra: el ledger no cierra y la sorteadora sigue ocupada. */
+function trabarLaEspera(): () => void {
+  let abrir: () => void = () => {};
+  const puerta = new Promise<void>((res) => (abrir = res));
+  red.alEsperar = () => puerta;
+  return abrir;
+}
+
+/** Los registros de un evento de la bitácora, ya leídos. */
+const registros = (evento: string) => lineas.map((l) => JSON.parse(l) as Record<string, unknown>).filter((x) => x.evento === evento);
 
 /** Una cuenta del libro con sorteos oficiales. */
 function admitida(sorteos = 3): Keypair {
@@ -191,6 +238,8 @@ async function selloDelPortero(org: Keypair, id: bigint, lista = LISTA): Promise
 const usados = (g: string) => cupos.consultar(g, ahora, { maxSellos: 100, maxSorteos: 100 });
 /** Lo que se mandó a la red sin contar los sellos de la preparación. */
 const draws = () => red.enviados.filter((x) => invocacion(x).metodo === "draw");
+/** La secuencia de la transacción interna de cada `draw` que se mandó. */
+const secuenciasDeLosDraw = () => draws().map((x) => (TransactionBuilder.fromXDR(x, Networks.TESTNET) as FeeBumpTransaction).innerTransaction.sequence);
 
 beforeEach(async () => {
   ahora = Date.now();
@@ -354,6 +403,7 @@ describe("POST /v1/sorteo: ya sorteado y repetido", () => {
     const org = admitida();
     await selloDelPortero(org, 1n);
     const a = await p.sortear("1", FIRMA);
+    await sor!.libre();
     const b = await p.sortear("1", FIRMA);
     expect(b).toEqual({ estado: 200, cuerpo: { hash: (a.cuerpo as { hash: string }).hash, status: "DUPLICATE" } });
     expect(draws()).toHaveLength(1);
@@ -399,8 +449,10 @@ describe("POST /v1/sorteo: ya sorteado y repetido", () => {
     red.envios = [{ status: "ERROR", codigo: "txFeeBumpInnerFailed/txInsufficientBalance" }];
     expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 503, cuerpo: { motivo: "fondo" } });
     expect(usados(org.publicKey()).sorteos).toBe(0);
+    await sor!.libre();
     const ok = await p.sortear("1", FIRMA);
     expect(ok).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    await sor!.libre();
     cupos.cerrar((ok.cuerpo as { hash: string }).hash, "ok", 54_000);
     red.sorteos.set(1n, { organizador: org.publicKey(), lista: LISTA, ronda: RONDA, estado: "Drawn" });
     expect(await p.sortear("1", FIRMA)).toEqual({ estado: 200, cuerpo: { ya: true } });
@@ -419,25 +471,30 @@ describe("POST /v1/sorteo: ya sorteado y repetido", () => {
 });
 
 describe("POST /v1/sorteo: las secuencias de la sorteadora", () => {
-  it("dos sorteos a la vez: el segundo espera a que entre el primero y sale con la secuencia que sigue, sin rechazos", async () => {
+  it("dos sorteos a la vez: uno sale y el otro recibe ocupado sin mandar nada. Al soltarse, el otro sale con la secuencia que sigue", async () => {
     const a = admitida();
     const b = admitida();
     await selloDelPortero(a, 1n);
     await selloDelPortero(b, 2n, new Uint8Array(32).fill(2));
-    // Desde acá, la red acepta una sola pendiente por cuenta, y el ledger cierra en la segunda espera.
+    // Desde acá, la red acepta una sola pendiente por cuenta, y el ledger no cierra hasta que la prueba lo diga.
     red.unaPorCuenta = true;
-    let esperas = 0;
-    red.alEsperar = () => {
-      if (++esperas === 2) red.cerrarLedger();
-    };
+    const abrir = trabarLaEspera();
     const antes = red.lecturas;
     red.retraso = 5;
-    const [ra, rb] = await Promise.all([p.sortear("1", FIRMA), p.sortear("2", FIRMA)]);
-    expect(ra).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
-    expect(rb).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    const rs = await Promise.all([p.sortear("1", FIRMA), p.sortear("2", FIRMA)]);
+    const salio = rs.findIndex((x) => x.estado === 200);
+    const otro = salio === 0 ? 1 : 0;
+    expect(rs[salio]).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(rs[otro]).toEqual({ estado: 503, cuerpo: { motivo: "ocupado" } });
+    expect(draws()).toHaveLength(1);
     expect(red.rechazos).toEqual([]);
-    const secuencias = draws().map((x) => (TransactionBuilder.fromXDR(x, Networks.TESTNET) as FeeBumpTransaction).innerTransaction.sequence);
-    expect(secuencias).toEqual(["501", "502"]);
+    red.retraso = 0;
+    abrir();
+    red.cerrarLedger();
+    await sor!.libre();
+    expect(await p.sortear(String(otro + 1), FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(red.rechazos).toEqual([]);
+    expect(secuenciasDeLosDraw()).toEqual(["501", "502"]);
     expect(red.lecturas - antes).toBe(1);
   });
 
@@ -460,8 +517,13 @@ describe("POST /v1/sorteo: las secuencias de la sorteadora", () => {
     await selloDelPortero(a, 1n);
     await selloDelPortero(b, 2n, new Uint8Array(32).fill(2));
     red.unaPorCuenta = true;
+    red.consultas = 0;
     expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
-    // El ledger no cerró en las diez esperas: la sorteadora olvida la secuencia y la relee (la red todavía dice 500).
+    // El ledger no cerró en las diez esperas: la sorteadora se suelta, olvida la secuencia y la relee (la red todavía dice 500).
+    await sor!.libre();
+    expect(sor!.ocupada()).toBeNull();
+    expect(red.consultas).toBe(10);
+    expect(registros("sorteo-sin-confirmar")).toHaveLength(1);
     const antes = red.lecturas;
     expect(await p.sortear("2", FIRMA)).toEqual({ estado: 502, cuerpo: { motivo: "red", detalle: "ocupada" } });
     expect(red.lecturas - antes).toBe(1);
@@ -470,6 +532,7 @@ describe("POST /v1/sorteo: las secuencias de la sorteadora", () => {
     expect(usados(b.publicKey()).sorteos).toBe(0);
     // Cierra el ledger: el reintento sale con la secuencia que sigue.
     red.cerrarLedger();
+    await sor!.libre();
     const ok = await p.sortear("2", FIRMA);
     expect(ok).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
     expect((TransactionBuilder.fromXDR(draws().at(-1) as string, Networks.TESTNET) as FeeBumpTransaction).innerTransaction.sequence).toBe("502");
@@ -480,10 +543,13 @@ describe("POST /v1/sorteo: las secuencias de la sorteadora", () => {
     await selloDelPortero(org, 1n);
     red.envios = [{ status: "TRY_AGAIN_LATER" }];
     expect(await p.sortear("1", FIRMA)).toEqual({ estado: 502, cuerpo: { motivo: "red", detalle: "ocupada" } });
+    await sor!.libre();
     red.envios = [{ status: "ERROR", codigo: "txInsufficientFee" }];
     expect(await p.sortear("1", FIRMA)).toEqual({ estado: 502, cuerpo: { motivo: "red", detalle: "ocupada" } });
+    await sor!.libre();
     red.envios = [{ status: "ERROR", codigo: "txFeeBumpInnerFailed/txInsufficientFee" }];
     expect(await p.sortear("1", FIRMA)).toEqual({ estado: 502, cuerpo: { motivo: "red", detalle: "ocupada" } });
+    await sor!.libre();
     red.envios = [{ status: "ERROR", codigo: "txInsufficientBalance" }];
     expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 503, cuerpo: { motivo: "fondo" } });
     expect(usados(org.publicKey()).sorteos).toBe(0);
@@ -526,6 +592,7 @@ describe("POST /v1/sorteo: las secuencias de la sorteadora", () => {
     await selloDelPortero(a, 2n, new Uint8Array(32).fill(2));
     red.envios = ["corte"];
     expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 502 });
+    await sor!.libre();
     const antes = red.lecturas;
     await p.sortear("2", FIRMA);
     expect(red.lecturas - antes).toBe(1);
@@ -537,6 +604,165 @@ describe("POST /v1/sorteo: las secuencias de la sorteadora", () => {
     red.cuentas.delete(sorteadora.publicKey());
     expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 503, cuerpo: { motivo: "fondo" } });
     expect(draws()).toHaveLength(0);
+  });
+});
+
+describe("POST /v1/sorteo: un sorteo a la vez", () => {
+  it("cinco sorteos distintos a la vez: uno sale y cuatro reciben ocupado, sin reservar, firmar ni mandar nada", async () => {
+    const cuentas = [admitida(), admitida(), admitida(), admitida(), admitida()];
+    for (const [i, c] of cuentas.entries()) await selloDelPortero(c, BigInt(i + 1), new Uint8Array(32).fill(i + 10));
+    red.unaPorCuenta = true;
+    const abrir = trabarLaEspera();
+    red.retraso = 5;
+    red.simulados = [];
+    firmasSorteadora = 0;
+    const antes = red.lecturas;
+    const rs = await Promise.all(cuentas.map((_, i) => p.sortear(String(i + 1), FIRMA)));
+    const salieron = rs.filter((x) => x.estado === 200);
+    expect(salieron).toHaveLength(1);
+    expect(salieron[0]).toMatchObject({ cuerpo: { status: "PENDING" } });
+    expect(rs.filter((x) => x.estado !== 200)).toEqual(Array.from({ length: 4 }, () => ({ estado: 503, cuerpo: { motivo: "ocupado" } })));
+    expect(draws()).toHaveLength(1);
+    expect(firmasSorteadora).toBe(1);
+    expect(red.lecturas - antes).toBe(1);
+    expect(red.simulados.filter((m) => m === "draw")).toHaveLength(5);
+    expect(cupos.exportar(true).uso?.filter((f) => f.metodo === "draw")).toHaveLength(1);
+    expect(cuentas.reduce((suma, c) => suma + usados(c.publicKey()).sorteos, 0)).toBe(1);
+    const ocupados = registros("sorteo-ocupado");
+    expect(ocupados).toHaveLength(4);
+    for (const o of ocupados) expect(typeof o.desdeMs).toBe("number");
+    for (const l of lineas) expect(l).not.toMatch(/\b[GC][A-Z2-7]{55}\b/);
+    // Cuando entra el envío, uno de los rechazados vuelve a pedir y sale con la secuencia que sigue, sin rechazos de la red.
+    red.retraso = 0;
+    abrir();
+    red.cerrarLedger();
+    await sor!.libre();
+    const otro = rs.findIndex((x) => x.estado !== 200);
+    expect(await p.sortear(String(otro + 1), FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(secuenciasDeLosDraw().at(-1)).toBe("502");
+    expect(red.rechazos).toEqual([]);
+  });
+
+  it("un pedido igual mientras la sorteadora espera que entre recibe el mismo envío, sin tocar la red", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    red.unaPorCuenta = true;
+    const abrir = trabarLaEspera();
+    const a = await p.sortear("1", FIRMA);
+    expect(a).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    const simulados = red.simulados.length;
+    const lecturas = red.lecturas;
+    const b = await p.sortear("1", FIRMA);
+    expect(b).toEqual(a);
+    expect(red.simulados).toHaveLength(simulados);
+    expect(red.lecturas).toBe(lecturas);
+    abrir();
+    red.cerrarLedger();
+    await sor!.libre();
+    // Ya cerrado el trabajo, el pedido mira el libro: es un draw de ese sello que dejó otro pedido.
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { hash: (a.cuerpo as { hash: string }).hash, status: "DUPLICATE" } });
+    expect(draws()).toHaveLength(1);
+  });
+
+  it("la ocupación termina cuando el envío entra, y el sorteo siguiente sale con la secuencia que sigue", async () => {
+    const a = admitida();
+    const b = admitida();
+    await selloDelPortero(a, 1n);
+    await selloDelPortero(b, 2n, new Uint8Array(32).fill(2));
+    red.unaPorCuenta = true;
+    const abrir = trabarLaEspera();
+    red.consultas = 0;
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(sor!.ocupada()).toEqual({ sorteo: "1", desde: ahora });
+    expect(await p.sortear("2", FIRMA)).toEqual({ estado: 503, cuerpo: { motivo: "ocupado" } });
+    expect(draws()).toHaveLength(1);
+    abrir();
+    red.cerrarLedger();
+    await sor!.libre();
+    expect(sor!.ocupada()).toBeNull();
+    expect(red.consultas).toBe(1);
+    expect(await p.sortear("2", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(secuenciasDeLosDraw()).toEqual(["501", "502"]);
+    expect(red.rechazos).toEqual([]);
+  });
+
+  it("un trabajo que lanza después de reservar no deja ocupada la sorteadora ni trabado el sorteo", async () => {
+    const a = admitida();
+    const b = admitida();
+    await selloDelPortero(a, 1n);
+    await selloDelPortero(b, 2n, new Uint8Array(32).fill(2));
+    const enviar = red.enviar.bind(red);
+    let vez = 0;
+    red.enviar = async (x) => {
+      if (vez++ === 0) throw new TypeError("roto");
+      return enviar(x);
+    };
+    const rs = await Promise.allSettled([p.sortear("1", FIRMA), p.sortear("1", FIRMA)]);
+    for (const x of rs) {
+      expect(x.status).toBe("rejected");
+      expect((x as PromiseRejectedResult).reason).toBeInstanceOf(TypeError);
+    }
+    await sor!.libre();
+    expect(sor!.ocupada()).toBeNull();
+    expect(await p.sortear("2", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    await sor!.libre();
+    // Lo reservado del primero sigue ahí para la alarma: un pedido igual recibe ese repetido.
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "DUPLICATE" } });
+    expect(usados(a.publicKey()).sorteos).toBe(1);
+  });
+
+  it("un trabajo que lanza antes de reservar tampoco deja nada", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    const firmar = sor!.firmar.bind(sor!);
+    let vez = 0;
+    sor!.firmar = async (tx) => {
+      if (vez++ === 0) throw new Error("llave");
+      return firmar(tx);
+    };
+    await expect(p.sortear("1", FIRMA)).rejects.toThrow("llave");
+    await sor!.libre();
+    expect(sor!.ocupada()).toBeNull();
+    expect(usados(org.publicKey()).sorteos).toBe(0);
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(usados(org.publicKey()).sorteos).toBe(1);
+  });
+
+  it("el objeto que se reinicia en plena espera degrada seguro: la red rechaza la secuencia repetida y nada se manda dos veces", async () => {
+    const a = admitida();
+    const b = admitida();
+    await selloDelPortero(a, 1n);
+    await selloDelPortero(b, 2n, new Uint8Array(32).fill(2));
+    red.unaPorCuenta = true;
+    const abrir = trabarLaEspera();
+    const primero = await p.sortear("1", FIRMA);
+    expect(primero).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    const o = await otroObjeto();
+    // El objeto nuevo no sabe que hay una pendiente: lee la secuencia de la red (500), arma la 501 y la red la rechaza.
+    expect(await o.p.sortear("2", FIRMA)).toEqual({ estado: 502, cuerpo: { motivo: "red", detalle: "ocupada" } });
+    expect(red.rechazos).toEqual(["txInsufficientFee"]);
+    expect(usados(b.publicKey()).sorteos).toBe(0);
+    // Y el mismo sorteo, pedido al objeto nuevo, recibe el repetido del libro.
+    expect(await o.p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { hash: (primero.cuerpo as { hash: string }).hash, status: "DUPLICATE" } });
+    abrir();
+  });
+
+  it("dos sorteos gemelos a la vez (misma lista y ronda): el servicio manda uno solo", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    red.sorteos.set(2n, { organizador: org.publicKey(), lista: LISTA, ronda: RONDA });
+    red.unaPorCuenta = true;
+    const abrir = trabarLaEspera();
+    red.retraso = 5;
+    const rs = await Promise.all([p.sortear("1", FIRMA), p.sortear("2", FIRMA)]);
+    const salieron = rs.filter((x) => x.cuerpo.status === "PENDING");
+    expect(salieron).toHaveLength(1);
+    const otro = rs.find((x) => x.cuerpo.status !== "PENDING");
+    const esOcupado = otro?.estado === 503 && otro.cuerpo.motivo === "ocupado";
+    const esRepetido = otro?.estado === 200 && otro.cuerpo.status === "DUPLICATE" && otro.cuerpo.hash === salieron[0]?.cuerpo.hash;
+    expect(esOcupado || esRepetido).toBe(true);
+    expect(draws()).toHaveLength(1);
+    abrir();
   });
 });
 
@@ -557,12 +783,16 @@ describe("POST /v1/sorteo: los topes del organizador", () => {
     await selloDelPortero(org, 1n);
     p.poner("apagado");
     expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 503, cuerpo: { motivo: "apagado" } });
+    expect(sor?.ocupada() ?? null).toBeNull();
     p.poner("pollar");
     expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 503, cuerpo: { motivo: "apagado" } });
+    expect(sor?.ocupada() ?? null).toBeNull();
     await montar({ SORTEO_SERVIDOR: "0" });
     expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 503, cuerpo: { motivo: "apagado" } });
+    expect(sor?.ocupada() ?? null).toBeNull();
     await montar({ CUENTA_SORTEADORA: "" });
     expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 503, cuerpo: { motivo: "apagado" } });
+    expect(sor?.ocupada() ?? null).toBeNull();
     expect(red.simulados).toHaveLength(0);
   });
 
@@ -730,6 +960,13 @@ describe("la ruta", () => {
     for (let i = 0; i <= cfg.porIpPorHora; i++) ultimo = ((await atenderSorteo(pedido({ sorteo: "1", firma: FIRMA }), cfg, porIp, llamar)) as Response).status;
     expect(ultimo).toBe(429);
     expect(llamadas).toHaveLength(cfg.porIpPorHora);
+  });
+
+  it("pasa ocupado tal cual, con CORS para el sitio", async () => {
+    const r = (await atenderSorteo(pedido({ sorteo: "1", firma: FIRMA }), cfgMainnet(), new PorIp(), async () => ({ estado: 503, cuerpo: { motivo: "ocupado" } }))) as Response;
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ motivo: "ocupado" });
+    expect(r.headers.get("Access-Control-Allow-Origin")).toBe("https://tinkazo.app");
   });
 
   it("con la bandera apagada, 503 apagado sin llamar al objeto", async () => {

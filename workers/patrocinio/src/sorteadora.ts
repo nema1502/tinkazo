@@ -7,13 +7,17 @@
  *        200 {hash, status} o {ya:true}   400 {motivo:"cuerpo"|"fallaria"}   403 {motivo:"no-es-nuestro"|"origen"}
  *        409 {motivo:"ronda-no-lista", reintentarEn}
  *        503 {motivo:"fondo"|"apagado"}   502 {motivo:"red"}   429 {motivo:"cupo-cuenta"|"cupo-ip"}
+ *        503 {motivo:"ocupado"}: la sorteadora estaba con otro sorteo. No reservó, firmó ni mandó nada, y no lo va a mandar.
+ *
+ * La sorteadora atiende un sorteo a la vez y no hace cola: un pedido admitido nunca espera detrás de otro, así que el
+ * tiempo de respuesta lo ponen sus propias llamadas a la red.
  *
  * Solo en mainnet con `ALTAS=1`, `SORTEO_SERVIDOR=1` y la cuenta sorteadora. La firma llega ya sin comprimir (los 96
  * bytes que pide `draw`), como hoy la arma el navegador: el Worker no descomprime nada, y la firma la comprueba el
  * contrato en la simulación. Así el Worker solo arma, firma con Ed25519 (WebCrypto) y manda.
  *
- * Acá vive lo que no sabe de cupos: leer el sorteo con `get_raffle`, armar y firmar el `draw`, y la cola de secuencias
- * de la sorteadora. Quién paga y cuánto lo decide el portero (`Portero.sortear`, en `servicio.ts`).
+ * Acá vive lo que no sabe de cupos: leer el sorteo con `get_raffle`, armar y firmar el `draw`, y la admisión y las
+ * secuencias de la sorteadora. Quién paga y cuánto lo decide el portero (`Portero.sortear`, en `servicio.ts`).
  */
 import { Account, Operation, TransactionBuilder, nativeToScVal, scValToNative, xdr, type Transaction } from "@stellar/stellar-sdk/base";
 import type { Config } from "./config";
@@ -33,9 +37,9 @@ export const INCLUSION_INTERNA = 100;
 /** Cuánto vale el `draw` armado por el servidor, en segundos. */
 export const VENTANA_SORTEO_S = 240;
 /**
- * Después de que la red toma un `draw` (PENDING), la cola de la sorteadora espera a que entre antes de mandar el
- * siguiente: Stellar Core guarda una sola transacción pendiente por cuenta de origen (desde el protocolo 19), y la
- * siguiente vuelve con TRY_AGAIN_LATER. Pregunta cada tanto, hasta unas cuantas veces; un ledger cierra en unos 5 s.
+ * Después de que la red toma un `draw` (PENDING), la sorteadora sigue ocupada hasta que entre: Stellar Core guarda una
+ * sola transacción pendiente por cuenta de origen (desde el protocolo 19), y la siguiente vuelve con TRY_AGAIN_LATER.
+ * Pregunta cada tanto, hasta unas cuantas veces; un ledger cierra en unos 5 s.
  */
 export const CONFIRMAR_CADA_MS = 1_000;
 export const CONFIRMAR_VECES = 10;
@@ -117,6 +121,13 @@ export async function leerSorteo(red: Red, o: { passphrase: string; contractId: 
   }
 }
 
+/** La sorteadora ocupada: con qué sorteo, desde cuándo (la hora de quien la tomó) y la promesa que se cumple al soltarla. */
+interface Ocupacion {
+  sorteo: string;
+  desde: number;
+  fin: Promise<void>;
+}
+
 export interface OpcionesSorteadora {
   passphrase: string;
   contractId: string;
@@ -130,16 +141,17 @@ export interface OpcionesSorteadora {
 }
 
 /**
- * La sorteadora: arma, firma y ordena los `draw` del servidor. Las secuencias salen de una cola en la memoria del
- * objeto: un envío detrás del otro, y después de un envío aceptado la cola espera a que entre (`esperarQueEntre`),
- * porque la red tiene una sola pendiente por cuenta. Así dos sorteos a la vez salen con secuencias seguidas, el segundo
- * unos segundos después. La secuencia se lee de la red la primera vez y después de cualquier cosa que no sea un envío
- * aceptado que entró.
+ * La sorteadora: arma, firma y ordena los `draw` del servidor, de a un sorteo. Toma uno (`tomar`) y queda ocupada hasta que
+ * su envío entra a la red (`esperarQueEntre`), porque la red guarda una sola pendiente por cuenta de origen. Mientras
+ * está ocupada, `tomar` dice que no en el acto y no encola nada: quien pide otro sorteo sabe enseguida que este no lo va
+ * a mandar. La secuencia se lee de la red la primera vez y después de cualquier cosa que no sea un envío aceptado que
+ * entró.
  */
 export class Sorteadora {
   /** La secuencia de la cuenta (la de su última transacción), si se sabe. */
   private actual: bigint | null = null;
   private cola: Promise<unknown> = Promise.resolve();
+  private ocupacion: Ocupacion | null = null;
 
   constructor(private readonly o: OpcionesSorteadora) {}
 
@@ -195,6 +207,32 @@ export class Sorteadora {
       () => retenida,
     ).catch(() => undefined);
     return r;
+  }
+
+  /**
+   * La admisión de un sorteo. Libre: queda ocupada con `sorteo` y `fn` corre en la cola, que en ese momento está vacía.
+   * Ocupada: null en el acto y no corre nada. Mirar y tomar es una sola jugada, sin await en el medio, así que dos pedidos
+   * a la vez no entran los dos. Se suelta cuando terminan `fn` y lo que retuvo (la espera a que el envío entre), salga bien
+   * o mal.
+   */
+  tomar<T>(sorteo: string, desde: number, fn: (retener: (p: Promise<unknown>) => void) => Promise<T>): Promise<T> | null {
+    if (this.ocupacion) return null;
+    const trabajo = this.enCola(fn);
+    const fin: Promise<void> = this.cola.then(() => {
+      if (this.ocupacion?.fin === fin) this.ocupacion = null;
+    });
+    this.ocupacion = { sorteo, desde, fin };
+    return trabajo;
+  }
+
+  /** Con qué sorteo está ocupada y desde cuándo, o null si está libre. */
+  ocupada(): { sorteo: string; desde: number } | null {
+    return this.ocupacion ? { sorteo: this.ocupacion.sorteo, desde: this.ocupacion.desde } : null;
+  }
+
+  /** Se cumple cuando la sorteadora queda libre, enseguida si ya lo está. Nunca falla. */
+  libre(): Promise<void> {
+    return this.ocupacion?.fin ?? Promise.resolve();
   }
 
   /**
