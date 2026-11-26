@@ -485,6 +485,25 @@ describe("la cadena del regalo", () => {
     expect(cf.activarCuenta).not.toHaveBeenCalled();
   });
 
+  it("sin ver el pedido, después el pedido aparece y la billetera dice que ya no está: son fallas seguidas distintas, no se pide cerrar sesión", async () => {
+    const srv = servidorFalso(true);
+    const cf = cuentaFalsa();
+    await abrir(srv, cf);
+    cf.e.est = { ...NUEVA, activacion: "preparando" };
+    principal().click();
+    await pasa(32_000);
+    expect(alerta()).toContain(t("clErrSinPedido"));
+    // El pedido aparece (la espera lo vio), pero al votar la billetera dice que no hay nada que activar.
+    cf.e.est = { ...NUEVA };
+    cf.activarCuenta.mockResolvedValueOnce("no-hay");
+    principal().click();
+    await pasa(3_000);
+    expect(cf.activarCuenta).toHaveBeenCalledTimes(1);
+    expect(alerta()).toContain(t("clErrSinPedido"));
+    expect(alerta()).not.toContain(t("clErrSinPedidoFin"));
+    expect(principal().textContent).toBe(t("clProbarDeNuevo"));
+  });
+
   it("la cadena entera no pasa de 45 segundos con la ruedita: el pedido llega a los 25 y la billetera no contesta", async () => {
     const srv = servidorFalso(true);
     const cf = cuentaFalsa({}, () => new Promise<ResultadoDeActivar>(() => undefined));

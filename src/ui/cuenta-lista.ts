@@ -2100,6 +2100,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         if (cerrado) return;
         if (p === "no") throw new Error("sin-pedido");
         if (p === "sin-lectura" || p === "tarde") throw new Error("tarda");
+        // El pedido apareció: la cuenta de fallas seguidas sin verlo empieza de nuevo.
+        acc.sinPedidoVeces = 0;
         paso = p === "lista" ? "estado" : "activar";
       }
       if (paso === "activar") {
@@ -2141,6 +2143,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       aplicarAcceso(e);
       acceso.refrescarCupo();
       acc.cadena = false;
+      acc.sinPedidoVeces = 0;
       correr(null);
       st.aviso = activo && st.est.proteccion !== "lista" ? "clActivada" : null;
       pintar();
