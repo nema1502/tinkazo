@@ -72,8 +72,8 @@ import { type AccionDeComision, type ControlDeComision, type DepsDeComision, cre
 import { cambiarDeCuentaReal, depsDeComisionReales, entrarConGoogleReal } from "./campana-comision-real";
 import { depsDeTusReales } from "./campana-tus-real";
 import { crearFilaViva } from "./fila-viva";
-import type { ContextoDelPaso } from "./campana-pasar";
-import { alApartarReal, alCerrarReal, alOlvidarReal, alReabrirReal, listaPasadaReal, listaTrabadaReal } from "./campana-pasar-real";
+import type { ContextoDelPaso, FilaParaReponer } from "./campana-pasar";
+import { alApartarReal, alCerrarReal, alOlvidarReal, alReabrirReal, listaPasadaReal, listaTrabadaReal, reponerEtiquetasReal } from "./campana-pasar-real";
 import { claveDeSellar, entraConGoogle as entraConGoogleDeLaPagina, openPicker } from "./wallet-ui";
 import { pintarQr } from "./qr";
 
@@ -189,6 +189,11 @@ export interface DepsDelPanelDeCampana {
   alRetomar?: (fase: FaseDeSala, s: SalaDeCampana) => void;
   /** Si la lista que había en el cuadro ya es la que se pasó de esta campaña (se recargó la pestaña después de pasarla). */
   listaPasada?: (s: SalaDeCampana) => boolean;
+  /**
+   * Al retomar una campaña ya pasada, con todas las filas recibidas: repone los nombres que la pestaña perdió (solo en una lista
+   * de personas). Se llama una sola vez por retomada. Sin esto, no se repone nada.
+   */
+  reponerEtiquetas?: (s: SalaDeCampana, filas: readonly FilaParaReponer[]) => void;
   /** El nombre del botón de sellar de la herramienta, tal como se lo ve ahora. */
   botonDeSellar?: () => string;
   /** Suelta el sello de la pantalla para armar de nuevo la lista (la sala no lo aceptó). */
@@ -273,6 +278,7 @@ export function depsReales(): DepsDelPanelDeCampana {
     alApartar: alApartarReal,
     organizadoraDeSala: (s) => leerOrganizadora(s),
     listaPasada: listaPasadaReal,
+    reponerEtiquetas: reponerEtiquetasReal,
     botonDeSellar: () => t(claveDeSellar()),
     // El sello que la sala no aceptó se suelta también con el show ya hecho (`soltarParaSellarDeNuevo`), sin cortar un juego en marcha.
     soltarElSello: () => import("./campana-resultado-real").then((m) => m.soltarParaSellarDeNuevo()),
@@ -813,11 +819,28 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   function alCambiarLasFilas(): void {
     pintar();
     grande.pintar();
+    reponerLasEtiquetas();
     if (sala && vista === "cerrada" && pasada) correrPaso();
+  }
+
+  /**
+   * Al retomar una campaña ya pasada, cuántas filas tiene la sala: cuando el panel las tiene todas se las da a la herramienta,
+   * una sola vez, para que reponga los nombres que la pestaña haya perdido. Sin quitas a medias: con una, la lista de la sala
+   * todavía no es la que se va a sellar.
+   */
+  let totalParaReponer: number | null = null;
+
+  function reponerLasEtiquetas(): void {
+    if (totalParaReponer === null || !sala || vista !== "cerrada" || !pasada) return;
+    const todas = visibles();
+    if (todas.length !== totalParaReponer || quitasEnCurso().length > 0) return;
+    totalParaReponer = null;
+    deps.reponerEtiquetas?.(sala, todas);
   }
 
   /** Deja la lista en blanco, con lo que se estaba por quitar: se vuelve a leer de la sala. */
   function vaciarFilas(): void {
+    totalParaReponer = null;
     filas.clear();
     llegados.clear();
     pendientes.clear();
@@ -2410,6 +2433,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     trabajando = false;
     if (!r.ok) return pintar();
     pasada = false;
+    totalParaReponer = null;
     sinLeer = false;
     retomada = false;
     // Lo que se pasó al cuadro ya no es la lista de la campaña: se vacía, así no queda una lista sellable con el margen de la sala.
@@ -2471,8 +2495,13 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // arriba ya salieron) y se pone en el cuadro de nuevo, que es lo que comprueba la sala al sellar.
     const sigueEnElCuadro = e.fase === "cerrada" && (deps.listaPasada?.(g.sala) ?? false);
     if (sigueEnElCuadro) pasada = true;
+    // Con la sala cerrada y la lista en el cuadro, los nombres se reponen cuando el panel tenga todas las filas.
+    if (sigueEnElCuadro) totalParaReponer = e.total;
     irA(e.fase, e.cierraMs);
-    if (sigueEnElCuadro) correrPaso();
+    if (sigueEnElCuadro) {
+      reponerLasEtiquetas();
+      correrPaso();
+    }
     if (e.fase !== "lista") deps.alRetomar?.(e.fase, g.sala);
     // Una memoria de antes no dice de quién es la sala: con una sesión se completa con la campaña firmada.
     if (g.cuenta === undefined) void completarLaDuena();
