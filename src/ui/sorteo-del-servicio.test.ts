@@ -103,7 +103,7 @@ function sortear(m: Mock, pasos: [string, string?][] = [], id = 7n): Promise<Fin
   return sortearPorElServicio({ raffleId: id, firma96: FIRMA, alPaso: (s, d) => void pasos.push(d === undefined ? [s] : [s, d]), ahora, dormir }, m.fuentes);
 }
 const mandado = (hash: string, pendiente = true): RespuestaDelSorteo => ({ accion: "mandado", hash, pendiente });
-const hoy = (m: Partial<{ marca: boolean; disyuntor: boolean; olvidar: boolean }> = {}): RespuestaDelSorteo => ({ accion: "hoy", marca: false, disyuntor: false, olvidar: false, ...m });
+const hoy = (m: Partial<{ marca: boolean; disyuntor: boolean; olvidar: boolean; disyuntorCorto: true }> = {}): RespuestaDelSorteo => ({ accion: "hoy", marca: false, disyuntor: false, olvidar: false, ...m });
 const transcurrido = (): number => Date.now() - T0;
 const entro = async (): Promise<{ status: string; cierre: number; valor: unknown }> => ({ status: "SUCCESS", cierre: Date.now() / 1000, valor: "x" });
 
@@ -331,10 +331,14 @@ describe("el servicio asegura que no mandó", () => {
     ["fee-alta", hoy(), false],
     ["fallaria", hoy({ marca: true }), false],
     ["origen", hoy({ disyuntor: true }), false],
-  ])("%s: camino de siempre en el acto, un solo pedido", async (_n, resp, olvida) => {
+    ["ocupado", hoy(), false],
+    ["tarde", hoy({ disyuntor: true }), false],
+    ["interno sin mandar", hoy({ disyuntorCorto: true }), false],
+  ])("%s: camino de siempre en el acto, un solo pedido, sin leer la red", async (_n, resp, olvida) => {
     const m = armar({ pedir: async () => resp });
     expect(await correr(sortear(m))).toEqual({ estado: "camino-de-hoy" });
     expect(m.pedir).toHaveBeenCalledTimes(1);
+    expect(m.leer).not.toHaveBeenCalled();
     expect(m.olvidar.mock.calls.length > 0).toBe(olvida);
     expect(transcurrido()).toBeLessThan(1000);
   });
@@ -446,6 +450,19 @@ describe("una cola larga en el servicio no es una falla", () => {
     const m = armar({ pedir: async () => ({ accion: "espera" }), leer: async () => GANADORES });
     expect(await correr(sortear(m))).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
     expect(m.leer).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("un servicio lento que dice que no manda: el segundo pedido recibe su respuesta", () => {
+  it.each([
+    ["tarde", hoy({ disyuntor: true })],
+    ["ocupado", hoy()],
+  ])("el primer pedido no contesta nunca y el segundo recibe %s: camino de siempre antes de los 20 segundos, sin leer la red", async (_n, resp) => {
+    const m = armar({ pedir: async (n) => (n === 0 ? new Promise<RespuestaDelSorteo>(() => undefined) : resp) });
+    expect(await correr(sortear(m))).toEqual({ estado: "camino-de-hoy" });
+    expect(m.pedir).toHaveBeenCalledTimes(2);
+    expect(transcurrido()).toBeLessThan(20_000);
+    expect(m.leer).not.toHaveBeenCalled();
   });
 });
 

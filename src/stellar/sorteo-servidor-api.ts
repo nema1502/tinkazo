@@ -13,6 +13,9 @@ import { ErrorPortero, errorDeRespuesta } from "./patrocinador";
  * - **Sin nada del navegador.** Sin sesión ni cabeceras de más, `credentials: "omit"`, sin `Referer`, sin caché.
  * - **Cerrado ante la duda.** Ninguna función lanza. Un corte, un tope o una respuesta que no se entiende es
  *   `incierto`: quien llama no vuelve a pedir ni cambia de camino sin antes mirar la red.
+ * - **Los noes seguros.** `503 ocupado` (el servicio está con otro sorteo), `503 tarde` (sus llamadas a la red tardaron
+ *   demasiado) y el `500 interno` con `detalle: "sin-mandar"` aseguran que no mandó ni va a mandar este sorteo: se sigue por
+ *   el camino de siempre en el acto. Un servicio que no los conoce nunca los contesta, y lo suyo cae en las reglas de siempre.
  */
 
 /** Qué hacer con una respuesta del servicio. */
@@ -35,9 +38,10 @@ export type RespuestaDelSorteo =
   /**
    * El servicio aseguró que no lo va a mandar: sigue el camino de siempre. `marca`: este sorteo ya no es suyo.
    * `disyuntor`: el problema es del servicio y no del sorteo, así que por un rato no se le pregunta más.
-   * `olvidar`: lo que se sabía del portero ya no vale.
+   * `olvidar`: lo que se sabía del portero ya no vale. `disyuntorCorto`: un tropiezo interno del servicio que ya devolvió lo
+   * reservado: un minuto.
    */
-  | { accion: "hoy"; marca: boolean; disyuntor: boolean; olvidar: boolean }
+  | { accion: "hoy"; marca: boolean; disyuntor: boolean; olvidar: boolean; disyuntorCorto?: true }
   /** Un no que se muestra tal cual, sin pasar por el camino de siempre. */
   | { accion: "error"; error: ErrorPortero }
   /** No se sabe si lo mandó. */
@@ -47,7 +51,13 @@ export type RespuestaDelSorteo =
 export const ESPERA_RONDA_NO_LISTA_MS = 5_000;
 
 const HASH = /^[0-9a-f]{64}$/i;
-const hoy = (m: { marca?: boolean; disyuntor?: boolean; olvidar?: boolean } = {}): RespuestaDelSorteo => ({ accion: "hoy", marca: !!m.marca, disyuntor: !!m.disyuntor, olvidar: !!m.olvidar });
+const hoy = (m: { marca?: boolean; disyuntor?: boolean; olvidar?: boolean; disyuntorCorto?: boolean } = {}): RespuestaDelSorteo => ({
+  accion: "hoy",
+  marca: !!m.marca,
+  disyuntor: !!m.disyuntor,
+  olvidar: !!m.olvidar,
+  ...(m.disyuntorCorto ? { disyuntorCorto: true as const } : {}),
+});
 /** Un no que habla del servicio y no del sorteo: se sigue por el camino de siempre y por un rato no se le pregunta. */
 const delServicio = (olvidar = false): RespuestaDelSorteo => hoy({ disyuntor: true, olvidar });
 
@@ -89,8 +99,14 @@ export function leerRespuestaDelSorteo(estado: number, cuerpo: unknown): Respues
   if (estado === 403) return motivo === "no-es-nuestro" ? hoy({ marca: true }) : delServicio();
   if (estado === 503) {
     if (motivo === "apagado" || motivo === "fondo") return delServicio(true);
+    // El servicio está con otro sorteo: no mandó ni va a mandar este. Anda bien, así que no se lo deja de lado.
+    if (motivo === "ocupado") return hoy();
+    // Su red anduvo tan lenta que no empezó a mandar: tampoco lo va a mandar, y el siguiente sorteo pagaría la misma espera.
+    if (motivo === "tarde") return delServicio();
     return { accion: "incierto" };
   }
+  // Falló al envolver, antes de mandar, y ya devolvió lo reservado. Cualquier otro 500 puede haber mandado.
+  if (estado === 500 && motivo === "interno" && detalle === "sin-mandar") return hoy({ disyuntorCorto: true });
   if (estado === 404 || estado === 405) return delServicio();
   if (estado >= 400 && estado < 500) return delServicio();
   return { accion: "incierto" };

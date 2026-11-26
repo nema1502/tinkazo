@@ -56,7 +56,7 @@ describe("el pedido", () => {
   });
 });
 
-const hoy = (m: Partial<{ marca: boolean; disyuntor: boolean; olvidar: boolean }> = {}): RespuestaDelSorteo => ({ accion: "hoy", marca: false, disyuntor: false, olvidar: false, ...m });
+const hoy = (m: Partial<{ marca: boolean; disyuntor: boolean; olvidar: boolean; disyuntorCorto: true }> = {}): RespuestaDelSorteo => ({ accion: "hoy", marca: false, disyuntor: false, olvidar: false, ...m });
 
 describe("la tabla de respuestas", () => {
   const filas: [string, number, unknown, RespuestaDelSorteo][] = [
@@ -79,6 +79,14 @@ describe("la tabla de respuestas", () => {
     ["502 desconocido", 502, { motivo: "red" }, { accion: "incierto" }],
     ["502 sin cuerpo", 502, null, { accion: "incierto" }],
     ["500 interno", 500, { motivo: "interno" }, { accion: "incierto" }],
+    ["500 interno sin mandar", 500, { motivo: "interno", detalle: "sin-mandar" }, hoy({ disyuntorCorto: true })],
+    ["500 interno con otro detalle", 500, { motivo: "interno", detalle: "otro" }, { accion: "incierto" }],
+    ["500 de otro motivo con el detalle de sin mandar", 500, { motivo: "otro", detalle: "sin-mandar" }, { accion: "incierto" }],
+    ["200 DUPLICATE con estado", 200, { hash: HASH, status: "DUPLICATE", estado: "enviado" }, { accion: "mandado", hash: HASH, pendiente: false }],
+    ["200 PENDING con estado", 200, { hash: HASH, status: "PENDING", estado: "enviado" }, { accion: "mandado", hash: HASH, pendiente: true }],
+    ["503 ocupado", 503, { motivo: "ocupado" }, hoy()],
+    ["503 tarde", 503, { motivo: "tarde" }, hoy({ disyuntor: true })],
+    ["503 de otro motivo", 503, { motivo: "lleno" }, { accion: "incierto" }],
     ["520 de Cloudflare", 520, null, { accion: "incierto" }],
     ["503 sin motivo", 503, null, { accion: "incierto" }],
     ["400 fee-alta", 400, { motivo: "fee-alta", detalle: "simulacion" }, hoy()],
