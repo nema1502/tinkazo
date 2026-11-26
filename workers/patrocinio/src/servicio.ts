@@ -624,13 +624,16 @@ export class Portero {
   }
 
   /**
-   * Si el `draw` de este sello ya va en camino: el mismo hash, sin mandar otro. Uno que ya cerró (bien o mal) no decide
-   * nada: si entró, `get_raffle` o la simulación lo dicen (`{ya:true}`); así un sorteo de otro sello que se quedó con lo
-   * guardado para este, antes de prender la regla, no lo frena.
+   * Si el `draw` de este sello ya va en camino: el mismo hash, sin mandar otro, y en `estado` lo que dice su fila.
+   * `reservado`: se reservó y no se sabe si la red lo tiene (el envío se cortó, o el objeto se reinició entre reservar y
+   * mandar). `enviado`: la red tomó el envío. No dice que siga vivo: uno que no entró en las diez preguntas sigue `enviado`
+   * hasta que la alarma lo cierra o lo devuelve, unos 14 minutos. Puede ser el `draw` de un sorteo gemelo, con la misma lista
+   * y la misma ronda. Uno que ya cerró (bien o mal) no decide nada: si entró, `get_raffle` o la simulación lo dicen
+   * (`{ya:true}`); así un sorteo de otro sello que se quedó con lo guardado para este, antes de prender la regla, no lo frena.
    */
   private yaPedido(selloHash: string): Respuesta | null {
     const d = this.cupos.sorteoDelSello(selloHash);
-    return d && (d.estado === "reservado" || d.estado === "enviado") ? r(200, { hash: d.hash, status: "DUPLICATE" }) : null;
+    return d && (d.estado === "reservado" || d.estado === "enviado") ? r(200, { hash: d.hash, status: "DUPLICATE", estado: d.estado }) : null;
   }
 
   /**

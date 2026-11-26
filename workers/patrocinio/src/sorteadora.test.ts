@@ -405,9 +405,20 @@ describe("POST /v1/sorteo: ya sorteado y repetido", () => {
     const a = await p.sortear("1", FIRMA);
     await sor!.libre();
     const b = await p.sortear("1", FIRMA);
-    expect(b).toEqual({ estado: 200, cuerpo: { hash: (a.cuerpo as { hash: string }).hash, status: "DUPLICATE" } });
+    expect(b).toEqual({ estado: 200, cuerpo: { hash: (a.cuerpo as { hash: string }).hash, status: "DUPLICATE", estado: "enviado" } });
     expect(draws()).toHaveLength(1);
     expect(usados(org.publicKey()).sorteos).toBe(1);
+  });
+
+  it("el repetido de un envío que se cortó dice reservado: no se sabe si la red lo tiene", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    red.envios = ["corte"];
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 502, cuerpo: { motivo: "red" } });
+    const b = await p.sortear("1", FIRMA);
+    expect(b).toMatchObject({ estado: 200, cuerpo: { status: "DUPLICATE", estado: "reservado" } });
+    expect(b.cuerpo.hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(draws()).toHaveLength(1);
   });
 
   it("dos pedidos del mismo sorteo a la vez comparten el trabajo y reciben la misma respuesta", async () => {
@@ -660,7 +671,7 @@ describe("POST /v1/sorteo: un sorteo a la vez", () => {
     red.cerrarLedger();
     await sor!.libre();
     // Ya cerrado el trabajo, el pedido mira el libro: es un draw de ese sello que dejó otro pedido.
-    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { hash: (a.cuerpo as { hash: string }).hash, status: "DUPLICATE" } });
+    expect(await p.sortear("1", FIRMA)).toEqual({ estado: 200, cuerpo: { hash: (a.cuerpo as { hash: string }).hash, status: "DUPLICATE", estado: "enviado" } });
     expect(draws()).toHaveLength(1);
   });
 
@@ -707,7 +718,7 @@ describe("POST /v1/sorteo: un sorteo a la vez", () => {
     expect(await p.sortear("2", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
     await sor!.libre();
     // Lo reservado del primero sigue ahí para la alarma: un pedido igual recibe ese repetido.
-    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "DUPLICATE" } });
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "DUPLICATE", estado: "reservado" } });
     expect(usados(a.publicKey()).sorteos).toBe(1);
   });
 
@@ -743,7 +754,7 @@ describe("POST /v1/sorteo: un sorteo a la vez", () => {
     expect(red.rechazos).toEqual(["txInsufficientFee"]);
     expect(usados(b.publicKey()).sorteos).toBe(0);
     // Y el mismo sorteo, pedido al objeto nuevo, recibe el repetido del libro.
-    expect(await o.p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { hash: (primero.cuerpo as { hash: string }).hash, status: "DUPLICATE" } });
+    expect(await o.p.sortear("1", FIRMA)).toEqual({ estado: 200, cuerpo: { hash: (primero.cuerpo as { hash: string }).hash, status: "DUPLICATE", estado: "enviado" } });
     abrir();
   });
 
@@ -759,7 +770,7 @@ describe("POST /v1/sorteo: un sorteo a la vez", () => {
     expect(draws()).toHaveLength(1);
     expect(await p.sortear("2", FIRMA)).toEqual({ estado: 503, cuerpo: { motivo: "ocupado" } });
     // El mismo sorteo no recibe ocupado: el libro tiene su fila reservada y ahí no hay nada que mandar otra vez.
-    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "DUPLICATE" } });
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "DUPLICATE", estado: "reservado" } });
     expect(draws()).toHaveLength(1);
     abrir();
     await sor!.libre();
@@ -890,7 +901,7 @@ describe("el draw que manda la persona, con ALTAS=1 (con o sin el sorteo del ser
     expect(await p.procesar(t.xdr)).toMatchObject({ estado: 200, cuerpo: { hash: t.hash } });
     expect(cupos.exportar(true).reserva?.find((f) => f.hash === sello)?.usada).toBe(t.hash);
     // Y el servidor ya no lo vuelve a mandar.
-    expect(await p.sortear("1", FIRMA)).toEqual({ estado: 200, cuerpo: { hash: t.hash, status: "DUPLICATE" } });
+    expect(await p.sortear("1", FIRMA)).toEqual({ estado: 200, cuerpo: { hash: t.hash, status: "DUPLICATE", estado: "enviado" } });
   });
 
   it("el draw de un sello del portero ata el sello a ese sorteo", async () => {
