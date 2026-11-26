@@ -747,6 +747,29 @@ describe("POST /v1/sorteo: un sorteo a la vez", () => {
     abrir();
   });
 
+  it("después de un corte al mandar, la sorteadora espera ese envío: el siguiente sorteo recibe ocupado y no manda con la misma secuencia", async () => {
+    const a = admitida();
+    const b = admitida();
+    await selloDelPortero(a, 1n);
+    await selloDelPortero(b, 2n, new Uint8Array(32).fill(2));
+    red.envios = ["corte"];
+    const abrir = trabarLaEspera();
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 502, cuerpo: { motivo: "red" } });
+    expect(sor!.ocupada()).toEqual({ sorteo: "1", desde: ahora });
+    expect(draws()).toHaveLength(1);
+    expect(await p.sortear("2", FIRMA)).toEqual({ estado: 503, cuerpo: { motivo: "ocupado" } });
+    // El mismo sorteo no recibe ocupado: el libro tiene su fila reservada y ahí no hay nada que mandar otra vez.
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "DUPLICATE" } });
+    expect(draws()).toHaveLength(1);
+    abrir();
+    await sor!.libre();
+    expect(sor!.ocupada()).toBeNull();
+    // Pasado el plazo sin que el envío aparezca, la secuencia se relee de la red.
+    const antes = red.lecturas;
+    expect(await p.sortear("2", FIRMA)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(red.lecturas - antes).toBe(1);
+  });
+
   it("dos sorteos gemelos a la vez (misma lista y ronda): el servicio manda uno solo", async () => {
     const org = admitida();
     await selloDelPortero(org, 1n);
