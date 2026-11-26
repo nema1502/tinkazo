@@ -22,32 +22,48 @@ import type { AnchorStep } from "./anchor";
  * Reglas de este archivo:
  *
  * - **El resultado sale de la red.** Los ganadores y el número al azar salen de leer el contrato (`readDraw`) o, si el
- *   contrato no se deja leer, del valor que devolvió en la red la transacción que el servicio dijo pendiente para ESTE
- *   sorteo y que ya está confirmada. Nunca de lo que diga el servicio. El enlace a la transacción solo se muestra para una
- *   transacción que el servicio dijo pendiente para este sorteo en esta pestaña y cuyo resultado coincide con el contrato:
- *   un número repetido puede ser el de otro sorteo con el mismo sello.
- * - **Nunca por los dos caminos a la vez.** Se pasa al camino de siempre (`camino-de-hoy`) solo cuando el servicio
- *   aseguró que no lo manda, cuando la red cerró su envío sin dejar el sorteo hecho, o cuando pasado un tope de reloj no
- *   hay una respuesta que se pueda comprobar y la red dice que el sorteo no está. Un pedido que no contestó en su tope se
- *   vuelve a pedir una vez más (el servicio no manda dos veces el mismo sello, y devuelve el mismo número): una cola larga
- *   no es una falla. Una cola más larga que la etapa y la duda no se puede esperar sin hacer esperar a la sala: se sigue por
- *   el camino de siempre y, si el envío del servicio entra después, uno de los dos falla con `AlreadyDrawn` (cuesta una
- *   comisión y no cambia el resultado). Lo mismo con un repetido de un envío que se cortó y quizás nunca llegó.
- *   Con la red sin poder leerse no se manda nada más: se sigue mirando hasta lo que da el camino de siempre
- *   (`TOPE_DE_LA_DUDA_SIN_RED_MS`) y recién entonces termina en `sin-confirmar`.
+ *   contrato no se deja leer o todavía se lee vacío, del valor que devolvió en la red la transacción que el servicio dijo
+ *   pendiente para ESTE sorteo en esta pestaña, ya confirmada. Nunca de lo que diga el servicio. Solo esa transacción
+ *   lleva su número, en el resultado y en un error, y en el resultado solo si lo que devolvió coincide con el contrato o si
+ *   el contrato no dio nada que comparar. Un número repetido puede ser el de otro sorteo con el mismo sello: no se muestra.
+ * - **Los noes seguros del servicio.** El servicio de esta versión atiende un sorteo a la vez. Si está con otro contesta
+ *   ocupado, y si sus propias llamadas a la red tardaron tanto que su respuesta no llegaría a tiempo contesta tarde. En los
+ *   dos casos no reservó, no mandó y no va a mandar este sorteo, y lo mismo con un error interno que declara sin mandar.
+ *   Con cualquiera de los tres se sigue en el acto por el camino de siempre, sin el respiro de la duda, y esa respuesta no
+ *   deja ninguna reserva que recordar. Ocupado no deja de lado al servicio porque anda bien, tarde lo deja de lado diez
+ *   minutos porque su red anda mal, y el error interno, un minuto.
+ * - **Un pedido que no contestó en su tope se vuelve a pedir una vez dentro de la etapa.** El servicio junta en un solo
+ *   trabajo los pedidos iguales de un sorteo y no empieza a mandar uno que ya lleva 9 segundos, así que está hecho para que
+ *   su respuesta (el envío, ocupado o tarde) salga dentro de los 20 segundos de la etapa, y el segundo pedido es el que la
+ *   recibe. Con el servicio de antes, que hace cola, el segundo pedido espera su turno detrás del primero y, si el primero
+ *   llegó a reservar, contesta el repetido.
+ * - **Cuándo puede salir por los dos caminos.** Se pasa al camino de siempre (`camino-de-hoy`) solo cuando el servicio
+ *   aseguró que no lo manda, cuando la red cerró su envío sin dejar el sorteo hecho, o cuando pasado un tope de reloj no hay
+ *   una respuesta que se pueda comprobar y la red dice que el sorteo no está. Aun así el sorteo puede salir además por el
+ *   servicio en estos casos, todos raros: un envío que la red tarda más que el minuto de la sala en cerrar (la red llena),
+ *   un repetido de un envío cortado que entra después de sus 15 segundos, un envío del servicio que se cuelga en sus dos
+ *   RPC más allá de la etapa y la duda, un sello de más de 35 días cuyo envío se cortó, y el servicio de antes con varios
+ *   sorteos a la vez. El contrato acepta uno solo: el otro falla con `AlreadyDrawn`, cuesta una comisión y una cofirma y no
+ *   cambia el resultado. Con la red sin poder leerse no se manda nada más.
  * - **Ninguna espera sin tope.** Todo se mide por el reloj de pared, no por vueltas: una pestaña en segundo plano estira
- *   los temporizadores, y al volver se revisa la hora y se abandona lo que ya pasó de su tope. La etapa de pedir dura como
- *   mucho 20 segundos y la duda, con la red leyéndose, unos 8 más: eso es lo que la sala puede esperar de más antes de que
- *   arranque el camino de siempre, al que `grabar-sorteo.ts` le descuenta lo gastado con un mínimo. Un envío que el servicio
- *   mandó y la red tarda en cerrar se espera como mucho `TOPE_DE_LA_SALA_MS` desde la entrada (lo que vive hoy la
- *   transacción de una cuenta de Google). Pasado eso, con la red contestando y el contrato sin el sorteo, se sigue por el
- *   camino de siempre, que arma otra transacción con su comisión de ese momento y reintenta como hoy: la sala no pierde la
- *   recuperación automática de la red ocupada. Si el envío del servicio entra después, uno de los dos falla con
- *   `AlreadyDrawn`. Con la red sin poder leerse no se manda nada: se sigue mirando hasta `TOPE_DE_LA_DUDA_SIN_RED_MS` desde
- *   la entrada y recién ahí termina en `sin-confirmar`, sin marca.
+ *   los temporizadores, y al volver se revisa la hora y se abandona lo que ya pasó de su tope. Un pedido sin tiempo en la
+ *   etapa no se manda. La etapa de pedir dura como mucho 20 segundos y la duda, con la red leyéndose, unos 8 más: eso es lo
+ *   que la sala puede esperar de más antes de que arranque el camino de siempre, al que `grabar-sorteo.ts` le descuenta lo
+ *   gastado con un mínimo. Un envío que el servicio dio por pendiente se espera como mucho `TOPE_DE_LA_SALA_MS` desde la
+ *   entrada (lo que vive hoy la transacción de una cuenta de Google), y un repetido, `VISTO_SIN_RED_MS` desde que se vio.
+ *   Pasado eso, con la red contestando y el contrato sin el sorteo, se sigue por el camino de siempre, que arma otra
+ *   transacción con su comisión de ese momento y reintenta como hoy. Todo final que no sigue por el camino de siempre,
+ *   también después de que la transacción entró, termina a más tardar a los `TOPE_DE_LA_DUDA_SIN_RED_MS` desde la entrada,
+ *   lo mismo que el camino de siempre, y hasta ahí solo se mira el contrato. La primera lectura de la duda y la del envío
+ *   que entró se hacen siempre: una pestaña que vuelve de segundo plano pasada esa hora mira el contrato una vez antes de
+ *   terminar.
  * - **Reserva del servicio.** Si el pedido salió y no se sabe cómo terminó, el servicio puede tener reservado ese sorteo en
- *   el cupo de la cuenta unos catorce minutos (`reservaDelServicioViva`): quien sigue por el camino de siempre lo usa para no
- *   dar por definitivo un tope de sorteos que es de esa reserva.
+ *   el cupo de la cuenta unos catorce minutos (`reservaDelServicioViva`): quien sigue por el camino de siempre lo usa para
+ *   no dar por definitivo un tope de sorteos que es de esa reserva. Un pedido que no se mandó por falta de tiempo no deja
+ *   nada que recordar. Uno que falla sin conexión cuenta como salido, porque desde acá no se distingue de un corte.
+ * - **Seguro con el servicio de antes.** Nada de lo que hace seguro a este archivo depende de las respuestas nuevas
+ *   (ocupado, tarde, el error interno sin mandar): con un servicio que no las conoce, cada respuesta cae en una regla de
+ *   siempre. Solo lo hacen más barato.
  * - **Sin textos nuevos.** Los pasos son solo `sending` y `confirmed`: con la cuenta de Google ninguno pide aprobar nada.
  *
  * La lógica es pura: lo que toca la red y la pantalla entra por `Fuentes`, y se prueba con un reloj manual.
@@ -634,8 +650,9 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
         f.olvidarElEstado();
         siguiente = await confirmar(r.hash, r.pendiente);
       } else if (porTope && hastaServicio - ahora() >= TOPE_MINIMO_DEL_PEDIDO_MS) {
-        // El servicio no contestó en su tope: con varios sorteos sobre la misma ronda su cola puede tardar más, y eso no es
-        // una falla. Se vuelve a pedir: el servicio no manda dos veces el mismo sello y devuelve el mismo número.
+        // El servicio no contestó en su tope. Se vuelve a pedir una vez: los pedidos iguales comparten un solo trabajo allá, así
+        // que no cuesta nada, y la respuesta (el envío, ocupado o tarde) sale antes del fin de la etapa. Con el servicio de
+        // antes, el repetido: no manda dos veces el mismo sello y devuelve el mismo número.
         vez++;
       } else {
         // Un corte, o un tope sin lugar para otro pedido: se mira la red hasta saber, sin mandar nada por el otro camino.
