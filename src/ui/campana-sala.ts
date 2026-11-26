@@ -3071,9 +3071,10 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       }
       return li;
     });
-    // Faltan códigos y se pueden volver a pedir: el enlace, al final. Sin quien los pida (todavía no se piden) no aparece.
+    // Los códigos se pidieron todas las veces y no se pudieron leer: el enlace para pedirlos de nuevo, al final. Mientras se
+    // están pidiendo, o sin quien los pida, no aparece: el panel no ofrece algo que no puede hacer.
     const verCodigos = accionesDelPuente().verCodigos;
-    if (enMano && verCodigos && paso.filas.some((g) => g.codigo === undefined)) {
+    if (enMano && paso.sinCodigos === true && verCodigos && paso.filas.some((g) => g.codigo === undefined)) {
       const li = document.createElement("li");
       li.className = "cpo-fila";
       li.append(boton(tx("cpoVerCodigos"), "enlace", () => verCodigos()));

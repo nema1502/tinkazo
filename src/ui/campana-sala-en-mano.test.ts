@@ -69,7 +69,13 @@ const fila = (cuenta: string, nombre: string, cambios: Partial<FilaDeGanadora> =
   ...cambios,
 });
 
-const enMano = (filas: FilaDeGanadora[]): PasoDelPuente => ({ paso: "resultado", otraBilletera: false, enMano: true, filas });
+const enMano = (filas: FilaDeGanadora[], sinCodigos = false): PasoDelPuente => ({
+  paso: "resultado",
+  otraBilletera: false,
+  enMano: true,
+  filas,
+  ...(sinCodigos ? { sinCodigos: true as const } : {}),
+});
 
 const filasDelResultado = (): string[] => [...document.querySelectorAll("#cpo-ganadoras > li")].map((li) => (li.textContent ?? "").trim());
 
@@ -139,14 +145,17 @@ describe("el resultado en mano en el panel", () => {
     expect(texto(p, "#cpo-linea")).toBe("Entregá cada premio en mano.");
   });
 
-  it("Ver los códigos solo aparece si hay quien los pida y falta alguno", async () => {
+  it("Ver los códigos solo aparece si no se pudieron leer, hay quien los pida y falta alguno", async () => {
     const m = mundo();
     const p = await enSorteada(m);
-    ponerPaso(enMano([fila(L1, "Ana"), fila(L2, "Beto")]));
+    ponerPaso(enMano([fila(L1, "Ana"), fila(L2, "Beto")], true));
     expect(botones(p).map((b) => b.textContent)).not.toContain("Ver los códigos");
     const pedir = vi.fn();
     registrarAcciones({ verCodigos: pedir });
-    ponerPaso(enMano([fila(L1, "Ana", { codigo: "0042" }), fila(L2, "Beto")]));
+    // Mientras se están pidiendo no se ofrece.
+    ponerPaso(enMano([fila(L1, "Ana"), fila(L2, "Beto")]));
+    expect(botones(p).map((b) => b.textContent)).not.toContain("Ver los códigos");
+    ponerPaso(enMano([fila(L1, "Ana", { codigo: "0042" }), fila(L2, "Beto")], true));
     boton(p, "Ver los códigos").click();
     expect(pedir).toHaveBeenCalledTimes(1);
     ponerPaso(enMano([fila(L1, "Ana", { codigo: "0042" }), fila(L2, "Beto", { codigo: "7310" })]));
@@ -164,7 +173,7 @@ describe("el resultado en mano en el panel", () => {
     expect(principales(p).map((b) => b.textContent)).toEqual(["Let Winner 2 know"]);
   });
 
-  it("no se registró ninguna acción de pedir códigos: todavía no se piden", () => {
+  it("el panel no registra por su cuenta la acción de pedir códigos: la registra quien los pide", () => {
     expect(accionesDelPuente().verCodigos).toBeUndefined();
   });
 });
