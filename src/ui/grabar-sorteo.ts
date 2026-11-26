@@ -154,8 +154,24 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
     ...(yaGastadoMs !== undefined ? { yaGastadoMs } : {}),
     dormir,
   });
-  if (!fin.ok) return { estado: "fallo", error: fin.error };
+  if (!fin.ok) {
+    // El tope de sorteos que se esperaba por la reserva del servicio y nunca se confirmó como real: si el envío del servicio no
+    // llegó, la fecha del mes que viene sería falsa (el tope vuelve a aceptarse cuando el servicio cierra su reserva, unos
+    // catorce minutos). Se dice lo que es verdad con el texto de siempre: no se pudo cubrir el sorteo ahora y queda en Mis sorteos.
+    if (import.meta.env.VITE_SORTEO_SERVIDOR === "1" && esperandoAlServicio !== null && fin.error === esperandoAlServicio) return { estado: "fallo", error: await sinCubrirPorAhora(fin.error) };
+    return { estado: "fallo", error: fin.error };
+  }
   return comparar(p.esperados, fin.valor, fin.yaEstaba);
+}
+
+/** El no del portero que dice lo que es verdad mientras la reserva del servicio siga viva. Si el módulo no baja, el de antes. */
+async function sinCubrirPorAhora(e: unknown): Promise<unknown> {
+  try {
+    const { ErrorPortero } = await import("../stellar/patrocinador");
+    return new ErrorPortero("fondo", 503, { detalle: "reserva-del-servicio" });
+  } catch {
+    return e;
+  }
 }
 
 /** Compara los ganadores que dice el contrato con los que la sala ya vio. */
