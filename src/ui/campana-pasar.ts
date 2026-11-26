@@ -215,8 +215,8 @@ export function crearPaso(d: DepsDelPaso): PasoDeLaCampana {
     if (d.modoTurnos()) d.ponerModoTurnos(false);
     d.ponerEtiquetas(armada.etiquetas, "personas");
     d.setList(armada.lineas.join("\n"));
-    // Premio en mano: cuando el modelo tenga el premio escrito, acá va ponerPremio con ese texto en lugar del monto.
-    d.ponerPremio(d.premioEnEspanol(campana.premios[0] ?? 0n));
+    // Con premio en mano el cuadro lleva lo que se escribió, siempre en español como el monto, porque es lo que se sella.
+    d.ponerPremio(campana.premioEnMano !== undefined ? campana.premioEnMano.es : d.premioEnEspanol(campana.premios[0] ?? 0n));
     d.ponerGanadores(premios);
     d.fijarPorCampana(true);
     const huella = d.huella(armada.lineas);

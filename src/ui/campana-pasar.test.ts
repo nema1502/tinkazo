@@ -623,3 +623,35 @@ describe("reponer los nombres de una campaña de personas ya pasada", () => {
     expect(puestas).toHaveLength(0);
   });
 });
+
+describe("el premio de una campaña de premio en mano al pasar la lista", () => {
+  const enMano = { es: "Auriculares", en: "Headphones" };
+  const contextoEnMano = (m: Mundo, premios: bigint[]): ContextoDelPaso => ({
+    campana: { ...campana(premios), premioEnMano: enMano } as Campana,
+    mostradas: new Set<number>(),
+    quitasEnCurso: () => m.quitas,
+  });
+
+  it("pone el premio escrito en español en el cuadro, no un monto, y los ganadores que dice la campaña", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(1), filaDePersona(2), filaDePersona(3), filaDePersona(4)]];
+    expect(await crearPaso(m.d).correr(SALA, contextoEnMano(m, [0n, 0n]))).toBe("pasada");
+    expect(m.cuadro.premio).toBe("Auriculares");
+    expect(m.cuadro.ganadores).toBe(2);
+    expect(ultimo(m)).toEqual({ paso: "en-el-sorteo", n: 4 });
+  });
+
+  it("con premios en cero y sin premio escrito sigue diciendo el monto de siempre", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(1), filaDePersona(2)]];
+    await crearPaso(m.d).correr(SALA, contexto(m, [400_000_000n]));
+    expect(m.cuadro.premio).toBe(premioParaElCuadro(400_000_000n));
+  });
+
+  it("una campaña de cuentas pone el monto aunque la lista lleve cuentas", async () => {
+    const m = mundo();
+    m.filas = [[fila(1), fila(2)]];
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(m.cuadro.premio).toBe("40 dólares digitales");
+  });
+});
