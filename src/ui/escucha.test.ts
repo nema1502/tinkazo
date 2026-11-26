@@ -6,6 +6,8 @@ import {
   hacerSonar,
   montarEscucha,
   tramoDeFase,
+  anotarVoto,
+  olvidarRespaldoDeVotos,
   votosDe,
   votar,
   votosDelJuego,
@@ -36,8 +38,8 @@ const opciones = (prendida: boolean, reproducir: (fase: string, juego: string) =
   prendida,
   votos,
   reproducir,
-  votarMas: (juego: string) => ({ ...votos, [juego]: votosDelJuego(votos, juego) + 1 }),
-  votarMenos: (juego: string) => ({ ...votos, [juego]: Math.max(0, votosDelJuego(votos, juego) - 1) }),
+  votarMas: (juego: string) => ({ votos: { ...votos, [juego]: votosDelJuego(votos, juego) + 1 }, guardado: true }),
+  votarMenos: (juego: string) => ({ votos: { ...votos, [juego]: Math.max(0, votosDelJuego(votos, juego) - 1) }, guardado: true }),
 });
 
 describe("la bandera de la escucha", () => {
@@ -140,8 +142,8 @@ describe("la página armada", () => {
       prendida: true,
       votos,
       reproducir: () => undefined,
-      votarMas: (juego) => (votos = { ...votos, [juego]: votosDelJuego(votos, juego) + 1 }),
-      votarMenos: (juego) => (votos = { ...votos, [juego]: Math.max(0, votosDelJuego(votos, juego) - 1) }),
+      votarMas: (juego) => ({ votos: (votos = { ...votos, [juego]: votosDelJuego(votos, juego) + 1 }), guardado: true }),
+      votarMenos: (juego) => ({ votos: (votos = { ...votos, [juego]: Math.max(0, votosDelJuego(votos, juego) - 1) }), guardado: true }),
     });
     const tarjeta = doc.querySelector('.tarjeta[data-juego="race"]')!;
     tarjeta.querySelector(".voto-mas")?.dispatchEvent(new Event("click", { bubbles: true }));
@@ -151,9 +153,34 @@ describe("la página armada", () => {
     expect(tarjeta.querySelector(".votos")?.textContent).toBe(`1 ${es.votos}`);
     expect(votos).toEqual({ race: 1 });
   });
+
+  it("si el voto no se pudo guardar, la página lo dice, y deja de decirlo cuando se guarda", () => {
+    const doc = pagina();
+    let guardado = false;
+    let votos: Votos = {};
+    armarEscucha(doc, {
+      lang: "es",
+      prendida: true,
+      votos,
+      reproducir: () => undefined,
+      votarMas: (juego) => ({ votos: (votos = { ...votos, [juego]: votosDelJuego(votos, juego) + 1 }), guardado }),
+      votarMenos: (juego) => ({ votos: (votos = { ...votos, [juego]: Math.max(0, votosDelJuego(votos, juego) - 1) }), guardado }),
+    });
+    const aviso = (): Element | null => doc.querySelector(".aviso-votos");
+    expect(aviso()?.textContent ?? "").toBe("");
+    const tarjeta = doc.querySelector('.tarjeta[data-juego="race"]')!;
+    tarjeta.querySelector(".voto-mas")?.dispatchEvent(new Event("click", { bubbles: true }));
+    expect(tarjeta.querySelector(".votos")?.textContent).toBe(`1 ${es.votos}`);
+    expect(aviso()?.textContent).toBe(es.votosSinGuardar);
+    guardado = true;
+    tarjeta.querySelector(".voto-mas")?.dispatchEvent(new Event("click", { bubbles: true }));
+    expect(aviso()?.textContent ?? "").toBe("");
+  });
 });
 
 describe("la ruleta de votos, anotada a mano en el navegador", () => {
+  afterEach(olvidarRespaldoDeVotos);
+
   /** Un localStorage de mentira: suficiente para los votos de la escucha, sin el index signature de Storage. */
   const almacenFalso = (): Storage => {
     const datos: Record<string, string> = {};
@@ -198,6 +225,54 @@ describe("la ruleta de votos, anotada a mano en el navegador", () => {
     expect(votosDe(a)).toEqual({});
     expect(votosDe(null)).toEqual({});
     expect(votar("race", 1, null)).toEqual({ race: 1 });
+  });
+
+  it("un voto que no se pudo guardar se cuenta igual en la sesión: el siguiente suma sobre él", () => {
+    olvidarRespaldoDeVotos();
+    const a = almacenFalso();
+    a.setItem = (): void => {
+      throw new Error("sin lugar");
+    };
+    const uno = anotarVoto("race", 1, a);
+    expect(uno).toEqual({ votos: { race: 1 }, guardado: false });
+    const dos = anotarVoto("race", 1, a);
+    expect(dos).toEqual({ votos: { race: 2 }, guardado: false });
+    expect(anotarVoto("race", -1, a).votos).toEqual({ race: 1 });
+  });
+
+  it("sin almacén tampoco se pierde la cuenta, y se avisa que no quedó guardada", () => {
+    olvidarRespaldoDeVotos();
+    expect(anotarVoto("wheel", 1, null)).toEqual({ votos: { wheel: 1 }, guardado: false });
+    expect(anotarVoto("wheel", 1, null)).toEqual({ votos: { wheel: 2 }, guardado: false });
+    olvidarRespaldoDeVotos();
+  });
+
+  it("cuando el almacén vuelve a andar, el voto de la sesión se guarda y el aviso se va", () => {
+    olvidarRespaldoDeVotos();
+    const a = almacenFalso();
+    const bueno = a.setItem.bind(a);
+    a.setItem = (): void => {
+      throw new Error("sin lugar");
+    };
+    anotarVoto("race", 1, a);
+    a.setItem = bueno;
+    const despues = anotarVoto("race", 1, a);
+    expect(despues).toEqual({ votos: { race: 2 }, guardado: true });
+    expect(votosDe(a)).toEqual({ race: 2 });
+  });
+
+  it("un voto guardado con éxito da guardado verdadero", () => {
+    olvidarRespaldoDeVotos();
+    expect(anotarVoto("race", 1, almacenFalso())).toEqual({ votos: { race: 1 }, guardado: true });
+  });
+
+  it("lo guardado que no es una cuenta de votos se ignora: arreglos, infinitos, decimales y negativos", () => {
+    const a = almacenFalso();
+    a.setItem("tinkazo.escucha.votos", "[3,4]");
+    expect(votosDe(a)).toEqual({});
+    a.setItem("tinkazo.escucha.votos", '{"race":1e999,"wheel":2.5,"sapo":-1,"trompo":"3","pinata":4,"oruro":null}');
+    expect(votosDe(a)).toEqual({ pinata: 4 });
+    expect(anotarVoto("race", 1, a).votos).toEqual({ pinata: 4, race: 1 });
   });
 
   it("votosDelJuego devuelve cero para el juego sin votos", () => {

@@ -64,34 +64,73 @@ export const almacenDeVotos = (): Storage | null => {
   }
 };
 
-/** Los votos de este navegador: {juego: cuenta}. */
+/** Una cuenta de votos válida: un entero de cero para arriba (ni infinitos, ni decimales, ni texto). */
+const esCuenta = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= 0;
+
+/** Los votos de este navegador: {juego: cuenta}. Lo guardado que no tiene forma de cuenta de votos se ignora. */
 export function votosDe(almacen: Storage | null = almacenDeVotos()): Votos {
   if (!almacen) return {};
   try {
     const crudo = almacen.getItem(CLAVE_VOTOS);
     if (!crudo) return {};
     const datos = JSON.parse(crudo) as unknown;
-    if (!datos || typeof datos !== "object") return {};
+    if (!datos || typeof datos !== "object" || Array.isArray(datos)) return {};
     const votos: Votos = {};
-    for (const [juego, n] of Object.entries(datos)) if (typeof n === "number" && n >= 0) votos[juego] = n;
+    for (const [juego, n] of Object.entries(datos)) if (esCuenta(n)) votos[juego] = n;
     return votos;
   } catch {
     return {};
   }
 }
 
-/** Un voto más (o menos) para un juego, anotado en el almacén. Devuelve los votos de después. */
-export function votar(juego: string, delta: 1 | -1, almacen: Storage | null = almacenDeVotos()): Votos {
-  const votos = votosDe(almacen);
+/** Un voto anotado: la cuenta de después y si quedó guardada en el almacén del navegador. */
+export interface ResultadoDeVoto {
+  votos: Votos;
+  guardado: boolean;
+}
+
+/**
+ * Los votos de esta sesión que el almacén no aceptó (cuota llena, modo privado, sin almacén). Sin esto, el
+ * siguiente voto leía otra vez un almacén vacío y la cuenta se quedaba en 1. Se vacía cuando un voto se guarda.
+ */
+const respaldoPorAlmacen = new WeakMap<Storage, Votos>();
+let respaldoSinAlmacen: Votos | null = null;
+
+const respaldoDe = (almacen: Storage | null): Votos | null => (almacen ? (respaldoPorAlmacen.get(almacen) ?? null) : respaldoSinAlmacen);
+
+function guardarRespaldo(almacen: Storage | null, votos: Votos | null): void {
+  if (!almacen) respaldoSinAlmacen = votos;
+  else if (votos) respaldoPorAlmacen.set(almacen, votos);
+  else respaldoPorAlmacen.delete(almacen);
+}
+
+/** Para las pruebas: olvida los votos de la sesión que no se pudieron guardar. */
+export function olvidarRespaldoDeVotos(): void {
+  respaldoSinAlmacen = null;
+}
+
+/** Un voto más (o menos) para un juego. Si el almacén no lo acepta, la cuenta sigue en memoria y `guardado` es falso. */
+export function anotarVoto(juego: string, delta: 1 | -1, almacen: Storage | null = almacenDeVotos()): ResultadoDeVoto {
+  const votos = { ...(respaldoDe(almacen) ?? votosDe(almacen)) };
   const n = Math.max(0, (votos[juego] ?? 0) + delta);
   if (n === 0) delete votos[juego];
   else votos[juego] = n;
+  let guardado = false;
   try {
-    almacen?.setItem(CLAVE_VOTOS, JSON.stringify(votos));
+    if (almacen) {
+      almacen.setItem(CLAVE_VOTOS, JSON.stringify(votos));
+      guardado = true;
+    }
   } catch {
-    /* que no se anote no rompe la escucha */
+    /* que no se guarde no rompe la escucha: la cuenta sigue en memoria y la página lo avisa */
   }
-  return votos;
+  guardarRespaldo(almacen, guardado ? null : votos);
+  return { votos, guardado };
+}
+
+/** Un voto más (o menos) para un juego, anotado en el almacén. Devuelve los votos de después. */
+export function votar(juego: string, delta: 1 | -1, almacen: Storage | null = almacenDeVotos()): Votos {
+  return anotarVoto(juego, delta, almacen).votos;
 }
 
 /* --------------------------------------------------------------- el audio */
@@ -241,10 +280,10 @@ export interface OpcionesEscucha {
   lang: IdiomaEscucha;
   prendida: boolean;
   votos: Votos;
-  /** Anota un voto más y devuelve los votos nuevos. */
-  votarMas: (juego: string) => Votos;
-  /** Anota un voto menos y devuelve los votos nuevos. */
-  votarMenos: (juego: string) => Votos;
+  /** Anota un voto más y devuelve los votos nuevos, con si quedaron guardados. */
+  votarMas: (juego: string) => ResultadoDeVoto;
+  /** Anota un voto menos y devuelve los votos nuevos, con si quedaron guardados. */
+  votarMenos: (juego: string) => ResultadoDeVoto;
   /** Renderiza y hace sonar una pieza (la página real); en pruebas siembra un aviso al llamar. */
   reproducir: (fase: FaseDeEscucha, juego: string) => void;
   /** Corta lo que suena y lo que se está armando. */
@@ -292,6 +331,13 @@ export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
   parar.textContent = `■ ${t("parar")}`;
   parar.addEventListener("click", () => o.parar?.());
   encabezado.append(parar, estado);
+
+  // Si el navegador no deja guardar un voto, se dice acá: la cuenta sigue mientras la página siga abierta.
+  const avisoDeVotos = doc.createElement("p");
+  avisoDeVotos.className = "aviso-votos";
+  avisoDeVotos.setAttribute("role", "status");
+  avisoDeVotos.setAttribute("aria-live", "polite");
+  encabezado.append(avisoDeVotos);
 
   let ponerTitulo = true;
   for (const id of Object.values(IDENTIDADES)) {
@@ -355,9 +401,10 @@ export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
     menos.type = "button";
     menos.className = "voto-menos";
     menos.textContent = t("quitar");
-    const alVotar = (f: (juego: string) => Votos): void => {
-      const nuevos = f(id.juego);
+    const alVotar = (f: (juego: string) => ResultadoDeVoto): void => {
+      const { votos: nuevos, guardado } = f(id.juego);
       cuenta.textContent = `${votosDelJuego(nuevos, id.juego)} ${t("votos")}`;
+      avisoDeVotos.textContent = guardado ? "" : t("votosSinGuardar");
     };
     mas.addEventListener("click", () => alVotar(o.votarMas));
     menos.addEventListener("click", () => alVotar(o.votarMenos));
@@ -388,8 +435,8 @@ export function montarEscucha(doc: Document): void {
       void pedirPieza(fase, id, estado);
     },
     parar: () => pararPieza(estado),
-    votarMas: (juego) => votar(juego, 1),
-    votarMenos: (juego) => votar(juego, -1),
+    votarMas: (juego) => anotarVoto(juego, 1),
+    votarMenos: (juego) => anotarVoto(juego, -1),
   });
   if (!prendida || typeof window === "undefined") return;
   // Al irse de la página la pieza se corta. Al volver a la vista, el contexto que el teléfono cortó se reanuda.
