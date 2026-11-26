@@ -360,14 +360,37 @@ describe("POST /v1/sorteo: ya sorteado y repetido", () => {
     expect(usados(org.publicKey()).sorteos).toBe(1);
   });
 
-  it("dos pedidos del mismo sorteo a la vez: sale uno solo", async () => {
+  it("dos pedidos del mismo sorteo a la vez comparten el trabajo y reciben la misma respuesta", async () => {
     const org = admitida();
     await selloDelPortero(org, 1n);
     red.retraso = 5;
-    const [a, b] = await Promise.all([p.sortear("1", FIRMA), p.sortear("1", FIRMA)]);
-    expect([a.estado, b.estado]).toEqual([200, 200]);
+    red.simulados = [];
+    const [a, b] = await Promise.all([p.sortear("1", FIRMA), p.sortear("1", FIRMA.toUpperCase())]);
+    expect(a).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(b).toEqual(a);
+    expect(red.simulados.filter((m) => m === "get_raffle")).toHaveLength(1);
+    expect(red.simulados.filter((m) => m === "draw")).toHaveLength(1);
     expect(draws()).toHaveLength(1);
     expect(usados(org.publicKey()).sorteos).toBe(1);
+  });
+
+  it("con otra firma no se suma al trabajo de la buena: la que no pasa da 400 y la buena sale", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    red.retraso = 5;
+    const [buena, mala] = await Promise.all([p.sortear("1", FIRMA), p.sortear("1", FIRMA_MALA)]);
+    expect(buena).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(mala).toMatchObject({ estado: 400, cuerpo: { motivo: "fallaria" } });
+    expect(draws()).toHaveLength(1);
+  });
+
+  it("un trabajo que contesta sin mandar no queda guardado: el pedido siguiente vuelve a mirar", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    red.simulados = [];
+    expect(await p.sortear("1", FIRMA_MALA)).toMatchObject({ estado: 400 });
+    expect(await p.sortear("1", FIRMA_MALA)).toMatchObject({ estado: 400 });
+    expect(red.simulados.filter((m) => m === "draw")).toHaveLength(2);
   });
 
   it("si la red lo rechazó, se puede volver a pedir; cuando entró, la red dice que ya está", async () => {
