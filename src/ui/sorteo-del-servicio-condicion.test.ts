@@ -279,9 +279,10 @@ describe("con la red sin poder leerse no se manda nada más por el camino de sie
     sinMarca();
   });
 
-  it("un repetido con la red muda: sin confirmar y sin el camino de siempre", async () => {
+  it("un repetido con la red muda: sin confirmar y sin el camino de siempre, y sin el número de una transacción que quizás no es de este sorteo", async () => {
     const r = await correr(fuentes({ pedir: async () => mandado(H1, false), consultar: caido }));
-    expect(sinConfirmarCon(r)).toMatchObject({ message: "sin-confirmar", txHash: H1 });
+    expect(sinConfirmarCon(r)).toMatchObject({ message: "sin-confirmar" });
+    expect(sinConfirmarCon(r).txHash).toBeUndefined();
     sinMarca();
   });
 });

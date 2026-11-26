@@ -451,6 +451,8 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
     const esPendiente = visto.pendiente;
     // Solo una transacción que el servicio dijo pendiente para ESTE sorteo es seguro que es de este sorteo.
     const esPropio = visto.pendiente && visto.sorteo === clave;
+    /** El número que va en un error: solo el de una transacción que es de este sorteo. Un repetido puede ser de un gemelo. */
+    const hashDelError = esPropio ? hash : undefined;
     const primera = visto.primera;
     alPaso("sending", hash);
     const venceEn = Math.floor(primera) + VENTANA_DEL_SERVICIO_S + HOLGURA_DE_RELOJES_S;
@@ -522,7 +524,7 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
             }
             return caminoDeHoy({ marca: true });
           }
-          if (ahora() >= hasta) return sinConfirmar(ultimoError, hash);
+          if (ahora() >= hasta) return sinConfirmar(ultimoError, hashDelError);
           await esperar(l.ok ? ENTRE_LECTURAS_DEL_QUE_ENTRO_MS : LEER_CADA_MS);
         }
       };
@@ -532,7 +534,7 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
         const l = await leer(Number.POSITIVE_INFINITY);
         if (l.ok && l.v) return listo(l.v, true);
         if (l.ok) return caminoDeHoy({ marca: true });
-        return sinConfirmar(l.error, hash);
+        return sinConfirmar(l.error, hashDelError);
       };
 
       const resolver = async (d: Desenlace, ultima: boolean): Promise<FinDelServicio | "otra-vez"> => {
@@ -551,9 +553,9 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
           // `AlreadyDrawn` (cuesta una comisión y no cambia el resultado). Si el contrato no se deja leer, no se manda nada.
           const l = await leer(Number.POSITIVE_INFINITY);
           if (l.ok && l.v) return listo(l.v, true);
-          return l.ok ? caminoDeHoy({ marca: true }) : sinConfirmar(l.error, hash);
+          return l.ok ? caminoDeHoy({ marca: true }) : sinConfirmar(l.error, hashDelError);
         }
-        if (ultima) return sinConfirmar(d.error, hash);
+        if (ultima) return sinConfirmar(d.error, hashDelError);
         f.alFallar(d.error);
         // Una última vuelta corta: la red puede haber vuelto.
         const hasta = ahora() + ULTIMA_VUELTA_MS;
@@ -566,7 +568,7 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
         }
         const l = await leer(hasta);
         if (l.ok && l.v) return listo(l.v, true);
-        return sinConfirmar(d.error, hash);
+        return sinConfirmar(d.error, hashDelError);
       };
 
       // La transacción del servicio vive 240 segundos y la de hoy 60: la sala no espera más que un minuto desde la entrada.
