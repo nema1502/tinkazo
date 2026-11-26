@@ -124,7 +124,7 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
     entrar: () => Promise.reject(new Error("google")),
     persona: {
       google: {
-        montar: (contenedor, alEntrar, alFallar) =>
+        montar: (contenedor, alEntrar, alFallar, textoDeEspera) =>
           p.google.montar(
             contenedor,
             (token) => {
@@ -132,6 +132,7 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
               alEntrar({ cuenta: SIN_CUENTA, nombre: nombreDeLaCredencial(token) });
             },
             alFallar,
+            textoDeEspera,
           ),
       },
     },

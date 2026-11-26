@@ -106,6 +106,8 @@ export interface BotonDeGoogle {
     contenedor: HTMLElement,
     alEntrar: (sesion: SesionDelCelular) => void,
     alFallar: (falla: FallaDeEntrada) => void,
+    /** La línea que se ve en el lugar del botón mientras Google no lo termina de armar. */
+    textoDeEspera?: string,
   ) => () => void;
 }
 

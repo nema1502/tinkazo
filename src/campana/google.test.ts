@@ -190,6 +190,139 @@ describe("botonDeGoogle", () => {
   });
 });
 
+describe("botonDeGoogle: mientras el botón no aparece", () => {
+  /** Un Google que arma el botón como el de verdad: un contenedor con un marco que carga aparte. */
+  function googleConMarco() {
+    const marcos: HTMLIFrameElement[] = [];
+    const api = {
+      initialize: vi.fn(),
+      renderButton: vi.fn((contenedor: HTMLElement) => {
+        const envoltorio = document.createElement("div");
+        const marco = document.createElement("iframe");
+        marcos.push(marco);
+        envoltorio.append(marco);
+        contenedor.append(envoltorio);
+      }),
+    };
+    return { api, marcos };
+  }
+
+  async function armar(cargar: () => Promise<unknown>) {
+    const { botonDeGoogle, ESPERA_DEL_BOTON_MS } = await import("./google");
+    return {
+      ESPERA_DEL_BOTON_MS,
+      boton: botonDeGoogle({ clienteId: "c", idioma: () => "es", cargar: cargar as never }),
+    };
+  }
+
+  it("mientras baja el guion deja una línea provisoria, y al aparecer el botón la saca", async () => {
+    const g = googleConMarco();
+    let bajar: (api: unknown) => void = () => undefined;
+    const { boton } = await armar(() => new Promise((resolver) => (bajar = resolver)));
+    const contenedor = document.createElement("div");
+    boton.montar(contenedor, () => undefined, () => undefined, "Un momento…");
+    expect(contenedor.querySelector(".cmp-google-espera")?.textContent).toBe("Un momento…");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(contenedor.querySelector(".cmp-google-espera")?.textContent).toBe("Un momento…");
+    bajar(g.api);
+    await vi.advanceTimersByTimeAsync(0);
+    // El botón ya está puesto pero su marco todavía no cargó: la línea sigue donde irá el botón.
+    expect(g.api.renderButton).toHaveBeenCalledTimes(1);
+    expect(contenedor.querySelector(".cmp-google-espera")).not.toBeNull();
+    g.marcos[0]?.dispatchEvent(new Event("load"));
+    expect(contenedor.querySelector(".cmp-google-espera")).toBeNull();
+    expect(contenedor.querySelector("iframe")).not.toBeNull();
+  });
+
+  it("un botón que aparece de una vez, sin marco aparte, saca la línea provisoria enseguida", async () => {
+    const api = { initialize: vi.fn(), renderButton: vi.fn((c: HTMLElement) => c.append(document.createElement("div"))) };
+    const { boton } = await armar(async () => api);
+    const contenedor = document.createElement("div");
+    const fallar = vi.fn();
+    boton.montar(contenedor, () => undefined, fallar, "Un momento…");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(contenedor.querySelector(".cmp-google-espera")).toBeNull();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fallar).not.toHaveBeenCalled();
+  });
+
+  it("si el guion carga pero el marco del botón no termina de cargar, a los ocho segundos avisa la falla y deja el contenedor limpio", async () => {
+    const g = googleConMarco();
+    const { boton, ESPERA_DEL_BOTON_MS } = await armar(async () => g.api);
+    expect(ESPERA_DEL_BOTON_MS).toBe(8000);
+    const contenedor = document.createElement("div");
+    const fallar = vi.fn();
+    const entrar = vi.fn();
+    boton.montar(contenedor, entrar, fallar, "Un momento…");
+    await vi.advanceTimersByTimeAsync(ESPERA_DEL_BOTON_MS - 1);
+    expect(fallar).not.toHaveBeenCalled();
+    expect(contenedor.querySelector(".cmp-google-espera")).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fallar).toHaveBeenCalledTimes(1);
+    expect(fallar).toHaveBeenCalledWith("google");
+    // Quien recibe la falla arma su propio botón de Probar de nuevo: el contenedor queda sin el marco y sin la línea.
+    expect(contenedor.querySelector(".cmp-google-espera")).toBeNull();
+    // Un marco que carga tarde ya no cambia nada, y no se llama dos veces.
+    g.marcos[0]?.dispatchEvent(new Event("load"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fallar).toHaveBeenCalledTimes(1);
+    expect(entrar).not.toHaveBeenCalled();
+  });
+
+  it("si el guion no baja en ocho segundos avisa la falla, y si baja después no arma nada", async () => {
+    const g = googleConMarco();
+    let bajar: (api: unknown) => void = () => undefined;
+    const { boton, ESPERA_DEL_BOTON_MS } = await armar(() => new Promise((resolver) => (bajar = resolver)));
+    const contenedor = document.createElement("div");
+    const fallar = vi.fn();
+    boton.montar(contenedor, () => undefined, fallar, "Un momento…");
+    await vi.advanceTimersByTimeAsync(ESPERA_DEL_BOTON_MS);
+    expect(fallar).toHaveBeenCalledTimes(1);
+    expect(fallar).toHaveBeenCalledWith("google");
+    bajar(g.api);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(g.api.renderButton).not.toHaveBeenCalled();
+    expect(contenedor.childElementCount).toBe(0);
+  });
+
+  it("con el marco cargado a tiempo no falla nunca, aunque pase mucho rato", async () => {
+    const g = googleConMarco();
+    const { boton } = await armar(async () => g.api);
+    const contenedor = document.createElement("div");
+    const fallar = vi.fn();
+    boton.montar(contenedor, () => undefined, fallar, "Un momento…");
+    await vi.advanceTimersByTimeAsync(5000);
+    g.marcos[0]?.dispatchEvent(new Event("load"));
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(fallar).not.toHaveBeenCalled();
+    expect(contenedor.querySelector("iframe")).not.toBeNull();
+    expect(contenedor.querySelector(".cmp-google-espera")).toBeNull();
+  });
+
+  it("sacar el botón antes de los ocho segundos cancela el reloj", async () => {
+    const g = googleConMarco();
+    const { boton, ESPERA_DEL_BOTON_MS } = await armar(async () => g.api);
+    const fallar = vi.fn();
+    const sacar = boton.montar(document.createElement("div"), () => undefined, fallar, "Un momento…");
+    await vi.advanceTimersByTimeAsync(1000);
+    sacar();
+    await vi.advanceTimersByTimeAsync(ESPERA_DEL_BOTON_MS * 2);
+    expect(fallar).not.toHaveBeenCalled();
+  });
+
+  it("sin texto provisorio no pone ninguna línea, y el tope de tiempo vale igual", async () => {
+    const g = googleConMarco();
+    const { boton, ESPERA_DEL_BOTON_MS } = await armar(async () => g.api);
+    const contenedor = document.createElement("div");
+    const fallar = vi.fn();
+    boton.montar(contenedor, () => undefined, fallar);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(contenedor.querySelector(".cmp-google-espera")).toBeNull();
+    await vi.advanceTimersByTimeAsync(ESPERA_DEL_BOTON_MS);
+    expect(fallar).toHaveBeenCalledWith("google");
+  });
+});
+
 describe("nombreDeLaCredencial", () => {
   it("lee el nombre corto del perfil, con tildes", async () => {
     const { nombreDeLaCredencial } = await import("./google");

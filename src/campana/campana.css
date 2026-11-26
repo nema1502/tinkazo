@@ -485,11 +485,24 @@
 /* El botón de Google de una campaña de personas: lo dibuja Google en su propio marco, y acá solo se le da el lugar del botón
    principal, centrado y del alto de uno. */
 .cmp-google {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
   min-height: 56px;
+}
+
+/* La línea que ocupa el lugar del botón mientras Google lo arma: no empuja nada y se va cuando el botón aparece. */
+.cmp-google-espera {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  text-align: center;
+  pointer-events: none;
 }
 
 /* El aviso de una cuenta usada en otro navegador: un bloque de papel arriba del saludo, que se lee de un vistazo. */

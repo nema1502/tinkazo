@@ -16,6 +16,11 @@ import { nombreParaLaPantalla } from "./sesion";
 export const URL_DEL_GUION_DE_GOOGLE = "https://accounts.google.com/gsi/client";
 /** Cuánto se espera a que el guion baje: pasado, se dice que Google no pudo entrar y se puede volver a probar. */
 export const ESPERA_DEL_GUION_MS = 10_000;
+/**
+ * Cuánto se espera a que el botón aparezca, contando desde que se pide: el guion que baja y el marco del botón que carga. Con la
+ * wifi de un salón lleno puede quedar en blanco. Pasado el tope se dice que Google no pudo entrar y se puede volver a probar.
+ */
+export const ESPERA_DEL_BOTON_MS = 8_000;
 
 interface OpcionesDelBoton {
   type: "standard";
@@ -111,12 +116,14 @@ export function nombreDeLaCredencial(credencial: string): string | null {
 export interface BotonDeGoogleDeVerdad {
   /**
    * Pone el botón en `contenedor` (baja el guion si hace falta). Cada vez que la persona entra con Google llama a `alEntrar` con
-   * el token de identidad. Si el guion no baja, o Google no entrega nada, llama a `alFallar`. Devuelve cómo sacar el botón.
+   * el token de identidad. Si el guion no baja, el botón no termina de aparecer en `ESPERA_DEL_BOTON_MS` o Google no entrega nada,
+   * llama a `alFallar`. Con `textoDeEspera` deja esa línea en el lugar del botón hasta que aparece. Devuelve cómo sacar el botón.
    */
   montar: (
     contenedor: HTMLElement,
     alEntrar: (credencial: string) => void,
     alFallar: (falla: FallaDeEntrada) => void,
+    textoDeEspera?: string,
   ) => () => void;
 }
 
@@ -133,8 +140,45 @@ export function botonDeGoogle(o: {
   /** Quien recibe lo que entregue Google: el último botón montado. Google se inicia una sola vez por página. */
   let receptor: ((respuesta: RespuestaDeGoogle) => void) | null = null;
   return {
-    montar: (contenedor, alEntrar, alFallar) => {
+    montar: (contenedor, alEntrar, alFallar, textoDeEspera) => {
       let vivo = true;
+      let aparecio = false;
+      const cargados = new WeakSet<Element>();
+      const provisoria = document.createElement("p");
+      provisoria.className = "cmp-apoyo cmp-google-espera";
+      provisoria.setAttribute("role", "status");
+      provisoria.textContent = textoDeEspera ?? "";
+      if (textoDeEspera) contenedor.append(provisoria);
+      // El botón está cuando Google puso algo en el contenedor y los marcos que puso ya cargaron. Los marcos de Google no avisan
+      // hacia arriba, pero su carga sí llega por acá: los eventos de carga no suben, y por eso se escuchan en la captura.
+      const revisar = (): void => {
+        if (!vivo || aparecio) return;
+        const puesto = [...contenedor.children].some((hijo) => hijo !== provisoria);
+        const marcos = [...contenedor.querySelectorAll("iframe")];
+        if (!puesto || !marcos.every((marco) => cargados.has(marco))) return;
+        aparecio = true;
+        provisoria.remove();
+        soltar();
+      };
+      const alCargar = (evento: Event): void => {
+        if (evento.target instanceof Element) cargados.add(evento.target);
+        revisar();
+      };
+      const vigia = typeof MutationObserver === "function" ? new MutationObserver(revisar) : null;
+      contenedor.addEventListener("load", alCargar, true);
+      vigia?.observe(contenedor, { childList: true, subtree: true });
+      const reloj = window.setTimeout(() => {
+        if (!vivo || aparecio) return;
+        vivo = false;
+        soltar();
+        provisoria.remove();
+        alFallar("google");
+      }, ESPERA_DEL_BOTON_MS);
+      function soltar(): void {
+        window.clearTimeout(reloj);
+        vigia?.disconnect();
+        contenedor.removeEventListener("load", alCargar, true);
+      }
       const mio = (respuesta: RespuestaDeGoogle): void => {
         if (!vivo) return;
         const credencial = respuesta.credential;
@@ -165,6 +209,7 @@ export function botonDeGoogle(o: {
             width: Math.max(200, Math.min(320, contenedor.clientWidth || 280)),
             locale: o.idioma(),
           });
+          revisar();
         },
         () => {
           if (vivo) alFallar("google");
@@ -172,6 +217,7 @@ export function botonDeGoogle(o: {
       );
       return () => {
         vivo = false;
+        soltar();
         if (receptor === mio) receptor = null;
         contenedor.replaceChildren();
       };

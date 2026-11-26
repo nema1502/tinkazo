@@ -47,6 +47,8 @@ interface Montaje {
   /** Lo que el botón de Google entrega al entrar una persona. */
   entrar: (credencial: string) => SesionDelCelular | null;
   bloqueos: string[];
+  /** La línea provisoria que cada montaje del botón de Google recibió. */
+  esperas: (string | undefined)[];
   /** El `cada` de la base: lo que la página le pide al reloj. */
   cada: ReturnType<typeof vi.fn>;
 }
@@ -55,9 +57,11 @@ function montar(guion: Record<string, Paso[]>, o: { enLinea?: boolean; memoria?:
   const { f, llamadas } = fetchFalso(guion);
   const memoria = o.memoria ?? almacenFalso();
   let alEntrar: (credencial: string) => void = () => undefined;
+  const esperas: (string | undefined)[] = [];
   const google: BotonDeGoogleDeVerdad = {
-    montar: (_contenedor, entrar) => {
+    montar: (_contenedor, entrar, _fallar, textoDeEspera) => {
       alEntrar = entrar;
+      esperas.push(textoDeEspera);
       return () => undefined;
     },
   };
@@ -101,7 +105,7 @@ function montar(guion: Record<string, Paso[]>, o: { enLinea?: boolean; memoria?:
     alEntrar(credencial);
     return sesion;
   };
-  return { deps, llamadas, memoria, entrar, bloqueos, cada };
+  return { deps, llamadas, memoria, entrar, bloqueos, cada, esperas };
 }
 
 /** Deja correr el reloj falso hasta que todo lo pendiente termine. */
@@ -129,6 +133,13 @@ describe("depsDePersona", () => {
   it("la entrada es el botón de Google: da la sesión sin cuenta y con el nombre del perfil", () => {
     const { entrar } = montar({});
     expect(entrar(tokenDe("Ana Pérez"))).toEqual({ cuenta: SIN_CUENTA, nombre: "Ana P." });
+  });
+
+  it("la línea provisoria del botón llega a Google tal cual, para que no quede un hueco en blanco", () => {
+    const { deps, esperas } = montar({});
+    deps.persona?.google.montar({} as HTMLElement, () => undefined, () => undefined, "Un momento…");
+    deps.persona?.google.montar({} as HTMLElement, () => undefined, () => undefined);
+    expect(esperas).toEqual(["Un momento…", undefined]);
   });
 
   it("no hay sesión que retomar ni ventana de entrada, y no se declara ninguna lectura de cuenta", async () => {

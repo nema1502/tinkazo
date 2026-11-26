@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { asentar, prepararCelular, propio, publico, type Mundo } from "./celular-falso";
 import type { BotonDeGoogle, DepsDelCelular, ResultadoDelAlta, SesionDelCelular } from "./celular";
 import { guardarMemoria, leerMemoria, SIN_CUENTA } from "./memoria";
+import { TEXTOS_CAMPANA } from "./textos";
 
 const AHORA = Date.UTC(2026, 10, 21, 18);
 const SALA = "evento-ejemplo";
@@ -37,10 +38,12 @@ function almacenFalso(): Storage {
 function googleFalso() {
   const montajes: HTMLElement[] = [];
   const sacados: HTMLElement[] = [];
+  const esperas: (string | undefined)[] = [];
   let entrada: (sesion: SesionDelCelular) => void = () => undefined;
   let falla: (motivo: "ventana" | "cerrada" | "google" | "cuentas" | "limite") => void = () => undefined;
   const google: BotonDeGoogle = {
-    montar: (contenedor, alEntrar, alFallar) => {
+    montar: (contenedor, alEntrar, alFallar, espera) => {
+      esperas.push(espera);
       const boton = document.createElement("button");
       boton.type = "button";
       boton.className = "google-falso";
@@ -60,6 +63,7 @@ function googleFalso() {
     google,
     montajes,
     sacados,
+    esperas,
     entrar: () => entrada(ANA),
     fallar: (motivo: "ventana" | "cerrada" | "google" | "cuentas" | "limite") => falla(motivo),
   };
@@ -103,6 +107,13 @@ describe("una campaña de personas: la previa", () => {
     expect(mundo.raiz.querySelector("#cmp-saber .cmp-google .google-falso")).not.toBeNull();
     expect(mundo.raiz.querySelector("#cmp-saber button.primary")).toBeNull();
     expect(entrar).not.toHaveBeenCalled();
+  });
+
+  it("le pide al botón una línea provisoria, en el idioma de la página, para que el lugar no quede en blanco mientras Google baja", async () => {
+    const { g } = await montarPersona();
+    expect(g.esperas).toEqual(["Un momento…"]);
+    // Y la línea existe en las dos lenguas.
+    expect(TEXTOS_CAMPANA.en.cpCargando).toBe("One moment…");
   });
 
   it("dice con palabras simples que no se crea ninguna cuenta", async () => {

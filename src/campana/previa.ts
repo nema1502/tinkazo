@@ -271,7 +271,7 @@ export function pintarLaCampana(
           sitio.replaceChildren();
           armar();
         });
-      });
+      }, deps.tx("cpCargando"));
     };
     armar();
     return () => {
