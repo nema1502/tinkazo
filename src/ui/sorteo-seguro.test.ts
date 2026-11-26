@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { errorKey } from "../stellar/errores";
 import { ErrorPortero } from "../stellar/patrocinador";
-import { ESPERAS_DEL_SORTEO_MS, PRESUPUESTO_MINIMO_DEL_SORTEO_MS, SORTEO_REINTENTABLE, avisoDelReintento, sorteoReintentable, sortearConReintentos } from "./sorteo-seguro";
+import { ESPERAS_DEL_SORTEO_MS, PRESUPUESTO_DEL_SORTEO_MS, PRESUPUESTO_MINIMO_DEL_SORTEO_MS, SORTEO_REINTENTABLE, avisoDelReintento, sorteoReintentable, sortearConReintentos } from "./sorteo-seguro";
 
 /** Un reloj de mentira: `dormir` lo adelanta en el acto. */
 function reloj() {
@@ -90,8 +90,11 @@ describe("sortearConReintentos: el sorteo reintenta", () => {
   });
 
   it("no espera más de 90 segundos en total: la sala está mirando", async () => {
+    expect(PRESUPUESTO_DEL_SORTEO_MS).toBe(90_000);
     let t = 0;
+    const empezo: number[] = [];
     const intentar = vi.fn(async () => {
+      empezo.push(t);
       t += 25_000; // cada intento tarda en rendirse
       throw new TypeError("Load failed");
     });
@@ -99,6 +102,8 @@ describe("sortearConReintentos: el sorteo reintenta", () => {
     expect(fin.ok).toBe(false);
     expect(intentar.mock.calls.length).toBeLessThan(5);
     expect(t).toBeLessThanOrEqual(90_000 + 25_000);
+    // Ningún intento empieza pasados los 90 segundos desde el primero: es el tope que el sorteo por el servicio también respeta.
+    expect(Math.max(...empezo) - (empezo[0] as number)).toBeLessThanOrEqual(PRESUPUESTO_DEL_SORTEO_MS);
   });
 
   it("avisa cada reintento con su número, para la línea de estado", async () => {

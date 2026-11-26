@@ -4,6 +4,7 @@ import type { RespuestaDelSorteo } from "../stellar/sorteo-servidor-api";
 import {
   DISYUNTOR_CORTO_MS,
   DISYUNTOR_MS,
+  TOPE_DE_LA_DUDA_SIN_RED_MS,
   type Fuentes,
   type FinDelServicio,
   type Ganadores,
@@ -12,6 +13,7 @@ import {
   sortearPorElServicio,
   usaElSorteoDelServicio,
 } from "./sorteo-del-servicio";
+import { PRESUPUESTO_DEL_SORTEO_MS } from "./sorteo-seguro";
 
 /**
  * El sorteo por el servicio de comisiones (`sorteo-del-servicio.ts`), con todas las fuentes de mentira y un reloj
@@ -662,6 +664,43 @@ describe("ninguna espera sin tope", () => {
     const r = await correr(sortear(m));
     expect(pasoDe(r)).toBe("error");
     expect(transcurrido()).toBeLessThanOrEqual(95_000);
+  });
+});
+
+describe("después de que la transacción entró, el tope es el de siempre", () => {
+  it("una transacción de este sorteo que entra tarde y un contrato que no contesta: sin confirmar con el enlace a los 90 segundos desde la entrada, no a los 97", async () => {
+    const m = armar({
+      pedir: async () => mandado(H1),
+      consultar: async () => (Date.now() - T0 < 55_000 ? { status: "NOT_FOUND", cierre: Date.now() / 1000 } : { status: "SUCCESS", cierre: Date.now() / 1000, valor: "scval" }),
+      valorDe: async () => null,
+    });
+    m.leer.mockImplementation((() => new Promise(() => undefined)) as never);
+    const r = await correr(sortear(m));
+    expect(pasoDe(r)).toBe("error");
+    expect((r as { error: Error & { txHash?: string } }).error.message).toBe("sin-confirmar");
+    expect((r as { error: { txHash?: string } }).error.txHash).toBe(H1);
+    expect(transcurrido()).toBeGreaterThanOrEqual(55_000);
+    expect(transcurrido()).toBeLessThanOrEqual(90_500);
+  });
+
+  it("si la pestaña vuelve de segundo plano pasada la hora, igual se mira el contrato una vez", async () => {
+    const m = armar({
+      pedir: async () => mandado(H1, false),
+      consultar: async () => {
+        vi.setSystemTime(Date.now() + 100_000);
+        return { status: "SUCCESS", cierre: Date.now() / 1000, valor: "scval" };
+      },
+      leer: async () => GANADORES,
+    });
+    const r = await correr(sortear(m));
+    expect(r).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
+    expect(m.leer).toHaveBeenCalledTimes(1);
+    expect(m.alFallar).not.toHaveBeenCalled();
+  });
+
+  it("los 90 segundos son los del camino de siempre", () => {
+    expect(TOPE_DE_LA_DUDA_SIN_RED_MS).toBe(PRESUPUESTO_DEL_SORTEO_MS);
+    expect(PRESUPUESTO_DEL_SORTEO_MS).toBe(90_000);
   });
 });
 
