@@ -19,6 +19,7 @@ import {
   type MemoriaDeOrg,
   type SalaDeCampana,
   avisarEnSala,
+  codigosDeEntrega,
   estadoConToken,
   guardarOrg,
   completarLaCuentaDeLaMemoria,
@@ -169,6 +170,8 @@ export function depsDelResultadoReales(): DepsDelResultado {
     // Pide distinguir la mezcla: reintentar no la cambia y tiene su propio aviso.
     resultado: (s) => resultadoDeSala(s, {}, { distinguirMezclada: true }),
     avisar: (s, cuenta) => avisarEnSala(s, cuenta),
+    // Cada pedido lleva su tope de tiempo (el de la sala). El código no se guarda: vive en la memoria de la pestaña.
+    codigos: (s) => codigosDeEntrega(s),
     // Un juego en marcha o la pantalla grande abierta no se cortan: solo se muestra la línea.
     sePuedeSoltar: () => app.frozen !== null && app.drawn === null && !sorteoEnMarcha(app.frozen) && !document.fullscreenElement,
     soltarElSello: soltarParaSellarDeNuevo,

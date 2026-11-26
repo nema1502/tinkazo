@@ -9,6 +9,7 @@ import { type PasoDelPuente, alCambiarElPuente, pasoDelPuente, reiniciarElPuente
 import { roundTime } from "../protocol/quicknet";
 import type {
   EstadoDeSala,
+  FallaDeCodigos,
   FallaDeSala,
   FaseDeSala,
   RespuestaDeAviso,
@@ -72,6 +73,10 @@ export interface Mundo {
   nombres: Record<string, string>;
   avisos: string[];
   respuestaAlAviso: RespuestaDeAviso;
+  /** Lo que contesta cada pedido de códigos de entrega, en orden. Una función es un pedido que tarda lo que la prueba quiera. */
+  respuestasALosCodigos: (string[] | FallaDeCodigos | (() => Promise<string[] | FallaDeCodigos>))[];
+  /** Cuándo (ms) se pidieron los códigos y cuántos pasos había pintado el puente en ese momento. */
+  pedidosDeCodigos: { en: number; pasosYaPintados: number }[];
   altas: { sorteo: string; ganadoras: string[] }[];
   altasDe: Record<string, EstadoDeAltaPremio>;
   otraBilletera: boolean;
@@ -121,6 +126,8 @@ export function mundo(): Mundo {
     nombres: {},
     avisos: [],
     respuestaAlAviso: "ok",
+    respuestasALosCodigos: [],
+    pedidosDeCodigos: [],
     altas: [],
     altasDe: {},
     otraBilletera: false,
@@ -183,6 +190,12 @@ export function mundo(): Mundo {
     avisar: async (_s, cuenta) => {
       m.avisos.push(cuenta);
       return m.respuestaAlAviso;
+    },
+    codigos: async () => {
+      m.pedidosDeCodigos.push({ en: m.ahora, pasosYaPintados: m.pasos.length });
+      const r = m.respuestasALosCodigos.shift();
+      if (r === undefined) return "red";
+      return typeof r === "function" ? r() : r;
     },
     sePuedeSoltar: () => m.puedeSoltar,
     soltarElSello: async () => void m.soltadas++,
