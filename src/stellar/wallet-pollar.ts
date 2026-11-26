@@ -643,14 +643,19 @@ export const ACTIVACION_LENTA = "pollar-activacion-lenta";
  * como techo desde que se pide, con la espera del candado adentro. Los dos quedan por encima del peor caso sano del kit
  * (una lectura de hasta 10 s que reintenta y tarda otros 10 s, en una cadena de unos siete pasos): con un proveedor lento
  * pero que contesta, la activación termina, y con uno que no contesta, se corta sin votar. `candadoMs`: lo que se espera
- * el candado entre pestañas. Desde que sale el voto: `despuesDelVotoMs` para el voto, la lectura y el cierre. El voto en
- * vuelo y el candado que lo acompaña nunca se sueltan por tiempo: ante la duda, se espera.
+ * el candado entre pestañas. Desde que sale el voto: `despuesDelVotoMs` para el voto, la lectura y el cierre.
+ * `seguroDelVotoMs`: si pasado ese tiempo el voto sigue sin terminar, el sitio lo da por perdido de vista para que la
+ * persona no quede trabada hasta recargar: suelta el candado, lo cuenta como un voto fallado y anota que ese pedido ya
+ * salió a votarse en esta página. Ese pedido no se vota otra vez: una llamada nueva lo lee y dice cómo quedó, o pide cerrar
+ * sesión. Antes del seguro, ante la duda, se espera. Un intento vencido antes del voto retiene el candado hasta que su
+ * cadena termine o pasen `candadoMs`, para que una llamada vieja del kit no se solape con la del intento nuevo.
  */
 export const TOPES_DE_ACTIVACION = {
   sinAvanzarMs: 45_000,
   totalMs: 90_000,
   candadoMs: 8_000,
   despuesDelVotoMs: 20_000,
+  seguroDelVotoMs: 65_000,
 } as const;
 /** Los pasos de la activación, con las palabras fijas que van a la consola cuando un tope vence. */
 type PasoDeActivar = "candado" | "cliente" | "billetera" | "pedidos" | "rearmar" | "leer" | "verificar" | "voto" | "cierre";
@@ -661,6 +666,8 @@ type PasoDeActivar = "candado" | "cliente" | "billetera" | "pedidos" | "rearmar"
 interface IntentoDeActivar {
   vigente: boolean;
   votoSalio: boolean;
+  /** El seguro de tiempo dio el voto por perdido de vista: si termina tarde, su falla ya se contó. */
+  olvidado: boolean;
   paso: PasoDeActivar;
 }
 /** Lo que el intento le da a su cadena de pasos: los relojes. */
@@ -677,15 +684,20 @@ interface ControlDeActivar {
   comprobar(): void;
   /**
    * Se llama en el mismo instante que el voto, sin ninguna espera en el medio: si el intento venció, corta. `cuenta` es
-   * la dirección que vota, para saber de quién es el voto en vuelo.
+   * la dirección que vota y `pedidoId` el pedido, para saber de quién y sobre qué es el voto en vuelo.
    */
-  alVotar(cuenta: string): void;
+  alVotar(cuenta: string, pedidoId: string): void;
 }
-/** El voto que ya salió: de qué cuenta, cómo termina y cómo soltar su candado (solo si cambia la cuenta de la pestaña). */
+/**
+ * El voto que ya salió: de qué cuenta, cómo termina, cuándo salió y cómo soltar su candado (si cambia la cuenta de la
+ * pestaña) o darlo por perdido de vista (el seguro de tiempo).
+ */
 interface VotoEnVuelo {
   cuenta: string;
   fin: Promise<ResultadoDeActivar>;
+  salioEn: number;
   soltar: () => void;
+  olvidar: () => void;
 }
 /** Cuántos votos fallados se admiten por pestaña antes de pedir que cierre sesión y entre de nuevo: cada voto cuesta. */
 export const TOPE_DE_VOTOS_FALLADOS = 2;
@@ -1472,10 +1484,16 @@ class PollarWallet implements SubmittingWallet {
   /**
    * El voto de la activación que ya salió y todavía no terminó, con lo que viene después (leer y cerrar). Aunque quien
    * pidió ya recibió `pendiente` a los 20 s, el voto sigue por detrás: una llamada nueva de la misma cuenta espera este
-   * mismo voto y nunca vota otro. Se suelta solo cuando termina (nunca por tiempo, porque el sitio no sabe si el voto está
-   * por llegar) o cuando entra otra cuenta, que tiene su propio pedido y no depende de este voto.
+   * mismo voto y nunca vota otro. Se suelta cuando termina, cuando entra otra cuenta (que tiene su propio pedido y no
+   * depende de este voto) o, como última salida, cuando pasa el seguro de tiempo (`seguroDelVotoMs`): ahí el pedido queda
+   * anotado en `#pedidosVotados` y esta página no lo vota más.
    */
   #votoEnVuelo: VotoEnVuelo | null = null;
+  /**
+   * Los pedidos (cuenta y número) cuyo voto salió y se perdió de vista pasado el seguro: duran lo que dure la página y no
+   * se vuelven a votar, aunque se cierre sesión. Lo que impide un segundo voto después de recargar queda para más adelante.
+   */
+  readonly #pedidosVotados = new Set<string>();
   /** Cierra el intento de activar que todavía no votó (al cerrar sesión): suelta el candado y rechaza a quien espera. */
   #descartarActivacion: (() => void) | null = null;
   /** Una confirmación de este navegador en curso: cerrar sesión la espera antes de sacarlo de la cuenta. */
@@ -3685,8 +3703,11 @@ class PollarWallet implements SubmittingWallet {
    * siguiente y 90 s en total, con la espera del candado adentro. Al vencer, el intento deja de valer y la promesa
    * rechaza con `pollar-activacion-lenta`: una cadena vieja que se destraba tarde no vuelve a pedir, importar, verificar
    * ni votar. Desde que sale el voto, la lectura y el cierre tienen 20 s: pasado ese tiempo da `pendiente` (nunca
-   * `activada`) y el voto sigue por detrás, sin que una llamada nueva vote otra vez. Un pedido que ya trae un voto no se
-   * vota: se lee y se espera con ese mismo tope.
+   * `activada`) y el voto sigue por detrás, sin que una llamada nueva vote otra vez. Si a los 65 s el voto sigue sin
+   * terminar, se lo da por perdido de vista (`seguroDelVotoMs`): se suelta el candado, cuenta como voto fallado, y ese
+   * pedido no se vota más en esta página. Una llamada nueva lo lee: si ya no está pendiente o ya trae un voto, dice cómo
+   * quedó, y si sigue igual, falla con `pollar-activacion-tope`. Un pedido que ya trae un voto no se vota: se lee y se
+   * espera con ese mismo tope.
    *
    * Falla solo con `pollar-sin-cuenta`, `pollar-activacion-rara`, `pollar-activacion-fallo`, `pollar-activacion-tope` y
    * `pollar-activacion-lenta`, o con un error que solo trae el código de red o de créditos. Fuera de la red principal no
@@ -3695,7 +3716,12 @@ class PollarWallet implements SubmittingWallet {
   activarCuenta(): Promise<ResultadoDeActivar> {
     if (network.name !== "mainnet") return Promise.reject(new Error(ACTIVACION_SIN_CUENTA));
     if (this.#activando) return this.#activando;
-    const enVuelo = this.#votoEnVuelo;
+    let enVuelo = this.#votoEnVuelo;
+    // El seguro, también con la hora de pared: en una pestaña congelada su temporizador no corrió.
+    if (enVuelo && Date.now() - enVuelo.salioEn >= TOPES_DE_ACTIVACION.seguroDelVotoMs) {
+      enVuelo.olvidar();
+      enVuelo = null;
+    }
     if (enVuelo && enVuelo.cuenta === this.address) {
       // El voto ya salió: no se vota otro. Se espera ese mismo, con el mismo tope, y se dice cómo quedó o pendiente.
       return esperarHasta(enVuelo.fin, TOPES_DE_ACTIVACION.despuesDelVotoMs, () => {
@@ -3724,7 +3750,7 @@ class PollarWallet implements SubmittingWallet {
    */
   #correrIntento(): Promise<ResultadoDeActivar> {
     const topes = TOPES_DE_ACTIVACION;
-    const intento: IntentoDeActivar = { vigente: true, votoSalio: false, paso: "candado" };
+    const intento: IntentoDeActivar = { vigente: true, votoSalio: false, olvidado: false, paso: "candado" };
     // La hora de pared del principio y del último avance: los temporizadores se congelan con la pestaña y la hora no.
     const inicio = Date.now();
     let ultimoAvance = inicio;
@@ -3733,6 +3759,10 @@ class PollarWallet implements SubmittingWallet {
       let sinAvanzar: Reloj;
       let techo: Reloj;
       let despues: Reloj;
+      let seguro: Reloj;
+      let gracia: Reloj;
+      /** El voto que salió, para anotarlo si el seguro lo da por perdido de vista. */
+      let votada: { cuenta: string; pedidoId: string } | null = null;
       let cerrada = false;
       let enElCierre = false;
       let resolverFin!: (r: ResultadoDeActivar) => void;
@@ -3760,11 +3790,18 @@ class PollarWallet implements SubmittingWallet {
         clearTimeout(despues);
         f();
       };
-      /** El intento terminó del todo: no queda reloj vivo, el candado se suelta y el voto deja de estar en vuelo. */
-      const terminar = (): void => {
+      /**
+       * El intento terminó: no queda reloj vivo, el candado se suelta y el voto deja de estar en vuelo. `conGracia`: el
+       * intento venció antes del voto y su cadena todavía puede tener una llamada del kit en vuelo, así que el candado se
+       * retiene hasta que esa cadena termine (lo suelta ella) o pasen `candadoMs`.
+       */
+      const terminar = (conGracia = false): void => {
         pararLosDeAntes();
         clearTimeout(despues);
-        soltarElCandado();
+        clearTimeout(seguro);
+        clearTimeout(gracia);
+        if (conGracia) gracia = setTimeout(soltarElCandado, topes.candadoMs);
+        else soltarElCandado();
         if (this.#votoEnVuelo?.fin === fin) this.#votoEnVuelo = null;
         if (this.#descartarActivacion === descartar) this.#descartarActivacion = null;
       };
@@ -3773,7 +3810,22 @@ class PollarWallet implements SubmittingWallet {
         intento.vigente = false;
         console.warn(`[tinkazo] activación lenta: ${intento.paso}`);
         cerrar(() => rechazar(new Error(ACTIVACION_LENTA)));
-        terminar();
+        terminar(true);
+      };
+      /**
+       * El seguro: el voto sigue sin terminar pasado `seguroDelVotoMs`. Se lo da por perdido de vista para que la persona
+       * no quede trabada: se suelta el candado, el voto cuenta como fallado (una sola vez) y ese pedido no se vota más en
+       * esta página. Si el voto termina después, su resultado se lee igual, pero su falla ya no se cuenta de nuevo.
+       */
+      const olvidar = (): void => {
+        if (!votada || this.#votoEnVuelo?.fin !== fin) return;
+        clearTimeout(seguro);
+        intento.olvidado = true;
+        this.#votoEnVuelo = null;
+        this.#pedidosVotados.add(`${votada.cuenta}:${votada.pedidoId}`);
+        if (this.#memoria?.dir === votada.cuenta) sumarVotoFallado();
+        console.warn("[tinkazo] activación lenta: seguro");
+        soltarElCandado();
       };
       /** Se cierra sesión con el intento sin votar: se suelta todo y quien espera recibe que no hay cuenta. */
       const descartar = (): void => {
@@ -3808,7 +3860,7 @@ class PollarWallet implements SubmittingWallet {
         },
         alCerrarSinVoto: () => {
           intento.paso = "cierre";
-          if (!cerrada) empezarElCierre();
+          if (!cerrada && !enElCierre) empezarElCierre();
         },
         comprobar: () => {
           if (intento.vigente && !enElCierre) {
@@ -3817,11 +3869,13 @@ class PollarWallet implements SubmittingWallet {
           }
           if (!intento.vigente) throw new Error(ACTIVACION_LENTA);
         },
-        alVotar: (cuenta) => {
+        alVotar: (cuenta, pedidoId) => {
           control.comprobar();
           intento.votoSalio = true;
           intento.paso = "voto";
-          this.#votoEnVuelo = { cuenta, fin, soltar: soltarElCandado };
+          votada = { cuenta, pedidoId };
+          this.#votoEnVuelo = { cuenta, fin, salioEn: Date.now(), soltar: soltarElCandado, olvidar };
+          seguro = setTimeout(olvidar, topes.seguroDelVotoMs);
           empezarElCierre();
         },
       };
@@ -3832,7 +3886,11 @@ class PollarWallet implements SubmittingWallet {
       void conCandado(
         "tinkazo-activar",
         () => {
-          if (cerrada) return candadoSoltado;
+          if (cerrada) {
+            // Se cerró antes de conseguir el candado: no corrió ninguna cadena y no hay nada que retener.
+            soltarElCandado();
+            return candadoSoltado;
+          }
           void this.#activar(control).then(
             (r) => {
               resolverFin(r);
@@ -3909,9 +3967,18 @@ class PollarWallet implements SubmittingWallet {
     }
     // 5. La transacción envejece mientras la persona decide: se pide de nuevo, una sola vez, y se revisa esa versión.
     ctl.avanzar("rearmar");
-    const pedido = (candidato.refreshable ? await delKit(client.cosign.refresh(candidato.id)) : candidato) as PedidoDeCofirma;
+    let pedido = (candidato.refreshable ? await delKit(client.cosign.refresh(candidato.id)) : candidato) as PedidoDeCofirma;
     sigue();
     if (pedido.id !== candidato.id) throw noAprobada("otro pedido");
+    // 5b. El voto de este pedido salió en esta página y el seguro de tiempo lo dio por perdido de vista: no se vota otra vez.
+    // Se lee cómo quedó. Si ya no está pendiente o ya trae un voto, sigue como cualquier pedido votado. Si sigue igual, no se
+    // sabe si el voto llegó: se pide cerrar sesión y entrar de nuevo, o escribirnos.
+    if (this.#pedidosVotados.has(`${cuenta}:${pedido.id}`)) {
+      ctl.alCerrarSinVoto();
+      pedido = (await delKit(client.cosign.get(pedido.id, { sync: true }))) as PedidoDeCofirma;
+      sigue();
+      if (pedido.status === "PENDING" && !pedido.activityId) throw new Error(ACTIVACION_TOPE);
+    }
     // 6. Ya no está pendiente: se lee cómo quedó, sin votar.
     if (pedido.status !== "PENDING") {
       ctl.avanzar("cierre");
@@ -3947,21 +4014,21 @@ class PollarWallet implements SubmittingWallet {
     // 10. La cuenta otra vez, y el voto. Entre `alVotar` (que comprueba que el intento vale y marca que el voto salió) y
     // `relay` no hay ninguna espera.
     if (this.#client !== client || this.#cuentaParaActivar(client) !== cuenta) throw new Error(ACTIVACION_SIN_CUENTA);
-    ctl.alVotar(cuenta);
+    ctl.alVotar(cuenta, pedido.id);
     let votado: PedidoDeCofirma;
     try {
       const res = await client.cosign.relay(verificacion.proposal.path, verificacion.proposal.body, { requestId: pedido.id });
       votado = (res.request ?? (await client.cosign.get(pedido.id, { sync: true }))) as PedidoDeCofirma;
     } catch (e) {
       if (codigoDelKit(e) !== "SDK_COSIGN_REQUEST_NOT_PENDING") {
-        // No se sabe si el voto salió: cuenta como uno fallado.
-        if (this.#sigueEnEstaSesion(client, memoria)) sumarVotoFallado();
+        // No se sabe si el voto salió: cuenta como uno fallado (salvo que el seguro ya lo contó).
+        if (this.#sigueEnEstaSesion(client, memoria) && !intento.olvidado) sumarVotoFallado();
         throw errorDeActivar(e);
       }
       try {
         votado = (await client.cosign.get(pedido.id, { sync: true })) as PedidoDeCofirma;
       } catch (e2) {
-        if (this.#sigueEnEstaSesion(client, memoria)) sumarVotoFallado();
+        if (this.#sigueEnEstaSesion(client, memoria) && !intento.olvidado) sumarVotoFallado();
         throw errorDeActivar(e2);
       }
     }
@@ -3994,7 +4061,7 @@ class PollarWallet implements SubmittingWallet {
       avisarCambioDeLaCuenta();
       return "activada";
     }
-    if (votamos && this.#sigueEnEstaSesion(client, memoria)) sumarVotoFallado();
+    if (votamos && !intento.olvidado && this.#sigueEnEstaSesion(client, memoria)) sumarVotoFallado();
     throw new Error(ACTIVACION_FALLO);
   }
 
@@ -4818,8 +4885,6 @@ export const pollarWallet = new PollarWallet();
 export function precargarSdk(): void {
   if (!pollarConfigured()) return;
   void cargaOpcional(import("@pollar/core"));
-  // El SDK de Stellar que usa el paso de leer la transacción de la activación: así su descarga no corre por el reloj.
-  void cargaOpcional(import("@stellar/stellar-sdk"));
 }
 
 /** Una wallet que envía sus propias transacciones. */

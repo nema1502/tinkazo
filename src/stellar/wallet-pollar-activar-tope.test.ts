@@ -212,7 +212,7 @@ afterEach(async () => {
 describe("antes del voto, ninguna espera es eterna", () => {
   it("los topes son los del diseño", () => {
     // Por encima del peor caso sano del kit: cada lectura puede tardar 10 s, reintentar y tardar otros 10 s.
-    expect(TOPES_DE_ACTIVACION).toEqual({ sinAvanzarMs: 45_000, totalMs: 90_000, candadoMs: 8_000, despuesDelVotoMs: 20_000 });
+    expect(TOPES_DE_ACTIVACION).toEqual({ sinAvanzarMs: 45_000, totalMs: 90_000, candadoMs: 8_000, despuesDelVotoMs: 20_000, seguroDelVotoMs: 65_000 });
     expect(ACTIVACION_LENTA).toBe("pollar-activacion-lenta");
   });
 
@@ -227,7 +227,10 @@ describe("antes del voto, ninguna espera es eterna", () => {
     // La miga de la consola dice el paso, sin datos de la cuenta.
     expect(consola()).toContain("[tinkazo] activación lenta: pedidos");
     expect(consola()).not.toContain(P);
+    // Lo único vivo es la gracia del candado, que se suelta sola a los 8 s.
+    await avanzar(8_000);
     expect(vi.getTimerCount()).toBe(0);
+    expect(candados.tomado("tinkazo-activar")).toBe(false);
     expect(votos()).toBeNull();
   });
 
@@ -363,6 +366,69 @@ describe("cada espera de antes del voto tiene su guarda", () => {
   });
 });
 
+describe("las guardas de los pasos que cuelgan, una por una", () => {
+  it("la guarda de alVotar con la hora de pared: si la verificación termina cuando ya pasó el tiempo, no sale el voto", async () => {
+    h.impl.verify = async (r: CosignRequest) => {
+      const v = await kitReal.verify(r);
+      // El celular se bloqueó dentro de la verificación: la hora salta y ningún temporizador corrió.
+      vi.setSystemTime(Date.now() + 100_000);
+      return v;
+    };
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(r.error?.message).toBe("pollar-activacion-lenta");
+    expect(vecesQue("verify")).toBe(1);
+    expect(vecesQue("relay")).toBe(0);
+    expect(votos()).toBeNull();
+  });
+
+  it("tras leer la transacción: si pasó el tiempo, no pide la verificación del kit ni vota", async () => {
+    h.impl.refresh = async (id: string) => {
+      const base = { ...structuredClone(pedido), id };
+      // Leer la transacción es lo primero que toca el campo: ahí la hora salta.
+      Object.defineProperty(base, "unsignedPayload", {
+        get() {
+          vi.setSystemTime(Date.now() + 100_000);
+          return pedido.unsignedPayload;
+        },
+        enumerable: true,
+      });
+      return base;
+    };
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(r.error?.message).toBe("pollar-activacion-lenta");
+    expect(vecesQue("verify")).toBe(0);
+    expect(vecesQue("relay")).toBe(0);
+  });
+
+  it("el pedido con voto: la lectura que termina tarde no pide settle", async () => {
+    pedido = { ...pedido, activityId: "actividad-0" };
+    const lectura = adelantada<unknown>();
+    h.impl.get = () => lectura.promesa;
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(20_000);
+    expect(r.valor).toBe("pendiente");
+    lectura.entregar({ ...pedido });
+    await avanzar(1_000);
+    expect(vecesQue("settle")).toBe(0);
+    expect(vecesQue("relay")).toBe(0);
+  });
+
+  it("el pedido con voto: si settle termina tarde diciendo que se aprobó, el intento vencido no escribe nada", async () => {
+    pedido = { ...pedido, activityId: "actividad-0" };
+    h.impl.get = async (id: string) => ({ ...pedido, id });
+    const cierre = adelantada<unknown>();
+    h.impl.settle = () => cierre.promesa;
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(20_000);
+    expect(r.valor).toBe("pendiente");
+    cierre.entregar(aprobado(pedido));
+    await avanzar(1_000);
+    expect(pollarWallet.estadoOficialLocal().activacion).not.toBe("lista");
+  });
+});
+
 describe("el candado espera poco", () => {
   it("tomado por otro que nunca lo suelta: pollar-activacion-lenta a los 8 s y sin votar", async () => {
     void candados.request("tinkazo-activar", () => new Promise(() => undefined));
@@ -376,18 +442,35 @@ describe("el candado espera poco", () => {
     expect(vecesQue("relay")).toBe(0);
   });
 
-  it("el intento que venció suelta el candado y uno nuevo lo toma y vota una sola vez", async () => {
+  it("el intento que venció retiene el candado hasta que su cadena vieja termine o pasen 8 s, y uno nuevo vota una sola vez", async () => {
     let lecturas = 0;
     h.impl.pending = () => (++lecturas === 1 ? new Promise(() => undefined) : Promise.resolve([structuredClone(pedido)]));
     const primero = observar(pollarWallet.activarCuenta());
     await avanzar(45_000);
     expect(primero.error?.message).toBe("pollar-activacion-lenta");
-    expect(candados.tomado("tinkazo-activar")).toBe(false);
+    // La cadena vieja puede tener una llamada del kit en vuelo: el candado sigue tomado.
+    expect(candados.tomado("tinkazo-activar")).toBe(true);
     const segundo = observar(pollarWallet.activarCuenta());
-    await avanzar(0);
+    await avanzar(7_000);
+    expect(segundo.listo).toBe(false);
+    expect(vecesQue("relay")).toBe(0);
+    await avanzar(1_100);
     expect(segundo.valor).toBe("activada");
     expect(vecesQue("relay")).toBe(1);
     expect(candados.tomado("tinkazo-activar")).toBe(false);
+  });
+
+  it("si la cadena vieja termina antes de los 8 s, el candado se suelta en ese momento", async () => {
+    const lectura = adelantada<unknown[]>();
+    h.impl.pending = () => lectura.promesa;
+    const primero = observar(pollarWallet.activarCuenta());
+    await avanzar(45_000);
+    expect(primero.error?.message).toBe("pollar-activacion-lenta");
+    expect(candados.tomado("tinkazo-activar")).toBe(true);
+    lectura.entregar([structuredClone(pedido)]);
+    await avanzar(10);
+    expect(candados.tomado("tinkazo-activar")).toBe(false);
+    expect(vecesQue("relay")).toBe(0);
   });
 });
 
@@ -442,19 +525,119 @@ describe("después del voto, 20 segundos", () => {
     expect(vecesQue("relay")).toBe(1);
   });
 
-  it("un voto que no vuelve nunca se olvida por tiempo: el candado sigue tomado y una llamada nueva no vota otra vez", async () => {
+  it("un voto que no vuelve: hasta los 65 s el candado sigue tomado y una llamada nueva no vota otra vez", async () => {
     h.impl.relay = () => new Promise(() => undefined);
     const r = observar(pollarWallet.activarCuenta());
     await avanzar(20_000);
     expect(r.valor).toBe("pendiente");
-    // Pasan cinco minutos: el pedido sigue sin voto registrado, y el sitio no sabe si el voto está por llegar.
-    await avanzar(300_000);
+    await avanzar(44_000);
     expect(candados.tomado("tinkazo-activar")).toBe(true);
     const nueva = observar(pollarWallet.activarCuenta());
-    await avanzar(20_000);
-    expect(nueva.valor).toBe("pendiente");
+    await avanzar(500);
+    expect(nueva.listo).toBe(false);
     expect(vecesQue("relay")).toBe(1);
+  });
+
+  it("el seguro de 65 s: suelta el candado, cuenta un voto fallado y lo dice en la consola sin datos de la cuenta", async () => {
+    h.impl.relay = () => new Promise(() => undefined);
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(20_000);
+    expect(r.valor).toBe("pendiente");
+    await avanzar(44_900);
+    expect(candados.tomado("tinkazo-activar")).toBe(true);
+    expect(votos()).toBeNull();
+    await avanzar(200);
+    expect(candados.tomado("tinkazo-activar")).toBe(false);
+    expect(votos()).toBe("1");
+    expect(consola()).toContain("[tinkazo] activación lenta: seguro");
+    expect(consola()).not.toContain(P);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("pasado el seguro, una llamada nueva lee el pedido: si ya está aprobado dice activada y no vota otra vez", async () => {
+    h.impl.relay = () => new Promise(() => undefined);
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(70_000);
+    expect(r.valor).toBe("pendiente");
+    expect(vecesQue("relay")).toBe(1);
+    h.impl.get = async (id: string) => aprobado({ ...pedido, id });
+    const nueva = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(nueva.valor).toBe("activada");
+    expect(vecesQue("relay")).toBe(1);
+  });
+
+  it("pasado el seguro, si el pedido sigue pendiente y sin voto, no se vota otra vez: pollar-activacion-tope, ni cerrando sesión", async () => {
+    h.impl.relay = () => new Promise(() => undefined);
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(70_000);
+    expect(r.valor).toBe("pendiente");
+    h.impl.get = async (id: string) => ({ ...pedido, id });
+    const nueva = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(nueva.error?.message).toBe("pollar-activacion-tope");
+    expect(vecesQue("relay")).toBe(1);
+    await pollarWallet.disconnect();
+    pollarWallet.address = P;
+    const otra = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(otra.error?.message).toBe("pollar-activacion-tope");
+    expect(vecesQue("relay")).toBe(1);
+  });
+
+  it("pasado el seguro, un pedido que ya trae un voto se espera sin votar", async () => {
+    h.impl.relay = () => new Promise(() => undefined);
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(70_000);
+    expect(r.valor).toBe("pendiente");
+    h.impl.get = async (id: string) => ({ ...pedido, id, activityId: "actividad-1" });
+    h.impl.settle = async (x: unknown) => aprobado(x as Pedido);
+    const nueva = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(nueva.valor).toBe("activada");
+    expect(vecesQue("relay")).toBe(1);
+  });
+
+  it("el voto olvidado que termina fallando por detrás no se cuenta dos veces", async () => {
+    h.impl.relay = () => llegaA(100_000, () => ({ status: 200, body: {}, request: { ...refrescado, status: "FAILED", activityId: "actividad-1" } }));
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(70_000);
+    expect(r.valor).toBe("pendiente");
+    expect(votos()).toBe("1");
+    await avanzar(40_000);
+    expect(votos()).toBe("1");
+    expect(vecesQue("relay")).toBe(1);
+  });
+
+  it("una pestaña congelada: pasó la hora del seguro sin que corra su temporizador y la llamada nueva no espera ni vota", async () => {
+    h.impl.relay = () => new Promise(() => undefined);
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(20_000);
+    expect(r.valor).toBe("pendiente");
+    vi.setSystemTime(Date.now() + 70_000);
+    h.impl.get = async (id: string) => ({ ...pedido, id });
+    const nueva = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(nueva.error?.message).toBe("pollar-activacion-tope");
+    expect(vecesQue("relay")).toBe(1);
+  });
+
+  it("otra pestaña consigue el candado cuando pasa el seguro", async () => {
+    h.impl.relay = () => new Promise(() => undefined);
+    void pollarWallet.activarCuenta();
+    await avanzar(64_000);
+    let consiguio: boolean | null = null;
+    void candados.request("tinkazo-activar", { ifAvailable: true }, (c) => {
+      consiguio = c !== null;
+    });
+    await avanzar(0);
+    expect(consiguio).toBe(false);
+    await avanzar(1_100);
+    void candados.request("tinkazo-activar", { ifAvailable: true }, (c) => {
+      consiguio = c !== null;
+    });
+    await avanzar(0);
+    expect(consiguio).toBe(true);
   });
 
   it("el voto vencido que termina fallando por detrás sigue contando como voto fallado", async () => {
@@ -623,10 +806,16 @@ describe("el camino sano no cambia", () => {
 });
 
 describe("la precarga", () => {
-  it("baja también el SDK de Stellar que usa el paso de leer la transacción, sin esperarlo", () => {
+  it("solo baja el kit del proveedor: quien se anota desde el celular no baja el SDK de Stellar", () => {
     const fuente = readFileSync(resolve(process.cwd(), "src/stellar/wallet-pollar.ts"), "utf8");
-    const cuerpo = fuente.slice(fuente.indexOf("export function precargarSdk"), fuente.indexOf("export function precargarSdk") + 900);
+    const desde = fuente.indexOf("export function precargarSdk");
+    const cuerpo = fuente.slice(desde, fuente.indexOf("\n}\n", desde));
     expect(cuerpo).toContain('void cargaOpcional(import("@pollar/core"));');
-    expect(cuerpo).toContain('void cargaOpcional(import("@stellar/stellar-sdk"));');
+    expect(cuerpo).not.toContain("stellar-sdk");
+  });
+
+  it("el paso de la cuenta baja el SDK de Stellar cuando se abre, con la persona mirando", () => {
+    const flujo = readFileSync(resolve(process.cwd(), "src/ui/cuenta-lista-flujo.ts"), "utf8");
+    expect(flujo).toContain('void import("@stellar/stellar-sdk").catch(() => undefined);');
   });
 });
