@@ -1181,6 +1181,8 @@ export interface EstadoDeCelular {
   gano?: boolean;
   puesto?: number;
   avisado?: boolean;
+  /** El código de entrega de quien ganó en una campaña de personas. Lo suma la sala, que tiene la sal: no sale de `estadoDeCelular`. */
+  codigo?: string;
 }
 
 /** Lo que ve un celular de sí mismo. Sin la llave correcta, solo lo público y `anotada: false`. */

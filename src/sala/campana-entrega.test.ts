@@ -206,3 +206,65 @@ describe("GET campana/entrega", () => {
     for (const secreto of [...codigos, sala.token, ...ganadoras]) expect(escrito).not.toContain(secreto);
   });
 });
+
+describe("el código propio en la consulta del celular de una persona", () => {
+  it("quien ganó recibe su código y solo el suyo, el del puesto que le tocó", async () => {
+    const { sal, sortear, yo, llaveDeLinea } = await montar();
+    const ganadoras = await sortear();
+    const codigos = await codigosDeEntrega(sal, ganadoras);
+    for (const [puesto, linea] of ganadoras.entries()) {
+      const r = await yo(llaveDeLinea(linea));
+      expect(r).toMatchObject({ fase: "sorteada", anotada: true, gano: true, puesto, codigo: codigos[puesto] });
+      expect(JSON.stringify(r)).not.toContain(codigos[1 - puesto] as string);
+    }
+  });
+
+  it("lo que ya devuelve no cambia: solo se suma el campo codigo a quien ganó", async () => {
+    const { sortear, yo, llaveDeLinea } = await montar();
+    const ganadoras = await sortear();
+    const ganadora = await yo(llaveDeLinea(ganadoras[0] as string));
+    expect(Object.keys(ganadora).sort()).toEqual(["anotada", "cierraMs", "codigo", "fase", "gano", "puesto", "ronda", "sorteo", "total"]);
+    expect(ganadora.codigo).toMatch(/^[0-9]{4}$/);
+  });
+
+  it("quien no ganó no recibe ningún código ni la clave", async () => {
+    const { lineas, sal, sortear, yo, llaveDeLinea } = await montar();
+    const ganadoras = await sortear();
+    const perdedora = lineas.find((l) => !ganadoras.includes(l)) as string;
+    const r = await yo(llaveDeLinea(perdedora));
+    expect(r).toMatchObject({ fase: "sorteada", anotada: true, gano: false });
+    expect("codigo" in r).toBe(false);
+    for (const codigo of await codigosDeEntrega(sal, ganadoras)) expect(JSON.stringify(r)).not.toContain(codigo);
+  });
+
+  it("una llave que no es de nadie no recibe ningún código", async () => {
+    const { sortear, yo } = await montar();
+    await sortear();
+    const r = await yo(llaveDe(99));
+    expect(r).toMatchObject({ fase: "sorteada", anotada: false });
+    expect("codigo" in r).toBe(false);
+    expect("gano" in r).toBe(false);
+  });
+
+  it("antes del sorteo nadie recibe un código", async () => {
+    const { poner, yo, llaveDeLinea, lineas } = await montar();
+    for (const linea of lineas) expect("codigo" in (await yo(llaveDeLinea(linea)))).toBe(false);
+    expect((await poner("cerrada")).status).toBe(204);
+    for (const linea of lineas) expect("codigo" in (await yo(llaveDeLinea(linea)))).toBe(false);
+  });
+
+  it("sigue dando el código con los interruptores de las personas apagados", async () => {
+    const { mundo, sortear, yo, llaveDeLinea } = await montar();
+    const ganadoras = await sortear();
+    mundo.env.DIFERIDA = "0";
+    mundo.env.GOOGLE_CLIENT_ID = "";
+    expect(((await yo(llaveDeLinea(ganadoras[1] as string))) as { codigo?: string }).codigo).toMatch(/^[0-9]{4}$/);
+  });
+
+  it("es el mismo código que ve quien organiza para esa ganadora", async () => {
+    const { sortear, entrega, yo, llaveDeLinea } = await montar();
+    const ganadoras = await sortear();
+    const { codigos } = (await (await entrega()).json()) as { codigos: string[] };
+    for (const [puesto, linea] of ganadoras.entries()) expect((await yo(llaveDeLinea(linea))).codigo).toBe(codigos[puesto]);
+  });
+});

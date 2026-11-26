@@ -311,7 +311,9 @@ el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
   entero módulo 10.000. Si el código ya salió para una ganadora de más adelante en el puesto, esa pasa a la vuelta siguiente: en una
   lista no hay dos iguales. No se guarda: se calcula en cada pedido y no se escribe en ningún registro. Lo ve quien organiza con
   `GET campana/entrega` (token de la sala, `200 {"codigos":["0421",...]}` en orden de puesto, `no-store`: `404 no-existe`,
-  `403 token`, `409 no-es-de-personas` en una campaña de cuentas y `409 fase` antes del sorteo). Los interruptores de las personas no lo frenan.
+  `403 token`, `409 no-es-de-personas` en una campaña de cuentas y `409 fase` antes del sorteo) y cada ganadora en la consulta de
+  su celular (`campana/yo`), que suma `"codigo"` solo para quien ganó y con el de su puesto. Los interruptores de las personas no
+  lo frenan.
 - **Saber si estoy anotada.** El celular no tiene cuenta que mandar: `POST campana/yo` con `{"llave"}` sola. La sala busca la fila
   que anotó esa llave y contesta lo mismo que con una cuenta y su llave. Quien no tiene la llave de una fila no ve nada de esa
   fila. En una campaña de cuentas, un pedido sin `cuenta` sigue siendo `400 forma`.

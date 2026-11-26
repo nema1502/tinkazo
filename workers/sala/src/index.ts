@@ -1100,15 +1100,21 @@ export class Sala extends DurableObject<Env> {
   }
 
   /**
-   * El celular de una campaña de personas pregunta por sí mismo con su llave sola. La respuesta es la de `estadoDeCelular` y no
-   * dice más que lo que dice hoy con una cuenta y su llave: quien no tiene la llave de una fila no ve nada de esa fila.
+   * El celular de una campaña de personas pregunta por sí mismo con su llave sola. La respuesta es la de `estadoDeCelular` más,
+   * para quien ganó, su código de entrega: quien no tiene la llave de una fila no ve nada de esa fila.
    */
   async estadoDePersona(llave: string): Promise<Resultado<EstadoDeCelular>> {
     // Sin mirar los interruptores: apagarlos frena crear campañas de personas y anotar, pero quien ya está anotada sigue viendo
     // cómo va lo suyo, y si ganó.
     if (!this.dato("huella") || !this.esCampana() || !this.esDePersonas()) return { ok: false, motivo: "forma" };
     const huella = await huellaDeLlave(llave);
-    return { ok: true, ...estadoDeCelularPorLlave(this.sql, huella) };
+    const estado = estadoDeCelularPorLlave(this.sql, huella);
+    // Quien ganó ve su código de entrega, el de su puesto, y nadie más ve ninguno. Sin poder calcularlo, el resto de la respuesta sigue igual.
+    if (estado.anotada && estado.gano === true && estado.puesto !== undefined) {
+      const codigo = (await this.codigosDe(ganadorasGuardadas(this.sql)))?.[estado.puesto];
+      if (codigo !== undefined) estado.codigo = codigo;
+    }
+    return { ok: true, ...estado };
   }
 
   /**
@@ -1811,6 +1817,7 @@ function cuerpoDeEstadoDeCelular(r: EstadoDeCelular): Record<string, unknown> {
     ...(r.gano !== undefined ? { gano: r.gano } : {}),
     ...(r.puesto !== undefined ? { puesto: r.puesto } : {}),
     ...(r.avisado ? { avisado: true } : {}),
+    ...(r.codigo !== undefined ? { codigo: r.codigo } : {}),
   };
 }
 
