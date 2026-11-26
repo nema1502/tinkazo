@@ -176,7 +176,7 @@ describe("cada salida al camino de siempre deja marcado el sorteo, y solo ese", 
 
   it("un sello gemelo que se repite", async () => {
     let pedidos = 0;
-    const r = await correr(fuentes({ pedir: async () => (pedidos++ === 0 ? mandado(H1, false) : mandado(H2)), consultar: entro }));
+    const r = await correr(fuentes({ pedir: async () => (pedidos++ === 0 ? mandado(H1, false) : mandado(H2, false)), consultar: entro }));
     expect(pedidos).toBe(2);
     expect(r).toEqual({ estado: "camino-de-hoy" });
     marcado();

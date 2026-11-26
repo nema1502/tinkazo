@@ -472,48 +472,41 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
     try {
       /**
        * Entró: el resultado sale del contrato para este sorteo, y el enlace solo si la transacción es de este sorteo y lo
-       * que devolvió coincide. Si el contrato no se deja leer y la transacción es de este sorteo, vale lo que devolvió en
-       * la red. Si no, se sigue leyendo un rato y no se manda nada más.
+       * que devolvió coincide. Si el contrato no se deja leer, o se lee vacío porque el RPC está atrasado, y la transacción es
+       * de este sorteo, vale lo que devolvió en la red. Si no, se sigue leyendo un rato y no se manda nada más.
        */
       const entro = async (valor: unknown): Promise<FinDelServicio | "otra-vez"> => {
         const hasta = ahora() + TOPE_DE_LAS_LECTURAS_DEL_QUE_ENTRO_MS;
+        let devuelto: Promise<Ganadores | null> | undefined;
+        /** Lo que devolvió en la red la transacción de este sorteo, leído una sola vez. */
+        const valorPropio = (): Promise<Ganadores | null> => (devuelto ??= Promise.resolve().then(() => f.valorDe(valor)).catch(() => null));
         let vacias = 0;
         let ultimoError: unknown = null;
         for (;;) {
           const l = await leer(Number.POSITIVE_INFINITY, TOPE_DE_LECTURA_DEL_QUE_ENTRO_MS);
           if (l.ok && l.v) {
-            let coincide = false;
-            if (esPropio) {
-              try {
-                const devuelto = await f.valorDe(valor);
-                coincide = !!devuelto && mismosNumeros(devuelto.winners, l.v.winners) && devuelto.randomness.toLowerCase() === l.v.randomness.toLowerCase();
-              } catch {
-                coincide = false;
-              }
-            }
+            const propio = esPropio ? await valorPropio() : null;
+            const coincide = !!propio && mismosNumeros(propio.winners, l.v.winners) && propio.randomness.toLowerCase() === l.v.randomness.toLowerCase();
             if (coincide) {
               alPaso("confirmed", hash);
               return listo(l.v, false, hash);
             }
             return listo(l.v, true);
           }
+          if (esPropio) {
+            // La transacción es de este sorteo y entró bien: el contrato tiene el sorteo. Si no se deja leer, o el que se lee
+            // está atrasado y lo da vacío, vale lo que devolvió en la red.
+            const propio = await valorPropio();
+            if (propio) {
+              alPaso("confirmed", hash);
+              return listo(propio, false, hash);
+            }
+          }
           if (l.ok) {
             vacias++;
           } else {
             vacias = 0;
             ultimoError = l.error;
-            if (esPropio) {
-              let devuelto: Ganadores | null = null;
-              try {
-                devuelto = await f.valorDe(valor);
-              } catch {
-                devuelto = null;
-              }
-              if (devuelto) {
-                alPaso("confirmed", hash);
-                return listo(devuelto, false, hash);
-              }
-            }
           }
           if (vacias >= LECTURAS_VACIAS_DEL_QUE_ENTRO) {
             // Entró una transacción que no es de este sorteo (un sello gemelo, con la misma lista y la misma ronda): el
