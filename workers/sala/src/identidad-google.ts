@@ -10,7 +10,7 @@
  * para que quien llama los use en memoria. Nada del token, del correo ni del identificador va a un registro, y el motivo
  * de un rechazo es siempre uno de una lista corta y fija. Nunca lanza.
  */
-import { deB64url } from "./firma";
+import { aB64url, deB64url } from "./firma";
 
 /** Donde Google publica las llaves públicas con las que firma los tokens de identidad. */
 export const URL_DE_LLAVES_DE_GOOGLE = "https://www.googleapis.com/oauth2/v3/certs";
@@ -284,6 +284,9 @@ async function verificar(token: string, opciones: OpcionesDeIdentidad): Promise<
   // El algoritmo lo fija la sala, no el token: cualquier otro, incluido `none`, se rechaza sin pedir llaves.
   if (cabecera.alg !== "RS256") return rechazo("firma");
   if (f === "") return rechazo("firma");
+  // La firma tiene una sola escritura: el último carácter de una firma de 256 bytes lleva cuatro bits que sobran y el decodificador
+  // los acepta con cualquier valor. Sin esta comprobación un mismo token tendría hasta dieciséis textos y cada uno una ficha propia.
+  if (aB64url(deB64url(f)) !== f) return rechazo("mal-formado");
 
   const ahora = opciones.ahora ?? Date.now;
   const llave = await llaveDe(kid, opciones.memoria ?? memoriaDelWorker, opciones.pedir ?? ((url, init) => fetch(url, init)), ahora, opciones.tiempoMaxMs ?? TIEMPO_MAX_LLAVES_MS);

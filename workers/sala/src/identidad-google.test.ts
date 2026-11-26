@@ -169,6 +169,21 @@ describe("lo que se rechaza", () => {
     }
   });
 
+  it("una firma con bits sobrantes distintos de cero no es canónica: mal formado, y el token bueno sigue entrando", async () => {
+    const b = banco();
+    const t = await firmar();
+    expect((await verificarIdentidadDeGoogle(t, b.opciones)).ok).toBe(true);
+    // La firma de 256 bytes son 342 letras y la última lleva cuatro bits que sobran: cambiarlos no cambia los bytes.
+    const alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const ultima = t.at(-1) as string;
+    for (const salto of [1, 2, 4, 8]) {
+      const otra = alfabeto[alfabeto.indexOf(ultima) ^ salto] as string;
+      expect(otra).not.toBe(ultima);
+      const distinto = `${t.slice(0, -1)}${otra}`;
+      expect(await verificarIdentidadDeGoogle(distinto, b.opciones), `salto ${salto}`).toEqual({ ok: false, motivo: "mal-formado" });
+    }
+  });
+
   it("un token vencido: vencido", async () => {
     const b = banco();
     const t = await firmar({ payload: { exp: AHORA / 1000 - 1 } });
