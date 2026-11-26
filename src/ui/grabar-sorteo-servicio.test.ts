@@ -214,14 +214,17 @@ describe("el tope de sorteos del mes cuando el servicio pudo dejar una reserva",
     expect(h.reserva).toHaveBeenCalledWith(7n, r.ahora);
   });
 
-  it("si el sorteo no aparece en lo que dura el presupuesto, el error del tope se muestra, con una sola firma", async () => {
+  it("si el sorteo no aparece en lo que dura el presupuesto, dice que no se pudo cubrir y no da la fecha del tope, con una sola firma", async () => {
     h.sortearPorElServicio.mockResolvedValue({ estado: "camino-de-hoy" });
     h.reserva.mockReturnValue(true);
-    const e = cupo();
-    h.drawOnChain.mockRejectedValue(e);
+    h.drawOnChain.mockRejectedValue(cupo());
     const { grabarElSorteo } = await import("./grabar-sorteo");
     const fin = await grabarElSorteo({ ...base, ...reloj() });
-    expect(fin).toEqual({ estado: "fallo", error: e });
+    expect(fin.estado).toBe("fallo");
+    const error = (fin as { error: { name?: string; motivo?: string; detalle?: string; que?: string; liberaEn?: number } }).error;
+    expect(error).toMatchObject({ name: "ErrorPortero", motivo: "fondo", detalle: "reserva-del-servicio" });
+    expect(error.que).toBeUndefined();
+    expect(error.liberaEn).toBeUndefined();
     expect(h.drawOnChain).toHaveBeenCalledTimes(1);
     expect(h.readDraw.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
