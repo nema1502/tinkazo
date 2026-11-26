@@ -6,7 +6,7 @@ import "./campana/campana.css";
 import { cargaOpcional } from "./carga-opcional";
 import { enNavegadorDeApp } from "./navegador";
 import { getLang, initialLang, onLangChange, setLang, texto } from "./idioma";
-import { leerEnlaceDeLaPagina } from "./campana/enlace";
+import { leerEnlaceDeCampana } from "./campana/enlace";
 import { campanasActivo } from "./campana/bandera";
 import { montarCelular, type DepsDelCelular, type VistaDelCelular } from "./campana/celular";
 import { cargarConUnReintento, depsConectadas, type BaseDelCelular } from "./campana/conectar";
@@ -202,7 +202,7 @@ async function montarDePersona(
     return;
   }
   if (!raiz || montaje !== montajes) return;
-  const [{ depsDePersona }, { botonDeGoogle, cargarElGuionDeGoogle }, { aislarDelGuion, enlaceCompleto }] = piezas;
+  const [{ depsDePersona }, { botonDeGoogle, cargarElGuionDeGoogle }, { aislarDelGuion }] = piezas;
   const deps = depsDePersona({
     base,
     campana,
@@ -214,7 +214,7 @@ async function montarDePersona(
       clienteId,
       idioma: getLang,
       oscuro: temaOscuro,
-      // Antes de que el guion de Google entre a la página: sin referencia y con la dirección limpia (ver `aislar.ts`).
+      // Antes de que el guion de Google entre a la página: sin referencia (ver `aislar.ts`).
       cargar: () => {
         aislarDelGuion();
         return cargarElGuionDeGoogle();
@@ -223,7 +223,7 @@ async function montarDePersona(
     memoria: leerMemoriaDeCampana(),
     red: network.name,
     enLinea: () => navigator.onLine !== false,
-    enlace: () => enlaceCompleto(),
+    enlace: () => location.href,
     ...(typeof navigator.locks?.request === "function"
       ? { bloquear: <T>(nombre: string, trabajo: () => Promise<T>): Promise<T> => navigator.locks.request(nombre, trabajo) }
       : {}),
@@ -289,8 +289,7 @@ async function cargar(): Promise<void> {
     montarVista(campanaDeEjemplo(Date.now()), true, null);
     return;
   }
-  // Con el guion de Google en una campaña de personas la dirección queda limpia: el enlace sale de la dirección o, si ya se limpió, del historial.
-  const enlace = leerEnlaceDeLaPagina();
+  const enlace = leerEnlaceDeCampana(location.search, location.hash);
   if (!enlace?.sala || !enlace.clave) {
     mostrarCarga("no-esta", () => undefined);
     return;

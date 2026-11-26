@@ -234,13 +234,14 @@ describe("participar.html: una campaña de personas", () => {
     expect(guardado).not.toContain("ana@example.org");
   });
 
-  it("al bajar el guion de Google la dirección queda sin la sala, el pase y la clave, y recargar sigue abriendo la campaña", async () => {
+  it("al bajar el guion de Google la página no dice de dónde viene y la dirección queda entera", async () => {
     await abrir();
     expect(guiones).toHaveLength(1);
     expect(document.head.querySelector('meta[name="referrer"]')?.getAttribute("content")).toBe("no-referrer");
-    expect(location.search).toBe("");
-    expect(location.hash).toBe("");
-    // Recargar: la dirección ya no trae nada y la página lee la campaña del historial de la pestaña.
+    // Copiar la dirección, abrirla en otro navegador o recargar sigue abriendo la misma campaña.
+    expect(location.href).toBe(`${location.origin}/participar.html${ENLACE}`);
+    expect(location.search).toContain("s=");
+    expect(location.hash).not.toBe("");
     vi.resetModules();
     document.body.innerHTML = main;
     guiones = [];

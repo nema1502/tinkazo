@@ -36,29 +36,3 @@ export function leerEnlaceDeCampana(search: string, hash: string): EnlaceDeCampa
   if (clave && !CLAVE.test(clave)) return null;
   return { evento, q, clave: clave || null, sala, pase };
 }
-
-/** La clave del historial donde la página guarda el enlace entero cuando limpia la dirección (ver `aislar.ts`). */
-export const MARCA_DEL_ENLACE = "tinkazoEnlace";
-
-/** Lo que la página sacó de la dirección y dejó en el historial de esta pestaña, o null si no hay nada con esa forma. */
-export function enlaceGuardadoEnElHistorial(estado: unknown): { search: string; hash: string } | null {
-  if (typeof estado !== "object" || estado === null) return null;
-  const x = (estado as Record<string, unknown>)[MARCA_DEL_ENLACE];
-  if (typeof x !== "object" || x === null) return null;
-  const { search, hash } = x as Record<string, unknown>;
-  return typeof search === "string" && typeof hash === "string" ? { search, hash } : null;
-}
-
-/**
- * El enlace de la campaña que abrió la página: el de la dirección y, si la página la limpió antes de bajar el guion de Google en
- * una campaña de personas, el que guardó el historial de esta pestaña. Recargar sigue abriendo la misma campaña.
- */
-export function leerEnlaceDeLaPagina(
-  ubicacion: Pick<Location, "search" | "hash"> = location,
-  estado: unknown = history.state,
-): EnlaceDeCampana | null {
-  const aca = leerEnlaceDeCampana(ubicacion.search, ubicacion.hash);
-  if (aca) return aca;
-  const guardado = enlaceGuardadoEnElHistorial(estado);
-  return guardado ? leerEnlaceDeCampana(guardado.search, guardado.hash) : null;
-}
