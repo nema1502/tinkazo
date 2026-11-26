@@ -27,6 +27,13 @@ vi.mock("../../workers/sala/src/cadena", () => ({ leerSorteoEnLaRed: async () =>
  * Si una respuesta cambia, aunque sea una cabecera, esta prueba falla.
  *
  * Para volver a grabar el archivo, solo contra el código de la rama principal: `GRABAR_PARIDAD=1`.
+ *
+ * Cómo se comprueba de dónde sale lo grabado: se saca el código de un commit de la rama principal a una carpeta aparte
+ * (`git archive <commit> src workers docs package.json tsconfig.json vite.config.ts`), se copia esta prueba a `src/sala`, se
+ * enlazan las dependencias y se corre con `GRABAR_PARIDAD=1`. El archivo que sale en esa carpeta se compara con este, sin contar
+ * los fines de línea. El 25 de noviembre de 2026 se regrabó así desde el estado actual de la rama principal (691885bd) y desde el
+ * punto donde nació esta rama (e7ab071d): las dos veces salió igual, byte por byte, a este archivo (SHA-256
+ * 6a85d381191d35a0c58ec40f48de284d2409065bc6c2b6ee17ffb2c81a1dfd9a, con fines de línea LF). Por eso no depende de esta rama.
  */
 const AHORA = Date.UTC(2026, 10, 25, 15, 0, 0);
 const RONDA = 40_000_000;
