@@ -12,14 +12,22 @@ import { almacenEnMemoria, reiniciar } from "./pollar-falso";
  */
 
 const h = await vi.hoisted(async () => (await import("./pollar-falso")).estadoPollarFalso());
+/** Un gancho que corre justo al armar el cliente, para que una prueba mueva la hora en medio de esa espera. */
+const gancho = vi.hoisted(() => ({ alArmar: null as (() => void) | null }));
 
 vi.mock("./config", async (orig) => ({ ...(await orig<typeof import("./config")>()), network: h.red }));
 vi.mock("@pollar/core", async (orig) => {
   const real = await orig<typeof import("@pollar/core")>();
   const { clienteFalso } = await import("./pollar-falso");
+  const Base = clienteFalso(h);
+  const PollarClient = function (config: Record<string, unknown>) {
+    const cliente = new Base(config);
+    gancho.alArmar?.();
+    return cliente;
+  } as unknown as typeof Base;
   return {
     ...real,
-    PollarClient: clienteFalso(h),
+    PollarClient,
     recognizedSetupRequest: (r: CosignRequest) => (h.impl.recognizedSetupRequest ? h.impl.recognizedSetupRequest(r) : real.recognizedSetupRequest(r)),
   };
 });
@@ -172,6 +180,7 @@ let candados: ReturnType<typeof candadosDePrueba>;
 beforeEach(() => {
   P = Keypair.random().publicKey();
   reiniciar(h);
+  gancho.alArmar = null;
   // Con la hora simulada también: los topes del sitio miran la hora de pared, no solo los temporizadores.
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY_MAINNET", "pub_mainnet_prueba");
@@ -567,7 +576,7 @@ describe("después del voto, 20 segundos", () => {
     expect(vecesQue("relay")).toBe(1);
   });
 
-  it("pasado el seguro, si el pedido sigue pendiente y sin voto, no se vota otra vez: pollar-activacion-tope, ni cerrando sesión", async () => {
+  it("pasado el seguro, si el pedido sigue pendiente y sin voto, no se vota otra vez y dice que tarda: cerrar sesión no lo arregla y no se pide", async () => {
     h.impl.relay = () => new Promise(() => undefined);
     const r = observar(pollarWallet.activarCuenta());
     await avanzar(70_000);
@@ -575,13 +584,13 @@ describe("después del voto, 20 segundos", () => {
     h.impl.get = async (id: string) => ({ ...pedido, id });
     const nueva = observar(pollarWallet.activarCuenta());
     await avanzar(0);
-    expect(nueva.error?.message).toBe("pollar-activacion-tope");
+    expect(nueva.error?.message).toBe("pollar-activacion-lenta");
     expect(vecesQue("relay")).toBe(1);
     await pollarWallet.disconnect();
     pollarWallet.address = P;
     const otra = observar(pollarWallet.activarCuenta());
     await avanzar(0);
-    expect(otra.error?.message).toBe("pollar-activacion-tope");
+    expect(otra.error?.message).toBe("pollar-activacion-lenta");
     expect(vecesQue("relay")).toBe(1);
   });
 
@@ -618,7 +627,7 @@ describe("después del voto, 20 segundos", () => {
     h.impl.get = async (id: string) => ({ ...pedido, id });
     const nueva = observar(pollarWallet.activarCuenta());
     await avanzar(0);
-    expect(nueva.error?.message).toBe("pollar-activacion-tope");
+    expect(nueva.error?.message).toBe("pollar-activacion-lenta");
     expect(vecesQue("relay")).toBe(1);
   });
 
@@ -699,6 +708,121 @@ describe("después del voto, 20 segundos", () => {
   });
 });
 
+describe("un voto que salió no se repite, ni con otra cuenta en medio ni desde otra pestaña", () => {
+  it.each([
+    ["con Web Locks", true],
+    ["sin Web Locks", false],
+  ])("A vota y no termina, entra B y vuelve A (%s): el pedido de A no se vota otra vez", async (_caso, conCandados) => {
+    if (!conCandados) Object.defineProperty(navigator, "locks", { value: undefined, configurable: true, writable: true });
+    h.impl.relay = () => new Promise(() => undefined);
+    const a = observar(pollarWallet.activarCuenta());
+    await avanzar(20_000);
+    expect(a.valor).toBe("pendiente");
+    const pedidoDeA = pedido;
+    await pollarWallet.disconnect();
+    // B entra en la misma pestaña, con su propio pedido, y vota lo suyo.
+    h.billetera = { address: Q, provisioning: "CREATING", existsOnStellar: false };
+    pollarWallet.address = Q;
+    pedido = pedidoDe(buena(Q), { id: "pedido-2", account: Q, signWith: Q });
+    h.impl.relay = async () => ({ status: 200, body: {}, request: aprobado(refrescado ?? pedido) });
+    const b = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(b.valor).toBe("activada");
+    expect(vecesQue("relay")).toBe(2);
+    await pollarWallet.disconnect();
+    // A vuelve: su pedido sigue pendiente y sin voto porque el relevo no aterrizó. No se vota otra vez.
+    h.billetera = { address: P, provisioning: "CREATING", existsOnStellar: false };
+    pollarWallet.address = P;
+    pedido = pedidoDeA;
+    h.impl.get = async (id: string) => ({ ...pedido, id });
+    const otra = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(otra.error?.message).toBe("pollar-activacion-lenta");
+    expect(vecesQue("relay")).toBe(2);
+  });
+
+  it("el voto retiene el candado de su pedido hasta que termina, aunque el seguro suelte el candado principal", async () => {
+    const relay = adelantada<unknown>();
+    h.impl.relay = () => relay.promesa;
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(70_000);
+    expect(r.valor).toBe("pendiente");
+    expect(candados.tomado("tinkazo-activar")).toBe(false);
+    expect(candados.tomado("tinkazo-voto:pedido-1")).toBe(true);
+    relay.entregar({ status: 200, body: {}, request: aprobado(refrescado ?? pedido) });
+    await avanzar(0);
+    expect(candados.tomado("tinkazo-voto:pedido-1")).toBe(false);
+  });
+
+  it("otra pestaña tiene el voto de este pedido sin terminar: se lee, no se vota y dice que tarda", async () => {
+    // La otra pestaña: su voto sigue en vuelo y retiene el candado de ese pedido.
+    void candados.request("tinkazo-voto:pedido-1", () => new Promise(() => undefined));
+    h.impl.get = async (id: string) => ({ ...pedido, id });
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(r.error?.message).toBe("pollar-activacion-lenta");
+    expect(vecesQue("relay")).toBe(0);
+    expect(h.argumentos.get).toEqual([["pedido-1", { sync: true }]]);
+    expect(votos()).toBeNull();
+  });
+
+  it("otra pestaña tiene el voto de este pedido sin terminar y la lectura ya lo trae aprobado: dice activada y no vota", async () => {
+    void candados.request("tinkazo-voto:pedido-1", () => new Promise(() => undefined));
+    h.impl.get = async (id: string) => aprobado({ ...pedido, id });
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(r.valor).toBe("activada");
+    expect(vecesQue("relay")).toBe(0);
+  });
+});
+
+describe("las guardas que faltaban", () => {
+  it("al armar el cliente: si pasó el tiempo mientras se armaba, no lee la billetera ni sigue", async () => {
+    gancho.alArmar = () => void vi.setSystemTime(Date.now() + 100_000);
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(r.error?.message).toBe("pollar-activacion-lenta");
+    expect(h.llamadas).not.toContain("refreshWalletState");
+    expect(vecesQue("relay")).toBe(0);
+  });
+
+  it("al cargar el lector del kit: si pasó el tiempo en ese rato, no pide la verificación ni vota", async () => {
+    // La organización se lee justo antes de cargar el lector del kit: ahí la hora salta.
+    h.impl["recovery.status"] = async () => ({
+      required: true,
+      configured: false,
+      get subOrgId() {
+        vi.setSystemTime(Date.now() + 100_000);
+        return SUB;
+      },
+      email: { address: null, verified: false },
+      passkeys: [],
+      devices: [],
+    });
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(0);
+    expect(r.error?.message).toBe("pollar-activacion-lenta");
+    expect(vecesQue("verify")).toBe(0);
+    expect(vecesQue("relay")).toBe(0);
+  });
+
+  it("la lectura del pedido ya votado: si termina tarde diciendo que la cuenta existe, el intento vencido no escribe nada", async () => {
+    h.impl.relay = () => new Promise(() => undefined);
+    const r = observar(pollarWallet.activarCuenta());
+    await avanzar(70_000);
+    expect(r.valor).toBe("pendiente");
+    const lectura = adelantada<unknown>();
+    h.impl.get = () => lectura.promesa;
+    const nueva = observar(pollarWallet.activarCuenta());
+    await avanzar(20_000);
+    expect(nueva.valor).toBe("pendiente");
+    lectura.entregar(aprobado({ ...pedido }));
+    await avanzar(1_000);
+    expect(pollarWallet.estadoOficialLocal().activacion).not.toBe("lista");
+    expect(vecesQue("relay")).toBe(1);
+  });
+});
+
 describe("cerrar sesión con una activación sin votar", () => {
   it("el intento se descarta antes de esperar la red de cerrar sesión: no llega a votar", async () => {
     // Cerrar sesión espera primero salir del navegador de la cuenta, y eso tarda: en ese rato la cadena no puede votar.
@@ -774,6 +898,7 @@ describe("el camino sano no cambia", () => {
     // Ni un reloj queda vivo y el candado quedó libre.
     expect(vi.getTimerCount()).toBe(0);
     expect(candados.tomado("tinkazo-activar")).toBe(false);
+    expect(candados.tomado("tinkazo-voto:pedido-1")).toBe(false);
     expect(consola()).not.toContain("activación lenta");
   });
 

@@ -646,8 +646,8 @@ export const ACTIVACION_LENTA = "pollar-activacion-lenta";
  * el candado entre pestañas. Desde que sale el voto: `despuesDelVotoMs` para el voto, la lectura y el cierre.
  * `seguroDelVotoMs`: si pasado ese tiempo el voto sigue sin terminar, el sitio lo da por perdido de vista para que la
  * persona no quede trabada hasta recargar: suelta el candado, lo cuenta como un voto fallado y anota que ese pedido ya
- * salió a votarse en esta página. Ese pedido no se vota otra vez: una llamada nueva lo lee y dice cómo quedó, o pide cerrar
- * sesión. Antes del seguro, ante la duda, se espera. Un intento vencido antes del voto retiene el candado hasta que su
+ * salió a votarse en esta página. Ese pedido no se vota otra vez: una llamada nueva lo lee y dice cómo quedó, o que tarda.
+ * El candado del voto de ese pedido (`tinkazo-voto`) sigue tomado hasta que el voto termine, así otra pestaña tampoco lo vota. Antes del seguro, ante la duda, se espera. Un intento vencido antes del voto retiene el candado hasta que su
  * cadena termine o pasen `candadoMs`, para que una llamada vieja del kit no se solape con la del intento nuevo.
  */
 export const TOPES_DE_ACTIVACION = {
@@ -694,6 +694,8 @@ interface ControlDeActivar {
  */
 interface VotoEnVuelo {
   cuenta: string;
+  /** El pedido que se votó: si el voto se suelta antes de terminar, ese pedido queda anotado y no se vota otra vez. */
+  pedidoId: string;
   fin: Promise<ResultadoDeActivar>;
   salioEn: number;
   soltar: () => void;
@@ -1068,6 +1070,41 @@ function esperarHasta<T>(p: Promise<T>, ms: number, alVencer: () => T): Promise<
 
 /** Un pedido de candado que se cortó por esperar de más (`AbortError`). */
 const esCorteDelCandado = (e: unknown): boolean => (e as { name?: unknown } | null)?.name === "AbortError";
+
+/** El nombre del candado de un voto que salió: lleva el número del pedido y nada de la cuenta. */
+const candadoDelVoto = (pedidoId: string): string => `tinkazo-voto:${pedidoId}`;
+
+function candadosDelNavegador(): LockManager | undefined {
+  const locks = typeof navigator !== "undefined" ? (navigator as { locks?: LockManager }).locks : undefined;
+  return locks && typeof locks.request === "function" ? locks : undefined;
+}
+
+/**
+ * Desde que sale el voto de un pedido y hasta que termina (o se cierra la página), retiene un candado propio de ese pedido.
+ * Es aparte del candado de activar, que el seguro de tiempo suelta: así otra pestaña que consiga el candado de activar
+ * pasado el seguro sabe que ese pedido ya salió a votarse y no lo vota otra vez. No se guarda nada: se va con la página.
+ * Sin Web Locks no hace nada.
+ */
+function retenerElVoto(pedidoId: string, hasta: Promise<unknown>): void {
+  const locks = candadosDelNavegador();
+  if (!locks) return;
+  try {
+    void Promise.resolve(locks.request(candadoDelVoto(pedidoId), () => hasta.then(() => undefined, () => undefined))).catch(() => undefined);
+  } catch {
+    /* sin el candado del voto, queda la anotación de esta página */
+  }
+}
+
+/** Otra pestaña (o esta página, pasado el seguro) tiene un voto de este pedido que todavía no terminó. Sin Web Locks, no se sabe: falso. */
+async function votoSinTerminar(pedidoId: string): Promise<boolean> {
+  const locks = candadosDelNavegador();
+  if (!locks) return false;
+  try {
+    return await locks.request(candadoDelVoto(pedidoId), { ifAvailable: true }, (candado) => candado === null);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Cómo está la activación de la cuenta de la red principal: lista (existe en la red), falta (hay un pedido de crearla
@@ -1490,7 +1527,8 @@ class PollarWallet implements SubmittingWallet {
    */
   #votoEnVuelo: VotoEnVuelo | null = null;
   /**
-   * Los pedidos (cuenta y número) cuyo voto salió y se perdió de vista pasado el seguro: duran lo que dure la página y no
+   * Los pedidos (cuenta y número) cuyo voto salió y se perdió de vista, pasado el seguro o porque entró otra cuenta en la
+   * misma pestaña antes de que terminara: duran lo que dure la página y no
    * se vuelven a votar, aunque se cierre sesión. Lo que impide un segundo voto después de recargar queda para más adelante.
    */
   readonly #pedidosVotados = new Set<string>();
@@ -3706,7 +3744,8 @@ class PollarWallet implements SubmittingWallet {
    * `activada`) y el voto sigue por detrás, sin que una llamada nueva vote otra vez. Si a los 65 s el voto sigue sin
    * terminar, se lo da por perdido de vista (`seguroDelVotoMs`): se suelta el candado, cuenta como voto fallado, y ese
    * pedido no se vota más en esta página. Una llamada nueva lo lee: si ya no está pendiente o ya trae un voto, dice cómo
-   * quedó, y si sigue igual, falla con `pollar-activacion-tope`. Un pedido que ya trae un voto no se vota: se lee y se
+   * quedó, y si sigue igual, falla con `pollar-activacion-lenta` (cerrar sesión no lo cambia). Lo mismo si el voto sigue en
+   * vuelo en otra pestaña. Un pedido que ya trae un voto no se vota: se lee y se
    * espera con ese mismo tope.
    *
    * Falla solo con `pollar-sin-cuenta`, `pollar-activacion-rara`, `pollar-activacion-fallo`, `pollar-activacion-tope` y
@@ -3731,7 +3770,10 @@ class PollarWallet implements SubmittingWallet {
     }
     if (enVuelo) {
       // El voto en vuelo es de otra cuenta (se cerró sesión y entró otra persona): su resultado ya no se escribe acá y esta
-      // cuenta tiene su propio pedido, así que el candado viejo se suelta en vez de hacerla esperar.
+      // cuenta tiene su propio pedido, así que el candado viejo se suelta en vez de hacerla esperar. Ese voto sigue por su
+      // lado y su pedido queda anotado: si la primera cuenta vuelve a entrar en esta página y el voto todavía no aterrizó,
+      // no se vota otra vez.
+      this.#pedidosVotados.add(`${enVuelo.cuenta}:${enVuelo.pedidoId}`);
       enVuelo.soltar();
       this.#votoEnVuelo = null;
     }
@@ -3874,7 +3916,9 @@ class PollarWallet implements SubmittingWallet {
           intento.votoSalio = true;
           intento.paso = "voto";
           votada = { cuenta, pedidoId };
-          this.#votoEnVuelo = { cuenta, fin, salioEn: Date.now(), soltar: soltarElCandado, olvidar };
+          this.#votoEnVuelo = { cuenta, pedidoId, fin, salioEn: Date.now(), soltar: soltarElCandado, olvidar };
+          // Otra pestaña (o esta, pasado el seguro) sabe que este pedido ya salió a votarse hasta que el voto termine.
+          retenerElVoto(pedidoId, fin);
           seguro = setTimeout(olvidar, topes.seguroDelVotoMs);
           empezarElCierre();
         },
@@ -3970,14 +4014,17 @@ class PollarWallet implements SubmittingWallet {
     let pedido = (candidato.refreshable ? await delKit(client.cosign.refresh(candidato.id)) : candidato) as PedidoDeCofirma;
     sigue();
     if (pedido.id !== candidato.id) throw noAprobada("otro pedido");
-    // 5b. El voto de este pedido salió en esta página y el seguro de tiempo lo dio por perdido de vista: no se vota otra vez.
-    // Se lee cómo quedó. Si ya no está pendiente o ya trae un voto, sigue como cualquier pedido votado. Si sigue igual, no se
-    // sabe si el voto llegó: se pide cerrar sesión y entrar de nuevo, o escribirnos.
-    if (this.#pedidosVotados.has(`${cuenta}:${pedido.id}`)) {
+    // 5b. El voto de este pedido ya salió: en esta página y el seguro de tiempo lo dio por perdido de vista, o en otra pestaña
+    // y todavía no terminó (su candado del voto sigue tomado). No se vota otra vez. Se lee cómo quedó. Si ya no está pendiente
+    // o ya trae un voto, sigue como cualquier pedido votado. Si sigue igual, no se sabe si el voto llegó: se dice que tarda,
+    // que es lo cierto, y cada toque nuevo lo vuelve a leer (cerrar sesión no lo cambia).
+    const yaVotado = this.#pedidosVotados.has(`${cuenta}:${pedido.id}`) || (await votoSinTerminar(pedido.id));
+    sigue();
+    if (yaVotado) {
       ctl.alCerrarSinVoto();
       pedido = (await delKit(client.cosign.get(pedido.id, { sync: true }))) as PedidoDeCofirma;
       sigue();
-      if (pedido.status === "PENDING" && !pedido.activityId) throw new Error(ACTIVACION_TOPE);
+      if (pedido.status === "PENDING" && !pedido.activityId) throw new Error(ACTIVACION_LENTA);
     }
     // 6. Ya no está pendiente: se lee cómo quedó, sin votar.
     if (pedido.status !== "PENDING") {
