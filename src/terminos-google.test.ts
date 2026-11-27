@@ -192,6 +192,34 @@ describe("los Términos: la nota de los servicios cuenta la lista de quienes se 
   });
 });
 
+describe("los documentos dicen lo mismo que los Términos, con el interruptor apagado y prendido", () => {
+  const sinSaltos = (ruta: string): string => leer(ruta).replace(/\s+/gu, " ");
+
+  it("premios.md ya no afirma sin más que no se guarda el correo ni nada para volver a la persona", () => {
+    const premios = sinSaltos("docs/premios.md");
+    expect(premios.includes("y no queda guardado ni su correo ni su identificador."), "la frase de antes").toBe(false);
+    expect(premios.includes("no se manda correo ni se guarda nada para volver a la persona"), "la frase de antes").toBe(false);
+    expect(premios.includes("Con el interruptor del perfil apagado, que es como nace, no queda guardado ni su correo ni su identificador."), "apagado").toBe(true);
+    expect(premios.includes("`PERFILES`") && premios.includes("`VITE_GUARDAR_PERFIL`"), "los dos interruptores").toBe(true);
+    expect(premios.includes("la tabla `perfiles` del objeto de cupos, que no se borra con la sala"), "dónde queda").toBe(true);
+  });
+
+  it("legal.md cuenta el perfil entre los datos de los participantes y como excepción a no tener datos legibles", () => {
+    const legal = sinSaltos("docs/legal.md");
+    expect(legal.includes("**En una campaña que se anota con la cuenta de Google**"), "el punto nuevo").toBe(true);
+    expect(legal.includes(`su recuadro ${texto("es", "tmGoogleT")}`), "nombra el recuadro de los términos").toBe(true);
+    expect(legal.includes("Ya es así: el enlace corto guarda una copia cifrada que Tinkazo no puede leer, y la borra a pedido. Se mantiene cuando lleguen los correos. La excepción"), "la excepción").toBe(true);
+    expect(legal.includes("tampoco tiene plazo"), "el plazo que falta").toBe(true);
+  });
+
+  it("prd.md ya no dice sin más que no hay ninguna base de participantes que Tinkazo pueda leer", () => {
+    const prd = sinSaltos("docs/prd.md");
+    expect(prd.includes("No hay base de datos de participantes que Tinkazo pueda leer:"), "la frase de antes").toBe(false);
+    expect(prd.includes("No hay base de datos de participantes que Tinkazo pueda leer, con una excepción que nace apagada"), "la excepción").toBe(true);
+    expect(prd.includes("y todo se borra con la sala del evento, que vive 24 horas como máximo. En una campaña de personas"), "lo que no se borra con la sala").toBe(true);
+  });
+});
+
 describe("los Términos: la descripción de la página habla de los nombres de la lista", () => {
   // Con el perfil guardado, Tinkazo tiene el nombre de quien se anota con Google. Lo que no puede leer son los nombres de la
   // lista de quien organiza, y la descripción que muestran los buscadores promete eso y nada más.
