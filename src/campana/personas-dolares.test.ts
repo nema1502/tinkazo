@@ -173,6 +173,7 @@ describe("los textos del modo en el panel", () => {
       "Entrá con Google y poné {total} dólares digitales: {premios} de premio, {envios} de envío y {servicio} del servicio.",
       "Sign in with Google and put in {total} digital dollars: {premios} for the prize, {envios} to send it and {servicio} for the service.",
     ],
+    ["cpoMandarPara", "{nombre}, código {codigo}", "{nombre}, code {codigo}"],
   ];
 
   it.each(NUEVAS)("%s dice lo mismo en los dos idiomas", (clave, es, en) => {

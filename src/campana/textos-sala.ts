@@ -235,6 +235,7 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoCmCargarEnvioL: "{premios} de premio, {envios} de envío y {servicio} del servicio de Tinkazo.",
     cpoCmCargarFaltaEnvio: "Tenés {saldo}. Son {premios} de premio, {envios} de envío y {servicio} del servicio.",
     cpoCmBorradorEntrarEnvioL: "Entrá con Google y poné {total} dólares digitales: {premios} de premio, {envios} de envío y {servicio} del servicio.",
+    cpoMandarPara: "{nombre}, código {codigo}",
     // Las que siguen son de las campañas de personas: van juntas al final de cada idioma.
     cpoListaRara: "La lista de la sala no se puede sortear. Avisale a Tinkazo.",
     cpoEntregaEnMano: "Entregá cada premio en mano.",
@@ -475,6 +476,7 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoCmCargarEnvioL: "{premios} for the prize, {envios} to send it and {servicio} for Tinkazo's service.",
     cpoCmCargarFaltaEnvio: "You have {saldo}. That's {premios} for the prize, {envios} to send it and {servicio} for the service.",
     cpoCmBorradorEntrarEnvioL: "Sign in with Google and put in {total} digital dollars: {premios} for the prize, {envios} to send it and {servicio} for the service.",
+    cpoMandarPara: "{nombre}, code {codigo}",
     // These are for people campaigns: they stay together at the end of each language.
     cpoListaRara: "The list on the server can't be drawn. Let Tinkazo know.",
     cpoEntregaEnMano: "Hand each prize over in person.",

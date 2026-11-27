@@ -254,7 +254,7 @@ describe("el resultado de una campaña de personas con premios en dólares", () 
     expect(partes(filasDelResultado(p)[2] as HTMLLIElement)).toEqual(["Beto R.", "Avisar a Beto R.", "Código 0042", "40,00 dólares digitales"]);
   });
 
-  it("Mandar abre con el premio de ese puesto y el nombre de esa fila", async () => {
+  it("Mandar abre con el premio de ese puesto, y el nombre y el código de esa fila", async () => {
     const m = mundo();
     const mandar = conMandar(m);
     const p = await enSorteada(m, { identidad: "persona", premios: ["400000000", "250000000", "105000000"] });
@@ -264,11 +264,28 @@ describe("el resultado de una campaña de personas con premios en dólares", () 
     expect(partes(filasDelResultado(p)[2] as HTMLLIElement)).toContain("10,50 dólares digitales");
     botonDeLaFila(p, 1, "Mandar 25,00").click();
     await suelta(3);
-    expect(mandar.abiertas).toEqual([{ llega: 250_000_000n, para: "Ganadora 2" }]);
+    expect(mandar.abiertas).toEqual([{ llega: 250_000_000n, para: "Ganadora 2, código 7310" }]);
     botonDeLaFila(p, 2, "Mandar 10,50").click();
     await suelta(3);
-    expect(mandar.abiertas[1]).toEqual({ llega: 105_000_000n, para: "Beto R." });
+    expect(mandar.abiertas[1]).toEqual({ llega: 105_000_000n, para: "Beto R., código 0042" });
     expect(texto(p, "#cpo-aviso")).toBe("");
+  });
+
+  // La ventana tapa la lista: lo que dice de quién es el premio tiene que alcanzar para no confundir dos puestos.
+  it("con dos ganadoras del mismo nombre, cada Mandar dice el código de su fila", async () => {
+    const m = mundo();
+    const mandar = conMandar(m);
+    const p = await enSorteada(m, { identidad: "persona", premios: ["400000000", "250000000"] });
+    ponerPaso(resultado([fila(L1, "Ana P.", { codigo: "0421" }), fila(L2, "Ana P.", { codigo: "9036" })]));
+    await suelta(3);
+    botonDeLaFila(p, 1, "Mandar 25,00").click();
+    await suelta(3);
+    botonDeLaFila(p, 0, "Mandar 40,00").click();
+    await suelta(3);
+    expect(mandar.abiertas).toEqual([
+      { llega: 250_000_000n, para: "Ana P., código 9036" },
+      { llega: 400_000_000n, para: "Ana P., código 0421" },
+    ]);
   });
 
   it("con otro envío en camino no se abre nada y arriba lo dice", async () => {
@@ -320,7 +337,7 @@ describe("el resultado de una campaña de personas con premios en dólares", () 
     botonDeLaFila(p, 0, "Mandar 40,00").click();
     botonDeLaFila(p, 1, "Mandar 40,00").click();
     await suelta(3);
-    expect(mandar.abiertas).toEqual([{ llega: 400_000_000n, para: "Ana P." }]);
+    expect(mandar.abiertas).toEqual([{ llega: 400_000_000n, para: "Ana P., código 0421" }]);
     soltar();
     mandar.espera = null;
     await suelta(3);
@@ -387,7 +404,7 @@ describe("el resultado de una campaña de personas con premios en dólares", () 
   it("en inglés todo sale en inglés", async () => {
     const m = mundo();
     m.idioma = "en";
-    conMandar(m);
+    const mandar = conMandar(m);
     const p = await enSorteada(m);
     ponerPaso(resultado([fila(L1, "Ana P."), fila(L2, "Winner 2")]));
     await suelta(3);
@@ -396,6 +413,9 @@ describe("el resultado de una campaña de personas con premios en dólares", () 
     await suelta(3);
     expect(texto(p, "#cpo-linea")).toBe("Check the code on the winner's phone and send their prize to the address they give you.");
     expect(partes(filasDelResultado(p)[0] as HTMLLIElement)).toEqual(["Ana P.", "Marked as notified.", "Code 0421", "40.00 digital dollars", "Send 40.00"]);
+    botonDeLaFila(p, 1, "Send 40.00").click();
+    await suelta(3);
+    expect(mandar.abiertas).toEqual([{ llega: 400_000_000n, para: "Winner 2, code 7310" }]);
   });
 });
 

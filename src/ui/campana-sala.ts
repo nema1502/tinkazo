@@ -3216,17 +3216,19 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   /**
    * Lo que suma una fila del resultado en dólares: el monto de su puesto, siempre, y con su código a la vista el botón de
-   * mandarlo, si esta sesión puede. El código es lo que dice a quién se le manda el premio: sin él no hay botón.
+   * mandarlo, si esta sesión puede. El código es lo que dice a quién se le manda el premio: sin él no hay botón. La ventana
+   * de Mandar tapa la lista, así que dice de quién es el premio con el nombre y el código: dos nombres iguales no se confunden.
    */
-  function premioDeLaFila(puesto: number, nombre: string, conCodigo: boolean): HTMLElement[] {
+  function premioDeLaFila(puesto: number, nombre: string, codigo: string | undefined): HTMLElement[] {
     const monto = montoDelPuesto(campana, puesto);
     if (monto === null) return [];
     const idioma = deps.idioma();
     const dicho = document.createElement("span");
     dicho.className = "cpo-marca";
     dicho.textContent = premiosTexto([monto], idioma, true);
-    if (!conCodigo || !puedeMandar || !deps.mandarPremio) return [dicho];
-    return [dicho, boton(fmt("cpoMandarMonto", { monto: montoConCentavos(monto, idioma) }), "ghost", () => void mandarElPremio(monto, nombre))];
+    if (codigo === undefined || !puedeMandar || !deps.mandarPremio) return [dicho];
+    const para = fmt("cpoMandarPara", { nombre, codigo });
+    return [dicho, boton(fmt("cpoMandarMonto", { monto: montoConCentavos(monto, idioma) }), "ghost", () => void mandarElPremio(monto, para))];
   }
 
   /** Cada ganadora con su botón de Avisar a y lo que dijo el servicio del acceso. Solo con el resultado en la sala. */
@@ -3266,7 +3268,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
           codigo.textContent = fmt("cpoCodigoDeEntrega", { codigo: g.codigo });
           li.append(codigo);
         }
-        if (enDolares) li.append(...premioDeLaFila(i, g.nombre, g.codigo !== undefined));
+        if (enDolares) li.append(...premioDeLaFila(i, g.nombre, g.codigo));
         return li;
       }
       if (g.alta !== "esperando" && g.alta.estado === "puede") {
