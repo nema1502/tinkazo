@@ -116,9 +116,12 @@ describe("modoDelFormulario: el archivo abierto manda", () => {
 
   it("lo que decide es el archivo y el pedido, no lo que la persona lleva escrito en el paso del premio", () => {
     const conDolares: PedidoDeModo = { nueva: "personas-dolares", archivoConDolares: true };
-    expect(modoDelFormulario({ ...nuevo(), premioEnMano: "Auriculares" }, conDolares, false)).toBe("personas-dolares");
-    expect(modoDelFormulario({ ...dePersonasConMontos(), premioEnMano: "Auriculares" }, conDolares, false)).toBe("personas-dolares");
-    expect(modoDelFormulario({ ...nuevo(), monto: 40 }, { nueva: "personas-en-mano", archivoConDolares: false }, false)).toBe("personas-en-mano");
+    const nuevoConPremio: FormularioDeCampana = { ...nuevo(), premioEnMano: "Auriculares" };
+    const abiertoConPremio: FormularioDeCampana = { ...dePersonasConMontos(), premioEnMano: "Auriculares" };
+    const nuevoConMonto: FormularioDeCampana = { ...nuevo(), monto: 40 };
+    expect(modoDelFormulario(nuevoConPremio, conDolares, false)).toBe("personas-dolares");
+    expect(modoDelFormulario(abiertoConPremio, conDolares, false)).toBe("personas-dolares");
+    expect(modoDelFormulario(nuevoConMonto, { nueva: "personas-en-mano", archivoConDolares: false }, false)).toBe("personas-en-mano");
   });
 });
 
