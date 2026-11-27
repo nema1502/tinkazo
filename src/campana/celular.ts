@@ -361,6 +361,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   };
   /** Solo personas: cuántas veces seguidas quedó sin respuesta la consulta propia por la llave de este celular. */
   let sinRespuesta = 0;
+  /** Solo personas: la sala terminó con Ganaste a la vista. La pantalla sigue siendo esa, con el código que la página ya tenía. */
+  let ganabaAlTerminar = false;
   /** La línea del límite del servicio de cuentas, bajada solo si hizo falta. */
   let limite: typeof import("./limite") | null = null;
   let cancelarIntervalo: (() => void) | null = null;
@@ -1014,7 +1016,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       return;
     }
     if (estado.pantalla === "termino") {
-      pintarTermino(raiz, depsDeRecibir, estado.memoria);
+      pintarTermino(raiz, depsDeRecibir, estado.memoria, ganabaAlTerminar ? { codigo: estado.codigo, comprobante: estado.comprobante } : null);
       return;
     }
     if (estado.pantalla === "sin-red") {
@@ -1269,6 +1271,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     if (!vale() || propio === "red") return;
     huboRespuesta();
     if (propio === "terminada") {
+      // En una campaña de personas, quien miraba Ganaste no lo pierde, ni su código, porque la sala ya no exista.
+      ganabaAlTerminar = !!deps.persona && estado.pantalla === "gano";
       ir("termino");
       return;
     }
