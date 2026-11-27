@@ -2253,9 +2253,20 @@ export function shareProof(): void {
  * Avisar al ganador sin servidor ni base de datos: los botones abren WhatsApp
  * o el cliente de correo del organizador con el mensaje ya escrito, incluido el
  * enlace para que el ganador verifique por su cuenta. Tinkazo no manda nada ni
- * guarda ningún contacto.
+ * guarda ningún contacto. Cuando quienes ganaron son líneas de persona, los dos
+ * botones se esconden.
  */
 function setNotifyLinks(names: string[], winners: number[], url: string): void {
+  // Con una lista de personas no hay a quién escribirle: de quien ganó no se tiene el correo ni el teléfono, y el premio se
+  // entrega en mano. El resultado no ofrece ninguno de los dos avisos. Con nombres o con cuentas quedan a la vista, como siempre.
+  const sinAvisos = winners.some((i) => esLineaDePersona(names[i] ?? ""));
+  for (const id of ["btn-whatsapp", "btn-email"]) {
+    const a = document.getElementById(id);
+    if (!a) continue;
+    a.hidden = sinAvisos;
+    if (sinAvisos) a.removeAttribute("href");
+  }
+  if (sinAvisos) return;
   const prize = app.frozen?.prize ?? "";
   // "Ana, Beto y Carla", no "Ana, Beto, Carla"; y en plural si son varios. Cuando la lista se lee por persona, el nombre
   // de la persona, sin la marca de la línea.
