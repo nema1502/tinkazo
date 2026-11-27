@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   anotarseSinBilleteraActivo,
-  claveDeNotaDeEntrar,
-  claveDeQueGuardamos,
+  claveConPerfil,
   clienteDeGoogleDelSitio,
   guardarPerfilActivo,
   permisoDePerfil,
@@ -92,20 +91,23 @@ describe("la bandera de guardar el perfil de quien se anota", () => {
     expect(permisoDePerfil()).toBe(true);
   });
 
-  it("elige las claves de los textos de la pantalla: las de siempre apagada y las del perfil con las dos prendidas", () => {
+  it("cambia solo las dos claves del texto de siempre por las del perfil, y solo con las dos banderas prendidas", () => {
     const prendido = { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "1" };
-    expect(claveDeNotaDeEntrar({})).toBe("cpEntrarNotaPersona");
-    expect(claveDeQueGuardamos({})).toBe("cpQueGuardamosPersona");
-    expect(claveDeNotaDeEntrar({ VITE_GUARDAR_PERFIL: "1" })).toBe("cpEntrarNotaPersona");
-    expect(claveDeQueGuardamos({ VITE_GUARDAR_PERFIL: "1" })).toBe("cpQueGuardamosPersona");
-    expect(claveDeNotaDeEntrar(prendido)).toBe("cpEntrarNotaPerfil");
-    expect(claveDeQueGuardamos(prendido)).toBe("cpQueGuardamosPerfil");
+    expect(claveConPerfil("cpEntrarNotaPersona", {})).toBe("cpEntrarNotaPersona");
+    expect(claveConPerfil("cpQueGuardamosPersona", {})).toBe("cpQueGuardamosPersona");
+    expect(claveConPerfil("cpEntrarNotaPersona", { VITE_GUARDAR_PERFIL: "1" })).toBe("cpEntrarNotaPersona");
+    expect(claveConPerfil("cpEntrarNotaPersona", prendido)).toBe("cpEntrarNotaPerfil");
+    expect(claveConPerfil("cpQueGuardamosPersona", prendido)).toBe("cpQueGuardamosPerfil");
+    // Las demás claves, incluidas las de las campañas de cuentas, no cambian con ninguna combinación.
+    for (const clave of ["cpEntrarNota", "cpQueGuardamos", "cpTitulo", "constructor", ""]) {
+      expect(claveConPerfil(clave, prendido), clave).toBe(clave);
+      expect(claveConPerfil(clave, {}), clave).toBe(clave);
+    }
     // Sin pasarle nada lee la variable de construcción, como la bandera.
-    expect(claveDeNotaDeEntrar()).toBe("cpEntrarNotaPersona");
+    expect(claveConPerfil("cpEntrarNotaPersona")).toBe("cpEntrarNotaPersona");
     vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
     vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
-    expect(claveDeNotaDeEntrar()).toBe("cpEntrarNotaPerfil");
-    expect(claveDeQueGuardamos()).toBe("cpQueGuardamosPerfil");
+    expect(claveConPerfil("cpEntrarNotaPersona")).toBe("cpEntrarNotaPerfil");
   });
 
   it("no cambia lo que dicen las otras dos banderas", () => {

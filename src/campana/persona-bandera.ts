@@ -50,18 +50,18 @@ export function guardarPerfilActivo(entorno: EntornoDePersonas = ENTORNO_DEL_BUI
 }
 
 /**
- * La clave del texto que va junto al botón de Google en la pantalla de entrar: el de siempre, o el que dice que se guarda el
- * correo, el nombre y la foto cuando la página se construyó para guardar el perfil. Las claves van escritas enteras acá, porque
- * el armado de la página busca en el código las claves que usa, y la elección vive junto a la bandera para que la pantalla
- * solo pida la clave.
+ * Los dos textos de una campaña de personas que cambian cuando la página guarda el perfil, con la clave de siempre y la clave
+ * del texto que dice qué se guarda. Van escritas enteras acá porque el armado de la página busca en el código las claves que
+ * usa. La pantalla de la campaña no sabe nada de esto: pide la clave de siempre y el celular de personas la cambia al armarse.
  */
-export function claveDeNotaDeEntrar(entorno?: EntornoDePersonas): string {
-  return guardarPerfilActivo(entorno) ? "cpEntrarNotaPerfil" : "cpEntrarNotaPersona";
-}
+const CLAVES_CON_PERFIL: ReadonlyMap<string, string> = new Map([
+  ["cpEntrarNotaPersona", "cpEntrarNotaPerfil"],
+  ["cpQueGuardamosPersona", "cpQueGuardamosPerfil"],
+]);
 
-/** La clave del párrafo Qué guardamos de las reglas de una campaña de personas: el de siempre, o el que cuenta el perfil. */
-export function claveDeQueGuardamos(entorno?: EntornoDePersonas): string {
-  return guardarPerfilActivo(entorno) ? "cpQueGuardamosPerfil" : "cpQueGuardamosPersona";
+/** La clave que se pide, o la de su texto con el perfil si la página se construyó para guardarlo y esa clave tiene uno. */
+export function claveConPerfil(clave: string, entorno?: EntornoDePersonas): string {
+  return guardarPerfilActivo(entorno) ? (CLAVES_CON_PERFIL.get(clave) ?? clave) : clave;
 }
 
 /**

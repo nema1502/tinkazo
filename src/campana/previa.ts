@@ -2,7 +2,6 @@
 
 import { horaTexto, textoDelPremio } from "./formato";
 import { leerCampana, type Campana } from "./modelo";
-import { claveDeNotaDeEntrar, claveDeQueGuardamos } from "./persona-bandera";
 import { caja, conDestacado, pintarAviso } from "./piezas";
 import { sustituir } from "./sustituir";
 import type {
@@ -136,7 +135,7 @@ export function pintarReglas(raiz: HTMLElement, deps: DepsDelCelular, correo = f
   if (deps.campana.pasos.length > 0) parrafo(detalles, deps.tx("cpPasosNota"));
   parrafo(detalles, deps.tx("cpRevisamosMas"));
   parrafo(detalles, deps.tx("cpComoSeEligeDetalle"));
-  parrafo(detalles, deps.tx(persona ? claveDeQueGuardamos() : "cpQueGuardamos"));
+  parrafo(detalles, deps.tx(persona ? "cpQueGuardamosPersona" : "cpQueGuardamos"));
   parrafo(detalles, deps.campana.bases[idioma], "cmp-bases");
   raiz.append(detalles);
 }
@@ -254,7 +253,7 @@ export function pintarLaCampana(
   }
   if (deps.persona) {
     // Una campaña de personas: el botón de Google del sitio en lugar de Entrar. Al entrar sigue Hola, como en las demás.
-    parrafo(accion, deps.tx(claveDeNotaDeEntrar()), "cmp-apoyo");
+    parrafo(accion, deps.tx("cpEntrarNotaPersona"), "cmp-apoyo");
     const falla = parrafo(accion, "", "cmp-error");
     falla.hidden = true;
     const sitio = caja("cmp-google");

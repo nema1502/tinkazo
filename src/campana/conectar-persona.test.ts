@@ -322,6 +322,26 @@ describe("depsDePersona", () => {
   });
 });
 
+describe("depsDePersona: los textos que dicen qué se guarda", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("sin la bandera pide los textos de siempre, tal cual", () => {
+    const { deps } = montar({});
+    for (const clave of ["cpEntrarNotaPersona", "cpQueGuardamosPersona", "cpQueGuardamos", "cpTitulo"]) expect(deps.tx(clave), clave).toBe(clave);
+  });
+
+  it("con la bandera prendida cambia solo esos dos por los del perfil", () => {
+    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
+    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
+    const { deps } = montar({});
+    expect(deps.tx("cpEntrarNotaPersona")).toBe("cpEntrarNotaPerfil");
+    expect(deps.tx("cpQueGuardamosPersona")).toBe("cpQueGuardamosPerfil");
+    for (const clave of ["cpEntrarNota", "cpQueGuardamos", "cpTitulo"]) expect(deps.tx(clave), clave).toBe(clave);
+  });
+});
+
 describe("depsDePersona: el permiso para guardar el perfil", () => {
   afterEach(() => {
     vi.unstubAllEnvs();

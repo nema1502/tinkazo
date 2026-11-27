@@ -35,7 +35,7 @@ import {
   type BaseDelCelular,
 } from "./conectar";
 import { SIN_CUENTA } from "./memoria";
-import { permisoDePerfil } from "./persona-bandera";
+import { claveConPerfil, permisoDePerfil } from "./persona-bandera";
 
 export interface PiezasDeLaPersona {
   base: BaseDelCelular;
@@ -130,6 +130,9 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
 
   return {
     ...p.base,
+    // Los dos textos que dicen qué se guarda cambian por los del perfil si esta página se construyó para guardarlo. Acá y no en la
+    // pantalla: la entrada de la página del celular tiene un tope de peso y esto solo lo necesita una campaña de personas.
+    tx: (clave) => p.base.tx(claveConPerfil(clave)),
     // Las consultas de cada 15 segundos pasan a 30, y cada celular elige su propio ritmo: no pegan todos en el mismo segundo.
     cada: (f, ms, modo) => p.base.cada(f, modo === "exacta" ? ms : Math.round((modo === "azar" || ms !== 15_000 ? ms : CONSULTA_ESTIRADA_MS) * (0.8 + azar() * 0.4))),
     campana: p.campana,

@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLang, setLang, texto, usarTextos } from "../idioma";
 import type { BotonDeGoogle, DepsDelCelular, EstadoPublico, FallaDeEntrada } from "./celular";
+import { depsDePersona } from "./conectar-persona";
 import { depsDeDemostracion } from "./demostracion";
 import { campanaDeEjemplo } from "./ejemplo";
 import { pintarEstadoDeCarga, pintarLaCampana, pintarReglas, sustituir, type EstadoDeCarga } from "./previa";
@@ -221,6 +222,31 @@ describe("la campaña abierta", () => {
 
 describe("una campaña de personas: lo que la pantalla dice que se guarda", () => {
   const google: BotonDeGoogle = { montar: () => () => undefined };
+  /** Los textos como los pide el celular de una campaña de personas de verdad: los que cambia `depsDePersona` según la bandera. */
+  const txDePersona = (): DepsDelCelular["tx"] =>
+    depsDePersona({
+      base: {
+        tx: texto,
+        idioma: getLang,
+        enApp: false,
+        ahora: () => AHORA,
+        cada: () => () => undefined,
+        visible: () => true,
+        alVolver: () => () => undefined,
+        vibrar: () => undefined,
+        movimientoReducido: () => false,
+      },
+      campana: campanaDeEjemplo(AHORA),
+      servicio: "https://servicio.example.org",
+      sala: "ABCDEFGH",
+      clave: "abcdefghijklmnopqrstuv",
+      pase: null,
+      google: { montar: () => () => undefined },
+      memoria: null,
+      red: "testnet",
+      enLinea: () => true,
+      enlace: () => "https://tinkazo.example.org/participar.html",
+    }).tx;
   const NOTA_DE_SIEMPRE = "Con Google confirmamos que sos vos. No te creamos ninguna cuenta.";
   const NOTA_CON_PERFIL = "Con Google confirmamos que sos vos. Guardamos tu correo, tu nombre y tu foto.";
   const REGLA_CON_PERFIL =
@@ -234,7 +260,7 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
 
   /** Pinta la previa y devuelve su marcado entero, para comparar una pantalla con otra. */
   function previa(dePersonas: boolean, idioma: "es" | "en" = "es"): { raiz: HTMLElement; marcado: string } {
-    const { raiz, deps, publico } = preparar(dePersonas ? { persona: { google } } : {});
+    const { raiz, deps, publico } = preparar(dePersonas ? { persona: { google }, tx: txDePersona() } : {});
     setLang(idioma);
     pintarLaCampana(raiz, deps, publico, () => undefined);
     return { raiz, marcado: raiz.querySelector("#cmp-saber")?.innerHTML ?? "" };
@@ -312,7 +338,7 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
   });
 
   it("las reglas que se repiten en las demás pantallas dicen lo mismo que la previa", () => {
-    const { raiz, deps } = preparar({ persona: { google } });
+    const { raiz, deps } = preparar({ persona: { google }, tx: txDePersona() });
     const seccion = raiz.querySelector<HTMLElement>("#cmp-saber") as HTMLElement;
     pintarReglas(seccion, deps);
     expect(seccion.textContent).toContain(TEXTOS_CAMPANA.es.cpQueGuardamosPersona);
