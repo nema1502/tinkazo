@@ -1846,6 +1846,7 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
         expect(puente.includes(vieja), vieja).toBe(false);
       }
       expect(fuente.includes("cpoOlvidarAviso")).toBe(true);
+      expect(fuente.includes("cpoOlvidarPremios")).toBe(true);
     });
   });
 });

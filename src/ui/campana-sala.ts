@@ -2812,6 +2812,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const n = visibles().length;
     const paso = pasoDelPuente();
     const enFila = enLaFila();
+    /** El resultado de una campaña de personas con premios en dólares: ahí dejar la campaña pregunta siempre. */
+    const enDolares = vista === "sorteada" && esResultadoEnDolares(paso, campana);
     const firma = [
       vista,
       vistaAntes,
@@ -2839,6 +2841,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         ? [deps.cuenta() === null, primarioDeTus(), tusTrabajando, tusFalla?.evento, tusFalla?.boton, tus.filter((f) => describirTus(f).usable).length]
         : "",
       vista === "tomada" ? puedeUsarAqui() : "",
+      enDolares,
     ].join("|");
     if (firma === firmaDeAcciones) return;
     firmaDeAcciones = firma;
@@ -2954,6 +2957,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // Con un aviso pendiente a los celulares no se deja de un toque: la pregunta de siempre. Con la lista sellada siempre se
       // pregunta, y con el sorteo hecho también, salvo con el resultado ya avisado a todas o con la sala borrada.
       botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (avisosPendientes(pasoDelPuente(), vista === "sorteada") ? pedirOlvidar() : olvidar())));
+      // En el resultado en dólares el panel no guarda a quién ya se le mandó: dejar la campaña pregunta siempre, aunque todas
+      // estén avisadas, porque al dejarla ya no se ve a quién le falta su premio.
+      if (enDolares) botones.splice(-1, 1, boton(tx("cpoOtroArchivo"), "enlace", () => pedirOlvidar()));
     } else if (vista === "sin-red") {
       botones.push(principal(tx("cpoReintentar"), () => reintentar?.()));
       botones.push(otroArchivo());
@@ -3073,6 +3079,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (vista === "olvidar" && (vistaAntes === "cerrada" || vistaAntes === "sellada" || vistaAntes === "sorteada")) {
       const paso = pasoDelPuente();
       if (paso.paso !== "sala-borrada" && avisosPendientes(paso, vistaAntes === "sorteada")) linea = tx("cpoOlvidarAviso");
+      // En el resultado en dólares, con todas avisadas, lo que se pierde al dejar la campaña es a quién le falta su premio.
+      else if (vistaAntes === "sorteada" && esResultadoEnDolares(paso, campana)) linea = tx("cpoOlvidarPremios");
     }
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? lineaDelPaso(pasoDelPuente()) : null;
     // Lo que la fila viva ya dice no se repite en la línea: la fila ocupa su lugar.
@@ -3550,7 +3558,24 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // La consecuencia dicha en simple: la lista queda a la vista, sin palabras que asusten.
       pieEl.textContent = fmt("cpoSeBorra", { fecha, hora: horaTexto(sala.vence, campana.zona, deps.idioma()) });
     }
+    pintarElPieDelResultado();
     pintarPlegado();
+  }
+
+  /**
+   * En el resultado de una campaña de personas con premios en dólares el pie dice hasta cuándo se ven los nombres y los códigos:
+   * pasada esa hora ya no se sabe a quién le falta su premio. El pie vive en el bloque de la lista, que con el sorteo hecho no se
+   * ve: ahí pasa a estar debajo de las ganadoras, y en las demás vistas vuelve a su lugar.
+   */
+  function pintarElPieDelResultado(): void {
+    if (!sala || !campana || vista !== "sorteada" || !esResultadoEnDolares(pasoDelPuente(), campana)) {
+      if (pieEl.parentElement !== listaBloque) listaBloque.append(pieEl);
+      return;
+    }
+    if (pieEl.previousElementSibling !== ganadorasEl) ganadorasEl.after(pieEl);
+    const idioma = deps.idioma();
+    pieEl.hidden = false;
+    pieEl.textContent = fmt("cpoCodigosHasta", { fecha: fechaTexto(sala.vence, campana.zona, idioma), hora: horaTexto(sala.vence, campana.zona, idioma) });
   }
 
   /* --- el plegado de pagar desde otra billetera --- */

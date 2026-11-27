@@ -480,6 +480,102 @@ describe("si esta sesión puede mandar se pregunta al entrar al resultado y cuan
   });
 });
 
+/* ------------------------------------------------------------ dejar la campaña y el pie */
+
+describe("que no se pierda a quién le falta su premio", () => {
+  it("Elegir otro archivo pregunta siempre, aunque todas estén avisadas, y la pregunta dice qué se pierde", async () => {
+    const m = mundo();
+    conMandar(m);
+    const p = await enSorteada(m);
+    ponerPaso(resultado(TRES_CON_CODIGO().map((f) => ({ ...f, avisada: true }))));
+    await suelta(3);
+    boton(p, "Elegir otro archivo").click();
+    expect(vistaDe(p)).toBe("olvidar");
+    expect(texto(p, "#cpo-h")).toBe("¿Dejar esta campaña?");
+    expect(texto(p, "#cpo-linea")).toBe(AL_DEJAR);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Sí, dejarla"]);
+    // Cancelar vuelve al resultado, con todo donde estaba.
+    boton(p, "Cancelar").click();
+    expect(vistaDe(p)).toBe("sorteada");
+    expect(texto(p, "#cpo-linea")).toBe(CON_CODIGOS);
+    expect(filasDelResultado(p)).toHaveLength(3);
+    expect(deMandar(p)).toHaveLength(3);
+    // Y confirmar la deja de verdad.
+    boton(p, "Elegir otro archivo").click();
+    boton(p, "Sí, dejarla").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
+    expect(texto(p, "#cpo-linea")).not.toBe(AL_DEJAR);
+  });
+
+  it("con alguien sin avisar, la pregunta lleva la línea de los avisos, que es la que corresponde", async () => {
+    const m = mundo();
+    const p = await enSorteada(m);
+    ponerPaso(resultado(TRES_CON_CODIGO()));
+    await suelta(3);
+    boton(p, "Elegir otro archivo").click();
+    expect(vistaDe(p)).toBe("olvidar");
+    expect(texto(p, "#cpo-linea")).toBe(AL_DEJAR_CON_AVISOS);
+  });
+
+  it("también pregunta sin los códigos y con todas avisadas", async () => {
+    const m = mundo();
+    const p = await enSorteada(m);
+    ponerPaso(resultado([fila(L1, "Ana P.", { avisada: true }), fila(L2, "Ganadora 2", { avisada: true })]));
+    await suelta(3);
+    boton(p, "Elegir otro archivo").click();
+    expect(vistaDe(p)).toBe("olvidar");
+    expect(texto(p, "#cpo-linea")).toBe(AL_DEJAR);
+  });
+
+  it("en inglés la pregunta dice lo mismo", async () => {
+    const m = mundo();
+    m.idioma = "en";
+    const p = await enSorteada(m);
+    ponerPaso(resultado(TRES_CON_CODIGO().map((f) => ({ ...f, avisada: true }))));
+    await suelta(3);
+    boton(p, "Choose another file").click();
+    expect(texto(p, "#cpo-linea")).toBe("If you leave it now, you can no longer see who is still missing their prize.");
+  });
+
+  it("el pie dice hasta cuándo se ven los nombres y los códigos, debajo de la lista de ganadoras", async () => {
+    const m = mundo();
+    const p = await enSorteada(m);
+    // Antes del resultado no hay nada que decir.
+    expect(seVe($(p, "#cpo-pie"))).toBe(false);
+    ponerPaso(resultado([fila(L1, "Ana P."), fila(L2, "Ganadora 2")]));
+    await suelta(3);
+    const pie = $(p, "#cpo-pie");
+    expect(seVe(pie)).toBe(true);
+    expect(pie.textContent).toBe("Los nombres y los códigos se ven hasta el 22 de noviembre a las 14:00.");
+    expect(pie.previousElementSibling?.id).toBe("cpo-ganadoras");
+    expect(p.raiz.querySelectorAll("#cpo-pie")).toHaveLength(1);
+  });
+
+  it("en inglés el pie dice lo mismo, con la fecha y la hora del evento", async () => {
+    const m = mundo();
+    m.idioma = "en";
+    const p = await enSorteada(m);
+    ponerPaso(resultado(TRES_CON_CODIGO()));
+    await suelta(3);
+    expect(seVe($(p, "#cpo-pie"))).toBe(true);
+    expect(texto(p, "#cpo-pie")).toBe("Names and codes stay visible until November 22 at 14:00.");
+  });
+
+  it("con la pregunta de dejar la campaña abierta el pie no se ve, y al dejarla vuelve a su lugar de siempre", async () => {
+    const m = mundo();
+    const p = await enSorteada(m);
+    ponerPaso(resultado(TRES_CON_CODIGO().map((f) => ({ ...f, avisada: true }))));
+    await suelta(3);
+    expect(seVe($(p, "#cpo-pie"))).toBe(true);
+    boton(p, "Elegir otro archivo").click();
+    expect(seVe($(p, "#cpo-pie"))).toBe(false);
+    boton(p, "Sí, dejarla").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("elegir"));
+    expect(seVe($(p, "#cpo-pie"))).toBe(false);
+    expect($(p, "#cpo-pie").parentElement?.id).toBe("cpo-lista");
+  });
+});
+
 /* ------------------------------------------------------------ lo que no cambia */
 
 describe("con premio en mano todo queda como estaba", () => {
