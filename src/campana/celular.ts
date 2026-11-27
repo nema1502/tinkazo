@@ -1272,8 +1272,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       await consultarPropio();
       return;
     }
-    if (sesion) {
-      if (publico.fase === "lista" || publico.fase === "cerrada") {
+    // Con la llave de este celular (personas) quien ya estaba anotada se reconoce sin sesión.
+    if (sesion || conLlave) {
+      if (sesion && (publico.fase === "lista" || publico.fase === "cerrada")) {
         await mostrarFasePublica(publico.fase);
         return;
       }
@@ -1285,25 +1286,13 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       }
       // Quien salió de la lista y vuelve sin recuerdo ve por qué salió, no otra vez el botón de anotarse.
       if (propio !== "red" && (propio.anotada || propio.quitada !== undefined)) {
+        if (!sesion) estado.ya = true;
         await aplicarPropio(propio);
         return;
       }
-      if (publico.fase === "abierta") ir("hola");
+      if (sesion && publico.fase === "abierta") ir("hola");
       else await mostrarFasePublica(publico.fase);
       return;
-    }
-    if (conLlave) {
-      const propio = await pedirPropio();
-      if (desmontado) return;
-      if (propio === "terminada") {
-        ir("termino");
-        return;
-      }
-      if (propio !== "red" && (propio.anotada || propio.quitada !== undefined)) {
-        estado.ya = true;
-        await aplicarPropio(propio);
-        return;
-      }
     }
     await mostrarFasePublica(publico.fase);
   }
