@@ -19,6 +19,7 @@ export const RED = {
   codigoCuenta: "c514d35ea67eaea9bfc1fb3327854c0c06111bc1ddebd4fe217c504c1004b9e1",
   verificador: "CC7EKIHQP3TN4CARQDND6CEOY2UXLWWC2X5GHTD5NLAT7BG5GPZIOM3F",
   desplegador: "GAAH4OT36RRCCAGKARGPN2HLHT2NOBVFHO4GUHA6CF7UKQ4MMV24WQ4N",
+  activo: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
 };
 
 const DRAND = "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/latest";
@@ -59,7 +60,7 @@ export async function controlPrevio(o = {}) {
   const fetchFn = o.fetchFn ?? fetch;
   const cambio = [];
   const sinMedir = [];
-  const datos = { codigo: false, verificador: false, contrato: false, desplegadorIntacto: false, friendbot: null, drand: false };
+  const datos = { codigo: false, verificador: false, contrato: false, activo: false, desplegadorIntacto: false, friendbot: null, drand: false };
   try {
     await rpc(fetchFn, "getLatestLedger", {});
   } catch (e) {
@@ -72,9 +73,11 @@ export async function controlPrevio(o = {}) {
     datos.codigo = await una(claveDeCodigo(RED.codigoCuenta));
     datos.verificador = await una(claveDeInstancia(RED.verificador));
     datos.contrato = await una(claveDeInstancia(RED.contrato));
+    datos.activo = await una(claveDeInstancia(RED.activo));
     if (!datos.codigo) cambio.push("no está el código de la cuenta");
     if (!datos.verificador) cambio.push("no está el verificador");
     if (!datos.contrato) cambio.push("no está el contrato de la prueba");
+    if (!datos.activo) cambio.push("no está el contrato de las monedas de prueba");
   } catch (e) {
     sinMedir.push(`no se pudo leer la red: ${e.message}`);
   }

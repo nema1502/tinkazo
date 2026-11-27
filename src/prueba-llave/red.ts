@@ -13,6 +13,8 @@ export const RED_DE_PRUEBA = {
   codigoCuenta: "c514d35ea67eaea9bfc1fb3327854c0c06111bc1ddebd4fe217c504c1004b9e1",
   verificador: "CC7EKIHQP3TN4CARQDND6CEOY2UXLWWC2X5GHTD5NLAT7BG5GPZIOM3F",
   desplegador: "GAAH4OT36RRCCAGKARGPN2HLHT2NOBVFHO4GUHA6CF7UKQ4MMV24WQ4N",
+  // El contrato de las monedas de prueba (el XLM de la red de prueba): se recalcula con el SDK en red.test.ts.
+  activo: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
 } as const;
 
 /** La vida mínima de una entrada persistente en la red de prueba, en ledgers. Contra 2.073.600 publicados para la red principal. */

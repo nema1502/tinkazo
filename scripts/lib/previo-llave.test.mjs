@@ -34,13 +34,13 @@ function redFalsa(cambios = {}) {
 
 describe("las direcciones del control previo", () => {
   it("son las de la prueba", () => {
-    for (const k of ["rpc", "horizon", "friendbot", "contrato", "codigoCuenta", "verificador", "desplegador"]) {
+    for (const k of ["rpc", "horizon", "friendbot", "contrato", "codigoCuenta", "verificador", "desplegador", "activo"]) {
       expect(RED[k], k).toBe(RED_DE_PRUEBA[k]);
     }
   });
 
   it("la llave de la instancia es la que arma el SDK", () => {
-    for (const c of [RED.contrato, RED.verificador]) {
+    for (const c of [RED.contrato, RED.verificador, RED.activo]) {
       expect(claveDeInstancia(c)).toBe(new Contract(c).getFootprint().toXDR("base64"));
     }
   });
@@ -58,14 +58,23 @@ describe("el control previo", () => {
     const r = await controlPrevio({ fetchFn: redFalsa().fetchFn });
     expect(r.salida).toBe(0);
     expect(r.motivo).toBeNull();
-    expect(r.datos).toMatchObject({ codigo: true, verificador: true, contrato: true, desplegadorIntacto: true, friendbot: 400, drand: true });
+    expect(r.datos).toMatchObject({ codigo: true, verificador: true, contrato: true, activo: true, desplegadorIntacto: true, friendbot: 400, drand: true });
   });
 
-  it("si falta el código, el verificador o el contrato, la red de prueba cambió", async () => {
+  it("si falta el código, el verificador, el contrato o el de las monedas de prueba, la red de prueba cambió", async () => {
     const r = await controlPrevio({ fetchFn: redFalsa({ entradas: { result: { entries: [] } } }).fetchFn });
     expect(r.salida).toBe(2);
     expect(r.motivo).toBe("la-red-de-prueba-cambio");
-    expect(r.fallas).toHaveLength(3);
+    expect(r.fallas).toHaveLength(4);
+  });
+
+  it("sin el contrato de las monedas de prueba sale con 2 y nunca con 1", async () => {
+    const claveDelActivo = claveDeInstancia(RED.activo);
+    const r = await controlPrevio({ fetchFn: redFalsa({ entradas: (clave) => (clave === claveDelActivo ? { result: { entries: [] } } : { result: { entries: [{ xdr: "x" }] } }) }).fetchFn });
+    expect(r.salida).toBe(2);
+    expect(r.motivo).toBe("la-red-de-prueba-cambio");
+    expect(r.fallas).toEqual(["no está el contrato de las monedas de prueba"]);
+    expect(r.datos).toMatchObject({ activo: false, contrato: true });
   });
 
   it("si el desplegador desapareció o cambió de firmantes, la red de prueba cambió", async () => {

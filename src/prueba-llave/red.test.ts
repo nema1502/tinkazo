@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Asset } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
 import { RED_DE_PRUEBA } from "./red";
 
@@ -26,6 +27,11 @@ describe("la red de la prueba", () => {
     expect(RED_DE_PRUEBA.verificador).toMatch(/^C[A-Z2-7]{55}$/);
     expect(RED_DE_PRUEBA.contrato).toMatch(/^C[A-Z2-7]{55}$/);
     expect(RED_DE_PRUEBA.desplegador).toMatch(/^G[A-Z2-7]{55}$/);
+  });
+
+  it("el contrato de las monedas de prueba es el del XLM de la red de prueba, recalculado con el SDK", () => {
+    expect(Asset.native().contractId(RED_DE_PRUEBA.passphrase)).toBe(RED_DE_PRUEBA.activo);
+    expect(RED_DE_PRUEBA.activo).toMatch(/^C[A-Z2-7]{55}$/);
   });
 
   it("no hay ningún índice ajeno: la cuenta se busca en la red", () => {
