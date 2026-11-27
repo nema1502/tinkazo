@@ -340,13 +340,15 @@ el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
   rechazo (`google-rechazado`), nunca el token.
 - **El correo a quien gana no se manda** en estas campañas, y el estado público lo dice con `"correo": false`. La línea no dice a
   quién escribir y la sala no guarda ningún dato que lo diga. Avisar por correo, y el reclamo del premio, son de otra etapa.
-- **Límite de este modo, a resolver antes de prenderlo en un evento con premios.** Quien gana y cierra la página no recibe ningún
-  aviso: se entera solo si su celular sigue abierto y consulta con su llave, o si quien organiza lo ve en su pantalla. Además la
-  línea sale de la sal de la sala, y esa sal se borra con ella a las 24 horas de crearla: pasado ese plazo nada permite volver de
-  una línea ganadora a una persona. Avisar a quien ya cerró la página exige guardar un dato que lleve de vuelta a la persona,
-  aunque sea cifrado y hasta el fin del reclamo, y eso choca con la regla de no guardar nada que la identifique. Reclamar el premio
-  exige además que la sala siga viva mientras dure el reclamo. Esta etapa no hace ninguna de las dos cosas a propósito. Mientras no
-  se decida cómo se entera quien gana, `DIFERIDA` queda en `"0"` en los eventos con premios.
+- **Cómo se entera quien gana.** En estas campañas no se manda correo ni se guarda nada que lleve de una línea a una persona. Quien
+  gana se entera al abrir la página de la campaña en su celular: la consulta propia le dice que ganó y le da su código de entrega.
+  Quien organiza nombra a quien ganó y le entrega el premio en mano, en el evento, pidiéndole ese código. Quien gana y cierra la
+  página no recibe ningún aviso y tiene que volver a abrirla en el mismo celular: desde otro no sirve, porque la sala no anota a
+  nadie con la lista cerrada. La línea sale de la sal de la sala, y esa sal se borra con ella a las 24 horas de crearla: pasado
+  ese plazo nada permite volver de una línea ganadora a una persona ni calcular su código. Avisar a quien ya cerró la página y
+  reclamar el premio exigirían guardar un dato que lleve de vuelta a la persona, aunque sea cifrado y hasta el fin del reclamo, y
+  que la sala siga viva mientras dure, y eso choca con la regla de no guardar nada que la identifique: esta etapa no hace
+  ninguna de las dos cosas a propósito. Si quien ganó no puede mostrar su código o no está, decide quien organiza.
 - **El interruptor apagado en medio de un evento** no toca lo que ya está anotado: la sala sigue mostrando el estado, la consulta
   propia de cada celular y el panel de quien organiza sigue quitando, cerrando, sellando, guardando el resultado y avisando.
   Solo dejan de andar crear campañas de personas y el alta de gente nueva.
