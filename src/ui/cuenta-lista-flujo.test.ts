@@ -150,6 +150,25 @@ describe("el sello en modo Oficial", () => {
     expect(op.volverA).toBe(volverA);
   });
 
+  it("Volver a cargar del paso deja la herramienta abierta antes de recargar", async () => {
+    h.billetera = pollar({ activacion: "lista", proteccion: "no-se-sabe" });
+    h.estado.mockResolvedValue({ ...TODO, proteccion: "falta" });
+    h.abrir.mockResolvedValue(false);
+    const f = await flujo();
+    await f.cuentaListaParaGrabar("sello");
+    const salidas = h.abrir.mock.calls[0]?.[1] as { recargar?: () => void };
+    expect(typeof salidas.recargar).toBe("function");
+    document.body.dataset.vista = "app";
+    document.body.dataset.tab = "nuevo";
+    history.replaceState(null, "", "/");
+    // jsdom no navega: avisa que no está implementado, y lo que importa es la dirección que queda.
+    const aviso = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    salidas.recargar?.();
+    aviso.mockRestore();
+    expect(location.hash).toBe("#sortear");
+    history.replaceState(null, "", "/");
+  });
+
   it("el correo de la sesión se lee cuando el paso lo necesita: una sesión retomada lo trae después de abrirse", async () => {
     h.mail = undefined;
     h.billetera = pollar({ activacion: "lista", proteccion: "no-se-sabe" });
