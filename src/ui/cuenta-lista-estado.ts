@@ -530,7 +530,8 @@ const GIRAN_AL_MANDAR: ReadonlySet<Accion> = new Set<Accion>(["mandar-codigo", "
 
 /**
  * Algo gira y merece una salida si tarda. Con la cuenta ya activada, lo de activar no cuenta: ahí solo se canjea un
- * cupón o se lee el acceso, cada espera con su tope, y no hay voto en juego. Tampoco cuentan confirmar el código ni el
+ * cupón, se pide el regalo o se lee el acceso, cada espera con su tope (hasta unos 58 segundos en total), y no hay voto en
+ * juego. Tampoco cuentan confirmar el código ni el
  * desbloqueo (su tope de un minuto termina con su botón), el pago (tiene su propia espera) ni cerrar la sesión.
  */
 function giraConSalida(e: EntradaVista, botones: readonly (Boton | null)[]): boolean {

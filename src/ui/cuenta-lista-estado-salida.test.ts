@@ -16,7 +16,7 @@ import {
 } from "./cuenta-lista-estado";
 
 /**
- * La salida de una espera larga en «Dejá tu cuenta lista», sin DOM. Cuando algo del paso gira y pasó el tiempo, la caja
+ * La salida de una espera larga en Dejá tu cuenta lista, sin DOM. Cuando algo del paso gira y pasó el tiempo, la caja
  * que gira ofrece una salida y el pie dice que tarda. Lo que gira no cambia: la principal sigue igual y nada se quita.
  * Sin nada que gire, la vista no cambia, y con la cuenta ya activada, confirmar, el desbloqueo y el pago no hay salida.
  */

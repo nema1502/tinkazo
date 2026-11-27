@@ -6,7 +6,7 @@ import type { EstadoOficial, ResultadoDeActivar } from "../stellar/wallet-pollar
 import { type AccesoDelPaso, type CuentaDelPaso, GUARDA_DE_TOQUE_MS, type OpcionesDelPaso, abrirCuentaLista, aceptarClicsDePrueba } from "./cuenta-lista";
 
 /**
- * La salida de una espera larga en «Dejá tu cuenta lista», en jsdom con relojes falsos y una cuenta y un servidor de
+ * La salida de una espera larga en Dejá tu cuenta lista, en jsdom con relojes falsos y una cuenta y un servidor de
  * mentira: sin red. Lo primero que fija es que, con el proveedor de cuentas rápido, las llamadas son siempre las mismas.
  */
 
@@ -722,6 +722,31 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
       expect(hayAlgunaSalida(), `${s} s`).toBe(false);
     });
     expect(textoDe()).toContain(t("clListaTitulo"));
+    expect(salidas.recargar).not.toHaveBeenCalled();
+  });
+
+  it("el regalo con la cuenta ya activada no tiene salida: sus esperas terminan solas antes de un minuto", async () => {
+    const reg: Registro = [];
+    const cf = cuentaFalsa(reg, { activacion: "lista", proteccion: "lista" });
+    const srv = servidorFalso(reg, {
+      regalo: true,
+      reclamarImpl: async (s) => {
+        await esperar(28_000);
+        s.acceso = "admin";
+        return ok<ReclamoDelRegalo>({ ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: { fecha: VENCE, cuantos: 3 } }, regalo: "dado", sigue: "lista" });
+      },
+      antesDelEstado: async (n) => {
+        if (n > 1) await esperar(28_000);
+      },
+    });
+    const { salidas } = await abrir(srv, cf);
+    await tocar();
+    await recorrer(58, (s) => {
+      expect(hayAlgunaSalida(), `${s} s`).toBe(false);
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(textoDe()).toContain(t("clListaTitulo"));
+    expect(cf.cuenta.activarCuenta).not.toHaveBeenCalled();
     expect(salidas.recargar).not.toHaveBeenCalled();
   });
 
