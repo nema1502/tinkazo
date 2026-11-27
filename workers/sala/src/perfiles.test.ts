@@ -97,6 +97,71 @@ describe("el archivo de la sala", () => {
   });
 });
 
+describe("lo que dicen los documentos de la sala", () => {
+  const leer = (ruta: string): string => readFileSync(fileURLToPath(new URL(`../../../${ruta}`, import.meta.url)), "utf8");
+  const hoja = leer("docs/operacion.md");
+  const readme = leer("workers/sala/README.md");
+  /** Las celdas de la fila de una tabla que empieza por esa variable, o null si no hay ninguna. */
+  const fila = (texto: string, variable: string): string[] | null => {
+    const linea = texto.split(/\r?\n/).find((l) => l.startsWith(`| \`${variable}\` |`));
+    return linea === undefined ? null : linea.split("|").slice(1, -1).map((c) => c.trim());
+  };
+
+  it("la hoja de operación trae los dos interruptores apagados, cada uno en su tabla", () => {
+    // La tabla de banderas del sitio, con la misma forma que la fila de anotarse sin billetera.
+    const delSitio = fila(hoja, "VITE_GUARDAR_PERFIL");
+    expect(delSitio).toHaveLength(4);
+    expect(delSitio?.slice(0, 3)).toEqual(["`VITE_GUARDAR_PERFIL`", "apagada, solo con `1`", "`sin definir`"]);
+    expect(fila(hoja, "VITE_ANOTARSE_SIN_BILLETERA")?.slice(1, 3)).toEqual(delSitio?.slice(1, 3));
+    // La tabla de las variables de la sala, con el mismo valor que trae su archivo.
+    const deLaSala = fila(hoja, "PERFILES");
+    expect(deLaSala).toHaveLength(3);
+    expect(deLaSala?.slice(0, 2)).toEqual(["`PERFILES`", '`"0"`']);
+    expect(leer("workers/sala/wrangler.toml")).toMatch(/^PERFILES = "0"\r?$/m);
+  });
+
+  /** El texto en un solo renglón: los párrafos del README vienen cortados y una frase puede caer en dos. */
+  const plano = (texto: string): string => texto.replace(/\s+/g, " ");
+  const documentos = [
+    ["hoja de operación", plano(hoja)],
+    ["README de la sala", plano(readme)],
+  ] as const;
+  /** Si el texto trae la frase. Se afirma sobre un sí o un no para que una falla nombre la frase y no vuelque el documento. */
+  const dice = (texto: string, frase: string | RegExp): boolean => (typeof frase === "string" ? texto.includes(frase) : frase.test(texto));
+
+  it("los dos dicen dónde se guarda, en qué orden se prende y se apaga, y que todavía no hay cómo leer ni borrar", () => {
+    const frases: (string | RegExp)[] = [
+      "la tabla `perfiles`",
+      /no se borra con las? salas?/,
+      "`PERFILES`",
+      "`VITE_GUARDAR_PERFIL`",
+      /\*\*Para prender\*\*.{0,120}primero la sala.{0,200}después el sitio/,
+      /\*\*Para apagar\*\*.{0,120}primero el sitio/,
+      "Todavía no hay herramienta para leer ni para borrar un perfil",
+      "Un pedido de borrado se anota y se cumple cuando llegue esa herramienta",
+    ];
+    for (const [nombre, texto] of documentos) {
+      for (const frase of frases) expect(dice(texto, frase), `${nombre}: ${String(frase)}`).toBe(true);
+    }
+  });
+
+  it("ninguno sigue diciendo, sin más, que del token no se guarda nada", () => {
+    const viejas = [
+      "**Lo que no se guarda.**",
+      "choca con la regla de no guardar nada que la identifique",
+      "ni se guarda nada que lleve de una línea a una persona",
+      "no se guarda nada para volver de una línea a una persona",
+      "Tinkazo no guarda nada para comprobar quién es una persona a partir de su línea",
+    ];
+    // Lo que pasa con el interruptor apagado y prendido está dicho en los dos.
+    const nuevas = [/Apagado\*{0,2}, .{0,200}no se guarda nada del token/, /Prendido\*{0,2}, .{0,300}el correo, el nombre y la dirección de la foto/];
+    for (const [nombre, texto] of documentos) {
+      for (const frase of viejas) expect(dice(texto, frase), `${nombre}: ${frase}`).toBe(false);
+      for (const frase of nuevas) expect(dice(texto, frase), `${nombre}: ${String(frase)}`).toBe(true);
+    }
+  });
+});
+
 describe("la tabla de perfiles", () => {
   it("tiene siete columnas, con el identificador como clave y todo lo demás obligatorio", () => {
     const { sql } = banco();

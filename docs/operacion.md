@@ -300,6 +300,7 @@ Las funciones del sitio se prenden con variables `VITE_` que se leen al construi
 | `VITE_CAMPANAS` | apagada, con `1` o `true` | `1` | La campaña de una empresa: panel, página del celular y entrada de quien ganó |
 | `VITE_ANOTARSE_SIN_BILLETERA` | apagada, solo con `1` | `sin definir` | Las campañas de personas: la página del celular las abre y el armador las ofrece con `?identidad=persona` |
 | `VITE_GOOGLE_CLIENT_ID` | sin identificador | `sin definir` | El identificador de cliente de Google con que se abre el botón de las campañas de personas. Es público |
+| `VITE_GUARDAR_PERFIL` | apagada, solo con `1` | `sin definir` | La página del celular de una campaña de personas dice que se guardan el correo, el nombre y la foto de quien se anota con Google, y manda el permiso en el alta. Exige `VITE_ANOTARSE_SIN_BILLETERA` |
 | `VITE_EQUIPOS` | prendida, se apaga con `0` o `false` | `1` | Los equipos con cupón |
 | `VITE_MODOS` | prendida, se apaga con `0` o `false` | `1` | El selector de modos del sorteo |
 | `VITE_FOTO_JUEGO` | prendida, se apaga con `0` o `false` | `sin definir` | La foto con el dibujo del juego al compartir |
@@ -383,6 +384,7 @@ La sala y el conteo se despliegan cada uno desde su carpeta, con la sesión de `
 | `PASE` | `"1"` | Exige el pase del QR. Solo `"0"` lo apaga, y es una salida de emergencia (Cómo cortar, más abajo). |
 | `SOLO_GOOGLE` | `"estricto"` | Deja entrar solo a quien el proveedor dice que es de Google. Cualquier otro valor, o ninguno, también es estricto. `"suave"` es una salida de emergencia que además deja entrar, y cuenta aparte, a quien el proveedor no dice por dónde entró. `"suave"` solo abre el alta de las personas: quien organiza, para activar o recuperar una campaña, sigue necesitando entrar con Google. Una vía que no es Google no entra en ningún modo. |
 | `CORREO_GANADORAS` | `"1"` | El aviso por correo a quien gana nace apagado en el código y hoy está prendido. Solo `"1"` lo prende, y hace falta además `CORREO` (el enlace `[[send_email]]` del archivo), `CORREO_DE` (una dirección del dominio ya habilitado para el envío) y `POLLAR_SECRETO`. Si falta algo, la sala no reserva ni manda nada y su estado público dice `"correo": false`, y el celular no promete el aviso. |
+| `PERFILES` | `"0"` | El perfil de quien se anota con Google en una campaña de personas nace apagado. Solo `"1"` lo prende, y hacen falta además `DIFERIDA = "1"` y el `GOOGLE_CLIENT_ID` de las campañas de personas. Prendido, y solo si el pedido del celular trae el permiso, la sala guarda el correo, el nombre y la dirección de la foto en la tabla `perfiles` del objeto de cupos, que no se borra con la sala. Con `"0"` no se guarda nada del token. Qué se guarda y en qué orden se prende está en El perfil de quien se anota, más abajo. |
 | `VIDA_PRUEBA_MS` y `LLAVE_CAMPANAS_PRUEBA` | no están | Solo para probar en local. En una campaña solo valen para pedidos que llegan a `localhost`: en un Worker desplegado se ignoran, para que un valor olvidado no le corte la vida a la sala de un evento. |
 
 **Las variables del sitio**, en Vercel, que se leen al construir. Se escriben sin salto de línea (con `printf`): varias solo prenden con un `1` exacto y se apagan sin aviso con cualquier otra cosa.
@@ -515,6 +517,23 @@ Es la campaña para un evento grande donde nadie necesita una cuenta de Tinkazo.
 
 Prender pide publicar el sitio y desplegar la sala, así que se hace con la palabra de quien mantiene el proyecto y nunca el día de un evento. Hasta entonces `DIFERIDA` queda en `"0"` y la sala no crea ninguna campaña de personas.
 
+**El perfil de quien se anota.** Al anotarse con Google, la sala puede guardar el perfil de esa persona, que es su cuenta de Tinkazo. Nace apagado, con un interruptor en la sala y otro en el sitio.
+
+- **Apagado**, que es como nace, no se guarda nada del token de Google: ni el correo, ni el nombre, ni la foto, ni el identificador de la cuenta. En la sala quedan la línea de la persona, las huellas con sal que sirven para no anotarla dos veces y el nombre que escribió, cifrado, hasta que la sala se borra.
+- **Prendido**, y solo si el pedido del celular trae el permiso, la sala guarda además el correo, el nombre y la dirección de la foto de perfil de Google, con el identificador de la cuenta de Google y la primera y la última vez que la persona se anotó. Quien organiza no los recibe, y no salen en ninguna respuesta, pantalla ni registro.
+- **Dónde.** En la tabla `perfiles` del objeto de cupos de la sala (`workers/sala`), en Cloudflare. Ese objeto es uno solo y no se borra con las salas: el perfil sigue ahí cuando la sala del evento vence a las 24 horas. Nada lo borra solo.
+- **Los dos interruptores.** En la sala, `PERFILES = "1"` en `[vars]` de `workers/sala/wrangler.toml`, que además pide las campañas de personas prendidas. En el sitio, `VITE_GUARDAR_PERFIL=1` en Vercel, que además pide `VITE_ANOTARSE_SIN_BILLETERA=1`. Solo el `1` exacto prende cada uno.
+- **El permiso viaja con el pedido.** El celular manda el permiso en el alta solo si su página se construyó con `VITE_GUARDAR_PERFIL` en `1`, que es cuando mostró los textos que dicen que se guarda. La sala guarda solo con ese permiso y con `PERFILES` prendida. Una página vieja en la memoria de un celular, que mostró el texto de antes, no hace guardar nada.
+- **Las campañas de cuentas** no cambian con ninguna combinación de interruptores y nunca guardan un perfil.
+
+**Para prender**, en este orden: primero la sala (`PERFILES = "1"` y desplegarla), después el sitio (`VITE_GUARDAR_PERFIL=1`, una publicación nueva y, en el mismo cambio, su fila de la tabla de banderas en `1`), y las campañas se arman después. Con la sala prendida y el sitio todavía apagado no se guarda nada, porque ningún celular manda el permiso. Las campañas se arman después porque sus bases quedan firmadas adentro cuando se arman: una campaña de personas armada antes de este cambio dice en sus bases que Tinkazo no guarda el correo, y con los perfiles prendidos esa campaña no se usa. Se arma y se firma otra.
+
+**Para apagar**, primero el sitio: se quita `VITE_GUARDAR_PERFIL`, se publica, y la pantalla deja de decir que se guarda y de mandar el permiso. Después la sala, con `PERFILES = "0"` y un despliegue. Apagar no borra los perfiles que ya están guardados.
+
+**Leer y borrar un perfil.** Todavía no hay herramienta para leer ni para borrar un perfil, y ninguna ruta de la sala los devuelve: llega en la etapa siguiente. Un pedido de borrado se anota y se cumple cuando llegue esa herramienta. Lo que se ve mientras tanto es el registro de la sala, que no lleva ningún dato de la persona: `perfil-guardado` dice si la persona es nueva y si quedó con nombre y con foto, y `perfil-error` trae un código fijo (`forma`, `guardar` o `inesperado`). Se mira desde `workers/sala` con `npx wrangler@4.160.0 tail --config wrangler.toml --search perfil-`.
+
+**La línea y el perfil.** La línea de una persona sale del identificador de su cuenta de Google con la sal de la sala. Con el perfil guardado ese identificador queda en la tabla, así que mientras la sala viva quien tuviera a la vez la tabla de perfiles y la sal de esa sala podría recalcular la línea de cada perfil. Ningún código lo hace y ninguna respuesta lo deja ver. Cuando la sala se borra, la sal se va con ella y ya no se puede.
+
 **Cómo se arma.** Quien arma abre `crear-campana.html?identidad=persona`. El armador no muestra ningún control del modo: lo deciden la dirección y la bandera, y sin la bandera la dirección no cambia nada. Con el modo puesto:
 
 1. En el paso del premio, la marca Premio en mano y un campo de texto, de hasta 60 caracteres, donde se escribe qué se lleva cada persona que gana. No hay botones de monto ni total, y sin el texto no se sigue.
@@ -533,7 +552,7 @@ El archivo trae `identidad` en `persona`, el `premio_en_mano` en español y en i
 - El show y las tarjetas del resultado dicen el nombre o, si esta pestaña no lo tiene, Lugar n de la lista. El panel dice Ganadora n cuando no tiene el nombre. Ninguna pantalla muestra una línea `p1:`, salvo la lista sellada del comprobante, que es la lista pública que cualquiera recalcula.
 - La pantalla del resultado trae una sola línea: Entregá cada premio en mano. Cuando llegan los códigos pasa a ser Entregá cada premio a quien te muestre su código, y cada fila lleva el suyo al lado (Código 0421). Las filas se pintan primero y los códigos llegan unos segundos después: el panel los pide hasta tres veces, con dos segundos entre una y otra, y si no llegaron queda el enlace Ver los códigos para pedirlos de nuevo. Mientras falte alguno la línea sigue diciendo que se entrega en mano.
 - Avisar a es solo una marca para quien organiza: no manda nada. Después la fila dice Marcada como avisada. Quien ganó se entera al abrir su página, que se actualiza sola, y ve Ganaste, el premio escrito y su código (Mostrale este código a quien organiza).
-- No aparece nunca Puede recibir, No se pudo preparar, Recibir mi premio ni Pagar premio. No se manda ningún correo (el estado público de la sala dice `"correo": false`, sin importar `CORREO_GANADORAS`) y no se guarda nada para volver de una línea a una persona.
+- No aparece nunca Puede recibir, No se pudo preparar, Recibir mi premio ni Pagar premio. No se manda ningún correo (el estado público de la sala dice `"correo": false`, sin importar `CORREO_GANADORAS`), tampoco con los perfiles prendidos: ningún código lleva de una línea ganadora a una persona.
 - Si la sala devolviera una lista que no se puede sortear (mezclada, solo con una sala rota), el panel dice que se avise a Tinkazo y no ofrece ninguna acción.
 
 **En el stand: el código antes de entregar.** Quien organiza entrega cada premio a quien le muestre su código, y solo a esa persona. Se compara con el de la fila de esa ganadora en el panel. El código son cuatro cifras, salen de la línea de la persona y no se repiten entre las ganadoras de la campaña. Una persona que dice haber ganado y no tiene el código no recibe el premio.
@@ -542,11 +561,11 @@ El archivo trae `identidad` en `persona`, el `premio_en_mano` en español y en i
 
 1. **Que vuelva a abrir la página de la campaña en el mismo celular.** El código no se perdió: la sala lo calcula de nuevo en cada consulta y la página se lo vuelve a mostrar, mientras la sala viva (24 horas desde que se creó) y el navegador conserve lo suyo.
 2. **Desde otro celular no sirve.** La lista ya cerró y la sala no vuelve a anotar a nadie, así que entrar con su cuenta de Google en otro aparato no le muestra el código.
-3. **Si no hay forma, decide quien organiza.** Entrega o no el premio según lo que vea en el evento, y deja anotado a quién se lo dio y por qué. Tinkazo no guarda nada para comprobar quién es una persona a partir de su línea.
+3. **Si no hay forma, decide quien organiza.** Entrega o no el premio según lo que vea en el evento, y deja anotado a quién se lo dio y por qué. Tinkazo no tiene ninguna herramienta para comprobar quién es una persona a partir de su línea, tampoco con los perfiles prendidos.
 
 La misma regla vale si quien ganó no está en el evento: las bases dicen que decide quien organiza qué hacer con el premio.
 
-**Cuándo se pierde el rastro.** La sala se borra a las 24 horas de crearse, no desde el sorteo, y con ella la sal de la que sale cada línea. Pasado ese plazo ni el panel ni el celular pueden decir quién ganó ni dar los códigos. El sorteo, el show y el comprobante siguen. Por eso se crea la sala el mismo día del evento y quien organiza anota el nombre de quien ganó y a quién entregó cada premio mientras la sala vive.
+**Cuándo se pierde el rastro.** La sala se borra a las 24 horas de crearse, no desde el sorteo, y con ella la sal de la que sale cada línea. Pasado ese plazo ni el panel ni el celular pueden decir quién ganó ni dar los códigos. El sorteo, el show y el comprobante siguen. Por eso se crea la sala el mismo día del evento y quien organiza anota el nombre de quien ganó y a quién entregó cada premio mientras la sala vive. El perfil de quien se anotó, si se guardó, no se borra con la sala, pero no dice en qué campaña estuvo ni si ganó.
 
 **Cómo cortarla.** Apagar los interruptores no corta una campaña en curso y tiene una excepción que hay que conocer: está en Cómo cortar una campaña, más arriba.
 
