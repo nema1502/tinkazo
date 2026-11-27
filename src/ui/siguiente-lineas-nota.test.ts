@@ -9,10 +9,10 @@ import { lineaDePrueba } from "../campana/cuentas-de-prueba";
  */
 
 const h = vi.hoisted(() => ({
-  unfreeze: vi.fn((texto: string) => {
+  unfreeze: vi.fn((...a: unknown[]) => {
     // Como el de verdad: el cuadro pasa a ser la lista nueva, sin quienes ya ganaron.
     const ta = document.getElementById("ta");
-    if (ta instanceof HTMLTextAreaElement) ta.value = texto;
+    if (ta instanceof HTMLTextAreaElement) ta.value = String(a[0]);
   }),
   abrirSorteo: vi.fn(),
   ponerPremio: vi.fn(),
