@@ -501,7 +501,7 @@ export function pintarOtra(
  * línea, que dice que el premio se entrega con quien organiza. Reclamar y cobrar desde el celular es de otra etapa, que
  * reemplaza esta función por el camino de verdad. Quien recarga vuelve a Ganaste.
  */
-export function pintarEntrega(raizPrincipal: HTMLElement, deps: DepsDelCelular, codigo?: string | null, alOlvidar?: () => void): void {
+export function pintarEntrega(raizPrincipal: HTMLElement, deps: DepsDelCelular, codigo?: string | null): void {
   const raiz = seccion(raizPrincipal, "#cmp-estado", "cmp-estado cmp-entrega cmp-solo");
   if (!raiz) return;
   const hero = caja("cmp-izq cmp-hero");
@@ -509,7 +509,6 @@ export function pintarEntrega(raizPrincipal: HTMLElement, deps: DepsDelCelular, 
   titulo(hero, deps.tx("cpEntregaT"));
   parrafo(hero, deps.tx("cpEntregaL"), "cmp-apoyo");
   lineaDelCodigo(hero, deps, codigo);
-  if (alOlvidar) boton(hero, deps.tx("cpNoSoyYo"), "cmp-otra-cuenta cmp-olvidar", alOlvidar);
   raiz.append(hero);
 }
 

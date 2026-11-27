@@ -950,7 +950,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
             conTarjeta: linea === "con-tarjeta",
             salta: saltarLaFase,
             respuestaDesde,
-            alOlvidar: olvidar,
+            // Solo con la lista abierta: después del cierre la sala no deja volver a entrar y el código no se recuperaría.
+            alOlvidar: datos.fase === "abierta" ? olvidar : undefined,
           });
         }
         pintadoAdentro = pintado;
@@ -1005,7 +1006,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       return;
     }
     if (estado.pantalla === "entrega") {
-      pintarEntrega(raiz, deps, estado.codigo, olvidar);
+      pintarEntrega(raiz, deps, estado.codigo);
       return;
     }
     if (estado.pantalla === "lista") {

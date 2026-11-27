@@ -319,8 +319,8 @@ describe("una campaña de personas: el resultado", () => {
     await asentar();
     expect(texto(mundo, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
     expect(texto(mundo, "#cmp-estado .cmp-apoyo")).toBe("Acercate a quien atiende el stand y mostrale esta pantalla.");
-    // Lo único que ofrece es el enlace chico que olvida a la persona en este celular.
-    expect([...mundo.raiz.querySelectorAll("#cmp-estado button")].map((b) => b.className)).toEqual(["cmp-otra-cuenta cmp-olvidar"]);
+    // Después del cierre ninguna pantalla ofrece olvidar: la sala no deja volver a entrar y el código no se recuperaría.
+    expect(mundo.raiz.querySelectorAll("#cmp-estado button")).toHaveLength(0);
     expect(recibir).not.toHaveBeenCalled();
   });
 
@@ -436,23 +436,33 @@ describe("una campaña de personas: olvidar a la persona en este celular", () =>
     expect(mundo.raiz.querySelector<HTMLElement>("#cmp-adentro")?.hidden).toBe(true);
   });
 
-  it("la pantalla de la entrega lo ofrece también, y es el único botón", async () => {
-    const memoria = almacenFalso();
-    guardarMemoria(memoria, SALA, { cuenta: SIN_CUENTA, fase: "sorteada", resultado: "gano", comprobante: null, guardado: AHORA });
-    const { mundo } = await montarPersona({
-      sala: SALA,
-      publico: async () => ({ ...publico(), fase: "sorteada" }),
-      yo: async () => ({ ...propio("sorteada"), gano: true }),
-      resultado: async () => ({ ganadoras: [LINEA], comprobante: "/verificar.html?demo=1" }),
-    }, memoria);
-    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
-    await asentar();
-    expect(texto(mundo, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
-    expect(olvidar(mundo)?.textContent).toBe("No soy yo");
-    olvidar(mundo)?.click();
-    await asentar();
-    expect(leerMemoria(memoria, SALA, AHORA)).toBeNull();
-    expect(mundo.raiz.querySelector("#cmp-saber .cmp-google")).not.toBeNull();
+  it("después del cierre ninguna pantalla lo ofrece: ni la lista cerrada, ni Ganaste, ni la entrega, ni Esta vez salió otra persona", async () => {
+    // La sala no deja entrar de nuevo con la lista cerrada: quien olvidara su celular perdería su código para siempre.
+    const cerrada = await montarPersona({ sala: SALA, yo: async () => propio("cerrada"), publico: async () => ({ ...publico(), fase: "cerrada" }) }, anotada());
+    expect(texto(cerrada.mundo, "#cmp-adentro h1")).toBe("Ya estabas en la lista");
+    expect(olvidar(cerrada.mundo)).toBeNull();
+    document.body.innerHTML = "";
+    const sellada = await montarPersona({ sala: SALA, yo: async () => propio("sellada"), publico: async () => ({ ...publico(), fase: "sellada" }) }, anotada());
+    expect(olvidar(sellada.mundo)).toBeNull();
+    for (const gano of [true, false]) {
+      document.body.innerHTML = "";
+      const memoria = almacenFalso();
+      guardarMemoria(memoria, SALA, { cuenta: SIN_CUENTA, fase: "sorteada", resultado: gano ? "gano" : "otra", comprobante: null, guardado: AHORA });
+      const { mundo } = await montarPersona({
+        sala: SALA,
+        publico: async () => ({ ...publico(), fase: "sorteada" }),
+        yo: async () => ({ ...propio("sorteada"), gano }),
+        resultado: async () => ({ ganadoras: [LINEA], comprobante: "/verificar.html?demo=1" }),
+      }, memoria);
+      expect(texto(mundo, "#cmp-estado h1")).toBe(gano ? "Ganaste" : "Esta vez salió otra persona");
+      expect(olvidar(mundo)).toBeNull();
+      if (gano) {
+        mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
+        await asentar();
+        expect(texto(mundo, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
+        expect(olvidar(mundo)).toBeNull();
+      }
+    }
   });
 
   it("en inglés dice Not me", async () => {
