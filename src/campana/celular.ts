@@ -343,6 +343,16 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   };
   let desmontado = false;
   let consultando = false;
+  /**
+   * Cambia cada vez que la pantalla pasa a ser otra y cuando la página olvida a la persona. Cada pedido a la sala anota la de su
+   * salida: si al volver ya es otra (la persona se anotó, tocó No soy yo o la pantalla cambió), la respuesta es vieja y se descarta.
+   */
+  let generacion = 0;
+  /** Se llama al salir un pedido a la sala. Lo que devuelve dice, al llegar la respuesta, si todavía vale para esta pantalla. */
+  const alSalir = (): (() => boolean) => {
+    const salio = generacion;
+    return () => !desmontado && salio === generacion;
+  };
   /** La línea del límite del servicio de cuentas, bajada solo si hizo falta. */
   let limite: typeof import("./limite") | null = null;
   let cancelarIntervalo: (() => void) | null = null;
@@ -692,8 +702,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     if (desmontado || consultando || !deps.visible() || estado.pantalla !== "adentro") return;
     consultando = true;
     try {
+      const vale = alSalir();
       const resultado = await pedirResultado();
-      if (desmontado || resultado === "red") return;
+      if (!vale() || resultado === "red") return;
       huboRespuesta();
       // En una campaña de personas la lista de elegidas no dice si esta persona ganó (son líneas, no cuentas): solo lo sabe la
       // sala por la llave de este celular. Se le pregunta a ella, y no se concluye nada de la lista.
@@ -1047,6 +1058,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   function ir(pantalla: Pantalla): void {
     if (desmontado) return;
     const llega = estado.pantalla !== pantalla;
+    if (llega) generacion += 1;
     estado.pantalla = pantalla;
     if (pantalla === "hola" && estado.sesion) buscarElNombre(estado.sesion);
     if (pantalla === "hola") ajustarElAviso();
@@ -1086,7 +1098,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   }
 
   async function mostrarSorteoPublico(): Promise<void> {
+    const vale = alSalir();
     const resultado = await pedirResultado();
+    if (!vale()) return;
     if (resultado && resultado !== "red") estado.comprobante = resultado.comprobante;
     ir("sorteada");
   }
@@ -1152,10 +1166,11 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       return;
     }
     if (propio.fase === "sorteada") {
+      const vale = alSalir();
       const resultado = await pedirResultado();
       const sinLista = resultado === "red" || resultado === null;
       // En una campaña de personas la lista de elegidas no decide nada: ya dijo la sala si esta persona ganó. Sin ella la pantalla sale igual.
-      if (desmontado || (sinLista && !deps.persona)) return;
+      if (!vale() || (sinLista && !deps.persona)) return;
       await aplicarResultado(sinLista ? { ganadoras: [], comprobante: estado.comprobante } : resultado, propio);
       return;
     }
@@ -1197,8 +1212,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   }
 
   async function consultarPropio(): Promise<void> {
+    const vale = alSalir();
     const propio = await pedirPropio();
-    if (desmontado || propio === "red") return;
+    if (!vale() || propio === "red") return;
     huboRespuesta();
     if (propio === "terminada") {
       ir("termino");
@@ -1231,13 +1247,14 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     if (desmontado) return;
     const memoria = leerMemoria(deps.memoria, deps.sala, deps.ahora());
     estado.memoria = memoria;
+    const vale = alSalir();
     let publico: EstadoPublico | "red" | "terminada";
     try {
       publico = await deps.publico();
     } catch {
       publico = "red";
     }
-    if (desmontado) return;
+    if (!vale()) return;
     if (publico === "red") {
       ir("sin-red");
       return;
@@ -1265,7 +1282,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
         sesion = null;
       }
     }
-    if (desmontado) return;
+    if (!vale()) return;
     estado.sesion = sesion;
     // La lectura de la cuenta sale en paralelo: ni Hola ni la alta la esperan.
     if (sesion) arrancarLaLectura(sesion.cuenta);
@@ -1282,7 +1299,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
         return;
       }
       const propio = await pedirPropio();
-      if (desmontado) return;
+      if (!vale()) return;
       if (propio === "terminada") {
         ir("termino");
         return;
@@ -1312,13 +1329,14 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     consultando = true;
     try {
       if (estado.pantalla === "previa" || estado.pantalla === "hola") {
+        const vale = alSalir();
         let publico: EstadoPublico | "red" | "terminada";
         try {
           publico = await deps.publico();
         } catch {
           publico = "red";
         }
-        if (desmontado || publico === "red") return;
+        if (!vale() || publico === "red") return;
         ultimaRespuesta = deps.ahora();
         if (publico === "terminada") {
           ir("termino");
@@ -1431,6 +1449,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
 
   /** La página olvida a quien recordaba: la memoria de la sala, la sesión de la pantalla y todo lo que se sabía de su cuenta. */
   function olvidarALaPersona(): void {
+    // Lo que la sala conteste a un pedido que salió con la persona anterior ya no cuenta.
+    generacion += 1;
     borrarMemoria(deps.memoria, deps.sala);
     estado.sesion = null;
     estado.memoria = null;
