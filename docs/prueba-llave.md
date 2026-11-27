@@ -152,12 +152,30 @@ Los saldos y la nota los lee el propio recorrido en la red de prueba, por un cam
 
 Los diez pasos son `premio-crear`, `premio-recibir`, `premio-pide-nota`, `premio-sin-doble`, `premio-mandar`, `premio-un-desbloqueo`, `premio-nota`, `premio-saldos`, `premio-sin-doble-tras-mandar` y `premio-raiz`. Son informativos como los de otro aparato: pasan a contar en el código de salida después de tres corridas buenas, en un cambio aparte y con las fechas anotadas abajo. Si el grifo o la red de prueba no contestan en una lectura propia del recorrido, se anota como falla ajena. Si el tiempo de la revisión se acaba, el archivo de medidas queda con lo medido hasta ahí y el recorrido sale con 1.
 
+### Lo que midió la primera corrida
+
+Los diez pasos dieron bien en la primera corrida (27 de noviembre de 2026, red de prueba, Chrome sin pantalla con autenticador virtual). Cifras en la unidad mínima, que son 7 decimales de la moneda de prueba. No se proyectan a otra red.
+
+| Paso | Total | Inclusión | Recursos | Alquiler | Instrucciones | Bytes escritos | Segundos |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Crear la cuenta | 173.166 | 100 | 14.002 | 159.064 | 3.051.892 | 1.040 | 10 |
+| Recibir el premio | 159.616 | 100 | 6.204 | 153.312 | 242.286 | 368 | 5 |
+| Mandar las monedas | 331.844 | 100 | 11.505 | 320.239 | 5.421.336 | 440 | 11 |
+| Cuenta de destino de la página | 200 | 200 | 0 | 0 | 0 | 0 | 5 |
+
+- Recibir crea la entrada de saldo de la billetera (224 bytes persistentes y su vida). Esa entrada quedó con vida hasta el ledger 6.470.204, unos 518.000 ledgers por delante del de la corrida. Es distinta de la vida mínima de las entradas de la cuenta, y la fija el contrato de las monedas.
+- Mandar escribe además una entrada temporal de 72 bytes (la autorización de un solo uso), que es lo que más pesa en su alquiler.
+- Un solo desbloqueo al mandar, contado por el navegador. La raíz de la entrada de autorización volvió exacta: la dirección M tal cual, con la nota adentro.
+- La nota pedida (1234567890) quedó en el evento de la transferencia y la página la leyó de ahí. Los saldos de las dos puntas coinciden con lo esperado: la billetera de 10 monedas a cero y la cuenta de destino de 2 a 12, sin que el destino pagara ninguna comisión.
+- Esta parte del recorrido tardó 40 segundos y la corrida entera 214.
+
 ### Límites y lo que no se comprobó
 
 - Las monedas que llegan a la cuenta de destino que arma la página quedan ahí: su llave vive solo en la memoria de esa carga. Son de prueba.
 - La vida de la entrada de saldo y de la cuenta en la red de prueba es la mínima. Pasada una semana, entrar da la pantalla de cuenta terminada. Restaurar no entra en esta prueba.
 - No se prueban las notas de texto (desde un contrato no se pueden), los destinos de otro tipo, mandar a un contrato en vivo ni mandar desde otro aparato en vivo. Lo cubren las pruebas de unidad.
-- Sin comprobar antes de la primera corrida: cómo vuelve la raíz con una M (el recorrido lo contesta), que el RPC de la red de prueba traiga los eventos dentro de la respuesta de la transacción (si no, el recorrido los pide aparte y la pantalla dice que no pudo confirmar la nota), que la regla de la cuenta acepte una transferencia firmada con una llave de este tipo, y qué hace la lectura de una entrada de saldo ya vencida.
+- Contestado por la primera corrida: la raíz con una M vuelve exacta, el RPC de la red de prueba trae los eventos dentro de la respuesta de la transacción y la regla de la cuenta acepta una transferencia firmada con la llave.
+- Sin comprobar: qué hace la lectura de una entrada de saldo ya vencida (la página la muestra igual y la red la restaura al usarla, pero no se midió), y que otro destino del enlace (una M, una C) llegue igual de punta a punta en vivo.
 
 ## Desacuerdo abierto: el borrado de la red de prueba
 
@@ -168,6 +186,8 @@ El sitio dice en varias cadenas y pruebas que la red de prueba se borra el 16 de
 Las corridas buenas del recorrido entero contra la red de prueba, con el paso de otro aparato, se anotan acá a mano. Hacen falta tres para que esos pasos cuenten en el código de salida.
 
 1. 25 de noviembre de 2026. Salió con 0. La otra llave entró por el historial y por el RPC, las dos al ledger de la creación de la cuenta, con un solo desbloqueo cada una. Desde el otro aparato se selló una lista y una llave sin cuenta llegó a la pantalla de que no hay cuenta. Ningún pedido fue a un índice ajeno.
+
+2. 27 de noviembre de 2026. Los diez pasos de recibir y mandar dieron bien en la primera corrida. La corrida entera salió con 1 porque la verificación del comprobante marcó que esa misma lista de ejemplo ya estaba sellada por otra cuenta del contrato a esa hora. No viene de recibir ni de mandar.
 
 ## Lo que no entra
 
