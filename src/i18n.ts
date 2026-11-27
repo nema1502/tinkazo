@@ -2509,11 +2509,11 @@ export const T: Record<Lang, Dict> = {
       "antes de abrir la inscripción. Lo paga directo desde su cuenta. Se suma a los premios y no sale de ellos. Participar es gratis, siempre.",
     tmCampDatosT: "Lo que se guarda en una campaña",
     tmCampDatosB:
-      "Si te anotás en una campaña de empresa, queda esto, y solo esto: una huella de la persona, que se calcula con una clave propia de la sala y nunca es su identificador, " +
+      "Si te anotás en una campaña de empresa, en la sala queda esto: una huella de la persona, que se calcula con una clave propia de la sala y nunca es su identificador, " +
       "su cuenta, y su nombre cifrado con la clave que va solo en el enlace, en el servicio de la sala, que corre en Cloudflare y no lo puede leer. " +
       "El nombre queda cifrado hasta que se cierran los premios, y se borra con la sala del evento, que vive 24 horas como máximo o se cierra antes. " +
       "También queda cuántas personas se quitaron por cada motivo, sin decir quiénes. " +
-      "Para el sorteo, en la red queda sellada solo la huella de la lista de cuentas (cada cuenta que se anotó y no fue quitada, sin nombres). La lista misma va en el comprobante del sorteo, que se comparte con un enlace.",
+      "Para el sorteo, en la red queda sellada solo la huella de la lista de cuentas (cada cuenta que se anotó y no fue quitada, sin nombres). La lista misma va en el comprobante del sorteo, que se comparte con un enlace. Si te anotás con tu cuenta de Google, leé también el recuadro de abajo.",
     tmCampSella:
       "Quién sella la lista: la cuenta de quien organiza la campaña. El servicio de la sala solo da por buena la lista de las personas anotadas, sin las quitadas, que es la que se ve en la pantalla. Un sello de otra cuenta o de otra lista no cuenta para esta campaña.",
     // Las campañas donde la persona se anota con el botón de Google. Lo que dice que se guarda es lo que guarda la tabla de
@@ -5665,11 +5665,11 @@ export const T: Record<Lang, Dict> = {
       "before sign-up opens. The company pays it straight from its own account. It is added to the prizes and never comes out of them. Taking part is always free.",
     tmCampDatosT: "What a campaign keeps",
     tmCampDatosB:
-      "If you sign up for a company campaign, here is what is kept, and only this: a fingerprint of the person, computed with a key unique to the room and never their identifier, " +
+      "If you sign up for a company campaign, here is what the room keeps: a fingerprint of the person, computed with a key unique to the room and never their identifier, " +
       "their account, and their name encrypted with the key that travels only in the link, in the room's service, which runs on Cloudflare and cannot read it. " +
       "The name stays encrypted until the prizes close, and is deleted with the event room, which lives 24 hours at most or is closed earlier. " +
       "There is also a count of how many people were removed, by reason, without saying who. " +
-      "For the draw, only a fingerprint of the list of accounts is sealed on the network (every account that signed up and was not removed, with no names). The list itself goes in the draw's receipt, which is shared with a link.",
+      "For the draw, only a fingerprint of the list of accounts is sealed on the network (every account that signed up and was not removed, with no names). The list itself goes in the draw's receipt, which is shared with a link. If you sign up with your Google account, read the box below too.",
     tmCampSella:
       "Who seals the list: the account of whoever runs the campaign. The room's service only accepts the list of signed-up people, without the removed ones, which is the one shown on the screen. A seal from another account or of another list does not count for this campaign.",
     // Campaigns where people sign up with the Google button. What it says is kept is what the room's profile table keeps

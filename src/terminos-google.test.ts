@@ -176,6 +176,29 @@ describe("los Términos: el recuadro de quien se anota con su cuenta de Google",
   });
 });
 
+describe("los Términos: Lo que se guarda en una campaña no dice que eso es lo único", () => {
+  // Con el perfil prendido, quien se anota con Google en una campaña deja además su perfil, que no se borra con la sala. El
+  // recuadro cuenta lo que queda en la sala y manda al de abajo: no puede decir que eso es todo.
+  it("cuenta lo que queda en la sala, sin decir que es lo único", () => {
+    expect(texto("es", "tmCampDatosB").startsWith("Si te anotás en una campaña de empresa, en la sala queda esto: una huella de la persona, ")).toBe(true);
+    expect(texto("en", "tmCampDatosB").startsWith("If you sign up for a company campaign, here is what the room keeps: a fingerprint of the person, ")).toBe(true);
+    for (const idioma of IDIOMAS) expect(texto(idioma, "tmCampDatosB"), idioma).not.toMatch(/solo esto|only this/iu);
+  });
+
+  it("termina mandando al recuadro de abajo a quien se anota con su cuenta de Google", () => {
+    expect(texto("es", "tmCampDatosB").endsWith(" que se comparte con un enlace. Si te anotás con tu cuenta de Google, leé también el recuadro de abajo.")).toBe(true);
+    expect(texto("en", "tmCampDatosB").endsWith(" which is shared with a link. If you sign up with your Google account, read the box below too.")).toBe(true);
+  });
+
+  it("terminos.html lo trae igual en español, y el recuadro de abajo es el de Google", () => {
+    const html = leer("terminos.html");
+    expect(html.includes(`<p data-i="tmCampDatosB">${texto("es", "tmCampDatosB")}</p>`), "terminos.html, tmCampDatosB").toBe(true);
+    expect(html.includes("y solo esto"), "la frase de antes").toBe(false);
+    // El orden de la página: el recuadro de Google es el que sigue.
+    expect(/<article class="nota" id="campana-datos">[\s\S]*?<\/article>\s*<article class="nota" id="campana-google">/u.test(html)).toBe(true);
+  });
+});
+
 describe("los Términos: la nota de los servicios remite al recuadro de quienes se anotan con Google", () => {
   it("empieza con el texto nuevo en el diccionario del modo Oficial, y lo demás sigue como estaba", () => {
     expect(TEXTOS_MODO_OFICIAL.es.tmMore1?.startsWith(`${INICIO_ES} Durante un sorteo el sitio pide afuera el número que publica un faro público`)).toBe(true);
