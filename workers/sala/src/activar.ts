@@ -25,9 +25,18 @@ import { leerDatosDeLista, leerTextoDeCampana, viaPermitida } from "./campana";
 import type { LecturaDeLista } from "./campana";
 import { firmarConLlaveAuto, llavePublicaAuto } from "./firma";
 import type { VariablesDeLlaveAuto } from "./firma";
+import { personasPrendido } from "./personas";
+import type { VariablesDePersonas } from "./personas";
 
 /** Lo más que pesa el pedido de activación: el texto de la campaña y la sesión de quien organiza. */
 export const MAX_CUERPO_ACTIVAR = 24_000;
+/**
+ * Los premios que puede llevar una campaña de personas que se activa sola. En esas campañas quien organiza le manda el premio
+ * a cada persona que gana, y cada envío sale de su cuenta por el servicio de comisiones, que acepta 10 envíos por cuenta y por
+ * día. El pago del costo del servicio de la campaña viaja por ese mismo camino y gasta uno: con 8 premios queda uno de
+ * margen para un intento que falle. Una campaña de cuentas sigue llevando hasta 10.
+ */
+export const PREMIOS_CON_ENVIO_MAXIMOS = 8;
 /** Campañas distintas que una misma cuenta verificada puede activar por día (repetir el mismo evento no suma). */
 export const ACTIVACIONES_POR_DIA = 5;
 /** Pedidos de activación por conexión y por ventana de 10 minutos: cada uno cuesta una mirada a la red. */
@@ -114,6 +123,11 @@ export interface CampanaParaActivar {
   sorteoMs: number;
   /** Lo que Tus campañas necesita del texto. Si falta algo, la campaña se firma igual y solo no aparece en la lista. */
   lista: LecturaDeLista;
+  /**
+   * Solo viene, con el valor `persona`, en una campaña de personas: la gente se anota con Google y quien organiza le manda el
+   * premio a cada persona que gana. Una campaña de cuentas no trae la clave.
+   */
+  identidad?: "persona";
 }
 
 export type LecturaParaActivar =
@@ -127,18 +141,20 @@ const esObjeto = (x: unknown): x is Record<string, unknown> => typeof x === "obj
  * principal, entrada con Google, abierta, sin anotadas ni contrato, promo o comprobante, de 1 a 10 premios del mismo monto
  * (cada uno de 1 a 10.000 dólares digitales en centavos justos), cierre dentro de los próximos 7 días, sorteo hasta un día después
  * del cierre, la cuenta de quien organiza escrita y un nombre de empresa que no imita a Tinkazo. `campo` dice cuál no sirvió.
+ *
+ * Una campaña de personas (`"identidad": "persona"`) con premios en dólares se lee igual, con hasta 8 premios
+ * (`PREMIOS_CON_ENVIO_MAXIMOS`), y su lectura suma `identidad`. Con `premio_en_mano` no se activa sola: esa la firma Tinkazo a
+ * mano. Si la sala tiene las campañas de personas prendidas lo mira `activarCampana`, no este lector.
  */
 export function leerParaActivar(texto: string, ahora: number): LecturaParaActivar {
   const forma = (campo: string): LecturaParaActivar => ({ ok: false, error: "forma", campo });
   const base = leerTextoDeCampana(texto, ahora);
   if (!base.ok) return forma(base.campo);
-  // Las campañas de personas y las de premio en mano las firma solo Tinkazo, a mano: la activación sola no las firma ni las cobra,
-  // con los interruptores de las personas como estén.
-  if (base.identidad === "persona") return forma("identidad");
   if (base.red !== "mainnet") return { ok: false, error: "red", campo: "red" };
   const c = JSON.parse(texto) as unknown;
   if (!esObjeto(c)) return forma("texto");
-  // El lector de la sala ya lo rechaza sin identidad de persona: queda dicho acá por si ese lector cambia algún día.
+  // El premio en mano no se activa solo ni se cobra: lo firma Tinkazo a mano. El lector de la sala ya lo rechaza sin identidad
+  // de persona, y acá se rechaza también con ella.
   if (c.premio_en_mano !== undefined) return forma("premio_en_mano");
   if (c.entrada !== "google") return forma("entrada");
   if (c.estado !== "abierta") return forma("estado");
@@ -155,6 +171,10 @@ export function leerParaActivar(texto: string, ahora: number): LecturaParaActiva
     if (typeof premio !== "string") return forma("premios");
     montos.push(BigInt(premio));
   }
+  // En una campaña de personas cada premio es un envío desde la cuenta de quien organiza: no entran más de los que esa cuenta
+  // puede mandar en un día.
+  const dePersonas = base.identidad === "persona";
+  if (dePersonas && montos.length > PREMIOS_CON_ENVIO_MAXIMOS) return forma("premios");
   const empresa = c.empresa;
   const nombre = esObjeto(empresa) ? empresa.nombre : null;
   const falla = reglaQueFalla({ premios: montos, cierraMs: base.cierraMs, sorteoMs: base.sorteoMs, nombre }, ahora);
@@ -169,6 +189,8 @@ export function leerParaActivar(texto: string, ahora: number): LecturaParaActiva
     cierraMs: base.cierraMs,
     sorteoMs: base.sorteoMs,
     lista: leerDatosDeLista(compacto),
+    // La clave va solo en una campaña de personas: la lectura de una de cuentas tiene las claves de siempre.
+    ...(dePersonas ? { identidad: "persona" as const } : {}),
   };
 }
 
@@ -373,7 +395,7 @@ export interface TopesDeActivar {
 }
 
 export interface DepsDeActivar {
-  env: VariablesDeActivar & VariablesDeLlaveAuto & { SOLO_GOOGLE?: string };
+  env: VariablesDeActivar & VariablesDeLlaveAuto & VariablesDePersonas & { SOLO_GOOGLE?: string };
   ahora: number;
   ip: string;
   f: Pedir;
@@ -506,6 +528,11 @@ export async function verificarCuentaDeCampanas(
 /**
  * Activa una campaña: comprueba la sesión, el texto, el pago de la comisión y los fondos, le da acceso a quien organiza en el
  * portero y recién entonces firma. El orden va del más barato al más caro, y nada se firma si algún paso duda.
+ *
+ * Una campaña de personas con premios en dólares se activa igual que una de cuentas, con dos diferencias: la sala tiene que
+ * tener las campañas de personas prendidas (si no, `503 personas-apagadas`, porque después no podría crear su sala) y en la
+ * cuenta de quien organiza tienen que estar los premios más el costo de mandar cada uno, que pone quien organiza para que el
+ * premio llegue entero. No se pide el acceso de ninguna ganadora: en esas campañas nadie recibe una cuenta al anotarse.
  */
 export async function activarCampana(cuerpo: unknown, d: DepsDeActivar): Promise<RespuestaDeActivar> {
   const config = configDeActivar(d.env);
@@ -527,6 +554,10 @@ export async function activarCampana(cuerpo: unknown, d: DepsDeActivar): Promise
   if (typeof sesion !== "string") return error(400, "forma", { campo: "sesion" });
   const campana = leerParaActivar(texto, d.ahora);
   if (!campana.ok) return error(400, campana.error, { campo: campana.campo });
+  // Una campaña de personas se firma solo si la sala la va a poder crear. Se dice antes de mirar la sesión, los topes o la red:
+  // así nadie gasta un tope ni paga por una campaña que después no abre.
+  const dePersonas = campana.identidad === "persona";
+  if (dePersonas && !personasPrendido(d.env)) return error(503, "personas-apagadas");
 
   // La sesión de quien organiza: topes, proveedor, vía de Google y cuenta, en este orden y con las mismas respuestas de siempre.
   const quien = await verificarQuienOrganiza(sesion, d);
@@ -554,11 +585,13 @@ export async function activarCampana(cuerpo: unknown, d: DepsDeActivar): Promise
   if (pagos.tipo === "red") return error(502, "red");
   if (pagos.suma < umbral) return error(402, "no-pagada", { falta: (umbral - pagos.suma).toString(), nota });
 
-  // Los premios que se van a pagar tienen que estar en la cuenta.
+  // Los premios que se van a pagar tienen que estar en la cuenta. En una campaña de personas, además, el costo de mandar cada
+  // uno: lo pone quien organiza, y así a quien gana le llega el premio entero.
   const saldo = await saldoDeDolares(d.f, cuenta);
   if (saldo.tipo === "red") return error(502, "red");
   const premios = campana.premios.reduce((a, p) => a + p, 0n);
-  if (saldo.saldo < premios) return error(402, "sin-fondos", { falta: (premios - saldo.saldo).toString() });
+  const fondos = dePersonas ? premios + config.costo * BigInt(campana.premios.length) : premios;
+  if (saldo.saldo < fondos) return error(402, "sin-fondos", { falta: (fondos - saldo.saldo).toString() });
 
   // Un pago sirve a un solo evento: si otro evento con la misma nota ya se activó con ella, para este no hay pago.
   if (!(await d.topes.nota(nota, campana.evento))) return error(402, "no-pagada", { falta: umbral.toString(), nota });

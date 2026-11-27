@@ -149,31 +149,32 @@ describe("crear una sala con premio en mano", () => {
   });
 });
 
-describe("la activación sola no firma campañas de personas ni de premio en mano", () => {
+describe("la activación sola firma una campaña de personas con dólares y no una de premio en mano", () => {
   const hoy = (m: Awaited<ReturnType<typeof montarMundoDeActivar>>, cambios: Record<string, unknown>) => JSON.stringify(m.campana(cambios));
 
-  it("el lector lo rechaza, sin importar nada más", async () => {
+  it("el lector acepta la de dólares y rechaza el premio en mano, sin importar nada más", async () => {
     const m = await montarMundoDeActivar({ DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE });
     expect(leerParaActivar(hoy(m, {}), HORA_DE_LA_PRUEBA)).toMatchObject({ ok: true });
-    expect(leerParaActivar(hoy(m, { identidad: "persona" }), HORA_DE_LA_PRUEBA)).toEqual({ ok: false, error: "forma", campo: "identidad" });
+    expect(leerParaActivar(hoy(m, { identidad: "persona" }), HORA_DE_LA_PRUEBA)).toMatchObject({ ok: true, identidad: "persona" });
     expect(leerParaActivar(hoy(m, { identidad: "cuenta" }), HORA_DE_LA_PRUEBA)).toMatchObject({ ok: true });
-    expect(leerParaActivar(hoy(m, { ...MANO }), HORA_DE_LA_PRUEBA)).toEqual({ ok: false, error: "forma", campo: "identidad" });
+    expect(leerParaActivar(hoy(m, { ...MANO }), HORA_DE_LA_PRUEBA)).toEqual({ ok: false, error: "forma", campo: "premio_en_mano" });
     expect(leerParaActivar(hoy(m, { premio_en_mano: EN_MANO }), HORA_DE_LA_PRUEBA)).toEqual({ ok: false, error: "forma", campo: "premio_en_mano" });
     expect(leerParaActivar(hoy(m, { premio_en_mano: null }), HORA_DE_LA_PRUEBA)).toEqual({ ok: false, error: "forma", campo: "premio_en_mano" });
   });
 
-  it("el pedido de activar con los interruptores prendidos no firma nada ni gasta el pago", async () => {
+  it("el pedido de activar con los interruptores prendidos no firma el premio en mano ni gasta el pago, y firma la de dólares", async () => {
     const m = await montarMundoDeActivar({ DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE });
     vi.setSystemTime(HORA_DE_LA_PRUEBA);
     m.horizon.pagos = [m.pagoCompleto("casa-andina-k7p2")];
-    for (const cambios of [{ identidad: "persona" }, MANO, { premio_en_mano: EN_MANO }]) {
+    for (const cambios of [MANO, { premio_en_mano: EN_MANO }]) {
       const r = await m.activar({ texto: hoy(m, cambios), sesion: m.organizadora.token });
       expect(r.status, JSON.stringify(cambios)).toBe(400);
-      expect(await r.json()).toMatchObject({ error: "forma" });
+      expect(await r.json()).toEqual({ error: "forma", campo: "premio_en_mano" });
     }
     expect(m.horizon.cuentasMiradas).toEqual([]);
-    const buena = await m.activar({ texto: hoy(m, {}), sesion: m.organizadora.token });
-    expect(buena.status).toBe(200);
+    const deDolares = await m.activar({ texto: hoy(m, { identidad: "persona" }), sesion: m.organizadora.token });
+    expect(deDolares.status).toBe(200);
+    expect(JSON.parse(((await deDolares.json()) as { texto: string }).texto)).toMatchObject({ identidad: "persona" });
   });
 });
 
