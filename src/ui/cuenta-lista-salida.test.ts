@@ -768,7 +768,7 @@ describe("proteger: Mandando el código tiene salida y confirmar, no", () => {
 
   it("mandar el código que no sale: Volver a cargar a los 45 s, en la caja de proteger", async () => {
     const reg: Registro = [];
-    const { salidas } = await abrirParaProteger(reg, (cf) => cf.cuenta.mandarCodigoDeProteccion.mockImplementation(() => new Promise<void>(() => undefined)));
+    const { salidas } = await abrirParaProteger(reg, (cf) => cf.cuenta.mandarCodigoDeProteccion.mockImplementation(() => new Promise<undefined>(() => undefined)));
     expect(principal().dataset.accion).toBe("mandar-codigo");
     await tocar();
     await vi.advanceTimersByTimeAsync(44_999);
