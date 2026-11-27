@@ -1022,10 +1022,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       avisoPublico(deps.tx("cpSorteado"), estado.comprobante);
       // Quien se anotó y abre el enlace en otro navegador después del sorteo no recupera su código: se le dice con quién hablar.
       if (deps.persona) {
-        const apoyo = document.createElement("p");
-        apoyo.className = "cmp-apoyo";
-        apoyo.textContent = deps.tx("cpPreguntaEnStand");
-        raiz.querySelector("#cmp-estado .cmp-hero")?.append(apoyo);
+        raiz.querySelector("#cmp-estado .cmp-hero")?.append(Object.assign(document.createElement("p"), { className: "cmp-apoyo", textContent: deps.tx("cpPreguntaEnStand") }));
       }
     }
   };
@@ -1153,14 +1150,10 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     }
     if (propio.fase === "sorteada") {
       const resultado = await pedirResultado();
-      if (desmontado) return;
+      const sinLista = resultado === "red" || resultado === null;
       // En una campaña de personas la lista de elegidas no decide nada: ya dijo la sala si esta persona ganó. Sin ella la pantalla sale igual.
-      if (deps.persona && (resultado === "red" || resultado === null)) {
-        await aplicarResultado({ ganadoras: [], comprobante: estado.comprobante }, propio);
-        return;
-      }
-      if (resultado === "red" || resultado === null) return;
-      await aplicarResultado(resultado, propio);
+      if (desmontado || (sinLista && !deps.persona)) return;
+      await aplicarResultado(sinLista ? { ganadoras: [], comprobante: estado.comprobante } : resultado, propio);
       return;
     }
     anotarLaRonda(propio);
@@ -1489,8 +1482,6 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
    */
   async function recibirElPremio(toque?: Event): Promise<void> {
     if (comparandoLaSesion) return;
-    // En una campaña de personas el premio se entrega en mano: no hay nada que recibir desde el celular.
-    if (deps.persona) return;
     const cuenta = estado.memoria?.cuenta;
     if (estado.sesion === null && cuenta !== undefined && deps.cuenta?.laSesionEs) {
       comparandoLaSesion = true;
