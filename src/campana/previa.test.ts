@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLang, setLang, texto, usarTextos } from "../idioma";
-import type { DepsDelCelular, EstadoPublico, FallaDeEntrada } from "./celular";
+import type { BotonDeGoogle, DepsDelCelular, EstadoPublico, FallaDeEntrada } from "./celular";
 import { depsDeDemostracion } from "./demostracion";
 import { campanaDeEjemplo } from "./ejemplo";
 import { pintarEstadoDeCarga, pintarLaCampana, pintarReglas, sustituir, type EstadoDeCarga } from "./previa";
@@ -216,6 +216,122 @@ describe("la campaña abierta", () => {
     expect(boton?.disabled).toBe(false);
     expect(boton?.textContent).toBe("Entrar con Google");
     expect(raiz.querySelector(".cmp-error")?.textContent).toBe(TEXTOS_CAMPANA.es[clave]);
+  });
+});
+
+describe("una campaña de personas: lo que la pantalla dice que se guarda", () => {
+  const google: BotonDeGoogle = { montar: () => () => undefined };
+  const NOTA_DE_SIEMPRE = "Con Google confirmamos que sos vos. No te creamos ninguna cuenta.";
+  const NOTA_CON_PERFIL = "Con Google confirmamos que sos vos. Guardamos tu correo, tu nombre y tu foto.";
+  const REGLA_CON_PERFIL =
+    "Qué guardamos: tu correo, tu nombre y tu foto de Google, para tu cuenta de Tinkazo. Quien organiza no los recibe. " +
+    "En la lista del sorteo queda un código que no dice quién sos, y el nombre con que salís en la pantalla, hasta mañana.";
+
+  const prender = (): void => {
+    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
+    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
+  };
+
+  /** Pinta la previa y devuelve su marcado entero, para comparar una pantalla con otra. */
+  function previa(dePersonas: boolean, idioma: "es" | "en" = "es"): { raiz: HTMLElement; marcado: string } {
+    const { raiz, deps, publico } = preparar(dePersonas ? { persona: { google } } : {});
+    setLang(idioma);
+    pintarLaCampana(raiz, deps, publico, () => undefined);
+    return { raiz, marcado: raiz.querySelector("#cmp-saber")?.innerHTML ?? "" };
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("con la bandera apagada dice lo de siempre, arriba del botón y en las reglas", () => {
+    const { raiz } = previa(true);
+    expect(raiz.querySelector(".cmp-accion .cmp-apoyo")?.textContent).toBe(NOTA_DE_SIEMPRE);
+    const reglas = raiz.querySelector(".cmp-reglas")?.textContent ?? "";
+    expect(reglas).toContain(TEXTOS_CAMPANA.es.cpQueGuardamosPersona);
+    expect(raiz.textContent).not.toContain("Guardamos tu correo");
+    expect(raiz.textContent).not.toContain("tu foto");
+  });
+
+  it("con la bandera prendida dice que se guardan el correo, el nombre y la foto, antes del botón de Google y en las reglas", () => {
+    prender();
+    const { raiz } = previa(true);
+    const accion = raiz.querySelector(".cmp-accion") as HTMLElement;
+    expect(accion.querySelector(".cmp-apoyo")?.textContent).toBe(NOTA_CON_PERFIL);
+    // La línea va antes del lugar del botón: la persona la lee antes de entrar.
+    expect(accion.firstElementChild?.classList.contains("cmp-apoyo")).toBe(true);
+    expect(accion.querySelector(".cmp-apoyo ~ .cmp-google")).not.toBeNull();
+    const reglas = raiz.querySelector(".cmp-reglas")?.textContent ?? "";
+    expect(reglas).toContain(REGLA_CON_PERFIL);
+    // Lo de antes ya no se dice: no queda en pantalla una promesa que el permiso del alta contradice.
+    expect(raiz.textContent).not.toContain("no guardamos tu correo");
+    expect(raiz.textContent).not.toContain("No te creamos ninguna cuenta");
+  });
+
+  it("con la bandera prendida y la página en inglés, las dos líneas salen en inglés", () => {
+    prender();
+    const { raiz } = previa(true, "en");
+    expect(raiz.querySelector(".cmp-accion .cmp-apoyo")?.textContent).toBe("Google confirms it's you. We keep your email, name and photo.");
+    const reglas = raiz.querySelector(".cmp-reglas")?.textContent ?? "";
+    expect(reglas).toContain(
+      "What we keep: your Google email, name and photo, for your Tinkazo account. The organizer doesn't get them. " +
+        "The draw list only holds a code that doesn't say who you are, and the name you show up with on the screen, until tomorrow.",
+    );
+    expect(raiz.textContent).not.toContain("we don't keep your email");
+    expect(raiz.textContent).not.toContain("We don't create any account");
+  });
+
+  it("con la bandera prendida, esas dos líneas son lo único que cambia de la pantalla", () => {
+    const apagada = previa(true).marcado;
+    prender();
+    const prendida = previa(true).marcado;
+    expect(prendida).not.toBe(apagada);
+    expect(prendida.replace(NOTA_CON_PERFIL, NOTA_DE_SIEMPRE).replace(REGLA_CON_PERFIL, TEXTOS_CAMPANA.es.cpQueGuardamosPersona ?? "")).toBe(apagada);
+  });
+
+  it.each([
+    ["sin anotarse sin billetera", { VITE_ANOTARSE_SIN_BILLETERA: "", VITE_GUARDAR_PERFIL: "1" }],
+    ["con la bandera en 0", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "0" }],
+    ["con la bandera en true", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "true" }],
+  ])("%s la pantalla es idéntica a la de hoy", (_caso, entorno) => {
+    const deHoy = previa(true).marcado;
+    for (const [nombre, valor] of Object.entries(entorno)) vi.stubEnv(nombre, valor);
+    expect(previa(true).marcado).toBe(deHoy);
+  });
+
+  it("una campaña de cuentas no cambia en nada con la bandera prendida", () => {
+    const deHoy = previa(false).marcado;
+    prender();
+    const { raiz, marcado } = previa(false);
+    expect(marcado).toBe(deHoy);
+    expect(raiz.querySelector(".cmp-accion .cmp-apoyo")?.textContent).toBe("Te creamos una cuenta de Tinkazo.");
+    expect(raiz.querySelector(".cmp-reglas")?.textContent).toContain(TEXTOS_CAMPANA.es.cpQueGuardamos);
+    expect(raiz.textContent).not.toContain("tu foto");
+  });
+
+  it("las reglas que se repiten en las demás pantallas dicen lo mismo que la previa", () => {
+    const { raiz, deps } = preparar({ persona: { google } });
+    const seccion = raiz.querySelector<HTMLElement>("#cmp-saber") as HTMLElement;
+    pintarReglas(seccion, deps);
+    expect(seccion.textContent).toContain(TEXTOS_CAMPANA.es.cpQueGuardamosPersona);
+    seccion.replaceChildren();
+    prender();
+    pintarReglas(seccion, deps);
+    expect(seccion.textContent).toContain(REGLA_CON_PERFIL);
+    expect(seccion.textContent).not.toContain("no guardamos tu correo");
+  });
+
+  it("las dos líneas nuevas existen en los dos idiomas, con Google nombrado y sin prometer que no se guarda nada", () => {
+    for (const idioma of ["es", "en"] as const) {
+      for (const clave of ["cpEntrarNotaPerfil", "cpQueGuardamosPerfil"]) {
+        const dicho = TEXTOS_CAMPANA[idioma][clave] ?? "";
+        expect(dicho, `${idioma}.${clave}`).toContain("Google");
+        expect(dicho, `${idioma}.${clave}`).not.toMatch(/no guardamos|don't keep|ninguna cuenta|any account/u);
+      }
+    }
+    // Las de siempre siguen como estaban, para la página construida sin la bandera.
+    expect(TEXTOS_CAMPANA.es.cpEntrarNotaPersona).toBe(NOTA_DE_SIEMPRE);
+    expect(TEXTOS_CAMPANA.en.cpEntrarNotaPersona).toBe("Google confirms it's you. We don't create any account for you.");
   });
 });
 
