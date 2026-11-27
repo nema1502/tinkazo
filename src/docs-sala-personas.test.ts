@@ -48,3 +48,35 @@ describe("los documentos dicen lo que ve quien ganó y lo que no recupera", () =
     expect(parrafo).toContain("después del cierre ninguna pantalla ofrece olvidar");
   });
 });
+
+describe("los documentos dicen lo que el comprobante muestra de una lista de personas", () => {
+  const operacion = leer("../docs/operacion.md");
+  const desde = operacion.indexOf("El show y las tarjetas del resultado dicen el nombre");
+  const renglon = operacion.slice(desde, operacion.indexOf("- La pantalla del resultado trae una sola línea", desde));
+
+  it("la operación no dice que el comprobante muestra las líneas: dice el lugar, y con qué se recalcula la huella", () => {
+    expect(desde).toBeGreaterThan(-1);
+    expect(operacion).not.toContain("salvo la lista sellada del comprobante");
+    expect(operacion).not.toContain("la lista pública que cualquiera recalcula");
+    expect(renglon).toContain("Ninguna pantalla muestra una línea `p1:`");
+    expect(renglon).toContain("La lista sellada del comprobante también dice Lugar n en cada fila");
+    expect(renglon).toContain("La huella se recalcula con la lista sellada que tiene quien organiza");
+  });
+
+  it("dice Lugar n donde el show y las tarjetas dicen Lugar n, y Lugar n de la lista donde se dice así", () => {
+    expect(renglon).toContain("si esta pestaña no lo tiene, Lugar n (o Sin nombre, si la lista del cuadro no trae esa línea)");
+    expect(renglon).toContain("Mis sorteos, el evento, el comprobante y el celular de quien mira dicen Lugar n de la lista");
+  });
+
+  it("dice lo que el evento comprueba y que el comprobante no ofrece buscar por nombre", () => {
+    expect(renglon).toContain("En la página del evento lo comprobado es ese lugar");
+    expect(renglon).toContain("no ofrece buscar por nombre");
+  });
+
+  it("los textos que cita son los del sitio", async () => {
+    const { T } = await import("./i18n");
+    expect(T.es.vLugar).toBe("Lugar {n}");
+    expect(T.es.vLugarDeLaLista).toBe("Lugar {n} de la lista");
+    expect(T.es.vPersonaAnotada).toBe("Sin nombre");
+  });
+});
