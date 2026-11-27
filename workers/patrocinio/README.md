@@ -6,7 +6,7 @@ Es un script aparte del de los enlaces (`tinkazo-enlaces`) y del de la sala (`ti
 
 **Comprobar un sorteo no depende de este servicio.** `verificar.html` no lo llama. Si se cae, no se puede sellar con patrocinio, pero todo lo ya hecho se sigue comprobando, y quien paga su comisión (Varial, antes Freighter, o una cuenta con saldo) no pasa por acá.
 
-**Estado:** desplegado en testnet en `p.tinkazo.app`. El sitio lo usa en `tinkazo.app` y `www.tinkazo.app` cuando el build no trae `VITE_PATROCINIO_URL` (`src/stellar/patrocinio-config.ts`): nunca en localhost ni en vistas previas, y solo en testnet. Con esa dirección por defecto el portero no es condición para sellar: si no contesta o no entiende `/cupo`, el sitio paga como antes con Pollar; si contesta que está apagado, sin fondo o sin configuración, se respeta. Con la variable puesta a mano sigue cerrado ante la duda.
+**Estado:** desplegado en testnet en `p.tinkazo.app`. El sitio lo usa en `tinkazo.app` y `www.tinkazo.app` cuando el build no trae `VITE_PATROCINIO_URL` (`src/stellar/patrocinio-config.ts`): nunca en localhost ni en vistas previas, y solo en testnet. El sitio publicado abre en Oficial (`VITE_STELLAR_NETWORK` en la tabla de banderas de [operacion.md](../../docs/operacion.md)), así que usa el portero de la red principal (`VITE_PATROCINIO_URL_MAINNET`, en `pm.tinkazo.app`) y no este. Con esa dirección por defecto el portero no es condición para sellar: si no contesta o no entiende `/cupo`, el sitio paga como antes con Pollar; si contesta que está apagado, sin fondo o sin configuración, se respeta. Con la variable puesta a mano sigue cerrado ante la duda.
 
 ## Cómo funciona
 
@@ -226,7 +226,7 @@ Con `Authorization: Bearer <TOKEN_LECTURA>` (secreto de 32 caracteres o más, di
 
 ## Los pagos de premios, los retiros y el alta de quien ganó
 
-Solo en mainnet, con `ALTAS = "1"` y cada forma con su variable (`PAGOS_PREMIO`, `RETIROS` y `ALTAS_PREMIO`), las tres apagadas por defecto: apagadas, las rutas de abajo dan `404 no-existe`, `/cupo` y `/estado` no cambian y la alarma no tiene nada nuevo que mirar. Qué son, cómo se prenden, se pausan y se ensayan está en la hoja de operación ([operacion.md](../../docs/operacion.md), «Los pagos de premios, los retiros y el alta de quien ganó»). Acá, el contrato.
+Solo en mainnet, con `ALTAS = "1"` y cada forma con su variable (`PAGOS_PREMIO`, `RETIROS` y `ALTAS_PREMIO`), las tres apagadas por defecto en el código y prendidas en `[env.mainnet.vars]` del repositorio desde el cambio `c2aec150`: apagadas, las rutas de abajo dan `404 no-existe`, `/cupo` y `/estado` no cambian y la alarma no tiene nada nuevo que mirar. Qué son, cómo se prenden, se pausan y se ensayan está en la hoja de operación ([operacion.md](../../docs/operacion.md), «Los pagos de premios, los retiros y el alta de quien ganó»). Acá, el contrato.
 
 ### `POST /v1/patrocinio/pago`
 

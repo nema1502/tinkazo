@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MARGEN_BASE, MARGEN_MAX, margenMusica } from "./music-margen";
+import { GRACIA_EN_REPOSO, MARGEN_BASE, MARGEN_GRACIA_MAX, MARGEN_MAX, FRENO_MS, adelgazadoPrendido, horizonteDeMusica, margenMusica, nivelDeGracia, prenderAdelgazado, seguirLaGracia, type EstadoDeGracia } from "./music-margen";
 
 /** Ticks del temporizador a estos intervalos (ms): devuelve el margen después de cada uno. */
 function correr(intervalos: number[], margen = MARGEN_BASE): number[] {
@@ -58,15 +58,178 @@ describe("el margen con que la música se programa por delante", () => {
   it("un intervalo inválido no lo mueve", () => {
     for (const ms of [Number.NaN, -10, 0, Number.POSITIVE_INFINITY]) expect(margenMusica(0.5, ms)).toBe(0.5);
   });
+
+  it("apagado el adelgazado, el margen baja siempre de a 0,01 por tick, como en producción", () => {
+    expect(margenMusica(1, 40)).toBe(0.99);
+    expect(margenMusica(1, 40, false)).toBe(0.99);
+    expect(margenMusica(1, 160)).toBeCloseTo(0.99);
+  });
+
+  it("con el adelgazado prendido, cuando los ticks ya vuelven a tiempo el margen que sobró baja más rápido", () => {
+    expect(margenMusica(1, 40, true)).toBe(1 - 0.06);
+    expect(margenMusica(1, 400, true)).toBe(0.99);
+    expect(margenMusica(1, 160, true)).toBeCloseTo(1 - 0.06);
+  });
 });
 
-describe("music.ts usa el margen", () => {
-  it("el tick programa hasta la hora más el margen, no 0,22 fijo, y el remate se arma con el mismo margen", async () => {
-    const { readFileSync } = await import("node:fs");
-    const src = readFileSync(new URL("./music.ts", import.meta.url), "utf8");
-    expect(src).not.toMatch(/s\.ctx\.currentTime \+ 0\.22/);
-    expect(src).toMatch(/s\.margen = document\.hidden \? MARGEN_BASE : margenMusica\(s\.margen, ahora - s\.ultimoTick\);/);
-    expect(src).toMatch(/while \(s\.next < s\.ctx\.currentTime \+ s\.margen\)/);
-    expect(src).toMatch(/const espera = \(at - s\.ctx\.currentTime - Math\.max\(0\.15, s\.margen\)\) \* 1000;/);
+/*
+ * El freno del procesador, con el adelgazado prendido (`?musicagracia=1`, apagado por defecto).
+ *
+ * El procesador frenado 4, 8 y 16 veces deja los temporizadores en 160, 320 y 640 ms, y la red lenta traba el hilo con
+ * tirones largos. En cada caso, o la música suena entera, o baja con gracia a algo más simple: nunca un silencio, nunca rota.
+ * Con la pestaña escondida el adelgazado no actúa: la música se salta en silencio (`music-escondida.test.ts`).
+ */
+describe("el freno del procesador y la pestaña escondida", () => {
+  it("cuánto frenó el procesador: sube al toque y baja de a poco", () => {
+    expect(FRENO_MS).toBe(160);
+    // 4× del audit-harness todavía respira; 8× y 16× son freno.
+    expect(nivelDeGracia(0, 40)).toBe(0);
+    expect(nivelDeGracia(0, 160)).toBe(0);
+    expect(nivelDeGracia(0, 320)).toBe(0.5);
+    expect(nivelDeGracia(0, 640)).toBe(1);
+    expect(nivelDeGracia(0, 1000)).toBe(1); // la pestaña escondida: un tick por segundo
+    // Se frena, se nota en el primer tick que llega tarde.
+    expect(nivelDeGracia(0.5, 640)).toBe(1);
+    // Y se recupera de a poco, que no vaya a brincare las capas.
+    expect(nivelDeGracia(1, 40)).toBeCloseTo(0.97);
+    expect(nivelDeGracia(0.02, 40)).toBe(0);
+    for (const ms of [Number.NaN, -10, 0, Number.POSITIVE_INFINITY]) expect(nivelDeGracia(0.5, ms)).toBe(0.5);
+  });
+
+  it("el horizonte de gracia alcanza hasta el próximo tick cuando el procesador frenó", () => {
+    expect(MARGEN_GRACIA_MAX).toBe(2);
+    // Equipo sano (y 4×): el margen de siempre.
+    expect(horizonteDeMusica(0.22, 40)).toBe(0.22);
+    expect(horizonteDeMusica(0.22, 160)).toBe(0.22);
+    // 8×: hasta 1,2 del intervalo medido, más un resto.
+    expect(horizonteDeMusica(0.22, 320)).toBeCloseTo(0.464);
+    // 16×: el margen ya está en el tope de 1 s, y alcanza de sobra.
+    expect(horizonteDeMusica(1, 640)).toBe(1);
+    // Un tick por segundo: el horizonte los cubre.
+    expect(horizonteDeMusica(1, 1000)).toBe(1.28);
+    // Red lenta con un tirón de 1,5 s: cubre, y hasta dos segundos, nunca más.
+    expect(horizonteDeMusica(1, 1500)).toBe(1.88);
+    expect(horizonteDeMusica(1, 3000)).toBe(2);
+    for (const ms of [Number.NaN, -10, 0, Number.POSITIVE_INFINITY]) expect(horizonteDeMusica(0.4, ms)).toBe(0.4);
+  });
+
+  /**
+   * El mismo reloj del audit-harness, con la máquina de gracia de music.ts: en cada tick se programa hasta la hora
+   * más el horizonte, que con el procesador frenado llega hasta el intervalo medido (el próximo tick).
+   */
+  function silencioConGracia(intervalos: number[], anterior = 40): number {
+    let ahora = 0, hasta = 0, margen = MARGEN_BASE, callado = 0;
+    for (const ms of intervalos) {
+      margen = margenMusica(margen, anterior, true);
+      hasta = Math.max(hasta, ahora + horizonteDeMusica(margen, anterior));
+      const proximo = ahora + ms / 1000;
+      if (proximo > hasta) callado += proximo - hasta;
+      ahora = proximo;
+      anterior = ms;
+    }
+    return callado;
+  }
+
+  it("procesador frenado 4× (160 ms): cero silencios", () => {
+    expect(silencioConGracia([...Array(40).fill(160)])).toBe(0);
+  });
+
+  it("procesador frenado 8× (320 ms): un tropiezo apenas y después nada", () => {
+    expect(silencioConGracia([...Array(40).fill(320)])).toBeLessThan(0.2);
+    expect(silencioConGracia([...Array(30).fill(320)], 320)).toBe(0);
+  });
+
+  it("procesador frenado 16× (640 ms): un tropiezo y después suena entera", () => {
+    expect(silencioConGracia([...Array(40).fill(640)])).toBeLessThan(0.5);
+    expect(silencioConGracia([...Array(30).fill(640)], 640)).toBe(0);
+  });
+
+  it("temporizadores a uno por segundo con la pestaña a la vista (la pantalla que se apaga y vuelve): sin agujeros y a la vuelta queda limpia", () => {
+    expect(silencioConGracia([...Array(10).fill(1000)], 1000)).toBe(0);
+    expect(silencioConGracia([...Array(5).fill(1000), ...Array(50).fill(40)], 1000)).toBe(0);
+  });
+
+  it("red lenta: un tirón largo y los que siguen, sin cortar a la mitad del show", () => {
+    // Hoy, con el tope de 1 s, cada tirón deja medio segundo callado.
+    expect(silencioConGracia([1500, 1200, 900, 800], 1500)).toBe(0);
+    // El único hueco es el primero del tirón, que nadie puede prever.
+    expect(silencioConGracia([...Array(40).fill(40), 1500, 1200, 900, 800, ...Array(60).fill(40)])).toBeLessThan(1.4);
+  });
+});
+
+describe("el interruptor del adelgazado", () => {
+  it("nace apagado: sin nada en la dirección, producción suena como siempre", () => {
+    expect(adelgazadoPrendido("")).toBe(false);
+    expect(adelgazadoPrendido("?demo=race&lang=en")).toBe(false);
+    expect(adelgazadoPrendido("?musicagracia=0")).toBe(false);
+  });
+
+  it("solo el valor 1 lo prende: vacío, false, off, no o cualquier otro lo dejan apagado", () => {
+    for (const v of ["", "false", "off", "no", "true", "2", "01", " 1"]) expect(adelgazadoPrendido(`?musicagracia=${v}`), v).toBe(false);
+    expect(adelgazadoPrendido("?musicagracia")).toBe(false);
+  });
+
+  it("la dirección con ?musicagracia=1 lo prende", () => {
+    expect(adelgazadoPrendido("?musicagracia=1")).toBe(true);
+    expect(adelgazadoPrendido("?demo=race&musicagracia=1")).toBe(true);
+  });
+
+  it("las pruebas y la escucha lo fuerzan, y null vuelve a lo de siempre", () => {
+    prenderAdelgazado(true);
+    expect(adelgazadoPrendido("")).toBe(true);
+    prenderAdelgazado(false);
+    expect(adelgazadoPrendido("?musicagracia=1")).toBe(false);
+    prenderAdelgazado(null);
+    expect(adelgazadoPrendido("?musicagracia=1")).toBe(true);
+  });
+});
+
+describe("la gracia no castiga a un equipo sano por un tropiezo", () => {
+  /** Los ticks de un show, uno tras otro, con el estado que va quedando. */
+  function correr(ticks: { ms: number; escondida?: boolean }[]): (EstadoDeGracia & { intervalo: number })[] {
+    let e: EstadoDeGracia = GRACIA_EN_REPOSO;
+    return ticks.map((t) => {
+      const r = seguirLaGracia(e, t.ms, t.escondida ?? false);
+      e = r;
+      return r;
+    });
+  }
+  const sanos = (n: number): { ms: number }[] => Array.from({ length: n }, () => ({ ms: 40 }));
+
+  it("un solo tick tarde, aunque sea de un segundo, no baja las capas", () => {
+    for (const ms of [200, 400, 700, 1500]) expect(correr([...sanos(5), { ms }, ...sanos(5)]).map((r) => r.gracia), `${ms} ms`).toEqual(Array(11).fill(0));
+  });
+
+  it("dos ticks tarde seguidos sí: la gracia sube con el segundo y sigue a cada tick", () => {
+    const r = correr([...sanos(5), { ms: 400 }, { ms: 400 }, { ms: 400 }]);
+    expect(r.map((x) => x.gracia).slice(5)).toEqual([0, 1, 1]);
+  });
+
+  it("después de dos tarde, la gracia baja de a poco cuando el equipo vuelve", () => {
+    const r = correr([{ ms: 400 }, { ms: 400 }, ...sanos(3)]);
+    expect(r[1]!.gracia).toBe(1);
+    expect(r[2]!.gracia).toBeLessThan(1);
+    expect(r[2]!.gracia).toBeGreaterThan(0.9);
+  });
+
+  it("un tropiezo suelto después de otro tropiezo, con ticks sanos en el medio, tampoco cuenta", () => {
+    expect(correr([{ ms: 400 }, ...sanos(2), { ms: 400 }, ...sanos(2)]).every((r) => r.gracia === 0)).toBe(true);
+  });
+
+  it("escondida no cuenta, y el primer tick que se ve al volver no mide el equipo", () => {
+    const r = correr([...sanos(3), { ms: 1000, escondida: true }, { ms: 1000, escondida: true }, { ms: 1000 }, { ms: 40 }]);
+    expect(r.map((x) => x.gracia)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    // El margen no ve el segundo entero de la pestaña escondida sino un intervalo sano.
+    expect(r[5]!.intervalo).toBe(FRENO_MS);
+    expect(r[6]!.intervalo).toBe(40);
+  });
+
+  it("con la pestaña escondida el intervalo se deja como viene: el margen no lo mira", () => {
+    expect(seguirLaGracia(GRACIA_EN_REPOSO, 1000, true).intervalo).toBe(1000);
+  });
+
+  it("al volver de escondida, dos ticks tarde seguidos sí bajan las capas: el equipo está frenado de verdad", () => {
+    const r = correr([{ ms: 1000, escondida: true }, { ms: 1000 }, { ms: 400 }, { ms: 400 }]);
+    expect(r.map((x) => x.gracia)).toEqual([0, 0, 0, 1]);
   });
 });

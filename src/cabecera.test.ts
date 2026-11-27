@@ -11,7 +11,8 @@ import { describe, expect, it } from "vitest";
  */
 describe("la cabecera", () => {
   const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
-  const paginas = readdirSync(".").filter((f) => f.endsWith(".html"));
+  // La página de escucha es una mesa de trabajo sin enlaces desde el sitio ni hacia él: no lleva la cabecera.
+  const paginas = readdirSync(".").filter((f) => f.endsWith(".html") && f !== "escucha.html");
 
   it("hay páginas con cabecera para revisar", () => {
     expect(paginas.length).toBeGreaterThan(5);

@@ -1,0 +1,449 @@
+import "../version-nueva";
+import {
+  CAPAS_SHOW,
+  IDENTIDADES,
+  IDENTIDADES_DEL_SELECTOR,
+  MOVIMIENTO_DEL_SHOW,
+  SEGUNDO_DEL_GOLPE,
+  SEMILLA_DE_LA_ESCUCHA,
+  HORA_DEL_SOLO_BOMBO,
+  armarBanda,
+  nivelDelShow,
+  perfilDeIdentidad,
+  rematDeHoyEn,
+  tocarMusicaEn,
+  type CapaShow,
+  type IdentidadDelJuego,
+} from "../music";
+import { reanudarSiHaceFalta } from "../sound";
+import { idiomaDeLaEscucha, nombreDeEtiqueta, nombreDeJuego, texto, type IdiomaEscucha } from "./escucha-textos";
+
+/**
+ * La página de escucha: las candidatas de música por juego, armadas con el secuenciador de
+ * `src/music.ts` (síntesis, sin samples), con su ruleta de votos manual y sin prender nada en el sitio:
+ * ninguna música nueva suena en producción hasta que alguien la escuche y la elija acá.
+ *
+ * Está aparte del selector y de cualquier enlace del sitio: solo abre con `?escucha=1`, como la bandera
+ * de `videoDescarga` en `src/flags.ts`. Va en el build (`escucha.html` está en `rollupOptions.input` de
+ * `vite.config.ts`), sin enlaces desde ninguna página, fuera del mapa del sitio y con noindex, para abrirla en el
+ * celular, en la tablet y en el parlante del proyector.
+ *
+ * El enlace de prueba del adelgazado abre un show con `?musicagracia=1`. La bandera se lee una sola vez, al armar
+ * la sesión de música: una sesión armada con ella sigue con el adelgazado prendido hasta recargar la página.
+ */
+
+/** Qué fase (o el show entero) se toca, con desde cuándo y cuánto dura, en segundos desde el inicio del show. */
+export type FaseDeEscucha = CapaShow | "todo";
+
+export function tramoDeFase(fase: FaseDeEscucha): { desde: number; dura: number } {
+  const { espera, tension, remate, festejo } = MOVIMIENTO_DEL_SHOW;
+  if (fase === "espera") return { desde: 0, dura: espera };
+  if (fase === "tension") return { desde: espera, dura: tension };
+  // El momento del ganador termina justo en el golpe: el remate entra con él en la pieza completa.
+  if (fase === "remate") return { desde: espera + tension, dura: remate };
+  if (fase === "festejo") return { desde: SEGUNDO_DEL_GOLPE, dura: festejo };
+  return { desde: 0, dura: SEGUNDO_DEL_GOLPE + festejo };
+}
+
+/** La bandera de la página: sin `?escucha=1` se ve solo la nota de que está apagada. */
+export function escuchaPrendida(busqueda: string = typeof location === "undefined" ? "" : location.search): boolean {
+  return new URLSearchParams(busqueda).get("escucha") === "1";
+}
+
+/* ------------------------------------------------------- la ruleta de votos */
+
+const CLAVE_VOTOS = "tinkazo.escucha.votos";
+export type Votos = Record<string, number>;
+
+/** El almacén donde viven los votos, o null en pruebas: cada votación se anota en este navegador, a mano. */
+export const almacenDeVotos = (): Storage | null => {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+};
+
+/** Una cuenta de votos válida: un entero de cero para arriba (ni infinitos, ni decimales, ni texto). */
+const esCuenta = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= 0;
+
+/** Los votos de este navegador: {juego: cuenta}. Lo guardado que no tiene forma de cuenta de votos se ignora. */
+export function votosDe(almacen: Storage | null = almacenDeVotos()): Votos {
+  if (!almacen) return {};
+  try {
+    const crudo = almacen.getItem(CLAVE_VOTOS);
+    if (!crudo) return {};
+    const datos = JSON.parse(crudo) as unknown;
+    if (!datos || typeof datos !== "object" || Array.isArray(datos)) return {};
+    const votos: Votos = {};
+    for (const [juego, n] of Object.entries(datos)) if (esCuenta(n)) votos[juego] = n;
+    return votos;
+  } catch {
+    return {};
+  }
+}
+
+/** Un voto anotado: la cuenta de después y si quedó guardada en el almacén del navegador. */
+export interface ResultadoDeVoto {
+  votos: Votos;
+  guardado: boolean;
+}
+
+/**
+ * Los votos de esta sesión que el almacén no aceptó (cuota llena, modo privado, sin almacén). Sin esto, el
+ * siguiente voto leía otra vez un almacén vacío y la cuenta se quedaba en 1. Se vacía cuando un voto se guarda.
+ */
+const respaldoPorAlmacen = new WeakMap<Storage, Votos>();
+let respaldoSinAlmacen: Votos | null = null;
+
+const respaldoDe = (almacen: Storage | null): Votos | null => (almacen ? (respaldoPorAlmacen.get(almacen) ?? null) : respaldoSinAlmacen);
+
+function guardarRespaldo(almacen: Storage | null, votos: Votos | null): void {
+  if (!almacen) respaldoSinAlmacen = votos;
+  else if (votos) respaldoPorAlmacen.set(almacen, votos);
+  else respaldoPorAlmacen.delete(almacen);
+}
+
+/** Para las pruebas: olvida los votos de la sesión que no se pudieron guardar. */
+export function olvidarRespaldoDeVotos(): void {
+  respaldoSinAlmacen = null;
+}
+
+/** Un voto más (o menos) para un juego. Si el almacén no lo acepta, la cuenta sigue en memoria y `guardado` es falso. */
+export function anotarVoto(juego: string, delta: 1 | -1, almacen: Storage | null = almacenDeVotos()): ResultadoDeVoto {
+  const votos = { ...(respaldoDe(almacen) ?? votosDe(almacen)) };
+  const n = Math.max(0, (votos[juego] ?? 0) + delta);
+  if (n === 0) delete votos[juego];
+  else votos[juego] = n;
+  let guardado = false;
+  try {
+    if (almacen) {
+      almacen.setItem(CLAVE_VOTOS, JSON.stringify(votos));
+      guardado = true;
+    }
+  } catch {
+    /* que no se guarde no rompe la escucha: la cuenta sigue en memoria y la página lo avisa */
+  }
+  guardarRespaldo(almacen, guardado ? null : votos);
+  return { votos, guardado };
+}
+
+/** Un voto más (o menos) para un juego, anotado en el almacén. Devuelve los votos de después. */
+export function votar(juego: string, delta: 1 | -1, almacen: Storage | null = almacenDeVotos()): Votos {
+  return anotarVoto(juego, delta, almacen).votos;
+}
+
+/* --------------------------------------------------------------- el audio */
+
+/**
+ * Renderiza el tramo de una fase con la identidad del juego, en un contexto sin conexión: la misma banda y el
+ * mismo secuenciador que la página (`tocarMusicaEn`), con el remate del ganador en el golpe cuando el tramo lo
+ * toca. Devuelve null si este navegador no sabe renderizar (las pruebas corren sin audio).
+ */
+export async function renderizarFase(fase: FaseDeEscucha, id: IdentidadDelJuego): Promise<AudioBuffer | null> {
+  const Offline = (window as unknown as { OfflineAudioContext?: typeof OfflineAudioContext }).OfflineAudioContext;
+  if (!Offline) return null;
+  const { desde, dura } = tramoDeFase(fase);
+  try {
+    const ctx = new Offline(2, Math.ceil(44100 * dura), 44100);
+    tocarMusicaEn(ctx, ctx.destination, {
+      seed: SEMILLA_DE_LA_ESCUCHA,
+      perfil: perfilDeIdentidad(id),
+      segundos: dura,
+      nivel: (t: number): number => nivelDelShow(t + desde),
+      // Los últimos tres segundos del ganador son solo el bombo, como en el show (`musicFinal`).
+      soloBomboDesde: HORA_DEL_SOLO_BOMBO >= desde ? HORA_DEL_SOLO_BOMBO - desde : undefined,
+      // En el show en vivo la música calla en el golpe: lo que sigue es el remate y el festejo, aparte.
+      hastaGolpe: SEGUNDO_DEL_GOLPE - desde,
+    });
+    if (fase !== "espera" && fase !== "tension") rematDeHoyEn(armarBanda(ctx, ctx.destination, SEMILLA_DE_LA_ESCUCHA, 1), SEGUNDO_DEL_GOLPE - desde);
+    return await ctx.startRendering();
+  } catch {
+    return null;
+  }
+}
+
+let suenaAhora: AudioBufferSourceNode | null = null;
+
+let contextoDeEscucha: AudioContext | null = null;
+
+/**
+ * El contexto de audio de la página, creado y reanudado en el mismo toque. En iPhone y Safari un contexto que nace
+ * después de un render asíncrono nace suspendido (el gesto ya pasó) y la pieza no suena: por eso se pide desde el
+ * manejador del clic, antes de esperar nada, y `hacerSonar` reutiliza el mismo. Devuelve null si el navegador no
+ * sabe de audio.
+ */
+export function prepararContextoDeEscucha(): AudioContext | null {
+  try {
+    const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return null;
+    if (!contextoDeEscucha) contextoDeEscucha = new Ctor();
+    reanudarSiHaceFalta(contextoDeEscucha);
+    return contextoDeEscucha;
+  } catch {
+    return null;
+  }
+}
+
+/** Corta la pieza que suena y suelta su nodo. */
+export function pararSonido(): void {
+  const src = suenaAhora;
+  suenaAhora = null;
+  if (!src) return;
+  src.onended = null;
+  try {
+    src.stop();
+  } catch {
+    /* ya había terminado */
+  }
+  try {
+    src.disconnect();
+  } catch {
+    /* ya estaba suelto */
+  }
+}
+
+/** Hace sonar un buffer ya renderizado, parando el anterior: una pieza a la vez, como en el parlante del stand. */
+export function hacerSonar(buffer: AudioBuffer): boolean {
+  try {
+    const ctx = prepararContextoDeEscucha();
+    if (!ctx) return false;
+    pararSonido();
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(ctx.destination);
+    // Al terminar solo, el nodo se suelta y deja de contar como la pieza que suena.
+    src.onended = (): void => {
+      if (suenaAhora === src) suenaAhora = null;
+      try {
+        src.disconnect();
+      } catch {
+        /* ya estaba suelto */
+      }
+    };
+    src.start();
+    suenaAhora = src;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** El número del último pedido de pieza: una pieza que termina de armarse después de otro toque ya no suena. */
+let ultimaPeticion = 0;
+
+/** Cómo anda el pedido: armando la pieza, o nada pendiente (suena, falló o se canceló). */
+export type EstadoDelPedido = "preparando" | "listo";
+
+interface DependenciasDelPedido {
+  render: (fase: FaseDeEscucha, id: IdentidadDelJuego) => Promise<AudioBuffer | null>;
+  sonar: (buffer: AudioBuffer) => boolean;
+}
+
+/**
+ * Pide una pieza: la arma y, solo si sigue siendo el último pedido, la hace sonar. Una pieza larga (el show entero
+ * tarda en armarse, sobre todo en un celular) no le gana a otra que se tocó después: manda el último toque, no el
+ * último render en terminar. `alEstado` avisa cuando empieza y cuando termina el armado.
+ */
+export async function pedirPieza(
+  fase: FaseDeEscucha,
+  id: IdentidadDelJuego,
+  alEstado: (e: EstadoDelPedido) => void = () => undefined,
+  dep: DependenciasDelPedido = { render: renderizarFase, sonar: hacerSonar },
+): Promise<void> {
+  const mia = ++ultimaPeticion;
+  alEstado("preparando");
+  let buffer: AudioBuffer | null = null;
+  try {
+    buffer = await dep.render(fase, id);
+  } catch {
+    /* si no se pudo armar, no suena y el aviso de armando se va igual */
+  }
+  if (mia !== ultimaPeticion) return;
+  alEstado("listo");
+  if (buffer) dep.sonar(buffer);
+}
+
+/** Corta lo que suena y cancela lo que todavía se está armando. */
+export function pararPieza(alEstado: (e: EstadoDelPedido) => void = () => undefined): void {
+  ultimaPeticion++;
+  pararSonido();
+  alEstado("listo");
+}
+
+/* ---------------------------------------------------------------- la página */
+
+/** Calcula los votos de un juego con una orden de votación, para la tarjeta y para la prueba. */
+export const votosDelJuego = (votos: Votos, juego: string): number => votos[juego] ?? 0;
+
+export interface OpcionesEscucha {
+  lang: IdiomaEscucha;
+  prendida: boolean;
+  votos: Votos;
+  /** Anota un voto más y devuelve los votos nuevos, con si quedaron guardados. */
+  votarMas: (juego: string) => ResultadoDeVoto;
+  /** Anota un voto menos y devuelve los votos nuevos, con si quedaron guardados. */
+  votarMenos: (juego: string) => ResultadoDeVoto;
+  /** Renderiza y hace sonar una pieza (la página real); en pruebas siembra un aviso al llamar. */
+  reproducir: (fase: FaseDeEscucha, juego: string) => void;
+  /** Corta lo que suena y lo que se está armando. */
+  parar?: () => void;
+}
+
+/** Arma la página entera en el documento. Es lo único que hace `escucha.ts` al cargar. */
+export function armarEscucha(doc: Document, o: OpcionesEscucha): void {
+  doc.title = texto(o.lang, "titulo");
+  doc.documentElement.lang = o.lang;
+  const raiz = doc.getElementById("escucha");
+  if (!raiz) return;
+  const t = (clave: Parameters<typeof texto>[1]): string => texto(o.lang, clave);
+
+  if (!o.prendida) {
+    raiz.innerHTML = `<p class="apagada">${t("apagada")}</p>`;
+    return;
+  }
+
+  const encabezado = doc.createElement("header");
+  const w = (doc.defaultView ?? window) as unknown as { AudioContext?: unknown; webkitAudioContext?: unknown; OfflineAudioContext?: unknown };
+  // El aviso sale solo cuando este navegador de verdad no puede tocar la pieza: sin contexto de audio o sin armarla.
+  const hayAudio = !!(w.AudioContext || w.webkitAudioContext) && !!w.OfflineAudioContext;
+  const otro: IdiomaEscucha = o.lang === "en" ? "es" : "en";
+  encabezado.innerHTML = `<h1>${t("titulo")}</h1><p class="nota"><a class="idioma" href="?escucha=1&amp;lang=${otro}" lang="${otro}">${t("otroIdioma")}</a></p><p>${t("subtitulo")}</p><p class="nota">${t("notaSemilla")}</p><p class="nota">${t("etiquetaTexto")}</p>${hayAudio ? "" : `<p class="aviso-sin-audio">${t("sinAudio")}</p>`}`;
+  raiz.append(encabezado);
+  // El adelgazado de capas nace apagado: desde acá se abre un show de prueba con él prendido para escucharlo.
+  const prueba = doc.createElement("p");
+  prueba.className = "nota";
+  const enlace = doc.createElement("a");
+  enlace.className = "prueba-adelgazado";
+  enlace.href = `/?demo=race&lead=3&musicagracia=1${o.lang === "en" ? "&lang=en" : ""}`;
+  enlace.textContent = t("probarAdelgazado");
+  prueba.append(enlace);
+  encabezado.append(prueba);
+  // Lo que pasa con la pieza (armándose) y cómo cortarla: el show entero tarda en armarse y no hay otra señal.
+  const estado = doc.createElement("p");
+  estado.className = "estado";
+  estado.id = "estado-escucha";
+  estado.setAttribute("role", "status");
+  estado.setAttribute("aria-live", "polite");
+  const parar = doc.createElement("button");
+  parar.type = "button";
+  parar.className = "parar";
+  parar.textContent = `■ ${t("parar")}`;
+  parar.addEventListener("click", () => o.parar?.());
+  encabezado.append(parar, estado);
+
+  // Si el navegador no deja guardar un voto, se dice acá: la cuenta sigue mientras la página siga abierta.
+  const avisoDeVotos = doc.createElement("p");
+  avisoDeVotos.className = "aviso-votos";
+  avisoDeVotos.setAttribute("role", "status");
+  avisoDeVotos.setAttribute("aria-live", "polite");
+  encabezado.append(avisoDeVotos);
+
+  let ponerTitulo = true;
+  for (const id of Object.values(IDENTIDADES)) {
+    // Los diez del selector van primero. Los que salieron de él, abajo y con su título.
+    if (ponerTitulo && !IDENTIDADES_DEL_SELECTOR.includes(id.juego)) {
+      ponerTitulo = false;
+      const titulo = doc.createElement("p");
+      titulo.className = "grupo";
+      titulo.textContent = t("fueraDelSelector");
+      raiz.append(titulo);
+    }
+    const nombre = nombreDeJuego(id.juego, o.lang);
+    const tarjeta = doc.createElement("section");
+    tarjeta.className = "tarjeta";
+    tarjeta.dataset.juego = id.juego;
+
+    const cabeza = doc.createElement("h2");
+    cabeza.textContent = nombre;
+    tarjeta.append(cabeza);
+
+    const [largada, grupo, recta] = id.bpm;
+    const datos = doc.createElement("p");
+    datos.className = "datos";
+    datos.textContent = `${t("tempo")}: ${largada} / ${grupo} / ${recta}`;
+    tarjeta.append(datos);
+
+    const etiquetas = doc.createElement("p");
+    etiquetas.className = "etiquetas";
+    etiquetas.innerHTML = `${t("ritmos")}: ${id.ritmos.map((r) => `<span class="chip">${nombreDeEtiqueta(r, o.lang)}</span>`).join(" ")}. ${t("instrumentos")}: ${id.instrumentos.map((d) => `<span class="chip">${nombreDeEtiqueta(d, o.lang)}</span>`).join(" ")}`;
+    tarjeta.append(etiquetas);
+
+    const capas = doc.createElement("div");
+    capas.className = "capas";
+    const capaTexto: Record<Exclude<FaseDeEscucha, "todo">, Parameters<typeof texto>[1]> = {
+      espera: "capaEspera",
+      tension: "capaTension",
+      remate: "capaGanador",
+      festejo: "capaFestejo",
+    };
+    for (const fase of [...CAPAS_SHOW, "todo"] as FaseDeEscucha[]) {
+      const b = doc.createElement("button");
+      b.type = "button";
+      b.className = "tocar";
+      b.dataset.fase = fase;
+      b.textContent = fase === "todo" ? `▶ ${t("btnTodo")}` : `▶ ${t(capaTexto[fase])}`;
+      b.addEventListener("click", () => o.reproducir(fase, id.juego));
+      capas.append(b);
+    }
+    tarjeta.append(capas);
+
+    const ruleta = doc.createElement("div");
+    ruleta.className = "ruleta";
+    const cuenta = doc.createElement("span");
+    cuenta.className = "votos";
+    cuenta.textContent = `${votosDelJuego(o.votos, id.juego)} ${t("votos")}`;
+    const mas = doc.createElement("button");
+    mas.type = "button";
+    mas.className = "voto-mas";
+    mas.textContent = t("votar");
+    const menos = doc.createElement("button");
+    menos.type = "button";
+    menos.className = "voto-menos";
+    menos.textContent = t("quitar");
+    const alVotar = (f: (juego: string) => ResultadoDeVoto): void => {
+      const { votos: nuevos, guardado } = f(id.juego);
+      cuenta.textContent = `${votosDelJuego(nuevos, id.juego)} ${t("votos")}`;
+      avisoDeVotos.textContent = guardado ? "" : t("votosSinGuardar");
+    };
+    mas.addEventListener("click", () => alVotar(o.votarMas));
+    menos.addEventListener("click", () => alVotar(o.votarMenos));
+    ruleta.append(mas, cuenta, menos);
+    tarjeta.append(ruleta);
+
+    raiz.append(tarjeta);
+  }
+}
+
+/** Lo que la página hace al cargar: medir la bandera, el idioma, los votos, y armar. */
+export function montarEscucha(doc: Document): void {
+  const lang = idiomaDeLaEscucha();
+  const prendida = escuchaPrendida();
+  const estado = (e: EstadoDelPedido): void => {
+    const p = doc.getElementById("estado-escucha");
+    if (p) p.textContent = e === "preparando" ? texto(lang, "preparando") : "";
+  };
+  armarEscucha(doc, {
+    lang,
+    prendida,
+    votos: votosDe(),
+    reproducir: (fase, juego) => {
+      const id = IDENTIDADES[juego];
+      if (!id) return;
+      // El contexto nace acá, dentro del toque: después del render ya no hay gesto que lo deje sonar.
+      prepararContextoDeEscucha();
+      void pedirPieza(fase, id, estado);
+    },
+    parar: () => pararPieza(estado),
+    votarMas: (juego) => anotarVoto(juego, 1),
+    votarMenos: (juego) => anotarVoto(juego, -1),
+  });
+  if (!prendida || typeof window === "undefined") return;
+  // Al irse de la página la pieza se corta. Al volver a la vista, el contexto que el teléfono cortó se reanuda.
+  window.addEventListener("pagehide", () => pararPieza(estado));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && contextoDeEscucha) reanudarSiHaceFalta(contextoDeEscucha);
+  });
+}
+
+if (typeof document !== "undefined" && document.getElementById("escucha")) montarEscucha(document);

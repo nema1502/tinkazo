@@ -4,10 +4,22 @@ import { ambiente, decidir, elegirJuego, ganador as ganadorDeArchivo, type Dispa
 import { curvaDeTecho } from "./sonidos/carrera";
 import { avisarJuego, festejoPropio, golpePropio, hayCandidatas } from "./sonidos/carrera-eleccion";
 import { pistaCallar, pistaDelJuego, pistaRemata, pistasConContexto } from "./sonidos/pistas-enganche";
+import { adelgazadoPrendido } from "./music-margen";
 
 /* Sonido con WebAudio: osciladores, y archivos cuando el banco (`src/sonidos/banco.ts`) los tiene. */
 
 let audioCtx: AudioContext | null = null;
+
+/**
+ * Los estados desde los que un contexto de audio se puede reanudar. Chrome solo dice `suspended`; Safari en el
+ * iPhone nombra `interrupted` a su estado de cortado (una llamada, el ahorro de batería). Si solo se mirara el
+ * primero, después de una interrupción el sorteo entero corría mudo y nada lo volvía a prender.
+ * `AudioContextState` no conoce `interrupted`, por eso se mira como cadena.
+ */
+export function reanudarSiHaceFalta(ctx: AudioContext): void {
+  const estado = ctx.state as string;
+  if (estado === "suspended" || estado === "interrupted") void ctx.resume();
+}
 
 const MUTE_KEY = "tinkazo.muted";
 
@@ -111,11 +123,32 @@ function techoDeLaMezcla(ctx: BaseAudioContext, prendido: boolean): void {
 /** La cadena, lista para sonar. */
 function chain(): { ctx: AudioContext; out: GainNode } | null {
   const c = contexto();
-  // El contexto nace suspendido si el primer sonido no salió de un clic. Sin
-  // esto el sorteo entero corre en silencio y nadie entiende por qué.
-  if (c?.ctx.state === "suspended") void c.ctx.resume();
+  // El contexto nace suspendido si el primer sonido no salió de un clic. Sin esto el sorteo entero corre en
+  // silencio y nadie entiende por qué. El iPhone además deja el suyo interrumpido después de una llamada: esa
+  // reanudación es parte del interruptor del adelgazado (`?musicagracia=1`), apagado hasta que alguien la escuche.
+  if (c) {
+    if (adelgazadoPrendido()) reanudarSiHaceFalta(c.ctx);
+    else if (c.ctx.state === "suspended") void c.ctx.resume();
+  }
   return c;
 }
+
+/** Si la persona ya tocó la página: solo entonces el navegador deja reanudar el audio sin que se lo pida un gesto. */
+let huboGesto = false;
+
+/**
+ * Cuando la pestaña vuelve a la vista, el contexto puede haber quedado suspendido o interrumpido (el iPhone lo
+ * corta al esconder la página, o con una llamada): se reanuda acá, en un solo lugar, para que la música y los
+ * efectos vuelvan donde estaban y nada suene roto. Es parte del interruptor del adelgazado: apagado no hace nada,
+ * como en producción. Y solo reanuda si la persona ya tocó la página: un contexto armado de antemano, que nunca
+ * vio un toque, se queda quieto hasta el primero.
+ */
+function alVolverALaVista(): void {
+  if (!adelgazadoPrendido()) return;
+  if (document.visibilityState !== "visible") return;
+  if (audioCtx && huboGesto) reanudarSiHaceFalta(audioCtx);
+}
+if (typeof document !== "undefined") document.addEventListener("visibilitychange", alVolverALaVista);
 
 /**
  * Hace sonar un archivo del banco por el mismo bus que los osciladores (el techo, el paso bajo y el silenciador
@@ -478,6 +511,7 @@ export function audio(): AudioContext | null {
 export function unlockAudioOnGesture(): void {
   const events = ["pointerdown", "touchend", "keydown"] as const;
   const unlock = (): void => {
+    huboGesto = true;
     try {
       const c = chain();
       if (!c) return;

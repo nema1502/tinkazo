@@ -1,8 +1,8 @@
 import { audio, destinoDeMezcla, isMuted } from "./sound";
 import { anotarGolpe } from "./state";
 import { camaDeMusica } from "./sonidos/banco";
-import { MARGEN_BASE, margenMusica } from "./music-margen";
-import { ACORDES, curvaDeTecho, type AcordeId, type Golpe, type PerfilMusica } from "./sonidos/carrera";
+import { MARGEN_BASE, adelgazadoPrendido, horizonteDeMusica, margenMusica, seguirLaGracia } from "./music-margen";
+import { ACORDES, curvaDeTecho, PERFIL_BASE, VUELTAS_PENTATONICAS, type AcordeId, type Golpe, type PerfilMusica } from "./sonidos/carrera";
 import { bomboYBajoChico, festejoPropio, golpePropio, perfilDeMusica } from "./sonidos/carrera-eleccion";
 import { permitirPistas, pistaArrancar, pistaCallar, pistaParar, pistaRemata, pistaRetener, pistaSuena, pistaTension } from "./sonidos/pistas-enganche";
 
@@ -200,8 +200,16 @@ interface Session {
   timer: number;
   /** Cuánto por delante se programa: crece si los ticks llegan tarde (`music-margen.ts`). */
   margen: number;
+  /** Cuánto frenó el procesador en los últimos ticks, de 0 nada a 1 frenado (`nivelDeGracia` en music-margen.ts). Siempre 0 con el adelgazado apagado. */
+  gracia: number;
+  /** ¿El adelgazado de capas está prendido para esta música? Se mide al armarla (`adelgazadoPrendido`). */
+  adelgazar: boolean;
   /** La hora de la página (`performance.now`) del último tick. */
   ultimoTick: number;
+  /** Cuántos ticks seguidos llegaron tarde. Con el adelgazado, uno solo es un tropiezo y no baja las capas. */
+  lentos: number;
+  /** El último tick fue con la pestaña escondida: el primero que se ve al volver no mide el equipo. */
+  veniaEscondida: boolean;
   /** La semilla con que arrancó: pedirla otra vez con la misma no la reinicia. */
   seed: number;
   /** Qué toca: el andino de siempre, o la chovena del juego cruceño. */
@@ -375,7 +383,11 @@ function armarSesion(
     won: false,
     timer: 0,
     margen: MARGEN_BASE,
+    gracia: 0,
+    adelgazar: adelgazadoPrendido(),
     ultimoTick: performance.now(),
+    lentos: 0,
+    veniaEscondida: false,
     seed,
     style,
     hold: false,
@@ -442,7 +454,7 @@ export function musicHold(on: boolean): void {
 }
 
 /**
- * El silencio de antes del ganador: la música se corta en seco un momento
+ * El silencio de antes del remate: la música se corta en seco un momento
  * antes del revelado, y el remate la vuelve a abrir. "Un cuarto de segundo sin
  * nada es el efecto más barato que existe" (docs/juegos.md), y lo que más
  * mueve en la música de baile es justamente eso: vaciar y volver con todo
@@ -460,14 +472,17 @@ export function musicTempo(mul: number): void {
 
 /**
  * Lo que dice el relator, con su tensión. Un salto grande es una sorpresa: la
- * música se calla un tiempo. Tensión 1 es el ganador: remate.
+ * música se calla un tiempo. Con tensión 1 entra el remate del ganador.
  */
 export function musicCue(heat: number): void {
   const s = cur;
   if (!s || s.won) return;
   if (heat >= 0.99) {
     s.won = true;
-    const at = Math.max(s.next, s.ctx.currentTime + 0.03);
+    // Con el adelgazado, un equipo frenado deja lo programado hasta dos segundos por delante: el golpe no espera a
+    // todo eso, entra a lo sumo en el margen de siempre (un segundo) y lo que queda programado detrás pasa a ser fondo.
+    const tope = s.adelgazar ? s.ctx.currentTime + s.margen : Infinity;
+    const at = Math.max(Math.min(s.next, tope), s.ctx.currentTime + 0.03);
     // Si el juego la dejó cortada (el silencio de antes del ganador, o el
     // corte de la chovena), el remate la vuelve a abrir. Con la pista sonando,
     // el bus de osciladores no se toca: el golpe y el festejo son de la pista.
@@ -489,6 +504,8 @@ export function musicCue(heat: number): void {
     }
     if (s.style === "chovena") finaleChovena(s, at);
     else finale(s, at);
+    // El remate suena entero pase lo que pase: la gracia solo alcanza mientras el show corre.
+    s.gracia = 0;
     return;
   }
   if (pistaTension(heat, s.level)) {
@@ -623,9 +640,20 @@ function tick(): void {
     return;
   }
   const ahora = performance.now();
+  let intervalo = ahora - s.ultimoTick;
+  const escondida = document.hidden;
+  // Con el adelgazado prendido, el procesador frenado baja las capas y adelanta lo programado hasta el próximo tick.
+  // Un tropiezo suelto y la vuelta de la pestaña escondida no cuentan como equipo frenado (`seguirLaGracia`).
+  if (s.adelgazar) {
+    const g = seguirLaGracia({ gracia: s.gracia, lentos: s.lentos, veniaEscondida: s.veniaEscondida }, intervalo, escondida);
+    s.gracia = g.gracia;
+    s.lentos = g.lentos;
+    s.veniaEscondida = g.veniaEscondida;
+    intervalo = g.intervalo;
+  } else s.gracia = 0;
   // Con la pestaña escondida el show está frenado: la música sigue saltando en silencio como desde el 2 de noviembre,
   // sin agrandar el margen por los temporizadores de uno por segundo.
-  s.margen = document.hidden ? MARGEN_BASE : margenMusica(s.margen, ahora - s.ultimoTick);
+  s.margen = escondida ? MARGEN_BASE : margenMusica(s.margen, intervalo, s.adelgazar);
   s.ultimoTick = ahora;
   // La tensión sube de a poco aunque el relator no diga nada: el piso crece
   // con el tiempo, así que la música siempre va de menos a más.
@@ -654,7 +682,7 @@ function tick(): void {
     s.step++;
   }
 
-  while (s.next < s.ctx.currentTime + s.margen) {
+  while (s.next < s.ctx.currentTime + (s.adelgazar && !escondida ? horizonteDeMusica(s.margen, intervalo) : s.margen)) {
     const sixteenth = beatLength(s) / 4;
     // Durante el corte de una sorpresa no suena nada.
     if (s.style === "chovena") playStepChovena(s, s.next, s.step);
@@ -696,28 +724,30 @@ function playStep(s: Session, t: number, step: number): void {
   }
 
   // El beat: bombo electrónico en cada tiempo, platillo cerrado a contratiempo,
-  // palmas en el dos, y con toda la tensión el platillo en semicorcheas.
-  if (L > 0.4) {
+  // palmas en el dos, y con toda la tensión el platillo en semicorcheas. Con
+  // gracia (procesador frenado) es lo primero que cae.
+  if (L > 0.4 && s.gracia < 0.5) {
     if (inBar % 4 === 0) kick(s, t);
     if (inBar % 4 === 2) hat(s, t, 0.9);
-    if (L > 0.75 && inBar % 2 === 1) hat(s, t, 0.45);
-    if (L > 0.55 && inBar === 4) clap(s, t);
+    if (L > 0.75 && s.gracia < 0.5 && inBar % 2 === 1) hat(s, t, 0.45);
+    if (L > 0.55 && s.gracia < 0.75 && inBar === 4) clap(s, t);
   }
 
   // La zampoña: el motivo de la ronda, repartido entre dos cañas que se
   // contestan, como tocan los sikuris (una fila empieza, la otra termina).
-  if (L > 0.6) {
+  // La octava de arriba es lo segundo que cae con gracia, después el beat.
+  if (L > 0.6 + 0.3 * s.gracia) {
     const d = s.motif[step % s.motif.length] as number;
     if (d >= 0) {
       const len = holdOf(s.motif, step % s.motif.length) * (beatLength(s) / 4);
       const side = (step >> 1) % 2 === 0 ? -0.45 : 0.45;
       siku(s, t, deg(d), len, side, 0.9);
-      if (L > 0.85) siku(s, t, deg(d) + 12, len, -side, 0.35);
+      if (L > 0.85 && s.gracia < 0.5) siku(s, t, deg(d) + 12, len, -side, 0.35);
     }
   }
 
-  // Cada cuatro compases, con toda la tensión, una subida de ruido.
-  if (L > 0.8 && step % 32 === 16) riser(s, t, beatLength(s) * 8);
+  // Cada cuatro compases, con toda la tensión, una subida de ruido. Con gracia no: es la capa más cara de todas.
+  if (L > 0.8 && s.gracia === 0 && step % 32 === 16) riser(s, t, beatLength(s) * 8);
 }
 
 /* ------------------------------------------------- la música de la carrera */
@@ -775,15 +805,16 @@ function playStepCarrera(s: Session, t: number, step: number): void {
   }
 
   // La caja de la comparsa, en el dos y el cuatro; con mucha tensión también en las notas fantasma.
-  if (c.caja > 0 && L > 0.3) {
+  // Con gracia cae después del beat, y las fantasma con ella.
+  if (c.caja > 0 && L > 0.3 && s.gracia < 0.75) {
     if (inBar === 2 || inBar === 6) cajaDeComparsa(s, t, c.caja);
-    if (L > 0.7 && (inBar === 3 || inBar === 7)) cajaDeComparsa(s, t, 0.35 * c.caja);
+    if (L > 0.7 && s.gracia < 0.5 && (inBar === 3 || inBar === 7)) cajaDeComparsa(s, t, 0.35 * c.caja);
   }
 
   // Las palmas de la gente, en el dos.
-  if (c.palmas > 0 && L > 0.5 && inBar === 4) clap(s, t, c.palmas);
+  if (c.palmas > 0 && L > 0.5 && s.gracia < 0.75 && inBar === 4) clap(s, t, c.palmas);
 
-  // La zampoña: el motivo de la ronda, repartido entre dos cañas que se contestan. La octava de arriba solo si cabe en el parlante.
+  // La zampoña: el motivo de la ronda, repartido entre dos cañas que se contestan. La octava de arriba solo si cabe en el parlante, y con gracia cae con el beat.
   if (c.zampona > 0 && L > p.zamponaDesde) {
     const i = step % s.motif.length;
     const d = s.motif[i] as number;
@@ -791,7 +822,7 @@ function playStepCarrera(s: Session, t: number, step: number): void {
       const len = holdOf(s.motif, i) * (beatLength(s) / 4);
       const side = (step >> 1) % 2 === 0 ? -0.45 : 0.45;
       siku(s, t, deg(d), len, side, 0.9 * c.zampona);
-      if (L > 0.85 && deg(d) + 12 <= 27) siku(s, t, deg(d) + 12, len, -side, 0.35 * c.zampona);
+      if (L > 0.85 && s.gracia < 0.5 && deg(d) + 12 <= 27) siku(s, t, deg(d) + 12, len, -side, 0.35 * c.zampona);
     }
   }
 }
@@ -827,6 +858,11 @@ export interface PedidoMusica {
   nivel: (t: number) => number;
   /** Desde qué segundo suena solo el bombo, si lo hay. */
   soloBomboDesde?: number;
+  /**
+   * El segundo del golpe del ganador, si el tramo lo trae: la música se corta ahí, como en el show en vivo, donde la
+   * música calla en el golpe y lo que sigue es el remate y el festejo, que se arman aparte.
+   */
+  hastaGolpe?: number;
   /** La mezcla del bombo y del bajo: `true` para la de parlante chico, `false` para la de hoy. Sin decirlo, la de la sesión (ver `armarSesion`). */
   parlanteChico?: boolean;
 }
@@ -840,7 +876,8 @@ export function tocarMusicaEn(ctx: BaseAudioContext, destino: AudioNode, o: Pedi
   const s = armarSesion(ctx, destino, o.seed, "andino", o.perfil, 0, o.perfil?.trim ?? 1, o.parlanteChico);
   s.next = 0.05;
   s.started = 0;
-  while (s.next < o.segundos) {
+  const fin = Math.min(o.segundos, o.hastaGolpe ?? Infinity);
+  while (s.next < fin) {
     s.level = o.nivel(s.next);
     if (o.soloBomboDesde !== undefined && s.next >= o.soloBomboDesde && s.soloBombo < 0) s.soloBombo = s.next;
     const sixteenth = beatLength(s) / 4;
@@ -854,6 +891,134 @@ export function tocarMusicaEn(ctx: BaseAudioContext, destino: AudioNode, o: Pedi
 
 /** La banda de la carrera para las piezas de efecto (el golpe, el festejo, el bombo del final): los mismos instrumentos, en su propio bus. */
 export type Banda = Session;
+
+/* --------------------------------------------------- el show por capas, por juego */
+
+/**
+ * Las cuatro capas del show: la espera antes de la ronda, la tensión que crece, el momento del ganador y el
+ * festejo. El show prende las capas con la tensión que le dice el relator (`musicCue`); acá solo están los nombres.
+ */
+export type CapaShow = "espera" | "tension" | "remate" | "festejo";
+
+export const CAPAS_SHOW: readonly CapaShow[] = ["espera", "tension", "remate", "festejo"];
+
+/**
+ * Cuánto dura cada capa en la pieza que se escucha para elegir. La espera y la tensión son la forma entera
+ * que se pide: un comienzo, un desarrollo y un final, sin delatar nunca el resultado. La capa del ganador entra
+ * solo cuando el show lo dice (`musicCue` con tensión 1), nunca antes, pase lo que pase en la animación.
+ */
+export const MOVIMIENTO_DEL_SHOW: Readonly<Record<CapaShow, number>> = { espera: 8, tension: 14, remate: 6, festejo: 4 } as const;
+
+/** El golpe del remate: al terminar la espera, la tensión y el ganador. */
+export const SEGUNDO_DEL_GOLPE = MOVIMIENTO_DEL_SHOW.espera + MOVIMIENTO_DEL_SHOW.tension + MOVIMIENTO_DEL_SHOW.remate;
+
+/** Los últimos tres segundos del ganador son solo el bombo (`musicFinal`, `soloBombo`): el show los marca. */
+export const HORA_DEL_SOLO_BOMBO = SEGUNDO_DEL_GOLPE - 3;
+
+/**
+ * La tensión (de 0 a 1) que pide el relator en el instante `t` de la pieza del show: la espera quedita, la tensión
+ * que crece, el pico del ganador, y después del golpe silencio, porque el remate y el festejo son otra pieza.
+ * Es la misma curva que en vivo componen la espera y `musicCue`; por eso la toca la página de escucha.
+ */
+export function nivelDelShow(t: number): number {
+  const { espera, tension } = MOVIMIENTO_DEL_SHOW;
+  if (t < espera) return 0.12;
+  if (t < espera + tension) return 0.2 + ((t - espera) / tension) * 0.55;
+  if (t < SEGUNDO_DEL_GOLPE) return 0.85;
+  return 0;
+}
+
+/** La semilla con que la página de escucha arma sus piezas: fija, para que la misma candidata suene igual cada vez. */
+export const SEMILLA_DE_LA_ESCUCHA = 0x0a110a;
+
+/**
+ * La identidad musical de un juego, en datos: lo que la página de escucha (`src/ui/escucha.ts`) toca con
+ * el secuenciador de siempre para poder elegir juego por juego, y nada más. En el show de producción no prende
+ * nada nuevo: eso se decide escuchando. El formato es el mismo perfil de la música de la carrera
+ * (`PerfilMusica`), que es el que el secuenciador ya sabe tocar capa por capa; los ritmos y los instrumentos de
+ * cuerpo (charango, zampoña, quena, bombo, guitarra; huayño, caporal, taquirari, cueca…) van como etiquetas de
+ * intención, solo texto: no hay samples ni voces nuevas, las hacen los sintetizadores que ya hay.
+ */
+export interface IdentidadDelJuego {
+  /** El juego tal como lo conoce el show (`Game`, en `src/state.ts`). */
+  juego: string;
+  /** Los golpes por minuto en la largada, en el grupo y en la recta (o el momento fuerte de cada juego). */
+  bpm: readonly [number, number, number];
+  /** A qué tensión pasa al segundo y al tercer ritmo. */
+  umbrales: readonly [number, number];
+  /** Cuánto suena cada capa, de 0 (no suena) a 1,5. */
+  capas: {
+    bombo: number;
+    bajo: number;
+    charango: number;
+    zampona: number;
+    caja: number;
+    palmas: number;
+  };
+  /** Cómo rasguea el charango. */
+  charango: "huayno" | "pulso" | "esparcido";
+  /** Desde qué tensión entra la zampoña. */
+  zamponaDesde: number;
+  /** Las vueltas de acordes entre las que elige la semilla. */
+  vueltas: readonly (readonly AcordeId[])[];
+  /** Los ritmos que se reconocen, como etiqueta de intención: solo texto. */
+  ritmos: readonly string[];
+  /** Los instrumentos con cuerpo a los que apunta la identidad, también solo texto: no hay samples. */
+  instrumentos: readonly string[];
+}
+
+const vueltas = (de: number, a: number): readonly (readonly AcordeId[])[] => VUELTAS_PENTATONICAS.slice(de, a);
+
+/**
+ * Los diez juegos del selector de hoy, en el orden del selector (`index.html`): los que se eligen escuchando. Van
+ * primero en `IDENTIDADES`. Después siguen los que salieron del selector y abren con `?demo=`.
+ */
+export const IDENTIDADES_DEL_SELECTOR: readonly string[] = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro", "guajojo", "toborochi"];
+
+/**
+ * La identidad de cada juego: el mismo huayño de banda con distinta cara. La carrera lleva el huayño del altiplano
+ * al frente; la ruleta, la chovena cruceña que ya tiene su estilo; la tómbola y los demás, virando la caja, las
+ * palmas y la zampoña. Mientras nadie elija escuchando, en el show suena lo de siempre: esto es
+ * la candidata, no la puesta en producción.
+ */
+export const IDENTIDADES: Readonly<Record<string, IdentidadDelJuego>> = {
+  race: { juego: "race", bpm: [100, 112, 124], umbrales: [0.3, 0.62], capas: { bombo: 1, bajo: 1, charango: 1, zampona: 1, caja: 0.7, palmas: 0.5 }, charango: "huayno", zamponaDesde: 0.6, vueltas: vueltas(0, 2), ritmos: ["huayño"], instrumentos: ["charango", "zampoña", "bombo"] },
+  sapo: { juego: "sapo", bpm: [96, 108, 120], umbrales: [0.32, 0.62], capas: { bombo: 1, bajo: 1, charango: 0.9, zampona: 0.8, caja: 0.8, palmas: 0.6 }, charango: "huayno", zamponaDesde: 0.56, vueltas: vueltas(0, 2), ritmos: ["huayño"], instrumentos: ["charango", "bombo", "zampoña"] },
+  trompo: { juego: "trompo", bpm: [88, 100, 116], umbrales: [0.36, 0.66], capas: { bombo: 1, bajo: 1, charango: 0.7, zampona: 0.7, caja: 0.9, palmas: 0.7 }, charango: "pulso", zamponaDesde: 0.55, vueltas: vueltas(1, 3), ritmos: ["caporal"], instrumentos: ["bombo", "guitarra"] },
+  chovena: { juego: "chovena", bpm: [90, 96, 104], umbrales: [0.35, 0.65], capas: { bombo: 1, bajo: 0.8, charango: 0.7, zampona: 0.6, caja: 0.9, palmas: 0.5 }, charango: "esparcido", zamponaDesde: 0.55, vueltas: vueltas(0, 2), ritmos: ["chovena"], instrumentos: ["bombo", "guitarra", "quena"] },
+  pinata: { juego: "pinata", bpm: [100, 112, 128], umbrales: [0.28, 0.56], capas: { bombo: 1.1, bajo: 1.1, charango: 1, zampona: 0.7, caja: 0.8, palmas: 0.8 }, charango: "esparcido", zamponaDesde: 0.58, vueltas: vueltas(0, 2), ritmos: ["caporal", "taquirari"], instrumentos: ["bombo", "charango", "guitarra"] },
+  wheel: { juego: "wheel", bpm: [90, 96, 103], umbrales: [0.35, 0.65], capas: { bombo: 1, bajo: 0.8, charango: 0.7, zampona: 0.6, caja: 0.9, palmas: 0.4 }, charango: "esparcido", zamponaDesde: 0.55, vueltas: vueltas(0, 2), ritmos: ["chovena"], instrumentos: ["bombo", "guitarra", "zampoña"] },
+  teleferico: { juego: "teleferico", bpm: [94, 106, 120], umbrales: [0.3, 0.6], capas: { bombo: 0.9, bajo: 0.9, charango: 1, zampona: 1.1, caja: 0.6, palmas: 0.5 }, charango: "huayno", zamponaDesde: 0.48, vueltas: vueltas(2, 4), ritmos: ["huayño", "saya"], instrumentos: ["zampoña", "charango", "quena"] },
+  oruro: { juego: "oruro", bpm: [88, 96, 105], umbrales: [0.38, 0.68], capas: { bombo: 1.2, bajo: 1, charango: 0.6, zampona: 0.9, caja: 1.2, palmas: 0.5 }, charango: "pulso", zamponaDesde: 0.6, vueltas: vueltas(1, 3), ritmos: ["morenada", "caporal"], instrumentos: ["bombo", "charango"] },
+  guajojo: { juego: "guajojo", bpm: [84, 94, 104], umbrales: [0.36, 0.66], capas: { bombo: 0.8, bajo: 0.9, charango: 0.8, zampona: 0.9, caja: 0.5, palmas: 0.3 }, charango: "esparcido", zamponaDesde: 0.5, vueltas: vueltas(1, 3), ritmos: ["taquirari"], instrumentos: ["quena", "guitarra", "bombo"] },
+  toborochi: { juego: "toborochi", bpm: [92, 104, 118], umbrales: [0.32, 0.62], capas: { bombo: 0.8, bajo: 0.8, charango: 1.1, zampona: 0.8, caja: 0.6, palmas: 0.5 }, charango: "pulso", zamponaDesde: 0.5, vueltas: vueltas(2, 4), ritmos: ["taquirari", "chovena"], instrumentos: ["guitarra", "charango", "quena"] },
+  stellar: { juego: "stellar", bpm: [100, 114, 126], umbrales: [0.3, 0.62], capas: { bombo: 1, bajo: 1, charango: 0.9, zampona: 0.8, caja: 0.5, palmas: 0.6 }, charango: "pulso", zamponaDesde: 0.55, vueltas: vueltas(2, 4), ritmos: ["taquirari"], instrumentos: ["charango", "guitarra", "bombo"] },
+  ledger: { juego: "ledger", bpm: [98, 110, 122], umbrales: [0.32, 0.6], capas: { bombo: 0.9, bajo: 1, charango: 1.1, zampona: 0.7, caja: 1, palmas: 0.8 }, charango: "esparcido", zamponaDesde: 0.5, vueltas: vueltas(1, 3), ritmos: ["cueca"], instrumentos: ["charango", "guitarra", "bombo"] },
+  rockets: { juego: "rockets", bpm: [96, 110, 126], umbrales: [0.28, 0.58], capas: { bombo: 1.1, bajo: 1.2, charango: 0.9, zampona: 0.6, caja: 0.6, palmas: 0.5 }, charango: "pulso", zamponaDesde: 0.62, vueltas: vueltas(0, 2), ritmos: ["caporal"], instrumentos: ["bombo", "charango"] },
+  pasanaku: { juego: "pasanaku", bpm: [92, 104, 116], umbrales: [0.34, 0.64], capas: { bombo: 1, bajo: 1, charango: 0.8, zampona: 0.9, caja: 0.8, palmas: 0.4 }, charango: "huayno", zamponaDesde: 0.5, vueltas: vueltas(1, 3), ritmos: ["huayño", "cueca"], instrumentos: ["charango", "zampoña", "bombo"] },
+  tombola: { juego: "tombola", bpm: [96, 108, 121], umbrales: [0.31, 0.61], capas: { bombo: 0.9, bajo: 0.9, charango: 0.9, zampona: 0.8, caja: 1.1, palmas: 0.6 }, charango: "esparcido", zamponaDesde: 0.52, vueltas: vueltas(0, 2), ritmos: ["taquirari"], instrumentos: ["quena", "charango", "bombo"] },
+  totora: { juego: "totora", bpm: [92, 104, 118], umbrales: [0.33, 0.63], capas: { bombo: 1, bajo: 0.9, charango: 0.8, zampona: 1, caja: 0.7, palmas: 0.6 }, charango: "huayno", zamponaDesde: 0.5, vueltas: vueltas(2, 4), ritmos: ["saya"], instrumentos: ["bombo", "zampoña", "charango"] },
+  luz: { juego: "luz", bpm: [96, 108, 122], umbrales: [0.32, 0.6], capas: { bombo: 0.9, bajo: 0.9, charango: 0.9, zampona: 0.9, caja: 0.7, palmas: 0.5 }, charango: "huayno", zamponaDesde: 0.54, vueltas: vueltas(2, 4), ritmos: ["taquirari", "huayño"], instrumentos: ["quena", "zampoña", "bombo"] },
+  quien: { juego: "quien", bpm: [100, 112, 124], umbrales: [0.3, 0.6], capas: { bombo: 0.9, bajo: 0.9, charango: 1, zampona: 0.7, caja: 1, palmas: 0.9 }, charango: "esparcido", zamponaDesde: 0.52, vueltas: vueltas(1, 3), ritmos: ["cueca"], instrumentos: ["guitarra", "charango", "bombo"] },
+  trueque: { juego: "trueque", bpm: [94, 106, 118], umbrales: [0.33, 0.63], capas: { bombo: 1, bajo: 1, charango: 0.9, zampona: 0.8, caja: 0.7, palmas: 0.7 }, charango: "huayno", zamponaDesde: 0.53, vueltas: vueltas(1, 3), ritmos: ["kullawada", "huayño"], instrumentos: ["charango", "zampoña", "bombo"] },
+};
+
+/**
+ * El perfil que las confía al secuenciador: la misma forma que toca `playStepCarrera`, sin el arreglo "legado"
+ * (así se oye la identidad, no el arreglo de hoy) y con el volumen medido de la base, pendiente de recalibrar por
+ * candidata cuando se las escoja escuchando.
+ */
+export function perfilDeIdentidad(i: IdentidadDelJuego): PerfilMusica {
+  return {
+    bpm: i.bpm,
+    umbrales: i.umbrales,
+    capas: i.capas,
+    charango: i.charango,
+    zamponaDesde: i.zamponaDesde,
+    trim: PERFIL_BASE.trim,
+    vueltas: i.vueltas,
+  };
+}
 
 /**
  * Arma una banda sobre cualquier contexto. `trim` sube o baja todo el bus: el golpe tiene que sonar de 6 a 10 LU sobre la
@@ -1363,10 +1528,10 @@ function playStepChovena(s: Session, t: number, step: number): void {
     const len = holdOf(cho.notes, i) * sixteenth;
     pifano(s, t, choDeg(d + 7) + choCents(d), len, -0.18, 0.9);
     if (L > 0.32) violin(s, t, choDeg(d), len, 0.25, 0.6);
-    if (L > 0.6) pifano(s, t, choDeg(d + 5) + choCents(d + 5), len, 0.42, 0.45);
+    if (L > 0.6 && s.gracia < 0.5) pifano(s, t, choDeg(d + 5) + choCents(d + 5), len, 0.42, 0.45);
   }
-  // Con toda la tensión, las palmas de los hombres en la "y" y la maraca.
-  if (L > 0.8) {
+  // Con toda la tensión, las palmas de los hombres en la "y" y la maraca. Con gracia, caen con el beat.
+  if (L > 0.8 && s.gracia < 0.5) {
     if (inBar === 2 || inBar === 6) clap(s, t);
     noiseHit(s, t, inBar % 2 ? 0.035 : 0.055, 0.03, "highpass", 6500);
   }

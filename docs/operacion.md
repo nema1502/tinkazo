@@ -179,7 +179,7 @@ Las rutas nuevas:
 
 ## Si el proveedor de cuentas corta el ingreso: el plan B del ingreso
 
-- **Qué es.** `VITE_INGRESO_PLAN_B` es una bandera del build, apagada por defecto. Con `1` y solo en el modo Prueba, cuando entrar con Google o con un correo falla por algo que no es de la persona (Pollar contesta con error, tarda de más o no deja crear la cuenta), el aviso suma el botón Sortear sin cuenta. Lleva al modo libre: la lista se cierra en el navegador, no queda sello en Stellar, el sorteo no aparece en Mis sorteos y el comprobante dice que falta un testigo. En Oficial nunca aparece, y siempre lo elige la persona.
+- **Qué es.** `VITE_INGRESO_PLAN_B` es una bandera del build, apagada por defecto y prendida hoy en el build de producción (ver la tabla de banderas más abajo). Solo se aplica en el modo Prueba, así que en Oficial no se ve. Con `1` y solo en el modo Prueba, cuando entrar con Google o con un correo falla por algo que no es de la persona (Pollar contesta con error, tarda de más o no deja crear la cuenta), el aviso suma el botón Sortear sin cuenta. Lleva al modo libre: la lista se cierra en el navegador, no queda sello en Stellar, el sorteo no aparece en Mis sorteos y el comprobante dice que falta un testigo. En Oficial nunca aparece, y siempre lo elige la persona.
 - **Cuándo se prende.** Solo si durante un evento el ingreso falla para varias personas a la vez (por ejemplo, al llegar al tope de cuentas del plan de Pollar) y reintentar no lo arregla. En Vercel, la variable `VITE_INGRESO_PLAN_B=1` en Production y una publicación nueva: se lee al construir, así que el cambio llega con la publicación y no al instante.
 - **Cómo se apaga.** Vaciar la variable (o poner `0`) y publicar de nuevo. Con la bandera apagada la elección ya hecha deja de valer y el botón de sellar vuelve a pedir la cuenta.
 
@@ -199,7 +199,7 @@ Las rutas nuevas:
 
 ## Los pagos de premios, los retiros y el alta de quien ganó
 
-Además de los sellos y los sorteos, el portero de mainnet puede pagar la comisión de la red de dos pagos de dólares digitales y dar de alta a quien ganó un premio. Son tres cosas aparte, cada una con su variable en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml`. Nacen apagadas y solo valen en la red principal y con `ALTAS = "1"`. Con las tres apagadas el portero hace lo de siempre: las rutas nuevas dan `404 no-existe` y `estado` y `cupo` no traen nada nuevo.
+Además de los sellos y los sorteos, el portero de mainnet puede pagar la comisión de la red de dos pagos de dólares digitales y dar de alta a quien ganó un premio. Son tres cosas aparte, cada una con su variable en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml`. Nacen apagadas en el código y solo valen en la red principal y con `ALTAS = "1"`. En el repositorio las tres están en `"1"` en `[env.mainnet.vars]` desde el cambio `c2aec150`. Con las tres apagadas el portero hace lo de siempre: las rutas nuevas dan `404 no-existe` y `estado` y `cupo` no traen nada nuevo.
 
 - **El pago de un premio** (`POST /v1/patrocinio/pago` con `{"forma":"premio","xdr":...}`). Quien organizó un sorteo le paga a quien ganó, desde su propia cuenta, con la nota `tk:premio:<sorteo>:<puesto>`. No lleva sesión: la firma de la cuenta que paga prueba quién es. El portero lo paga solo si esa cuenta está en su libro, el sorteo es suyo, ya se sorteó, el puesto existe, el sello lo pagó el portero, el `draw` de ese mismo sorteo también lo pagó el portero con ese sello (un sello respalda un solo sorteo: otro igual sellado por fuera no tiene premios por acá) y ese puesto no se pagó antes por esta ruta.
 - **El retiro con su costo** (`forma: "retiro"`). Una persona saca dólares digitales de su cuenta a otra, y en la misma transacción paga el costo de `COSTO_RETIRO` a `CUENTA_COBROS`. Vale desde cualquier cuenta. El portero reconoce ese costo por la transacción que él mismo pagó: no cae a los pagos sueltos ni se confunde con una orden, y la nota de un retiro nunca se lee como la de una orden.
@@ -209,9 +209,9 @@ La comisión de la red la paga la cuenta que paga los sellos, con un presupuesto
 
 | Variable | Hoy | Qué hace |
 |---|---|---|
-| `PAGOS_PREMIO` | `"0"` | Con `"1"`, el pago de un premio. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `pagos-premio` y queda apagada |
-| `RETIROS` | `"0"` | Con `"1"`, el retiro con su costo. Pide `ALTAS = "1"`, `CUENTA_COBROS` propia y `COSTO_RETIRO` bien escrito. Si falta algo, `faltaAltas` dice `retiros` o `costo-retiro` |
-| `ALTAS_PREMIO` | `"0"` | Con `"1"`, el alta de quien ganó. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `alta-premio` |
+| `PAGOS_PREMIO` | `"1"` | Con `"1"`, el pago de un premio. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `pagos-premio` y queda apagada |
+| `RETIROS` | `"1"` | Con `"1"`, el retiro con su costo. Pide `ALTAS = "1"`, `CUENTA_COBROS` propia y `COSTO_RETIRO` bien escrito. Si falta algo, `faltaAltas` dice `retiros` o `costo-retiro` |
+| `ALTAS_PREMIO` | `"1"` | Con `"1"`, el alta de quien ganó. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `alta-premio` |
 | `COSTO_RETIRO` | `"0.50"` | El costo exacto del retiro, en USDC con punto, de 0,01 a 5. Manda sobre el del sitio: si no son iguales, el portero rechaza todo retiro y nunca cobra de más. Vacío, en 0, en 6, con coma o con letras, el retiro no se prende y `faltaAltas` dice `costo-retiro` |
 | `TOPE_PAGOS_STROOPS` | `"20000000"` | El presupuesto de las comisiones de los pagos en 24 horas: 2 XLM, aparte del de los sellos. **Solo dígitos** y hasta `"100000000"` (10 XLM): mal escrita apaga los pagos y `faltaAltas` dice `tope-pagos`, también con las formas apagadas |
 | `PAGOS_RECHAZADOS_DIA` | `"20"` | Cuántos pagos de cada forma que la red rechazó al aplicarse (y que pagaron comisión) se aceptan en 24 horas entre todas las cuentas. Lo que está en el aire tiene su propio tope, en el código. **Solo dígitos** y hasta `"100"`: mal escrita apaga los pagos y `faltaAltas` dice `pagos-rechazos` |
@@ -274,6 +274,64 @@ Solo se puede en la red principal. Hace falta una vista previa del sitio que pag
 
 Mueve 3 dólares digitales entre cuentas propias (1 queda en cobros), unos cientos de stroops de XLM, una activación y unas siete firmas (unos 180 créditos). Si sale bien, se deja reanudado o pausado según decida quien mantiene el proyecto. Si la vista previa del sitio no está a tiempo, el paso 1 se hace con `curl` y el token de la sesión de quien organiza, copiado de la vista previa y sin escribirlo en ningún archivo, y la cuenta nueva se activa con la vista previa del paso.
 
+## Las banderas del sitio y su estado en producción
+
+Las funciones del sitio se prenden con variables `VITE_` que se leen al construir y quedan escritas en su código. Esta tabla dice cuáles trae hoy el sitio publicado. **Leído del sitio publicado el 25 de noviembre de 2026**, del código que sirve tinkazo.app, y vigilado cada día por `pnpm check:banderas`, que baja el sitio, saca el valor de cada variable y falla si una fila ya no coincide o si el sitio trae una variable que la tabla no nombra.
+
+**Quien prende o apaga una bandera en producción actualiza esta tabla en el mismo cambio. Si no, la vigilancia del día siguiente falla.**
+
+- **Sin la variable.** Lo que pasa cuando no está definida. Una variable ausente no es una bandera apagada: `VITE_EQUIPOS`, `VITE_MODOS`, `VITE_FOTO_JUEGO` y las pistas de música nacen prendidas (`VITE_EQUIPOS` y `VITE_MODOS` desde el cambio `7e414660`), y solo un valor de apagado las frena. Las demás nacen apagadas.
+- **En producción.** El valor escrito, `sin definir` si el sitio no la trae, o `definida` si la trae y su valor es un monto, una dirección o una llave pública: de esas la tabla no escribe el valor y la comprobación solo mira que exista.
+- **Desde cuándo.** Las variables viven en Vercel y ningún archivo del repositorio registra el día en que se pusieron. La única fuente de una fecha es la lista de variables de Vercel, leída el 25 de noviembre de 2026, que dice cuándo figura creada cada una. Muestra la antigüedad en días enteros, así que cada fecha puede correrse un día. Es la fecha de la variable en Vercel y no la de la publicación que empezó a usarla. `VITE_PAGOS`, `VITE_PAGAR_CON_GOOGLE`, `VITE_VOTO_POR_CONTENIDO`, `VITE_RAMPA` y `VITE_CAMPANAS` figuran creadas alrededor del 18 de noviembre de 2026, `VITE_STELLAR_NETWORK` y `VITE_REGALO` alrededor del 20, `VITE_EQUIPOS`, `VITE_MODOS` y `VITE_INGRESO_PLAN_B` alrededor del 12 y `VITE_ALTA` alrededor del 11. De las demás no hay fecha. Una fecha de otro documento sobre una de estas banderas tiene que citar su fuente: el cambio de git que la movió, o esta lectura.
+- **Qué no entra.** Las variables `VITE_VERCEL_` las pone el sistema de publicación y no son banderas.
+- **Cómo se cambia una fila.** Se cambia la variable en Vercel, se publica de nuevo y en el mismo pedido se corrige la tabla. Si no, la vigilancia diaria falla.
+
+| Variable | Sin la variable | En producción | Qué cambia |
+|---|---|---|---|
+| `VITE_STELLAR_NETWORK` | abre en Prueba | `mainnet` | La red con que abre el sitio: con `mainnet` abre en Oficial |
+| `VITE_ALTA` | apagada, solo con `1` | `1` | El acceso por cupón o por pago en la red principal. Exige `VITE_PATROCINIO_URL_MAINNET` |
+| `VITE_ALTA_LIBRE` | apagada, solo con `1` | `sin definir` | Salida de emergencia: activar una cuenta sin acceso confirmado. No vale junto con `VITE_ALTA` |
+| `VITE_ALTA_PAGO` | apagada, solo con `1` | `sin definir` | La compra de sorteos |
+| `VITE_PAGO_CON_SALDO` | apagada, solo con `1` | `sin definir` | Pagar un paquete con el saldo de la cuenta |
+| `VITE_COMPRA_QR` | apagada, solo con `1` | `sin definir` | Comprar un paquete con el QR del banco |
+| `VITE_VENTA_ABIERTA` | apagada, solo con `1` | `sin definir` | La venta a la vista de todos. Sin ella, las tres anteriores valen solo en el piloto |
+| `VITE_SORTEO_SERVIDOR` | apagada, solo con `1` | `sin definir` | El sorteo lo manda el servidor |
+| `VITE_REGALO` | apagada, solo con `1` | `1` | Los primeros 3 sorteos oficiales gratis |
+| `VITE_CAMPANAS` | apagada, con `1` o `true` | `1` | La campaña de una empresa: panel, página del celular y entrada de quien ganó |
+| `VITE_EQUIPOS` | prendida, se apaga con `0` o `false` | `1` | Los equipos con cupón |
+| `VITE_MODOS` | prendida, se apaga con `0` o `false` | `1` | El selector de modos del sorteo |
+| `VITE_FOTO_JUEGO` | prendida, se apaga con `0` o `false` | `sin definir` | La foto con el dibujo del juego al compartir |
+| `VITE_MUSICA` | pistas prendidas, solo `sintetizada` las apaga | `sin definir` | La música de los juegos: pistas o sintetizada |
+| `VITE_VIDEO_DESCARGA` | apagada, solo con `1` | `sin definir` | La descarga del video del sorteo |
+| `VITE_INGRESO_PLAN_B` | apagada, solo con `1` | `1` | El plan B del ingreso. Solo se aplica en el modo Prueba: en Oficial no se ve |
+| `VITE_PAGOS` | apagada, solo con `1` | `1` | Pagar premio y el panel de ganadores |
+| `VITE_PAGOS_ACTIVO` | el USDC de prueba de Circle | `sin definir` | El activo de los premios en testnet |
+| `VITE_PAGOS_CUENTAS` | ninguna cuenta | `sin definir` | Cuentas que pagan premios sin ser la que selló |
+| `VITE_PAGAR_CON_GOOGLE` | apagada, solo con `1` | `1` | Cargar y pagar el premio desde la cuenta de Google |
+| `VITE_VOTO_POR_CONTENIDO` | apagada, solo con `1` | `1` | La cuenta de Google vota solo la transacción que armó la página |
+| `VITE_RAMPA` | apagada | `premios` | Tus dólares digitales: ver el saldo y recibir un premio |
+| `VITE_RAMPA_CUENTAS` | sin lista de cuentas | `sin definir` | El piloto de la carga con bolivianos |
+| `VITE_RAMPA_MINIMO` | sin mínimo, solo en localhost | `sin definir` | Un mínimo de prueba, solo en localhost |
+| `VITE_RAMPA_DEMO` | apagada, solo en localhost | `sin definir` | Una demostración de la carga, solo en localhost |
+| `VITE_RAMPA_REGISTRO` | apagada, solo con `1` | `sin definir` | El registro de la carga en la consola |
+| `VITE_RAMPA_PRACTICA` | apagada, solo en localhost | `sin definir` | La práctica de la carga, solo en localhost |
+| `VITE_MONEDAS` | apagada | `sin definir` | Monedas, tiendita y Canjear para quien organiza |
+| `VITE_CUENTA_URL` | sin dirección | `sin definir` | Dónde está el servicio de cuenta |
+| `VITE_CUENTA_PLANES` | sin cuenta | `sin definir` | La cuenta que cobra el plan del equipo |
+| `VITE_PLAN_EQUIPO` | apagada | `sin definir` | La compra del plan del equipo |
+| `VITE_ENLACES` | el servicio de enlaces de siempre | `sin definir` | Otro servicio de enlaces cortos |
+| `VITE_PATROCINIO_URL` | sin dirección | `sin definir` | La dirección vieja del portero, que vale solo en Prueba |
+| `VITE_PATROCINIO_URL_TESTNET` | sin dirección | `sin definir` | El portero de la red de prueba |
+| `VITE_PATROCINIO_URL_MAINNET` | sin dirección | `definida` | El portero de la red principal |
+| `VITE_POLLAR_PUBLISHABLE_KEY` | sin entrada con Google | `definida` | La llave publicable del proveedor de cuentas |
+| `VITE_POLLAR_PUBLISHABLE_KEY_MAINNET` | cae a la de siempre | `definida` | La misma llave, para la red principal |
+| `VITE_POLLAR_PUBLISHABLE_KEY_TESTNET` | cae a la de siempre | `sin definir` | La misma llave, para la red de prueba |
+| `VITE_RETIRO_COSTO` | no se cobra el retiro | `definida` | El costo del retiro |
+| `VITE_RETIRO_CUENTA` | no se cobra el retiro | `definida` | La cuenta que recibe el costo del retiro |
+| `VITE_COMISION_PB` | no se cobra a las campañas | `definida` | Los puntos básicos que se cobran a una campaña |
+| `VITE_COMISION_MINIMO` | no se cobra a las campañas | `definida` | Lo menos que se cobra a una campaña |
+| `VITE_COMISION_CUENTA` | no se cobra a las campañas | `definida` | La cuenta que recibe el cobro a las campañas |
+
 ## La campaña de una empresa
 
 Es el sorteo de una empresa por QR: la empresa pone el premio, la gente se anota desde el celular con su cuenta de Google y quien organiza lo maneja desde un panel de la herramienta, que se abre con `?campana`. Junta cuatro piezas: el portero (comisiones, altas y pagos), el servicio de conteo, la sala de campaña (`workers/sala`, en `s.tinkazo.app`) y el sitio. Esta sección dice cómo se prepara, qué se despliega y en qué orden, qué se prueba antes, qué se hace el día y qué queda para después. Lo del portero (el pago de un premio, el retiro con su costo y el alta de quien ganó) no se repite: está en la sección anterior, Los pagos de premios, los retiros y el alta de quien ganó, y acá se enlaza. El contrato de la sala, ruta por ruta, está en [workers/sala/README.md](../workers/sala/README.md), en Las salas de campaña firmadas.
@@ -302,7 +360,7 @@ node scripts/campana-firmar.mjs --nueva-llave-prueba
 
 ### Qué se despliega, en qué orden y por qué
 
-El código del sitio sube antes, con todas las banderas apagadas: así ya está publicado cuando la sala nueva exista, y con las banderas apagadas la campaña no se ve. Después va este orden, y cada paso se comprueba antes de seguir. Con gente adentro no se despliega el portero ni el sitio. La sala solo se despliega para los cortes 3 a 5 de Cómo cortar una campaña: la lista, las fases y la alarma están guardadas en el almacenamiento de la sala y sobreviven, y los celulares siguen preguntando solos y se ponen al día en menos de un minuto.
+Para una campaña nueva, el código del sitio sube antes, con las banderas de esa campaña apagadas: así ya está publicado cuando la sala nueva exista, y con las banderas apagadas la campaña no se ve. Hoy `VITE_CAMPANAS` y las de pagos ya están prendidas, como dice la tabla de banderas. Después va este orden, y cada paso se comprueba antes de seguir. Con gente adentro no se despliega el portero ni el sitio. La sala solo se despliega para los cortes 3 a 5 de Cómo cortar una campaña: la lista, las fases y la alarma están guardadas en el almacenamiento de la sala y sobreviven, y los celulares siguen preguntando solos y se ponen al día en menos de un minuto.
 
 1. **El portero**, con los tres pagos desplegados apagados y pausados, y después prendidos y pausados. Es lo primero porque el sello y el sorteo de la campaña, el alta de quien ganó y los pagos pasan por él, y porque cada despliegue suyo reinicia su memoria. Se hace como dice Cómo se prenden, en la sección de los pagos: dos despliegues y un exporte antes de cada uno.
 2. **El servicio de conteo** (`workers/enlaces`, en `c.tinkazo.app`). Va antes que las banderas del voto porque la lista cerrada de lo que cuenta incluye el error `cofirmaDistinta`, el que sale cuando el voto por contenido frena una firma. Un conteo anterior rechaza ese aviso entero y justo la falla que más importa no se vería.
@@ -457,7 +515,7 @@ El build no sale con una sola o con dos de las tres, con la cuenta repetida, sin
 
 **Qué hace falta antes (no es código):**
 
-1. El portero de la red principal con `RETIROS = "1"` y `PAGOS_PREMIO = "1"`: es un cambio en `workers/patrocinio/wrangler.toml` y un despliegue del portero, que pide la palabra de quien mantiene el proyecto. **Hoy `RETIROS` está en `"0"`: sin eso, el panel muestra el pago desde otra billetera como único camino.**
+1. El portero de la red principal con `RETIROS = "1"` y `PAGOS_PREMIO = "1"`: es un cambio en `workers/patrocinio/wrangler.toml` y un despliegue del portero, que pide la palabra de quien mantiene el proyecto. **En el repositorio `RETIROS` está en `"1"` desde el cambio `c2aec150`. Con `"0"`, el panel muestra el pago desde otra billetera como único camino.**
 2. La cuenta que cobra, creada en la red principal con su línea del USDC de Circle. Sin la línea, el retiro da `no-recibe`.
 3. Créditos de Pollar para la firma del retiro.
 

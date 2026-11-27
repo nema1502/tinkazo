@@ -1,5 +1,5 @@
 /**
- * La bandera de los equipos con cupón: `VITE_EQUIPOS`. **Prendida por defecto desde el 17 de noviembre de 2026**:
+ * La bandera de los equipos con cupón: `VITE_EQUIPOS`. **Prendida por defecto desde el cambio 7e414660**:
  * el registro de equipos es parte del producto, y una variable solo para apagarlo (`VITE_EQUIPOS=0` al construir)
  * queda para un repliegue de emergencia, como `VITE_FOTO_JUEGO` (src/ui/foto-juego-bandera.ts).
  *

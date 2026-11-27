@@ -268,7 +268,7 @@ El nombre es boliviano: un *tinkazo* es un presentimiento, una corazonada.
 
 ## Contribuir
 
-Issues y pull requests son bienvenidos. **Si encontrás una forma de torcer un sorteo, abrí un issue**: es el reporte que más sirve. Para agregar un juego, mirá [docs/juegos.md](docs/juegos.md); tiene que pasar los auditores para entrar.
+Issues y pull requests son bienvenidos. **Si encontrás una forma de torcer un sorteo, escribí a hola@tinkazo.app antes de contarlo en público** ([cómo avisar](SECURITY.md)): es el reporte que más sirve. Para agregar un juego, mirá [docs/juegos.md](docs/juegos.md); tiene que pasar los auditores para entrar.
 
 ## Licencia
 

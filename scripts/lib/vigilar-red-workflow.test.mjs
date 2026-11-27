@@ -82,6 +82,34 @@ describe("vigilar-red.yml: la alerta del fondo del portero", () => {
   });
 });
 
+describe("vigilar-red.yml: la comprobación de las banderas del sitio", () => {
+  const texto = readFileSync(WORKFLOW, "utf8");
+  const PASO_BANDERAS = "Banderas del sitio publicado";
+
+  it("el paso está una sola vez y corre el guion", () => {
+    expect(texto.split(/\r?\n/).filter((r) => r.includes(`name: ${PASO_BANDERAS}`))).toHaveLength(1);
+    expect(renglonesDelPaso(texto, PASO_BANDERAS).join("\n")).toContain("node scripts/check-banderas.mjs");
+  });
+
+  it("corre una vez al día, también si falla un paso anterior, y antes del latido", () => {
+    const condicion = condicionDelPaso(texto, PASO_BANDERAS);
+    expect(condicion).toMatch(/^always\(\)\s*&&\s*\(.*\)$/);
+    expect(condicion).toContain("github.event.schedule == '7 12 * * *'");
+    expect(condicion).toContain("inputs.diario");
+    expect(texto.indexOf(`name: ${PASO_BANDERAS}`)).toBeLessThan(texto.indexOf("name: Latido para el servicio de alarma"));
+  });
+
+  it("baja docs/operacion.md, que es donde está la tabla", () => {
+    expect(texto).toMatch(/sparse-checkout: \|[\s\S]*?docs\/operacion\.md/);
+  });
+
+  it("no corre en la revisión de cada pedido: depende de producción", () => {
+    const ci = readFileSync(resolve(aqui, "..", "..", ".github", "workflows", "ci.yml"), "utf8");
+    expect(ci).not.toContain("check-banderas");
+    expect(ci).not.toContain("check:banderas");
+  });
+});
+
 describe("condicionDelPaso", () => {
   const paso = (prefijo, condicion) =>
     [
