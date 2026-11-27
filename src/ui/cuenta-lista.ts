@@ -562,6 +562,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   let esperaHasta = 0;
   /** Desde cuándo gira una espera con salida (hora de verdad), o 0. Lo lleva `seguirLaEspera`. */
   let giraDesde = 0;
+  /** El temporizador de la espera ya cumplió: la salida queda a la vista aunque la hora de pared se corrija hacia atrás. */
+  let esperaPasada = false;
   let relojDeLaEspera: ReturnType<typeof setTimeout> | null = null;
   /** Mientras corre `esperarPedido`: vuelve a contar sus vueltas desde la primera. Si no, `null`. */
   let pedidoDeNuevo: (() => void) | null = null;
@@ -668,7 +670,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
    * demás, Volver a cargar, salvo sin conexión: recargar llevaría a la página de error del navegador.
    */
   function demoraDeAhora(): "recargar" | "pedido" | null {
-    if (giraDesde === 0 || Date.now() - giraDesde < ESPERA_SIN_SALIDA_MS) return null;
+    if (giraDesde === 0 || (!esperaPasada && Date.now() - giraDesde < ESPERA_SIN_SALIDA_MS)) return null;
     if (pedidoDeNuevo) return "pedido";
     if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
     return "recargar";
@@ -1175,6 +1177,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   function seguirLaEspera(gira: boolean): void {
     if (!gira) {
       giraDesde = 0;
+      esperaPasada = false;
       if (relojDeLaEspera) {
         clearTimeout(relojDeLaEspera);
         relojes.delete(relojDeLaEspera);
@@ -1186,7 +1189,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     giraDesde = Date.now();
     relojDeLaEspera = despues(() => {
       relojDeLaEspera = null;
-      if (giraDesde !== 0) giraDesde = Math.min(giraDesde, Date.now() - ESPERA_SIN_SALIDA_MS);
+      esperaPasada = true;
       pintar();
     }, ESPERA_SIN_SALIDA_MS);
   }

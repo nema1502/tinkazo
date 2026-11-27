@@ -442,6 +442,37 @@ describe("el camino directo: la salida a los 45 segundos y nada se corta", () =>
     expect(recargarDelPaso()).not.toBeNull();
   });
 
+  it("si la hora de pared se atrasa después de que la salida apareció, la salida se queda", async () => {
+    const reg: Registro = [];
+    const cf = cuentaFalsa(reg);
+    activarColgada(cf, reg);
+    await abrir(servidorFalso(reg, { acceso: "cupon" }), cf);
+    await tocar();
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(recargarDelPaso()).not.toBeNull();
+    // El celular corrige la hora hacia atrás al recuperar la red, y la pantalla se pinta otra vez.
+    vi.setSystemTime(Date.now() - 20_000);
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(recargarDelPaso()).not.toBeNull();
+    expect(principal().getAttribute("aria-busy")).toBe("true");
+  });
+
+  it("al perder la conexión con la salida a la vista, la salida se va en el acto", async () => {
+    const reg: Registro = [];
+    const cf = cuentaFalsa(reg);
+    activarColgada(cf, reg);
+    await abrir(servidorFalso(reg, { acceso: "cupon" }), cf);
+    await tocar();
+    await vi.advanceTimersByTimeAsync(50_000);
+    expect(recargarDelPaso()).not.toBeNull();
+    const enLinea = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    window.dispatchEvent(new Event("offline"));
+    expect(recargarDelPaso()).toBeNull();
+    expect(principal().getAttribute("aria-busy")).toBe("true");
+    enLinea.mockRestore();
+  });
+
   it("sin conexión no se ofrece recargar, y vuelve en el acto con la conexión", async () => {
     const reg: Registro = [];
     const cf = cuentaFalsa(reg);
@@ -500,6 +531,8 @@ describe("el camino directo: la salida a los 45 segundos y nada se corta", () =>
     // Cada oyente puesto se sacó, con el mismo oyente.
     const sacados = [...sinDocumento.mock.calls, ...sinVentana.mock.calls];
     for (const [tipo, oyente] of puestos) expect(sacados.some(([t2, o2]) => t2 === tipo && o2 === oyente), tipo).toBe(true);
+    // Ni el reloj de la espera ni ningún otro temporizador del paso quedó armado.
+    expect(vi.getTimerCount()).toBe(0);
     const llamadas = reg.length;
     const hijos = document.body.children.length;
     document.dispatchEvent(new Event("visibilitychange"));
