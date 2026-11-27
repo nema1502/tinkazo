@@ -31,7 +31,11 @@ export interface SalaDeCampana extends Sala {
   evento: string;
   red: RedDeCampana;
 }
-export type FallaAlCrear = "forma" | "firma" | "ya-existe" | "vencida" | "cupo-campanas" | "origen" | "red";
+/**
+ * Por qué la sala no creó la campaña. `personas-apagadas` es que la sala no tiene prendidas las campañas de personas (o las
+ * tiene con otro identificador de Google que el sitio): no es una falta de conexión y repetir el pedido no lo arregla.
+ */
+export type FallaAlCrear = "forma" | "firma" | "ya-existe" | "vencida" | "cupo-campanas" | "origen" | "personas-apagadas" | "red";
 /**
  * Lo que puede salir mal en una llamada con token: la sala ya no está, la sala ya no acepta este token (otra compu tomó la
  * campaña), la sala dijo que no, la hora pedida no vale, o no hubo respuesta a tiempo.
@@ -100,6 +104,8 @@ const DE_LA_SALA: Record<string, FallaAlCrear> = {
   vencida: "vencida",
   "cupo-campanas": "cupo-campanas",
   origen: "origen",
+  "personas-apagadas": "personas-apagadas",
+  "personas-configuracion": "personas-apagadas",
 };
 const ES_ID = /^[0-9A-Za-z]{8}$/u;
 const ES_TOKEN = /^[A-Za-z0-9_-]{22}$/u;
@@ -143,6 +149,30 @@ export async function crearCampanaEnSala(
     red: de.red,
   };
   return { ok: true, sala };
+}
+
+/** Cuánto se espera la respuesta de si las campañas de personas están prendidas: es una pregunta chica, antes de abrir. */
+export const PLAZO_DE_PERSONAS_MS = 8_000;
+
+/**
+ * Si una campaña de personas se puede abrir ahora. `clienteDelSitio` es el identificador de Google (público) con que el sitio
+ * abre esas campañas, o `null` si el sitio se construyó sin ellas: entonces no se puede y a la sala no se le pregunta nada.
+ * Si no, la sala dice si las tiene prendidas y con qué identificador (`GET /v1/personas/estado`): tiene que ser el mismo, o
+ * nadie podría entrar. `true` o `false` cuando se sabe, y `null` si no hubo una respuesta que se entienda (sin red, pasado
+ * el plazo u otro estado): quien pregunta sigue como si no hubiera preguntado, y la sala rechaza sola lo que no puede.
+ */
+export async function personasSePuedenAbrir(
+  clienteDelSitio: string | null,
+  dep: DependenciasOrg = {},
+  servicio = servicioDeSala(),
+): Promise<boolean | null> {
+  if (clienteDelSitio === null) return false;
+  const conPlazo: DependenciasOrg = { ...dep, senal: dep.senal ?? ((): AbortSignal => AbortSignal.timeout(PLAZO_DE_PERSONAS_MS)) };
+  const r = await llamar(conPlazo, `${servicio}/v1/personas/estado`, {});
+  if (!r || r.status !== 200) return null;
+  const x: unknown = await r.json().catch(() => null);
+  if (!esObjeto(x) || typeof x.prendido !== "boolean" || typeof x.cliente !== "string") return null;
+  return x.prendido && x.cliente === clienteDelSitio;
 }
 
 /**

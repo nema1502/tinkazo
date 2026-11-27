@@ -199,6 +199,8 @@
     padding: 10px 18px; font-size: 16px; font-weight: 700; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
   }
   a.ghost { display: inline-block; text-decoration: none; }
+  /* Con una lista de personas el resultado no ofrece avisar: el atributo hidden solo no alcanza contra el display de a.ghost. */
+  #btn-whatsapp[hidden], #btn-email[hidden] { display: none; }
   button.ghost:hover:not(:disabled), a.ghost:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
   /* "Sellar la lista" mientras faltan nombres: apagado y sin el color de la casa (participants.ts). */
   button.ghost:disabled { cursor: not-allowed; color: var(--muted); border-color: var(--muted); box-shadow: none; }

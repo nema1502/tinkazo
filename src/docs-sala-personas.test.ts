@@ -48,3 +48,75 @@ describe("los documentos dicen lo que ve quien ganó y lo que no recupera", () =
     expect(parrafo).toContain("después del cierre ninguna pantalla ofrece olvidar");
   });
 });
+
+describe("los documentos dicen lo que el comprobante muestra de una lista de personas", () => {
+  const operacion = leer("../docs/operacion.md");
+  const desde = operacion.indexOf("El show y las tarjetas del resultado dicen el nombre");
+  const renglon = operacion.slice(desde, operacion.indexOf("- La pantalla del resultado trae una sola línea", desde));
+
+  it("la operación no dice que el comprobante muestra las líneas: dice el lugar, y con qué se recalcula la huella", () => {
+    expect(desde).toBeGreaterThan(-1);
+    expect(operacion).not.toContain("salvo la lista sellada del comprobante");
+    expect(operacion).not.toContain("la lista pública que cualquiera recalcula");
+    expect(renglon).toContain("Ninguna pantalla muestra una línea `p1:`");
+    expect(renglon).toContain("La lista sellada del comprobante también dice Lugar n en cada fila");
+    expect(renglon).toContain("La huella se recalcula con la lista sellada que tiene quien organiza");
+  });
+
+  it("dice Lugar n donde el show y las tarjetas dicen Lugar n, y Lugar n de la lista donde se dice así", () => {
+    expect(renglon).toContain("si esta pestaña no lo tiene, Lugar n (o Sin nombre, si la lista del cuadro no trae esa línea)");
+    expect(renglon).toContain("Mis sorteos, el evento, el comprobante y el celular de quien mira dicen Lugar n de la lista");
+  });
+
+  it("dice lo que el evento comprueba y que el comprobante no ofrece buscar por nombre", () => {
+    expect(renglon).toContain("En la página del evento lo comprobado es ese lugar");
+    expect(renglon).toContain("no ofrece buscar por nombre");
+  });
+
+  it("los textos que cita son los del sitio", async () => {
+    const { T } = await import("./i18n");
+    expect(T.es.vLugar).toBe("Lugar {n}");
+    expect(T.es.vLugarDeLaLista).toBe("Lugar {n} de la lista");
+    expect(T.es.vPersonaAnotada).toBe("Sin nombre");
+  });
+});
+
+describe("los documentos dicen lo que el panel mira antes de abrir y lo que el celular hace sin respuesta", () => {
+  const operacion = leer("../docs/operacion.md");
+  const ux = leer("../docs/ux.md");
+
+  it("la operación dice que el panel pregunta antes de ofrecer abrir, con los textos del panel", async () => {
+    const { TEXTOS_SALA_CAMPANA } = await import("./campana/textos-sala");
+    const desde = operacion.indexOf("**El panel lo mira antes de abrir.**");
+    expect(desde).toBeGreaterThan(-1);
+    const renglon = operacion.slice(desde, operacion.indexOf("Prender pide publicar el sitio", desde));
+    for (const clave of ["cpoFvPreguntando", "cpoPersonasNoT", "cpoPersonasNoL", "cpoReintentar"]) {
+      expect(renglon, clave).toContain(String(TEXTOS_SALA_CAMPANA.es[clave]));
+    }
+    expect(renglon).toContain("no crea ninguna sala");
+    expect(renglon).toContain("ofrece abrir como siempre");
+  });
+
+  it("la operación dice que la consulta sin respuesta se repite con tope y que Ganaste a la vista conserva su código", async () => {
+    const { TEXTOS_CAMPANA } = await import("./campana/textos");
+    const desde = operacion.indexOf("Quien ya se anotó y abre su página después del cierre");
+    expect(desde).toBeGreaterThan(-1);
+    const renglon = operacion.slice(desde, desde + 900);
+    expect(renglon).toContain("hasta cuatro veces");
+    expect(renglon).toContain(String(TEXTOS_CAMPANA.es.cpProbarDeNuevo));
+    const rastro = operacion.indexOf("**Cuándo se pierde el rastro.**");
+    expect(rastro).toBeGreaterThan(-1);
+    expect(operacion.slice(rastro, rastro + 1200)).toContain("El celular que tenía Ganaste a la vista cuando la sala se borró conserva el código que ya mostraba");
+  });
+
+  it("la UX dice los estados nuevos del panel y del celular, y que dejar una campaña ya sorteada pregunta antes", async () => {
+    const { TEXTOS_SALA_CAMPANA } = await import("./campana/textos-sala");
+    const desde = ux.indexOf("Con premio en mano, el panel no habla de plata");
+    expect(desde).toBeGreaterThan(-1);
+    const parrafo = ux.slice(desde, desde + 6000);
+    expect(parrafo).toContain(String(TEXTOS_SALA_CAMPANA.es.cpoPersonasNoT));
+    expect(parrafo).toContain(String(TEXTOS_SALA_CAMPANA.es.cpoCodigosAlDejar));
+    expect(parrafo).toContain("no ofrece avisar por WhatsApp ni por correo");
+    expect(parrafo).toContain("Probar de nuevo");
+  });
+});

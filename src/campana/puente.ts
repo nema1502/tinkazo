@@ -64,6 +64,16 @@ export function avisosPendientes(p: PasoDelPuente, sorteoHecho: boolean): boolea
   return true;
 }
 
+/**
+ * ¿Se pierden códigos de entrega si se deja la campaña ahora? Con el resultado en mano a la vista, sí: el panel es lo único
+ * que se los muestra a quien organiza, y los lee con lo que esa compu guarda de la campaña. Marcar a una ganadora como
+ * avisada no quiere decir que el premio se entregó, así que vale también con todas marcadas, y por eso es una pregunta
+ * aparte de `avisosPendientes`. Con una campaña de cuentas no hay códigos y nunca se pierde nada.
+ */
+export function seVanLosCodigos(p: PasoDelPuente): boolean {
+  return p.paso === "resultado" && p.enMano === true;
+}
+
 /** Lo que el panel puede pedirle a quien tiene la lógica de cada paso. Cada módulo registra la suya. */
 export interface AccionesDelPuente {
   reintentarPaso?: () => void;

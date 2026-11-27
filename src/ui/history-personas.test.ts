@@ -129,3 +129,59 @@ describe("Mis sorteos con una lista de personas", () => {
     expect(hist.toCsv(WHO)).toContain("Carla | Ana");
   });
 });
+
+/**
+ * El archivo que se baja se abre en una planilla, y una planilla ejecuta como fórmula lo que empieza con =, +, -, @, una
+ * tabulación o un retorno de carro. En una campaña de personas el nombre de quien ganó lo eligió cada persona en su cuenta,
+ * así que esos valores llevan un apóstrofo adelante, en todas las columnas. Lo demás del archivo no cambia.
+ */
+describe("el archivo de Mis sorteos y las fórmulas de una planilla", () => {
+  const CABECERA = '"id","fecha","cuenta","list_hash","participantes","ganadores","ronda","premio","tx_sello","tx_sorteo","comprobante","origen","contrato"';
+  const celdas = (linea: string): string[] => linea.slice(1, -1).split('","');
+  const fila = (csv: string): string[] => celdas(csv.split("\n")[1] ?? "");
+
+  it("el nombre de una ganadora que empieza con = sale con un apóstrofo adelante", async () => {
+    const etiquetas = await import("../equipos/etiquetas");
+    etiquetas.ponerEtiquetas(new Map([[LINEAS[2] as string, "=SUMA(A1:A9)"]]), "personas");
+    const hist = await pintar(sorteoDePersonas());
+    const csv = hist.toCsv(WHO);
+    expect(fila(csv)[5]).toBe("'=SUMA(A1:A9) | Lugar 1 de la lista");
+    expect(csv).not.toContain('"=');
+    expect(csv).not.toContain("p1:");
+  });
+
+  it("vale para cada forma de empezar una fórmula y en todas las columnas", async () => {
+    const hist = await import("./history");
+    const casos = ["=1+1", "+1+1", "-1+1", "@SUMA(A1)", "\tcmd", "\rcmd"];
+    casos.forEach((valor, i) => {
+      hist.remember(sorteoDePersonas({ names: [valor, "Beto", "Carla", "Diego"], winners: [valor, "Beto"], prize: valor, id: valor, round: 100 + i }) as never);
+    });
+    // El retorno de carro va adentro de una celda entre comillas: las filas se separan solo por el salto de línea.
+    const filas = hist.toCsv(WHO).split("\n").slice(1);
+    expect(filas).toHaveLength(casos.length);
+    for (const valor of casos) {
+      const suya = filas.map(celdas).find((c) => c[7] === `'${valor}`);
+      expect(suya, JSON.stringify(valor)).toBeDefined();
+      expect(suya?.[0]).toBe(`'${valor}`);
+      expect(suya?.[5]).toBe(`'${valor} | Beto`);
+    }
+    for (const f of filas) for (const celda of celdas(f)) expect(celda).not.toMatch(/^[=+\-@\t\r]/u);
+  });
+
+  it("un signo que no está al principio de la celda queda como estaba", async () => {
+    const hist = await pintar(sorteoDePersonas({ names: ["Ana", "=1+1", "Carla", "Diego"], winners: ["Ana", "=1+1"], prize: "2 + 2 = 4" }));
+    const celda = fila(hist.toCsv(WHO));
+    expect(celda[5]).toBe("Ana | =1+1");
+    expect(celda[7]).toBe("2 + 2 = 4");
+  });
+
+  it("un sorteo de nombres comunes sale igual que siempre, letra por letra", async () => {
+    const hist = await pintar(sorteoDePersonas({ names: ["Ana", "Beto", "Carla", "Diego"], winners: ["Carla", 'Ana "la'], prize: "Auriculares, x2" }));
+    expect(hist.toCsv(WHO)).toBe(
+      [
+        CABECERA,
+        `"9","${new Date((AHORA - 120) * 1000).toISOString()}","${WHO}","${"ab".repeat(32)}","4","Carla | Ana ""la","77","Auriculares, x2","","","https://tinkazo.app/verificar.html#rPRUEBA","equipo",""`,
+      ].join("\n"),
+    );
+  });
+});

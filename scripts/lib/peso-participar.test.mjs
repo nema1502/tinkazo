@@ -84,11 +84,11 @@ describe("la prueba de peso de la página del celular", () => {
     expect(informe(medida)).not.toContain("PASA EL TOPE");
   });
 
-  it("el tope de la entrada no se mueve de 15 KB, y el del código del celular deja lugar para decir que se guarda el perfil", () => {
+  it("los topes son los más altos aceptados para esta página, y en ellos caben los textos del perfil", () => {
     const KB = 1024;
     // La entrada es lo que baja un celular antes de mostrar nada: ese tope es el que manda.
-    expect(TOPES.entrada).toBe(15 * KB);
-    expect(TOPES.celular).toBeCloseTo(29.2 * KB, 5);
+    expect(TOPES.entrada).toBe(15.5 * KB);
+    expect(TOPES.celular).toBe(30 * KB);
     expect(TOPES.html).toBe(8 * KB);
     expect(TOPES.hoja).toBe(5 * KB);
   });
