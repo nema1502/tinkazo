@@ -352,12 +352,13 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   /**
    * Cambia cada vez que la pantalla pasa a ser otra y cuando la página olvida a la persona. Cada pedido a la sala anota la de su
    * salida: si al volver ya es otra (la persona se anotó, tocó No soy yo o la pantalla cambió), la respuesta es vieja y se descarta.
+   * Solo en una campaña de personas: en una de cuentas cada respuesta se aplica como siempre.
    */
   let generacion = 0;
   /** Se llama al salir un pedido a la sala. Lo que devuelve dice, al llegar la respuesta, si todavía vale para esta pantalla. */
   const alSalir = (): (() => boolean) => {
     const salio = generacion;
-    return () => !desmontado && salio === generacion;
+    return () => !desmontado && (!deps.persona || salio === generacion);
   };
   /** Solo personas: cuántas veces seguidas quedó sin respuesta la consulta propia por la llave de este celular. */
   let sinRespuesta = 0;

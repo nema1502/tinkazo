@@ -2,8 +2,8 @@
 /**
  * Una respuesta de la sala que llega tarde no pisa la pantalla nueva. Cada pedido (el estado, lo propio y el resultado) vale
  * para la pantalla desde la que salió: si mientras viajaba la persona se anotó, tocó No soy yo o la pantalla pasó a ser otra,
- * su respuesta se descarta y la consulta siguiente trae lo que corresponde. Con una sala de mentira que contesta cuando la
- * prueba lo decide: nada llama a ningún servicio.
+ * su respuesta se descarta y la consulta siguiente trae lo que corresponde. Vale en una campaña de personas: en una de cuentas
+ * nada cambia. Con una sala de mentira que contesta cuando la prueba lo decide: nada llama a ningún servicio.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -115,7 +115,7 @@ describe("quien se anota mientras una consulta del estado está en vuelo", () =>
     expect(dice(mundo)).not.toContain(ES.cpCerro);
   });
 
-  it("en una campaña de cuentas pasa lo mismo: quien recién se anotó sigue viendo que está adentro", async () => {
+  it("en una campaña de cuentas nada cambia: la respuesta en vuelo se aplica como siempre", async () => {
     const estado = conFreno<EstadoPublico | "red" | "terminada">(() => publico());
     const mundo = await prepararCelular({ sala: SALA, memoria: almacenFalso(), sesion: async () => SESION, publico: estado.pedir });
     expect(titulo(mundo, "#cmp-hola")).toContain("Hola");
@@ -124,9 +124,9 @@ describe("quien se anota mientras una consulta del estado está en vuelo", () =>
     expect(estado.enVuelo()).toBe(true);
     await aceptar(mundo);
     expect(titulo(mundo, "#cmp-adentro")).toBe("Ya estás adentro");
+    // La generación de la pantalla vale solo en una campaña de personas. En una de cuentas la página se comporta como antes.
     await estado.soltar({ ...publico(), fase: "cerrada" });
-    expect(escondida(mundo, "#cmp-adentro")).toBe(false);
-    expect(dice(mundo)).not.toContain(ES.cpCerro);
+    expect(dice(mundo)).toContain(ES.cpCerro);
   });
 
   it("el resultado que llega tarde tampoco la manda a Este sorteo ya se hizo", async () => {
