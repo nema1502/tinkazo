@@ -308,3 +308,60 @@ describe("depsDePersona", () => {
     expect(cada.mock.calls.map((c) => c[1])).toEqual([30_000, 15_000, 8_000]);
   });
 });
+
+describe("depsDePersona: el permiso para guardar el perfil", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  /** Anota a una persona y devuelve los cuerpos de los pedidos del alta, tal como salieron, y su token. */
+  async function cuerposDelAlta(guion: Paso[] = [ALTA_OK], congelado = false): Promise<{ crudos: string[]; token: string }> {
+    const { deps, llamadas, entrar } = montar({ alta: guion }, { congelado });
+    const token = tokenDe("Ana Pérez");
+    const sesion = entrar(token);
+    await (congelado ? correrDeAPoco : correr)(deps.anotar(sesion?.nombre ?? null, () => undefined));
+    return { crudos: llamadas.filter((l) => l.ruta === "alta").map((l) => String(l.init.body)), token };
+  }
+
+  /** El cuerpo de siempre, armado con lo que el pedido trae en sus cuatro campos: así se compara letra por letra. */
+  const deSiempre = (crudo: string, token: string): string => {
+    const leido = JSON.parse(crudo) as { d: string; llave: string };
+    return JSON.stringify({ google: token, d: leido.d, llave: leido.llave, p: PASE });
+  };
+
+  it("sin la bandera, el cuerpo del alta es byte a byte el de siempre", async () => {
+    const { crudos, token } = await cuerposDelAlta();
+    expect(crudos).toHaveLength(1);
+    expect(crudos[0]).toBe(deSiempre(crudos[0] ?? "", token));
+    expect(crudos[0]).not.toContain("perfil");
+  });
+
+  it("con la bandera prendida suma perfil: true al final, y es lo único que cambia", async () => {
+    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
+    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
+    const { crudos, token } = await cuerposDelAlta();
+    expect(crudos).toHaveLength(1);
+    expect(crudos[0]).toBe(`${deSiempre(crudos[0] ?? "", token).slice(0, -1)},"perfil":true}`);
+    expect((JSON.parse(crudos[0] ?? "{}") as { perfil?: unknown }).perfil).toBe(true);
+  });
+
+  it.each([
+    ["sin anotarse sin billetera", { VITE_ANOTARSE_SIN_BILLETERA: "", VITE_GUARDAR_PERFIL: "1" }],
+    ["con la bandera en 0", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "0" }],
+    ["con la bandera en true", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "true" }],
+    ["con la bandera vacía", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "" }],
+  ])("%s no lo manda: el cuerpo es el de siempre", async (_caso, entorno) => {
+    for (const [nombre, valor] of Object.entries(entorno)) vi.stubEnv(nombre, valor);
+    const { crudos, token } = await cuerposDelAlta();
+    expect(crudos[0]).toBe(deSiempre(crudos[0] ?? "", token));
+  });
+
+  it("el alta que se repite porque la respuesta se perdió lleva el mismo cuerpo, con su permiso", async () => {
+    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
+    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
+    const { crudos } = await cuerposDelAlta(["corte", "corte", { estado: 200, cuerpo: { anotada: true, ya: true } }], true);
+    expect(crudos).toHaveLength(3);
+    expect(new Set(crudos).size).toBe(1);
+    expect(crudos[2]).toContain('"perfil":true');
+  });
+});

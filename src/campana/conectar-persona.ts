@@ -10,12 +10,20 @@
  *  - Lo único que el celular recuerda es la llave de este aparato y el recuerdo de siempre (`memoria.ts`), sin cuenta. Quien
  *    vuelve a abrir el enlace ve que está adentro por esa llave, sin entrar de nuevo.
  *  - Con 150 celulares a la vez, las consultas se desparraman en el tiempo y los reintentos del alta tienen tope.
+ *  - El permiso para guardar el perfil (`perfil: true`) viaja en el alta solo si esta página se construyó para guardarlo
+ *    (`guardarPerfilActivo`), que es cuando la pantalla le dijo a la persona qué se guarda. Sin eso el cuerpo del alta es el de
+ *    siempre, letra por letra: una página vieja en la memoria de un celular nunca hace guardar nada.
  */
 
 import { cifrarEquipo } from "../equipos/datos";
 import { llaveDelCelular, olvidarLlaveDelCelular } from "../equipos/celular";
 import { estadoPublico, type DependenciasDeCampana, type SosiegoDelAlta } from "../sala/campana";
-import { anotarPersonaEnCampana, miEstadoDePersona, resultadoDeCampanaDePersona } from "../sala/celular-persona";
+import {
+  anotarPersonaEnCampana,
+  miEstadoDePersona,
+  resultadoDeCampanaDePersona,
+  type CuerpoDeAltaDePersona,
+} from "../sala/celular-persona";
 import type { NetworkName } from "../stellar/config";
 import type { DepsDelCelular, EstadoPublico, ResultadoDelAlta } from "./celular";
 import type { Campana } from "./modelo";
@@ -27,6 +35,7 @@ import {
   type BaseDelCelular,
 } from "./conectar";
 import { SIN_CUENTA } from "./memoria";
+import { guardarPerfilActivo } from "./persona-bandera";
 
 export interface PiezasDeLaPersona {
   base: BaseDelCelular;
@@ -93,7 +102,14 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
     // Sin el token no hay con qué anotarse: se entra de nuevo con el botón.
     if (google === null) return { ok: false, motivo: "sesion" };
     const d = await cifrarEquipo(p.clave, { nombre: nombre ?? "", integrantes: [] });
-    const cuerpo = { google, d, llave: llave(), p: p.pase };
+    const cuerpo: CuerpoDeAltaDePersona = {
+      google,
+      d,
+      llave: llave(),
+      p: p.pase,
+      // El permiso va con el pedido, y solo desde una página que dijo qué se guarda.
+      ...(guardarPerfilActivo() ? { perfil: true as const } : {}),
+    };
     const opciones = { inicio, sosiego };
     let r = await anotarPersonaEnCampana(p.servicio, p.sala, cuerpo, dep, alReintentar, opciones);
     // La sala pudo anotarla y perderse la respuesta. Lo que contesta la llave del celular no prueba nada: ese celular pudo
