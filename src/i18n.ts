@@ -2432,6 +2432,12 @@ export const T: Record<Lang, Dict> = {
     sgReportB: "Escribinos a hola@tinkazo.app con el asunto Seguridad antes de contarlo en público. Es el reporte que más sirve, y el proyecto es código abierto justamente para eso: el protocolo completo, el contrato y las amenazas conocidas están escritos y se pueden auditar sin pedirle permiso a nadie.",
     sgLinkProto: "El protocolo ↗", sgLinkAmen: "Las amenazas ↗", sgLinkAviso: "Cómo avisar ↗", sgLinkIssue: "Abrir un issue ↗",
     prTitle: "Precios", prNote: "Hoy Tinkazo es gratis. Los precios para quien organiza los vamos a publicar acá muy pronto, y te avisamos antes de cobrar. Participar en un sorteo y comprobarlo es gratis, siempre.",
+    prCardFree: "Gratis",
+    prCardOrganize: "Organizar",
+    prCardParticipate: "Participar y comprobar",
+    prCardCompany: "Campaña de empresa",
+    // Solo presentación: el porcentaje lo pone comision-texto.ts desde la configuración.
+    prCardPercentage: "{p}",
     // La tabla de planes: precios de Bolivia en bolivianos y del resto de Latinoamérica en dólares.
     // Fuera de la página de precios desde el 8 de noviembre de 2026, mientras se definen los precios: las claves
     // prCol*, prP*, prTablaNota, prSponsorNota, prPatrocinioNota y prPay* se quedan acá. Volver a ponerlas es pegar la tabla de nuevo.
@@ -5587,6 +5593,12 @@ export const T: Record<Lang, Dict> = {
     sgReportB: "Email hola@tinkazo.app with the subject Security before making it public. That is the most useful report there is, and the project is open source precisely for that: the full protocol, the contract and the known threats are written down and can be audited without asking anyone.",
     sgLinkProto: "The protocol ↗", sgLinkAmen: "The threats ↗", sgLinkAviso: "How to report ↗", sgLinkIssue: "Open an issue ↗",
     prTitle: "Pricing", prNote: "Today Tinkazo is free. We will publish pricing for organizers here very soon, and we will tell you before we charge. Taking part in a draw and checking it are always free.",
+    prCardFree: "Free",
+    prCardOrganize: "Organize",
+    prCardParticipate: "Take part and check",
+    prCardCompany: "Company campaign",
+    // Presentation only: comision-texto.ts fills the percentage from configuration.
+    prCardPercentage: "{p}",
     // The plans table: Bolivia's prices in bolivianos, the rest of Latin America's in dollars.
     // Off the pricing page since November 8, 2026, while the prices are being defined: the prCol*, prP*, prTablaNota,
     // prSponsorNota, prPatrocinioNota and prPay* keys stay here. Putting the table back is pasting it again.

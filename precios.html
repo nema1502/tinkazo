@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" data-titulo-clave="titPrecios" data-desc-clave="descPrecios">
+<html lang="es" class="precios-pagina" data-titulo-clave="titPrecios" data-desc-clave="descPrecios">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -55,63 +55,79 @@
 </header>
 
 <main>
-  <section class="hero" style="padding: 48px 0 8px">
+  <section class="hero precios-hero">
     <div class="hero-copy">
-      <h1 style="font-size: clamp(32px, 4.6vw, 48px)" data-i="prTitle">Precios</h1>
+      <h1 data-i="prTitle">Precios</h1>
       <p class="lead" data-i-con-comision="prNoteComision" data-i="prNote">Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. Participar y comprobar es gratis, siempre.</p>
     </div>
   </section>
+  <div class="precios-tarjetas">
+    <article class="precios-tarjeta">
+      <h2 data-i="prCardOrganize">Organizar</h2>
+      <p class="precios-numero" data-i="prCardFree">Gratis</p>
+      <p class="precios-texto" data-i="prNote">Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. Participar y comprobar es gratis, siempre.</p>
+      <a class="sec-link" href="/" data-i="backHome">Volver a sortear</a>
+    </article>
+    <article class="precios-tarjeta">
+      <h2 data-i="prCardParticipate">Participar y comprobar</h2>
+      <p class="precios-numero" data-i="prCardFree">Gratis</p>
+      <p class="precios-texto" data-i="prNever3">Comprobar un sorteo es gratis, siempre.</p>
+    </article>
+
+  <!-- Lo que cuesta una campaña de empresa: entra solo con la comisión configurada (src/comision-texto.ts), que cambia {p}, {m} y {e} por los números. -->
+  <template data-con-comision>
+  <article class="precios-tarjeta" data-comision>
+    <h2 data-i="prCardCompany">Campaña de empresa</h2>
+    <p class="precios-numero" data-i="prCardPercentage">{p}</p>
+    <h3 class="precios-subtitulo" data-i="prComisionT">Lo que cuesta una campaña de empresa</h3>
+    <p class="precios-texto" data-i="prComision">
+      Cuando una empresa sortea premios en dólares digitales, paga a Tinkazo {p} del total de los premios, con un mínimo de {m}, antes de abrir la inscripción.
+      Lo paga directo desde su cuenta, se suma a lo que carga y no sale del premio: para repartir 120, carga {e}. Quien gana recibe el premio entero y anotarse es gratis.</p>
+    <a class="sec-link" href="/crear-campana.html" data-i="prComisionLink">Armá la campaña de tu empresa →</a>
+  </article>
+  </template>
+  </div>
+
   <!-- La compra de sorteos oficiales: entra solo con VITE_ALTA_PAGO (src/paginas-cobro.ts) y la lista la llena el servidor. -->
   <template data-con-cobro>
-  <section id="paquetes" style="padding: 14px 0 0">
+  <section id="paquetes" class="precios-seccion">
     <h2 class="kicker" data-i="prPaqT">Sorteos oficiales</h2>
-    <p style="max-width: 680px; color: var(--ink2); font-size: 16px; margin-top: 8px" data-i="prPaqAyuda">Se compran desde tu cuenta, en el modo Oficial.</p>
-    <ul class="notas" data-paquetes style="max-width: 900px; list-style: none; padding-left: 0; margin-top: 12px"></ul>
-    <p style="max-width: 680px; color: var(--ink2); font-size: 16px; margin-top: 12px" data-paquetes-nota hidden></p>
+    <p class="precios-texto" data-i="prPaqAyuda">Se compran desde tu cuenta, en el modo Oficial.</p>
+    <ul class="notas precios-paquetes" data-paquetes></ul>
+    <p class="precios-texto" data-paquetes-nota hidden></p>
     <a class="sec-link" href="/terminos.html#compras" data-i="prPaqTerminos">Qué comprás y cómo pedir una devolución</a>
   </section>
   </template>
 
   <!-- Lo que cuesta retirar: entra solo con el costo configurado (src/costo-del-retiro.ts), que cambia {c} por el monto. -->
   <template data-con-retiro>
-  <section style="padding: 14px 0 0" data-retiro>
+  <section class="precios-seccion" data-retiro>
     <h2 class="kicker" data-i="prRetiroT">Lo que cuesta retirar</h2>
-    <p style="max-width: 680px; color: var(--ink2); font-size: 16px; margin-top: 8px" data-i="prRetiro">
+    <p class="precios-texto" data-i="prRetiro">
       Recibir un premio es gratis, e ingresar dólares digitales a tu cuenta también.
       Retirarlos a otra cuenta cuesta {c} dólares digitales por retiro, sea cual sea el monto.</p>
   </section>
   </template>
 
-  <!-- Lo que cuesta una campaña de empresa: entra solo con la comisión configurada (src/comision-texto.ts), que cambia {p}, {m} y {e} por los números. -->
-  <template data-con-comision>
-  <section style="padding: 14px 0 0" data-comision>
-    <h2 class="kicker" data-i="prComisionT">Lo que cuesta una campaña de empresa</h2>
-    <p style="max-width: 680px; color: var(--ink2); font-size: 16px; margin-top: 8px" data-i="prComision">
-      Cuando una empresa sortea premios en dólares digitales, paga a Tinkazo {p} del total de los premios, con un mínimo de {m}, antes de abrir la inscripción.
-      Lo paga directo desde su cuenta, se suma a lo que carga y no sale del premio: para repartir 120, carga {e}. Quien gana recibe el premio entero y anotarse es gratis.</p>
-    <a class="sec-link" href="/crear-campana.html" data-i="prComisionLink">Armá la campaña de tu empresa →</a>
-  </section>
-  </template>
-
-  <section style="padding: 14px 0 0">
+  <section class="precios-seccion precios-notas">
     <h2 class="kicker" data-i="prNeverTitle">Lo que nunca vamos a cobrar ni vender</h2>
-    <ul style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px; padding-left: 0; list-style: none; display: grid; gap: 8px">
-      <li style="display:flex; gap:10px"><span aria-hidden="true" style="color: var(--teal-ink); font-weight: 800">✓</span><span data-i="prNever1">Nunca cobramos por entrar a un sorteo.</span></li>
-      <li style="display:flex; gap:10px"><span aria-hidden="true" style="color: var(--teal-ink); font-weight: 800">✓</span><span data-i="prNever2">El premio llega entero a quien gana.</span></li>
-      <li style="display:flex; gap:10px"><span aria-hidden="true" style="color: var(--teal-ink); font-weight: 800">✓</span><span data-i="prNever3">Comprobar un sorteo es gratis, siempre.</span></li>
-      <li style="display:flex; gap:10px"><span aria-hidden="true" style="color: var(--teal-ink); font-weight: 800">✓</span><span data-i="prNever4">Nunca vendemos los nombres de tu lista.</span></li>
+    <ul class="precios-nunca">
+      <li><span aria-hidden="true">✓</span><span data-i="prNever1">Nunca cobramos por entrar a un sorteo.</span></li>
+      <li><span aria-hidden="true">✓</span><span data-i="prNever2">El premio llega entero a quien gana.</span></li>
+      <li><span aria-hidden="true">✓</span><span data-i="prNever3">Comprobar un sorteo es gratis, siempre.</span></li>
+      <li><span aria-hidden="true">✓</span><span data-i="prNever4">Nunca vendemos los nombres de tu lista.</span></li>
     </ul>
-    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="prSponsorNota">La marca de un sponsor nunca va dentro del sorteo.</p>
+    <p class="precios-texto" data-i="prSponsorNota">La marca de un sponsor nunca va dentro del sorteo.</p>
   </section>
-  <section style="padding: 14px 0 30px">
+  <section class="precios-detalle precios-notas">
     <details class="tecnico">
       <summary data-i="detalleT">Para quien quiera el detalle</summary>
-      <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="nextBody">Al cerrar la lista, se sella antes de que exista el número que decide, y cualquier cambio posterior se nota. El costo de sellar lo paga Tinkazo en el modo Prueba, y también en el modo Oficial mientras te queden sorteos oficiales. Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. Participar y comprobar es gratis, siempre. En el modo Oficial, quien entra con su propia billetera paga la comisión de la red, que es de centavos. En el modo Prueba, guardá el comprobante de tus sorteos, porque sirve para volver a comprobarlos aunque el registro se reinicie el 16 de diciembre de 2026.</p>
-      <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="prLogoNota">El logo de tu comunidad en el sorteo es gratis, para todos, y siempre lleva al lado la leyenda Hecho con Tinkazo. Lo previsto para los planes pagos es otra cosa: sacar esa leyenda, los colores propios, el acta y el informe del evento. Todavía no existen, y te avisamos antes de cobrarlos.</p>
+      <p class="precios-texto" data-i="nextBody">Al cerrar la lista, se sella antes de que exista el número que decide, y cualquier cambio posterior se nota. El costo de sellar lo paga Tinkazo en el modo Prueba, y también en el modo Oficial mientras te queden sorteos oficiales. Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. Participar y comprobar es gratis, siempre. En el modo Oficial, quien entra con su propia billetera paga la comisión de la red, que es de centavos. En el modo Prueba, guardá el comprobante de tus sorteos, porque sirve para volver a comprobarlos aunque el registro se reinicie el 16 de diciembre de 2026.</p>
+      <p class="precios-texto" data-i="prLogoNota">El logo de tu comunidad en el sorteo es gratis, para todos, y siempre lleva al lado la leyenda Hecho con Tinkazo. Lo previsto para los planes pagos es otra cosa: sacar esa leyenda, los colores propios, el acta y el informe del evento. Todavía no existen, y te avisamos antes de cobrarlos.</p>
       <a class="sec-link" href="/como-funciona.html#que-queda" data-i="prDuraLink">Qué queda de tu sorteo y por cuánto tiempo →</a>
     </details>
   </section>
-  <section style="padding: 0 0 40px">
+  <section class="precios-volver">
     <p class="note"><a href="/" data-i="backHome">Volver a sortear</a></p>
   </section>
 </main>

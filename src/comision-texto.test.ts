@@ -145,7 +145,9 @@ describe.each([
     const moldes = document.querySelectorAll<HTMLTemplateElement>("template[data-con-comision]");
     expect(moldes).toHaveLength(1);
     const claves = [...(moldes[0]?.content.querySelectorAll<HTMLElement>("[data-i]") ?? [])].map((el) => el.dataset.i);
-    expect(claves).toEqual([titulo, texto, ...enlaces]);
+    expect(claves).toEqual(pagina === "precios.html"
+      ? ["prCardCompany", "prCardPercentage", titulo, texto, ...enlaces]
+      : [titulo, texto, ...enlaces]);
   });
 
   it("el molde trae el texto en español del diccionario, con marcadores y sin el porcentaje ni el mínimo escritos", () => {
