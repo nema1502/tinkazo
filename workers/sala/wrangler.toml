@@ -57,6 +57,10 @@ CORREO_MARCA = "0"
 # cliente de Google de Tinkazo, que es público (no es un secreto).
 DIFERIDA = "0"
 GOOGLE_CLIENT_ID = ""
+# El perfil de quien se anota con Google en una campaña de personas: su correo, su nombre y la dirección de su foto, en la tabla
+# perfiles del objeto de cupos. Nace apagado: solo con "1", con las dos variables de arriba puestas y si el pedido del celular
+# trae el permiso, la sala lo guarda. Con "0" no se guarda nada del token.
+PERFILES = "0"
 
 # Tus campañas (POST /v1/mis-campanas y POST /v1/campana/recuperar, ver README.md): quien organiza ve sus campañas desde cualquier
 # navegador y usa una en esta compu. Solo con "1" atienden, y cambiarlo es publicar otra vez con el mismo corte de sockets: no es un

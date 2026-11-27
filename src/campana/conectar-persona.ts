@@ -10,12 +10,21 @@
  *  - Lo único que el celular recuerda es la llave de este aparato y el recuerdo de siempre (`memoria.ts`), sin cuenta. Quien
  *    vuelve a abrir el enlace ve que está adentro por esa llave, sin entrar de nuevo.
  *  - Con 150 celulares a la vez, las consultas se desparraman en el tiempo y los reintentos del alta tienen tope.
+ *  - El permiso para guardar el perfil (`perfil: true`) viaja en el alta solo si la pantalla le dijo a la persona qué se guarda.
+ *    Eso pide dos cosas: que esta página se construyó para guardarlo (`permisoDePerfil`) y que la sala, en su estado público,
+ *    dijo que lo guarda. Sin eso la pantalla dice lo de siempre y el cuerpo del alta es el de siempre, letra por letra: una
+ *    página vieja en la memoria de un celular, o una sala apagada, nunca hacen guardar nada ni prometen que se guarda.
  */
 
 import { cifrarEquipo } from "../equipos/datos";
 import { hayLlaveDelCelular, llaveDelCelular, olvidarLlaveDelCelular } from "../equipos/celular";
 import { estadoPublico, type DependenciasDeCampana, type SosiegoDelAlta } from "../sala/campana";
-import { anotarPersonaEnCampana, miEstadoDePersona, resultadoDeCampanaDePersona } from "../sala/celular-persona";
+import {
+  anotarPersonaEnCampana,
+  miEstadoDePersona,
+  resultadoDeCampanaDePersona,
+  type CuerpoDeAltaDePersona,
+} from "../sala/celular-persona";
 import type { NetworkName } from "../stellar/config";
 import type { DepsDelCelular, EstadoPublico, ResultadoDelAlta } from "./celular";
 import type { Campana } from "./modelo";
@@ -27,6 +36,7 @@ import {
   type BaseDelCelular,
 } from "./conectar";
 import { SIN_CUENTA } from "./memoria";
+import { claveConPerfil, permisoDePerfil } from "./persona-bandera";
 
 export interface PiezasDeLaPersona {
   base: BaseDelCelular;
@@ -68,6 +78,10 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
   /** El token de identidad que entregó Google, hasta que el alta sale bien o la sala lo rechaza. */
   let credencial: string | null = null;
   let primeraConsulta = true;
+  /** Si la sala dijo, en su última consulta, que guarda el perfil. Mientras no lo diga, la pantalla no promete nada. */
+  let salaGuardaPerfil = false;
+  /** Si la última vez que la pantalla pidió la nota junto al botón de Google fue con el texto que dice que se guarda. */
+  let notaConPerfil = false;
   /** La llave se lee de nuevo cada vez: con dos pestañas abiertas, las dos usan la que quedó guardada. */
   const llave = (): string => llaveDelCelular(p.sala, almacenDeLlaves);
 
@@ -80,6 +94,7 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
         r = await estadoPublico(p.servicio, p.sala, p.pase, dep);
       }
     }
+    if (r !== "red" && r !== "terminada") salaGuardaPerfil = r.perfil === true;
     return r;
   }
 
@@ -93,7 +108,15 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
     // Sin el token no hay con qué anotarse: se entra de nuevo con el botón.
     if (google === null) return { ok: false, motivo: "sesion" };
     const d = await cifrarEquipo(p.clave, { nombre: nombre ?? "", integrantes: [] });
-    const cuerpo = { google, d, llave: llave(), p: p.pase };
+    const cuerpo: CuerpoDeAltaDePersona = {
+      google,
+      d,
+      llave: llave(),
+      p: p.pase,
+      // El permiso va con el pedido, y solo si la pantalla dijo qué se guarda: sitio construido para guardar, sala que lo confirmó y
+      // nota pintada con ese texto. Sin él queda sin definir y no viaja.
+      perfil: notaConPerfil ? permisoDePerfil() : undefined,
+    };
     const opciones = { inicio, sosiego };
     let r = await anotarPersonaEnCampana(p.servicio, p.sala, cuerpo, dep, alReintentar, opciones);
     // La sala pudo anotarla y perderse la respuesta. Lo que contesta la llave del celular no prueba nada: ese celular pudo
@@ -114,6 +137,14 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
 
   return {
     ...p.base,
+    // Los dos textos que dicen qué se guarda cambian por los del perfil si esta página se construyó para guardarlo Y la sala dijo que
+    // lo guarda. Acá y no en la pantalla: la entrada de la página del celular tiene un tope de peso y esto solo lo necesita una
+    // campaña de personas.
+    tx: (clave) => {
+      const c = salaGuardaPerfil ? claveConPerfil(clave) : clave;
+      if (clave === "cpEntrarNotaPersona") notaConPerfil = c !== clave;
+      return p.base.tx(c);
+    },
     // Las consultas de cada 15 segundos pasan a 30, y cada celular elige su propio ritmo: no pegan todos en el mismo segundo.
     cada: (f, ms, modo) => p.base.cada(f, modo === "exacta" ? ms : Math.round((modo === "azar" || ms !== 15_000 ? ms : CONSULTA_ESTIRADA_MS) * (0.8 + azar() * 0.4))),
     campana: p.campana,

@@ -4,6 +4,11 @@
  * cuenta. Este archivo reúne lo que no depende de Cloudflare: los dos interruptores y la lectura del vencimiento de un token.
  *
  * Con los interruptores apagados, que es como nacen, la sala no crea ni usa campañas de personas y todo sigue como siempre.
+ *
+ * Qué se guarda de quien se anota depende de un tercer interruptor, `PERFILES`, que vive en `perfiles.ts` y también nace
+ * apagado. Apagado, del token no se guarda nada: en la sala queda la línea de la persona, que no dice quién es. Prendido, y solo
+ * si el pedido del alta trae el permiso del celular, el objeto de cupos guarda además el identificador de la cuenta de Google,
+ * el correo, el nombre y la dirección de la foto de perfil. `PERFILES` no prende nada sin estos dos.
  */
 
 import { grupoDeIp } from "./logica";
