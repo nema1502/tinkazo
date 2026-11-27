@@ -2527,7 +2527,8 @@ export const T: Record<Lang, Dict> = {
       "Cuando la pantalla donde te anotás lo dice, Tinkazo guarda tu correo, tu nombre, la dirección de tu foto de perfil y el identificador de tu cuenta de Google, " +
       "con la fecha de la primera y de la última vez que te anotaste y cuántas veces lo hiciste: es tu cuenta de Tinkazo. " +
       "La usamos para saber quiénes usan Tinkazo y para escribirte por tus sorteos o por novedades del servicio. " +
-      "Quien organiza no recibe esos datos, no se publican y no se venden. " +
+      "Quien organiza no recibe tu correo ni tu foto, y tu nombre sí puede verse en la pantalla del evento. " +
+      "Fuera de eso, esos datos no se publican y no se venden. " +
       "Quedan guardados en Cloudflare hasta que pidas borrarlos: escribinos a hola@tinkazo.app desde ese correo. " +
       "En la lista del sorteo no va nada de eso. Va una línea que te representa en esa campaña, que no es tu correo ni tu identificador y es distinta en cada campaña, " +
       "y tu nombre cifrado, igual que en las demás campañas. En la red queda sellada solo la huella de la lista de esas líneas. " +
@@ -5680,7 +5681,8 @@ export const T: Record<Lang, Dict> = {
       "When the screen where you sign up says so, Tinkazo keeps your email, your name, the address of your profile photo and your Google account identifier, " +
       "with the date of the first and of the last time you signed up and how many times you did: that is your Tinkazo account. " +
       "We use it to know who uses Tinkazo and to write to you about your draws or about news of the service. " +
-      "The organizer does not receive this data, and it is not published or sold. " +
+      "The organizer doesn't get your email or your photo. Your name may show on the event screen. " +
+      "Apart from that, this data is not published or sold. " +
       "It is stored on Cloudflare until you ask us to delete it: write to hola@tinkazo.app from that email address. " +
       "None of that goes into the draw list. The list holds a line that stands for you in that campaign, which is not your email or your identifier and is different in every campaign, " +
       "and your encrypted name, as in other campaigns. Only a fingerprint of the list of those lines is sealed on the network. " +

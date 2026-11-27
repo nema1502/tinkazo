@@ -77,13 +77,28 @@ describe("los Términos: el recuadro de quien se anota con su cuenta de Google",
     expect(TEXTOS_CAMPANA.en.cpEntrarNotaPerfil).toContain("We keep your email, name and photo.");
   });
 
-  it("dice para qué se usa, quién no lo recibe, dónde queda y cómo pedir que se borre, con el correo de contacto de la página", () => {
+  it("dice para qué se usa, qué recibe quien organiza, dónde queda y cómo pedir que se borre, con el correo de contacto de la página", () => {
     const es = texto("es", "tmGoogleB");
     const en = texto("en", "tmGoogleB");
     expect(es).toContain("La usamos para saber quiénes usan Tinkazo y para escribirte por tus sorteos o por novedades del servicio.");
     expect(en).toContain("We use it to know who uses Tinkazo and to write to you about your draws or about news of the service.");
-    expect(es).toContain("Quien organiza no recibe esos datos, no se publican y no se venden.");
-    expect(en).toContain("The organizer does not receive this data, and it is not published or sold.");
+    // El nombre de la cuenta de Google viaja cifrado con la clave del enlace y quien organiza lo ve en la pantalla del evento.
+    expect(es).toContain(
+      "Quien organiza no recibe tu correo ni tu foto, y tu nombre sí puede verse en la pantalla del evento. " +
+        "Fuera de eso, esos datos no se publican y no se venden.",
+    );
+    expect(en).toContain(
+      "The organizer doesn't get your email or your photo. Your name may show on the event screen. " +
+        "Apart from that, this data is not published or sold.",
+    );
+    for (const dicho of [es, en]) expect(dicho).not.toMatch(/no recibe esos datos|does not receive this data/u);
+    // La pantalla donde la persona se anota dice lo mismo, con las mismas palabras.
+    expect(TEXTOS_CAMPANA.es.cpQueGuardamosPerfil).toContain(
+      "Quien organiza no recibe tu correo ni tu foto, y tu nombre sí puede verse en la pantalla del evento.",
+    );
+    expect(TEXTOS_CAMPANA.en.cpQueGuardamosPerfil).toContain(
+      "The organizer doesn't get your email or your photo. Your name may show on the event screen.",
+    );
     expect(es).toContain("Quedan guardados en Cloudflare hasta que pidas borrarlos: escribinos a hola@tinkazo.app desde ese correo.");
     expect(en).toContain("It is stored on Cloudflare until you ask us to delete it: write to hola@tinkazo.app from that email address.");
     // El mismo correo que la página da para escribir.
@@ -225,6 +240,14 @@ describe("los documentos dicen lo mismo que los Términos, con el interruptor ap
     expect(legal.includes(`su recuadro ${texto("es", "tmGoogleT")}`), "nombra el recuadro de los términos").toBe(true);
     expect(legal.includes("Ya es así: el enlace corto guarda una copia cifrada que Tinkazo no puede leer, y la borra a pedido. Se mantiene cuando lleguen los correos. La excepción"), "la excepción").toBe(true);
     expect(legal.includes("tampoco tiene plazo"), "el plazo que falta").toBe(true);
+  });
+
+  it("operacion.md y legal.md no dicen que quien organiza no recibe nada: el nombre puede verse en la pantalla del evento", () => {
+    for (const ruta of ["docs/operacion.md", "docs/legal.md"]) {
+      const documento = sinSaltos(ruta);
+      expect(documento.includes("Quien organiza no los recibe"), ruta).toBe(false);
+      expect(documento.includes("Quien organiza no recibe el correo ni la foto, y el nombre sí puede verse en la pantalla del evento"), ruta).toBe(true);
+    }
   });
 
   it("operacion.md, el README de la sala y premios.md cuentan que la pantalla dice que se guarda solo si la sala lo confirma", () => {

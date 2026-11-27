@@ -259,7 +259,8 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
   const NOTA_DE_SIEMPRE = "Con Google confirmamos que sos vos. No te creamos ninguna cuenta.";
   const NOTA_CON_PERFIL = "Con Google confirmamos que sos vos. Guardamos tu correo, tu nombre y tu foto.";
   const REGLA_CON_PERFIL =
-    "Qué guardamos: tu correo, tu nombre y tu foto de Google, para tu cuenta de Tinkazo. Quien organiza no los recibe. " +
+    "Qué guardamos: tu correo, tu nombre y tu foto de Google, para tu cuenta de Tinkazo. " +
+    "Quien organiza no recibe tu correo ni tu foto, y tu nombre sí puede verse en la pantalla del evento. " +
     "En la lista del sorteo queda un código que no dice quién sos, y el nombre con que salís en la pantalla, hasta mañana.";
 
   const prender = (): void => {
@@ -309,7 +310,8 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
     expect(raiz.querySelector(".cmp-accion .cmp-apoyo")?.textContent).toBe("Google confirms it's you. We keep your email, name and photo.");
     const reglas = raiz.querySelector(".cmp-reglas")?.textContent ?? "";
     expect(reglas).toContain(
-      "What we keep: your Google email, name and photo, for your Tinkazo account. The organizer doesn't get them. " +
+      "What we keep: your Google email, name and photo, for your Tinkazo account. " +
+        "The organizer doesn't get your email or your photo. Your name may show on the event screen. " +
         "The draw list only holds a code that doesn't say who you are, and the name you show up with on the screen, until tomorrow.",
     );
     expect(raiz.textContent).not.toContain("we don't keep your email");
@@ -378,6 +380,9 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
         expect(dicho, `${idioma}.${clave}`).not.toMatch(/no guardamos|don't keep|ninguna cuenta|any account/u);
       }
     }
+    // El nombre de la cuenta de Google sí llega a quien organiza, en la pantalla del evento: el texto no dice que no recibe nada.
+    expect(TEXTOS_CAMPANA.es.cpQueGuardamosPerfil).not.toMatch(/no los recibe/u);
+    expect(TEXTOS_CAMPANA.en.cpQueGuardamosPerfil).not.toMatch(/doesn't get them/u);
     // Las de siempre siguen como estaban, para la página construida sin la bandera.
     expect(TEXTOS_CAMPANA.es.cpEntrarNotaPersona).toBe(NOTA_DE_SIEMPRE);
     expect(TEXTOS_CAMPANA.en.cpEntrarNotaPersona).toBe("Google confirms it's you. We don't create any account for you.");
