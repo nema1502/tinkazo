@@ -74,7 +74,8 @@ function activarEnElPanel(texto: string): boolean {
 function depsReales(): DepsDelCreador {
   // Lo que cobra Tinkazo, el mismo cobro que después pide el panel de la portada.
   const cobro = comisionDelBuild(entornoDelBuild());
-  // Una campaña de personas no lleva cobro, comisión ni activación: la firma Tinkazo y se baja como archivo.
+  // Una campaña de personas no lleva cobro, comisión ni activación: la firma Tinkazo y se baja como archivo. Lo decide el panel
+  // según la campaña que arma o abre, así que acá el cobro va siempre y no depende de la dirección.
   const persona = anotarseSinBilleteraActivo() && parametros.get("identidad") === "persona";
   return {
     tx: texto,
@@ -97,13 +98,13 @@ function depsReales(): DepsDelCreador {
     costo: costoDelRetiroTexto,
     // Activar solo se ofrece con lo que cobra Tinkazo configurado: es el mismo cobro que después pide el panel. Sin eso, la
     // página es la de siempre y solo baja la campaña.
-    activar: cobro === null || persona ? undefined : activarEnElPanel,
+    activar: cobro === null ? undefined : activarEnElPanel,
     // Tus campañas se ofrece solo si la sala de afuera la tiene: se le pregunta una vez, sin gastar nada. La demostración no la ofrece.
     tusDisponible: demo ? () => Promise.resolve(false) : () => import("./sala/campana-org").then((m) => m.salaTieneTusCampanas()),
     // El enlace a Tus campañas lleva el idioma y el tema de esta dirección, como Activar mi campaña.
     consulta: location.search,
     // El resumen dice el servicio y el total a poner antes de pedir nada, calculados para esta campaña.
-    comision: persona ? null : comisionDelArmado(cobro),
+    comision: comisionDelArmado(cobro),
     origen: location.origin,
     tema: parametros.get("theme"),
     // Anotarse sin billetera: solo con el interruptor del sitio y el parámetro en la dirección. Sin los dos, la campaña de siempre.
