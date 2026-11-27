@@ -91,6 +91,74 @@ Los pasos que mide son siete: `otro-aparato`, `misma-cuenta`, `un-desbloqueo-al-
 
 No se prueba en el recorrido: una cuenta de más de unos 7 días (cuando la única fuente posible es el historial y el RPC ya no tiene la transacción), una instancia reescrita y el selector de un aparato real con varias llaves del mismo sitio. Lo cubren las pruebas de unidad y las pantallas.
 
+## Recibir y mandar monedas de prueba
+
+Un modo más de la misma página, `/prueba/llave/?modo=premio`. Sin ese parámetro la página hace lo de siempre. Muestra el camino que haría una persona que gana algo, sin que haya ningún sorteo detrás: crea su billetera con la llave, le llegan monedas de prueba y las manda a otra cuenta. Todo en la red de prueba.
+
+### Qué hace la persona
+
+1. Toca Crear mi billetera y usa su huella, su cara o su clave. Le llegan 10 monedas de prueba solas, sin otro desbloqueo.
+2. Toca Mandar mis monedas. La llave aprueba el envío con un solo desbloqueo y las monedas salen a una cuenta de prueba que pide nota. Si el enlace no trae un destino, la página arma esa cuenta en el momento.
+3. Ve cuántas monedas llegaron, a qué cuenta (los últimos cuatro caracteres) y con qué nota. Un botón abre lo que costó cada paso.
+
+Con el destino en el enlace se muestra la dirección entera antes del desbloqueo. Los parámetros valen solo en esta página y solo en la red de prueba:
+
+- `?modo=premio`: el modo. Cualquier otro valor se ignora.
+- `?destino=`: una cuenta G, una dirección M o un contrato C, con su control. Sin él, el destino lo arma la página.
+- `?nota=`: un número de 1 a 20 dígitos que no pase del mayor de 64 bits, solo con una G.
+- `?fuente=historial` o `?fuente=rpc`: como antes.
+
+Un destino o una nota mal escritos muestran una pantalla con un botón que abre la prueba sin ellos, y no se pide nada. Nada se adivina ni se arregla.
+
+### El activo
+
+Son monedas de prueba del contrato de activo del XLM de la red de prueba. Usa el mismo mecanismo que usaría un dólar digital en otra red: la función `transfer(from, to, amount)` de un contrato de activo, hacia y desde una dirección de contrato. Para una cuenta de contrato el saldo vive en el almacenamiento del contrato de activo y no en una línea de confianza. Si el destino es una dirección M, el contrato saca de ella un número y lo deja en el evento de la transferencia junto al monto. Se eligió el XLM de prueba porque la cuenta descartable ya lo tiene del grifo, no pide línea de confianza ni emisor y no suma ningún tercero.
+
+Fuentes leídas el 27 de noviembre de 2026: la página del contrato de activo de Stellar (sección Sending to a muxed address) y la de las cuentas de contrato, en developers.stellar.org.
+
+### Cómo se cuida
+
+- El premio se paga por un registro que se anota una sola vez, al crear la billetera en ese aparato. Nunca se paga por leer un saldo en cero. Recargar, volver a entrar o mandar no pagan otro premio. Si el saldo es cero y no hay registro (otro aparato), la pantalla dice que no hay monedas y ofrece crear otra billetera.
+- Antes de pedir el desbloqueo, la página comprueba que lo que va a firmar la llave es exactamente la transferencia pedida: el contrato, la función, el origen, el destino, el monto y ninguna llamada de más. Después de ensamblar la transacción comprueba de nuevo la operación, la autorización firmada y un tope a la comisión por recursos.
+- El pago y el envío se guardan con su hash antes de mandarse. Solo se arma otro sobre cuando la red dijo que el anterior no entró ni puede entrar.
+- Después de mandar hay solo dos salidas: se sabe que entró o queda Mirar de nuevo. Ninguna lectura posterior (saldos, cobro, evento) lleva a una pantalla de falla ni arma otra transferencia.
+- Un destino del enlace que es una G sin nota se mira en el historial. Si pide nota, no se manda sin ella. Si el historial no contesta, tampoco se manda.
+- Los desbloqueos se cuentan con el contador del navegador y no con un número fijo.
+
+### Lo que demuestra y lo que no
+
+Demuestra, con medidas:
+
+- Que una cuenta de contrato nacida de una llave recibe un activo por `transfer`, cuánto cuesta crear su entrada de saldo y hasta cuándo vive.
+- Que esa cuenta manda con un solo desbloqueo, con la comisión pagada por otra cuenta, a una cuenta que pide nota, con el número de nota dentro de una dirección M, y que la nota aparece en el evento de la transferencia.
+- Cómo vuelve la raíz de la entrada de autorización cuando el destino es una M: la M tal cual (exacta) o la G de abajo (normalizada). Cualquiera de las dos pasa y el recorrido anota cuál fue.
+
+No demuestra, y la página lo dice:
+
+- Quién ganó. No hay sorteo: la página paga a quien abre el modo, desde una cuenta del grifo. Probar quién ganó y pagar una sola vez por ganador desde un servicio no se ejercita acá.
+- Que se pague una sola vez entre aparatos o entre dos pestañas a la vez. El registro vive en el aparato y no tiene candado. Con dos pestañas, tocar Probar de nuevo en el mismo segundo podría pagar dos veces.
+- Que un exchange acredite. La cuenta que pide nota es una cuenta de prueba nuestra. Desde un contrato la nota solo puede ser un número de 64 bits dentro de una dirección M, porque una transacción que invoca un contrato lleva MEMO_NONE. La documentación oficial dice además que hoy los exchanges no aceptan transferencias que salen de contratos. Una corrida en verde no quiere decir que un exchange acepte esto.
+- El dólar digital: la línea de confianza de una cuenta de destino y las banderas del emisor no entran, porque el XLM no las tiene.
+
+### La revisión automática de recibir y mandar
+
+Después de lo de otro aparato, el recorrido abre otro navegador con su propia llave y tres cargas de la página. Antes prepara una cuenta de destino con el grifo, le pone la marca de que pide nota y espera a verla en el historial.
+
+1. Carga 1: con el destino en el enlace, crea la billetera y recibe. Toca Mandar mis monedas y llega a la pantalla de que esa cuenta pide una nota: no se movió ninguna moneda.
+2. Carga 2: la página sin destino. Vuelve a entrar y no se paga otro premio. Manda al destino que arma la página, con un solo desbloqueo.
+3. Carga 3: recarga. No hay monedas y no se paga otro premio.
+
+Los saldos y la nota los lee el propio recorrido en la red de prueba, por un camino que no usa nada del código de la página. Mide los segundos, el cobro entero de cada paso, los saldos de las dos puntas, la vida de la entrada de saldo, los desbloqueos, la forma de la raíz y la nota que quedó en la red.
+
+Los diez pasos son `premio-crear`, `premio-recibir`, `premio-pide-nota`, `premio-sin-doble`, `premio-mandar`, `premio-un-desbloqueo`, `premio-nota`, `premio-saldos`, `premio-sin-doble-tras-mandar` y `premio-raiz`. Son informativos como los de otro aparato: pasan a contar en el código de salida después de tres corridas buenas, en un cambio aparte y con las fechas anotadas abajo. Si el grifo o la red de prueba no contestan en una lectura propia del recorrido, se anota como falla ajena. Si el tiempo de la revisión se acaba, el archivo de medidas queda con lo medido hasta ahí y el recorrido sale con 1.
+
+### Límites y lo que no se comprobó
+
+- Las monedas que llegan a la cuenta de destino que arma la página quedan ahí: su llave vive solo en la memoria de esa carga. Son de prueba.
+- La vida de la entrada de saldo y de la cuenta en la red de prueba es la mínima. Pasada una semana, entrar da la pantalla de cuenta terminada. Restaurar no entra en esta prueba.
+- No se prueban las notas de texto (desde un contrato no se pueden), los destinos de otro tipo, mandar a un contrato en vivo ni mandar desde otro aparato en vivo. Lo cubren las pruebas de unidad.
+- Sin comprobar antes de la primera corrida: cómo vuelve la raíz con una M (el recorrido lo contesta), que el RPC de la red de prueba traiga los eventos dentro de la respuesta de la transacción (si no, el recorrido los pide aparte y la pantalla dice que no pudo confirmar la nota), que la regla de la cuenta acepte una transferencia firmada con una llave de este tipo, y qué hace la lectura de una entrada de saldo ya vencida.
+
 ## Desacuerdo abierto: el borrado de la red de prueba
 
 El sitio dice en varias cadenas y pruebas que la red de prueba se borra el 16 de diciembre de 2026. La documentación oficial de Stellar sobre las redes (sección del reinicio de datos de la red de prueba) dice, leída el 25 de noviembre de 2026, que no hay más reinicios previstos para 2026. La página de esta prueba no nombra fechas de borrado, y esta prueba no toca el texto del sitio: queda para decidir cuál vale.
@@ -103,4 +171,4 @@ Las corridas buenas del recorrido entero contra la red de prueba, con el paso de
 
 ## Lo que no entra
 
-La red principal y sus direcciones, el proveedor de cuentas, el portero y el servicio de patrocinio, premios y dólares digitales, fondear la cuenta de contrato, llaves secundarias, firmantes nuevos, políticas, sumar una segunda llave, entrar desde un aparato que no comparte la llave, restaurar una cuenta que ya terminó, extender la vida del código compartido y cambiar el sitio de hoy o su verificación.
+La red principal y sus direcciones, el proveedor de cuentas, el portero y el servicio de patrocinio, los dólares digitales (entran monedas de prueba, no dólares), fondear la cuenta de contrato desde afuera de esta prueba, llaves secundarias, firmantes nuevos, políticas, sumar una segunda llave, entrar desde un aparato que no comparte la llave, restaurar una cuenta que ya terminó, extender la vida del código compartido y cambiar el sitio de hoy o su verificación.
