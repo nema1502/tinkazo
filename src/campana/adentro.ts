@@ -454,11 +454,8 @@ const ES_CODIGO = /^[0-9]{4}$/u;
 
 /** El código de entrega de quien ganó, con la línea que dice que se lo muestre a quien organiza. Sin código válido no pone nada y dice false. */
 function lineaDelCodigo(destino: HTMLElement, deps: DepsDelCelular, codigo: string | null | undefined): boolean {
-  if (codigo === null || codigo === undefined || !ES_CODIGO.test(codigo)) return false;
-  const linea = document.createElement("p");
-  linea.className = "cmp-apoyo cmp-codigo-linea";
-  conDestacado(linea, deps.tx("cpTuCodigo"), "codigo", codigo, "cmp-hora cmp-codigo");
-  destino.append(linea);
+  if (!codigo || !ES_CODIGO.test(codigo)) return false;
+  conDestacado(parrafo(destino, "", "cmp-apoyo cmp-codigo-linea"), deps.tx("cpTuCodigo"), "codigo", codigo, "cmp-hora cmp-codigo");
   return true;
 }
 
@@ -522,39 +519,30 @@ export function pintarTermino(
   deps: DepsDelCelular,
   memoria: MemoriaDeCampana | null,
 ): void {
-  if (memoria?.resultado === "gano" && deps.persona) {
-    // La sala ya no existe: desde el celular no se puede recibir nada. Quien ganó sigue sabiéndolo, y se le dice con quién hablar.
-    pintarResultado(
-      raizPrincipal,
-      "cmp-estado cmp-termino cmp-termino-gano",
-      {
-        titulo: deps.tx("cpGanaste"),
-        rotulos: [sustituir(deps.tx("cpTitulo"), { empresa: deps.campana.empresa.nombre })],
-        apoyo: [
-          sustituir(deps.tx("cpPremioDe"), {
-            premio: textoDelPremio({ ...deps.campana, premios: deps.campana.premios.slice(0, 1) }, deps.idioma()),
-            empresa: deps.campana.empresa.nombre,
-          }),
-          deps.tx("cpTerminoGanaste"),
-        ],
-      },
-      memoria.comprobante ? { texto: deps.tx("cpComoSeEligio"), enlace: memoria.comprobante } : null,
-    );
+  const gano = memoria?.resultado === "gano";
+  if (gano && !deps.persona) {
+    pintarGano(raizPrincipal, deps, { avisado: false, comprobante: memoria?.comprobante ?? null });
     return;
   }
-  if (memoria?.resultado === "gano") {
-    pintarGano(raizPrincipal, deps, { avisado: false, comprobante: memoria.comprobante });
-    return;
-  }
-  const apoyo = memoria?.resultado === "otra"
-    ? [deps.tx("cpOtraPersona"), deps.tx("cpGracias")]
-    : [deps.tx("cpPreguntaEnStand")];
+  // En una campaña de personas la sala ya no existe: desde el celular no se puede recibir nada. Quien ganó sigue sabiéndolo, y
+  // se le dice con quién hablar.
+  const apoyo = gano
+    ? [
+        sustituir(deps.tx("cpPremioDe"), {
+          premio: textoDelPremio({ ...deps.campana, premios: deps.campana.premios.slice(0, 1) }, deps.idioma()),
+          empresa: deps.campana.empresa.nombre,
+        }),
+        deps.tx("cpTerminoGanaste"),
+      ]
+    : memoria?.resultado === "otra"
+      ? [deps.tx("cpOtraPersona"), deps.tx("cpGracias")]
+      : [deps.tx("cpPreguntaEnStand")];
   const comprobante = memoria?.resultado && memoria.comprobante ? memoria.comprobante : null;
   pintarResultado(
     raizPrincipal,
     "cmp-estado cmp-termino",
     {
-      titulo: deps.tx("cpTermino"),
+      titulo: deps.tx(gano ? "cpGanaste" : "cpTermino"),
       rotulos: [sustituir(deps.tx("cpTitulo"), { empresa: deps.campana.empresa.nombre })],
       apoyo,
     },
