@@ -168,6 +168,20 @@ describe("al abrir el enlace solo con la llave del celular, si la consulta propi
     expect(espera.textContent).toBe(ES.cpCargando);
   });
 
+  it("si al abrir no había conexión, Probar de nuevo consulta también por la llave y quien ganó ve Ganaste", async () => {
+    const sala = salaFalsa("sorteada", ganadora());
+    let hayRed = false;
+    const { mundo } = await montar(sala, { publico: async () => (hayRed ? { ...publico(), fase: "sorteada" } : "red") });
+    expect(dice(mundo)).toContain(ES.cpSinRed);
+    expect(sala.yo).not.toHaveBeenCalled();
+    hayRed = true;
+    boton(mundo)?.click();
+    await asentar();
+    await asentar();
+    expect(titulo(mundo, "#cmp-estado")).toBe("Ganaste");
+    expect(mundo.raiz.querySelector("#cmp-estado .cmp-codigo")?.textContent).toBe(CODIGO);
+  });
+
   it("con la pestaña escondida no pide nada", async () => {
     const sala = salaFalsa("cerrada", "red");
     const { mundo } = await montar(sala);
