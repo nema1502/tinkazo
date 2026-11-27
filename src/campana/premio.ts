@@ -10,6 +10,9 @@ import type { LecturaDelCelular } from "../stellar/wallet-pollar";
 import type { DepsDelCelular } from "./celular";
 import { TEXTOS_PREMIO } from "./textos-premio";
 
+/** Lo que Ganaste suma en una campaña de personas con el premio en dólares: va con esto para no sumar otra descarga a la página. */
+export { completarEnDolares } from "./ganaste-dolares";
+
 /** Lo de la lectura de la cuenta que Ganaste necesita para decidir su línea. */
 export type CuentaParaGanar = Pick<LecturaDelCelular, "estado" | "protegida">;
 
