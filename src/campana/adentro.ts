@@ -347,6 +347,8 @@ export function pintarAdentro(
     conTarjeta?: boolean;
     salta?: boolean;
     respuestaDesde?: () => number;
+    /** Solo en una campaña de personas: el enlace chico que olvida a la persona en este celular. */
+    alOlvidar?: () => void;
   },
 ): () => void {
   const raiz = seccion(raizPrincipal, "#cmp-adentro", "cmp-adentro cmp-dos");
@@ -362,6 +364,7 @@ export function pintarAdentro(
   titulo(izq, deps.tx(datos.ya ? "cpYaEstabas" : "cpAdentro"));
   const contador = parrafo(izq, "", "cmp-contador");
   conDestacado(contador, deps.tx(datos.total === 1 ? "cpEnLaLista1" : "cpEnLaListaN"), "n", String(datos.total), "cmp-numero");
+  if (datos.alOlvidar) enlaceParaOlvidar(izq, deps, datos.alOlvidar);
   const der = caja("cmp-der");
   const horas = caja("cmp-horas");
   const claveFase = datos.fase === "abierta" ? "cpCierraA" : datos.fase === "cerrada" ? "cpYaCerro" : "cpSellada";
@@ -498,7 +501,7 @@ export function pintarOtra(
  * línea, que dice que el premio se entrega con quien organiza. Reclamar y cobrar desde el celular es de otra etapa, que
  * reemplaza esta función por el camino de verdad. Quien recarga vuelve a Ganaste.
  */
-export function pintarEntrega(raizPrincipal: HTMLElement, deps: DepsDelCelular, codigo?: string | null): void {
+export function pintarEntrega(raizPrincipal: HTMLElement, deps: DepsDelCelular, codigo?: string | null, alOlvidar?: () => void): void {
   const raiz = seccion(raizPrincipal, "#cmp-estado", "cmp-estado cmp-entrega cmp-solo");
   if (!raiz) return;
   const hero = caja("cmp-izq cmp-hero");
@@ -506,7 +509,13 @@ export function pintarEntrega(raizPrincipal: HTMLElement, deps: DepsDelCelular, 
   titulo(hero, deps.tx("cpEntregaT"));
   parrafo(hero, deps.tx("cpEntregaL"), "cmp-apoyo");
   lineaDelCodigo(hero, deps, codigo);
+  if (alOlvidar) enlaceParaOlvidar(hero, deps, alOlvidar);
   raiz.append(hero);
+}
+
+/** El enlace chico No soy yo de una campaña de personas: olvida a la persona en este celular. No es la acción principal. */
+function enlaceParaOlvidar(destino: HTMLElement, deps: DepsDelCelular, alHacer: () => void): void {
+  boton(destino, deps.tx("cpNoSoyYo"), "cmp-otra-cuenta cmp-olvidar", alHacer);
 }
 
 /** La salida de la lista siempre explica el motivo que informó la sala. */
