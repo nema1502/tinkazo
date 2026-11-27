@@ -78,8 +78,8 @@ export async function anotarPersonaEnCampana(
     d: cuerpo.d,
     llave: cuerpo.llave,
     p: cuerpo.p,
-    // Solo el true exacto viaja, y va al final: sin el permiso el cuerpo no cambia ni en una letra.
-    ...(cuerpo.perfil === true ? { perfil: true } : {}),
+    // Solo el true exacto viaja, y va al final: sin el permiso queda sin definir, el JSON lo deja afuera y el cuerpo no cambia ni en una letra.
+    perfil: cuerpo.perfil === true || undefined,
   });
   return anotarConLector(servicio, sala, cuerpoJson, leerAltaDePersona, dep, alReintentar, opciones);
 }

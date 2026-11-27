@@ -107,8 +107,8 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
       d,
       llave: llave(),
       p: p.pase,
-      // El permiso va con el pedido, y solo desde una página que dijo qué se guarda.
-      ...(guardarPerfilActivo() ? { perfil: true as const } : {}),
+      // El permiso va con el pedido, y solo desde una página que dijo qué se guarda. Sin él queda sin definir y no viaja.
+      perfil: guardarPerfilActivo() || undefined,
     };
     const opciones = { inicio, sosiego };
     let r = await anotarPersonaEnCampana(p.servicio, p.sala, cuerpo, dep, alReintentar, opciones);
