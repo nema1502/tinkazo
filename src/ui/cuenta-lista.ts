@@ -564,6 +564,11 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   let giraDesde = 0;
   /** El temporizador de la espera ya cumplió: la salida queda a la vista aunque la hora de pared se corrija hacia atrás. */
   let esperaPasada = false;
+  /**
+   * Se tocó Volver a cargar y la página todavía no se descargó: la cadena del regalo y del cupón no vota por su cuenta. Cualquier
+   * otro toque lo baja, porque cada voto sale de un toque.
+   */
+  let recargando = false;
   let relojDeLaEspera: ReturnType<typeof setTimeout> | null = null;
   /** Mientras corre `esperarPedido`: si ya se pidió dejarla (Probar de nuevo con la espera pasada de tiempo). Si no, `null`. */
   let esperaDelPedido: { dejada: boolean } | null = null;
@@ -1955,6 +1960,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         // ahora que esta misma cuenta tiene acceso. Si el acceso quedó en otra cuenta, o el servidor no lo ve, no se vota.
         if ((await accesoParaVotar()) === "no") return;
         if (cerrado) return;
+        // La página se está yendo: sin votar, queda la falla de hoy y su Probar de nuevo, que sale de un toque.
+        if (recargando) throw new Error("tarda");
         let r: ResultadoDeActivar | "esperada" = await votarLaActivacion();
         if (cerrado) return;
         if (r === "pendiente") r = (await esperarQueSeActive()) ? "esperada" : "pendiente";
@@ -2157,6 +2164,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
 
   async function hacer(a: Accion): Promise<void> {
     if (cerrado) return;
+    if (a !== "recargar") recargando = false;
     switch (a) {
       case "activar":
         return activar();
@@ -2299,6 +2307,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       case "recargar":
         // Sin conexión, recargar lleva a la página de error del navegador: la salida se va y vuelve con la conexión.
         if (typeof navigator !== "undefined" && navigator.onLine === false) return pintar();
+        recargando = true;
         if (salidas.recargar) salidas.recargar();
         else location.reload();
         return;

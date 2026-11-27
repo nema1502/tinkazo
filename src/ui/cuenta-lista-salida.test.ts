@@ -634,6 +634,41 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
     expect(salidas.recargar).toHaveBeenCalledTimes(1);
   });
 
+  it("tras tocar Volver a cargar, la cadena de la página que se va no vota, y un toque nuevo sí", async () => {
+    const reg: Registro = [];
+    const cf = cuentaFalsa(reg, { proteccion: "lista" });
+    // El regalo (20 s) y la pregunta del acceso antes del voto (28 s) pasan de 45 s: la salida se toca antes del voto, y la
+    // recarga todavía no descargó la página.
+    const srv = servidorFalso(reg, {
+      regalo: true,
+      reclamarImpl: async (s) => {
+        await esperar(20_000);
+        s.acceso = "admin";
+        return ok<ReclamoDelRegalo>({ ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: { fecha: VENCE, cuantos: 3 } }, regalo: "dado", sigue: "activar" });
+      },
+      antesDelEstado: async (n) => {
+        if (n === 2) await esperar(28_000);
+      },
+    });
+    const { salidas } = await abrir(srv, cf);
+    await tocar();
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(recargarDelPaso()).not.toBeNull();
+    recargarDelPaso()?.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(salidas.recargar).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(10_000);
+    // El acceso llegó, pero la cadena vieja no vota: queda la falla de hoy con su Probar de nuevo.
+    expect(cf.cuenta.activarCuenta).not.toHaveBeenCalled();
+    expect(alerta()).toContain(t("clErrFallo"));
+    expect(principal().dataset.accion).toBe("seguir-cupon");
+    // Un toque de la persona sí sigue, con un solo voto.
+    principal().click();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(cf.cuenta.activarCuenta).toHaveBeenCalledTimes(1);
+    expect(textoDe()).toContain(t("clListaTitulo"));
+  });
+
   it("el cupón colgado en el voto: Volver a cargar a los 45 s del toque", async () => {
     const reg: Registro = [];
     const cf = cuentaFalsa(reg);
