@@ -1,4 +1,6 @@
 import type { Cobro } from "./cobro";
+import type { TipoDeDestino } from "./destino";
+import type { NotaDelEnvio } from "./evento";
 import type { IntentoDeGrifo } from "./pagador";
 import { RED_DE_PRUEBA, TTL_MINIMO_PERSISTENTE } from "./red";
 
@@ -47,6 +49,50 @@ export interface PasoDeEntrada {
   motivo: string | null;
 }
 
+/** Recibir las monedas de prueba en la billetera nueva. */
+export interface PasoDePremio {
+  hash: string;
+  ledger: number;
+  segundos: number;
+  /** Lo que se pagó, en la unidad mínima y como texto. */
+  monto: string;
+  /** Lo que se leyó de la billetera después de que entró, o `null` si no se pudo leer. */
+  saldoDespues: string | null;
+  /** El ledger hasta el que vive la entrada de saldo de la billetera recién creada: lo que falta para proyectar la renta. */
+  vidaDelSaldo: number | null;
+  cobro: Cobro | null;
+}
+
+/** Mandar las monedas de la billetera a otra cuenta, con un desbloqueo de la llave. */
+export interface PasoDeEnvio {
+  hash: string;
+  ledger: number;
+  segundos: number;
+  /** Cuántas veces pidió la llave el desbloqueo según el navegador, o `null` si el envío se retomó al recargar. */
+  desbloqueos: number | null;
+  /** Cómo trajo la entrada de autorización el destino: la M tal cual (`exacta`) o la G de abajo (`normalizada`). `null` si se retomó al recargar. */
+  raiz: "exacta" | "normalizada" | null;
+  monto: string;
+  destino: { tipo: TipoDeDestino; direccion: string; fin: string; origen: "pagina" | "enlace" };
+  notaPedida: string | null;
+  /** La nota que dejó la red en el evento de la transferencia. */
+  notaVista: string | null;
+  notaEnvio: NotaDelEnvio;
+  saldoOrigenAntes: string | null;
+  saldoOrigenDespues: string | null;
+  saldoDestinoAntes: string | null;
+  saldoDestinoDespues: string | null;
+  cobro: Cobro | null;
+}
+
+/** La cuenta de prueba que armó la página para recibir, con la marca de que pide nota. */
+export interface PasoDeDestinoDePrueba {
+  publica: string;
+  hash: string;
+  segundos: number;
+  cobro: Cobro | null;
+}
+
 export interface FallaMedida {
   paso: string;
   motivo: string;
@@ -55,9 +101,11 @@ export interface FallaMedida {
 }
 
 export interface Medidas {
-  version: 1;
+  version: 2;
   red: "testnet";
   contrato: string;
+  /** El contrato de las monedas de prueba. */
+  activo: string;
   kit: string;
   codigoCuenta: string;
   aviso: string;
@@ -69,14 +117,18 @@ export interface Medidas {
   sello: PasoDeSello | null;
   sorteo: PasoDeSorteo | null;
   entrada: PasoDeEntrada | null;
+  premio: PasoDePremio | null;
+  envios: PasoDeEnvio[];
+  destinoDePrueba: PasoDeDestinoDePrueba | null;
   fallas: FallaMedida[];
 }
 
 export function medidasVacias(ahora: Date = new Date()): Medidas {
   return {
-    version: 1,
+    version: 2,
     red: "testnet",
     contrato: RED_DE_PRUEBA.contrato,
+    activo: RED_DE_PRUEBA.activo,
     kit: VERSION_DEL_KIT,
     codigoCuenta: RED_DE_PRUEBA.codigoCuenta,
     aviso: "Cifras de la red de prueba. No se proyectan a la red principal.",
@@ -88,6 +140,9 @@ export function medidasVacias(ahora: Date = new Date()): Medidas {
     sello: null,
     sorteo: null,
     entrada: null,
+    premio: null,
+    envios: [],
+    destinoDePrueba: null,
     fallas: [],
   };
 }
