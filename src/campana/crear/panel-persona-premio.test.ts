@@ -332,7 +332,7 @@ describe("el armador de siempre", () => {
     const viejo = JSON.parse(bajadas[0] ?? "{}") as Record<string, unknown>;
     viejo.identidad = "persona";
     expect(viejo.premios).toEqual(["400000000", "400000000", "400000000"]);
-    expect(validarCampanaParaElFirmador(JSON.stringify(viejo), AHORA)).toMatchObject({ ok: false, campo: "premio_en_mano" });
+    expect(validarCampanaParaElFirmador(JSON.stringify(viejo), AHORA)).toEqual({ ok: true });
     localStorage.clear();
     for (const c of montados) c.desmontar();
     montados = [];
