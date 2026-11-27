@@ -238,6 +238,7 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoNoSeMarco: "No se pudo marcar. Probá de nuevo o seguí con la entrega.",
     cpoPersonasNoT: "Todavía no se puede abrir",
     cpoPersonasNoL: "Este modo todavía no está prendido. Avisale a Tinkazo.",
+    cpoCodigosAlDejar: "Si la dejás, ya no vas a poder ver los códigos de entrega desde esta compu.",
   },
   en: {
     cpoTitulo: "Company campaign",
@@ -471,5 +472,6 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoNoSeMarco: "Couldn't mark it. Try again or go on with the handover.",
     cpoPersonasNoT: "It can't be opened yet",
     cpoPersonasNoL: "This mode isn't turned on yet. Let Tinkazo know.",
+    cpoCodigosAlDejar: "If you leave it, you won't be able to see the handover codes on this computer.",
   },
 };

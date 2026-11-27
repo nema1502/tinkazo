@@ -11,6 +11,7 @@ import {
   ponerPaso,
   ponerRechazo,
   registrarAcciones,
+  seVanLosCodigos,
 } from "../campana/puente";
 import { anotarDuenaDelBorrador, borradorEsDeOtra, borrarBorrador, leerBorrador } from "../campana/borrador";
 import { DOLAR, dolaresEnTexto, esDeCentavosJustos, totalDePremios } from "../campana/comision";
@@ -2958,7 +2959,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // Los celulares todavía leen el resultado: la sala no se borra, solo se deja de recordar en esta compu.
       // Con un aviso pendiente a los celulares no se deja de un toque: la pregunta de siempre. Con la lista sellada siempre se
       // pregunta, y con el sorteo hecho también, salvo con el resultado ya avisado a todas o con la sala borrada.
-      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (avisosPendientes(pasoDelPuente(), vista === "sorteada") ? pedirOlvidar() : olvidar())));
+      // Con el resultado en mano se pregunta siempre, también con todas marcadas: dejar la campaña pierde los códigos de entrega.
+      const preguntaAntes = (): boolean => avisosPendientes(pasoDelPuente(), vista === "sorteada") || (vista === "sorteada" && seVanLosCodigos(pasoDelPuente()));
+      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (preguntaAntes() ? pedirOlvidar() : olvidar())));
     } else if (vista === "sin-red") {
       botones.push(principal(tx("cpoReintentar"), () => reintentar?.()));
       botones.push(otroArchivo());
@@ -3078,6 +3081,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (vista === "olvidar" && (vistaAntes === "cerrada" || vistaAntes === "sellada" || vistaAntes === "sorteada")) {
       const paso = pasoDelPuente();
       if (paso.paso !== "sala-borrada" && avisosPendientes(paso, vistaAntes === "sorteada")) linea = tx("cpoOlvidarAviso");
+      // Con el resultado en mano lo que se pierde son los códigos de entrega: los celulares ven el suyo sin que nadie les avise.
+      if (vistaAntes === "sorteada" && seVanLosCodigos(paso)) linea = tx("cpoCodigosAlDejar");
     }
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? lineaDelPaso(pasoDelPuente()) : null;
     // Lo que la fila viva ya dice no se repite en la línea: la fila ocupa su lugar.
