@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLang, setLang, texto, usarTextos } from "../idioma";
 import type { BotonDeGoogle, DepsDelCelular, EstadoPublico, FallaDeEntrada } from "./celular";
+import { fetchFalso } from "../sala/fetch-falso";
 import { depsDePersona } from "./conectar-persona";
 import { depsDeDemostracion } from "./demostracion";
 import { campanaDeEjemplo } from "./ejemplo";
@@ -222,9 +223,13 @@ describe("la campaña abierta", () => {
 
 describe("una campaña de personas: lo que la pantalla dice que se guarda", () => {
   const google: BotonDeGoogle = { montar: () => () => undefined };
-  /** Los textos como los pide el celular de una campaña de personas de verdad: los que cambia `depsDePersona` según la bandera. */
-  const txDePersona = (): DepsDelCelular["tx"] =>
-    depsDePersona({
+  /**
+   * Los textos como los pide el celular de una campaña de personas de verdad: los que cambia `depsDePersona` según la bandera y
+   * según lo que la sala dijo en su estado público. `salaGuarda` es lo que la sala contesta en esa consulta.
+   */
+  const txDePersona = async (salaGuarda = true): Promise<DepsDelCelular["tx"]> => {
+    const estado = { fase: "abierta", total: 5, cierraMs: AHORA + 3_600_000, pase: "vale", ...(salaGuarda ? { perfil: true } : {}) };
+    const deps = depsDePersona({
       base: {
         tx: texto,
         idioma: getLang,
@@ -246,7 +251,11 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
       red: "testnet",
       enLinea: () => true,
       enlace: () => "https://tinkazo.example.org/participar.html",
-    }).tx;
+      dep: { fetch: fetchFalso({ estado: [{ estado: 200, cuerpo: estado }] }).f },
+    });
+    await deps.publico();
+    return deps.tx;
+  };
   const NOTA_DE_SIEMPRE = "Con Google confirmamos que sos vos. No te creamos ninguna cuenta.";
   const NOTA_CON_PERFIL = "Con Google confirmamos que sos vos. Guardamos tu correo, tu nombre y tu foto.";
   const REGLA_CON_PERFIL =
@@ -259,8 +268,8 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
   };
 
   /** Pinta la previa y devuelve su marcado entero, para comparar una pantalla con otra. */
-  function previa(dePersonas: boolean, idioma: "es" | "en" = "es"): { raiz: HTMLElement; marcado: string } {
-    const { raiz, deps, publico } = preparar(dePersonas ? { persona: { google }, tx: txDePersona() } : {});
+  async function previa(dePersonas: boolean, idioma: "es" | "en" = "es", salaGuarda = true): Promise<{ raiz: HTMLElement; marcado: string }> {
+    const { raiz, deps, publico } = preparar(dePersonas ? { persona: { google }, tx: await txDePersona(salaGuarda) } : {});
     setLang(idioma);
     pintarLaCampana(raiz, deps, publico, () => undefined);
     return { raiz, marcado: raiz.querySelector("#cmp-saber")?.innerHTML ?? "" };
@@ -270,8 +279,8 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
     vi.unstubAllEnvs();
   });
 
-  it("con la bandera apagada dice lo de siempre, arriba del botón y en las reglas", () => {
-    const { raiz } = previa(true);
+  it("con la bandera apagada dice lo de siempre, arriba del botón y en las reglas, aunque la sala diga que guarda", async () => {
+    const { raiz } = await previa(true);
     expect(raiz.querySelector(".cmp-accion .cmp-apoyo")?.textContent).toBe(NOTA_DE_SIEMPRE);
     const reglas = raiz.querySelector(".cmp-reglas")?.textContent ?? "";
     expect(reglas).toContain(TEXTOS_CAMPANA.es.cpQueGuardamosPersona);
@@ -279,9 +288,9 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
     expect(raiz.textContent).not.toContain("tu foto");
   });
 
-  it("con la bandera prendida dice que se guardan el correo, el nombre y la foto, antes del botón de Google y en las reglas", () => {
+  it("con la bandera prendida dice que se guardan el correo, el nombre y la foto, antes del botón de Google y en las reglas", async () => {
     prender();
-    const { raiz } = previa(true);
+    const { raiz } = await previa(true);
     const accion = raiz.querySelector(".cmp-accion") as HTMLElement;
     expect(accion.querySelector(".cmp-apoyo")?.textContent).toBe(NOTA_CON_PERFIL);
     // La línea va antes del lugar del botón: la persona la lee antes de entrar.
@@ -294,9 +303,9 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
     expect(raiz.textContent).not.toContain("No te creamos ninguna cuenta");
   });
 
-  it("con la bandera prendida y la página en inglés, las dos líneas salen en inglés", () => {
+  it("con la bandera prendida y la página en inglés, las dos líneas salen en inglés", async () => {
     prender();
-    const { raiz } = previa(true, "en");
+    const { raiz } = await previa(true, "en");
     expect(raiz.querySelector(".cmp-accion .cmp-apoyo")?.textContent).toBe("Google confirms it's you. We keep your email, name and photo.");
     const reglas = raiz.querySelector(".cmp-reglas")?.textContent ?? "";
     expect(reglas).toContain(
@@ -307,10 +316,22 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
     expect(raiz.textContent).not.toContain("We don't create any account");
   });
 
-  it("con la bandera prendida, esas dos líneas son lo único que cambia de la pantalla", () => {
-    const apagada = previa(true).marcado;
+  it("con la bandera prendida y la sala sin guardar perfiles, la pantalla es idéntica a la de hoy: no promete lo que no se hace", async () => {
+    const deHoy = (await previa(true)).marcado;
     prender();
-    const prendida = previa(true).marcado;
+    for (const idioma of ["es", "en"] as const) {
+      const { raiz, marcado } = await previa(true, idioma, false);
+      expect(raiz.querySelector(".cmp-accion .cmp-apoyo")?.textContent).toBe(TEXTOS_CAMPANA[idioma].cpEntrarNotaPersona);
+      expect(raiz.querySelector(".cmp-reglas")?.textContent).toContain(TEXTOS_CAMPANA[idioma].cpQueGuardamosPersona);
+      expect(raiz.textContent).not.toMatch(/tu foto|your email, name and photo/u);
+      if (idioma === "es") expect(marcado).toBe(deHoy);
+    }
+  });
+
+  it("con la bandera prendida y la sala que lo confirma, esas dos líneas son lo único que cambia de la pantalla", async () => {
+    const apagada = (await previa(true)).marcado;
+    prender();
+    const prendida = (await previa(true)).marcado;
     expect(prendida).not.toBe(apagada);
     expect(prendida.replace(NOTA_CON_PERFIL, NOTA_DE_SIEMPRE).replace(REGLA_CON_PERFIL, TEXTOS_CAMPANA.es.cpQueGuardamosPersona ?? "")).toBe(apagada);
   });
@@ -321,24 +342,24 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
     ["con la bandera en true", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "true" }],
   ];
 
-  it.each(APAGADA)("%s la pantalla es idéntica a la de hoy", (_caso, entorno) => {
-    const deHoy = previa(true).marcado;
+  it.each(APAGADA)("%s la pantalla es idéntica a la de hoy, aunque la sala diga que guarda", async (_caso, entorno) => {
+    const deHoy = (await previa(true)).marcado;
     for (const [nombre, valor] of Object.entries(entorno)) vi.stubEnv(nombre, valor);
-    expect(previa(true).marcado).toBe(deHoy);
+    expect((await previa(true)).marcado).toBe(deHoy);
   });
 
-  it("una campaña de cuentas no cambia en nada con la bandera prendida", () => {
-    const deHoy = previa(false).marcado;
+  it("una campaña de cuentas no cambia en nada con la bandera prendida", async () => {
+    const deHoy = (await previa(false)).marcado;
     prender();
-    const { raiz, marcado } = previa(false);
+    const { raiz, marcado } = await previa(false);
     expect(marcado).toBe(deHoy);
     expect(raiz.querySelector(".cmp-accion .cmp-apoyo")?.textContent).toBe("Te creamos una cuenta de Tinkazo.");
     expect(raiz.querySelector(".cmp-reglas")?.textContent).toContain(TEXTOS_CAMPANA.es.cpQueGuardamos);
     expect(raiz.textContent).not.toContain("tu foto");
   });
 
-  it("las reglas que se repiten en las demás pantallas dicen lo mismo que la previa", () => {
-    const { raiz, deps } = preparar({ persona: { google }, tx: txDePersona() });
+  it("las reglas que se repiten en las demás pantallas dicen lo mismo que la previa", async () => {
+    const { raiz, deps } = preparar({ persona: { google }, tx: await txDePersona() });
     const seccion = raiz.querySelector<HTMLElement>("#cmp-saber") as HTMLElement;
     pintarReglas(seccion, deps);
     expect(seccion.textContent).toContain(TEXTOS_CAMPANA.es.cpQueGuardamosPersona);
