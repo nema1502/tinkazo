@@ -6,6 +6,18 @@
  * Google, el emisor, la audiencia (el identificador de cliente de Tinkazo, que es público), la caducidad y que el correo
  * esté verificado. Con la API de Web Crypto del Worker y sin paquetes.
  *
+ * Las cuentas de servicio no entran, con los interruptores como estén. Google firma con las mismas llaves y el mismo emisor
+ * los tokens de identidad de las cuentas de servicio, con la audiencia que pida quien los genera y con el correo verificado.
+ * Sin este rechazo, quien tiene un proyecto en la nube de Google se anotaría una vez por cada cuenta de servicio que cree, y
+ * el sorteo dejaría de ser una vez por persona. Se rechaza el token cuyo correo, sin espacios alrededor y en minúsculas,
+ * tiene después de la última arroba el dominio gserviceaccount.com o uno que termina en .gserviceaccount.com. El motivo es
+ * el del correo sin verificar, que la persona lee como entrar de nuevo. Ninguna persona tiene un correo así, de modo que
+ * este rechazo no deja afuera a nadie.
+ *
+ * El campo `azp` no rechaza a nadie: solo se mide. El resultado bueno dice si vino igual al identificador de cliente,
+ * distinto o si no vino, con uno de tres textos fijos, y el alta lo deja en el registro sin ningún dato de la persona. Con
+ * esos números se decide después si sirve para algo más.
+ *
  * Lo que devuelve es un usuario estable (`google:` y el identificador de la cuenta de Google), el correo verificado y, si
  * el token los trae como texto, el nombre y la dirección de la foto de perfil. El nombre y la foto salen tal como vienen:
  * acá solo se mira que sean un texto, y limpiarlos es cosa de `perfiles.ts`.
@@ -31,11 +43,17 @@ export type MotivoDeRechazo =
   | "llaves-no-disponibles";
 
 /**
+ * Cómo vino el campo `azp` de un token bueno: igual al identificador de cliente, con cualquier otro valor, o sin el campo.
+ * Es una medida y nada más: nunca decide si el token entra, y nunca repite lo que trajo el token.
+ */
+export type AzpDelToken = "igual" | "distinto" | "sin";
+
+/**
  * `nombre` y `foto` son los campos `name` y `picture` del token cuando son un texto, sin tocar. Si faltan o son otra cosa,
- * quedan vacíos: nunca hacen rechazar un token.
+ * quedan vacíos: nunca hacen rechazar un token. `azp` dice cómo vino ese campo, y tampoco hace rechazar a nadie.
  */
 export type ResultadoDeIdentidad =
-  | { ok: true; usuario: string; correo: string; nombre: string; foto: string }
+  | { ok: true; usuario: string; correo: string; nombre: string; foto: string; azp: AzpDelToken }
   | { ok: false; motivo: MotivoDeRechazo };
 
 /** Lo mínimo que se lee de la respuesta de las llaves: sirve la de `fetch` y la de una prueba. */
@@ -102,7 +120,22 @@ const ES_SEGMENTO = /^[A-Za-z0-9_-]+$/;
 /** El identificador de cuenta de Google: ASCII, hasta 255 caracteres. Sin `:` para que `google:<id>` no sea ambiguo. */
 const ES_SUB = /^[0-9A-Za-z_.-]{1,255}$/;
 
+/** El dominio de los correos de las cuentas de servicio de Google: ese mismo, o cualquiera que termine en él después de un punto. */
+const DOMINIO_DE_CUENTAS_DE_SERVICIO = "gserviceaccount.com";
+
 const rechazo = (motivo: MotivoDeRechazo): ResultadoDeIdentidad => ({ ok: false, motivo });
+
+/** Si el correo, ya sin espacios alrededor, es de una cuenta de servicio de Google: mira solo lo que sigue a la última arroba. */
+function esDeCuentaDeServicio(correo: string): boolean {
+  const dominio = correo.slice(correo.lastIndexOf("@") + 1).toLowerCase();
+  return dominio === DOMINIO_DE_CUENTAS_DE_SERVICIO || dominio.endsWith(`.${DOMINIO_DE_CUENTAS_DE_SERVICIO}`);
+}
+
+/** Cómo vino `azp`: nunca rechaza. Sin el campo es `sin`, y todo lo que no sea el identificador de cliente es `distinto`. */
+function azpDe(valor: unknown, clienteId: string): AzpDelToken {
+  if (valor === undefined) return "sin";
+  return valor === clienteId ? "igual" : "distinto";
+}
 
 function objetoDe(bytes: Uint8Array): Record<string, unknown> | null {
   try {
@@ -322,6 +355,9 @@ async function verificar(token: string, opciones: OpcionesDeIdentidad): Promise<
   const verificado = cuerpo.email_verified;
   const correo = cuerpo.email;
   if ((verificado !== true && verificado !== "true") || typeof correo !== "string" || correo.trim() === "") return rechazo("correo-sin-verificar");
+  // Una cuenta de servicio no es una persona: Google le firma un token con la audiencia que pida y con el correo verificado.
+  // Se rechaza siempre, con el motivo de siempre, y `azp` no interviene.
+  if (esDeCuentaDeServicio(correo.trim())) return rechazo("correo-sin-verificar");
   const sub = cuerpo.sub;
   if (typeof sub !== "string" || !ES_SUB.test(sub)) return rechazo("mal-formado");
   return {
@@ -330,5 +366,6 @@ async function verificar(token: string, opciones: OpcionesDeIdentidad): Promise<
     correo: correo.trim(),
     nombre: typeof cuerpo.name === "string" ? cuerpo.name : "",
     foto: typeof cuerpo.picture === "string" ? cuerpo.picture : "",
+    azp: azpDe(cuerpo.azp, opciones.clienteId),
   };
 }

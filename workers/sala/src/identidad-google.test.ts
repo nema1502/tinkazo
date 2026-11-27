@@ -109,7 +109,7 @@ describe("un token de Google bueno", () => {
   it("da el usuario estable y el correo verificado", async () => {
     const b = banco();
     const r = await verificarIdentidadDeGoogle(await firmar(), b.opciones);
-    expect(r).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "" });
+    expect(r).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "", azp: "sin" });
   });
 
   it("da también el nombre y la dirección de la foto, tal como vienen en el token y sin limpiarlos", async () => {
@@ -121,22 +121,23 @@ describe("un token de Google bueno", () => {
       correo: CORREO,
       nombre: "  Ana   de Prueba \n",
       foto: "http://fotos.example.org/ana.jpg ",
+      azp: "sin",
     });
   });
 
   it("un token sin nombre o sin foto entra igual, con ese dato vacío", async () => {
     const b = banco();
     const sinNombre = await verificarIdentidadDeGoogle(await firmar({ payload: { picture: FOTO } }), b.opciones);
-    expect(sinNombre).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: FOTO });
+    expect(sinNombre).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: FOTO, azp: "sin" });
     const sinFoto = await verificarIdentidadDeGoogle(await firmar({ payload: { name: "Ana" } }), b.opciones);
-    expect(sinFoto).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "Ana", foto: "" });
+    expect(sinFoto).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "Ana", foto: "", azp: "sin" });
   });
 
   it("un nombre o una foto que no son un texto quedan vacíos y no frenan a nadie", async () => {
     const b = banco();
     for (const raro of [7, 0, null, true, false, { a: 1 }, ["Ana"], []]) {
       const r = await verificarIdentidadDeGoogle(await firmar({ payload: { name: raro, picture: raro } }), b.opciones);
-      expect(r, JSON.stringify(raro)).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "" });
+      expect(r, JSON.stringify(raro)).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "", azp: "sin" });
     }
   });
 
@@ -171,28 +172,91 @@ describe("un token de Google bueno", () => {
   });
 });
 
-describe("entra lo mismo que entraba antes de guardar perfiles", () => {
-  // Guardar el perfil no cambia quién puede anotarse: la verificación mira lo mismo que miraba, con los interruptores como estén.
+describe("las cuentas de servicio no entran y el campo azp solo se mide", () => {
+  // Google firma con las mismas llaves y el mismo emisor los tokens de las cuentas de servicio, con la audiencia que pida quien
+  // los genera. Su correo siempre termina igual, y ninguna persona tiene uno así.
   const BUENO = { ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "" };
+  const NO_ENTRA = { ok: false, motivo: "correo-sin-verificar" };
+  const AZPS: Record<string, unknown>[] = [{}, { azp: CLIENTE }, { azp: "112233445566778899001" }];
 
-  it("el campo azp no se mira: con cualquier valor el token entra igual que sin él", async () => {
+  it("un correo de cuenta de servicio no entra, con o sin azp: es el rechazo del correo sin verificar", async () => {
     const b = banco();
-    expect(await verificarIdentidadDeGoogle(await firmar(), b.opciones)).toEqual(BUENO);
-    for (const azp of [CLIENTE, "otro-cliente.apps.example.org", "112233445566778899001", "", 123, null, true, [CLIENTE], { a: CLIENTE }]) {
-      const t = await firmar({ payload: { azp } });
-      expect(await verificarIdentidadDeGoogle(t, b.opciones), JSON.stringify(azp)).toEqual(BUENO);
+    const correos = [
+      "name@proyecto.iam.gserviceaccount.com",
+      "123-compute@developer.gserviceaccount.com",
+      "proyecto@appspot.gserviceaccount.com",
+      "NAME@PROYECTO.IAM.GSERVICEACCOUNT.COM",
+      "Name@Proyecto.Iam.GServiceAccount.Com",
+      "  name@proyecto.iam.gserviceaccount.com  ",
+      "\tNAME@PROYECTO.IAM.GSERVICEACCOUNT.COM\n",
+      "name@gserviceaccount.com",
+      " NAME@GSERVICEACCOUNT.COM ",
+      "ana@example.org@proyecto.iam.gserviceaccount.com",
+    ];
+    for (const email of correos) {
+      for (const azp of AZPS) {
+        for (const email_verified of [true, "true"]) {
+          const r = await verificarIdentidadDeGoogle(await firmar({ payload: { email, email_verified, ...azp } }), b.opciones);
+          expect(r, JSON.stringify([email, azp, email_verified])).toEqual(NO_ENTRA);
+        }
+      }
     }
   });
 
-  it("el dominio del correo no se mira: un correo verificado entra termine como termine", async () => {
+  it("el rechazo no repite nada del token y no depende del nombre ni de la foto", async () => {
     const b = banco();
-    const dominio = ["gserviceaccount", "com"].join(".");
-    for (const email of [`robot@proyecto.iam.${dominio}`, `Robot@Proyecto.IAM.${dominio.toUpperCase()}`, `robot@developer.${dominio}`, "ana@escuela.example.org"]) {
-      for (const payload of [{ email }, { email, azp: CLIENTE }, { email, azp: "112233445566778899001" }]) {
-        const r = await verificarIdentidadDeGoogle(await firmar({ payload }), b.opciones);
-        expect(r, JSON.stringify(payload)).toEqual({ ...BUENO, correo: email });
+    const t = await firmar({ payload: { email: "name@proyecto.iam.gserviceaccount.com", name: "Ana de Prueba", picture: FOTO, azp: CLIENTE } });
+    expect(JSON.stringify(await verificarIdentidadDeGoogle(t, b.opciones))).toBe('{"ok":false,"motivo":"correo-sin-verificar"}');
+  });
+
+  it("un correo común entra con cualquier azp y sin azp, y el resultado dice cómo vino: igual, distinto o sin", async () => {
+    const b = banco();
+    expect(await verificarIdentidadDeGoogle(await firmar(), b.opciones)).toEqual({ ...BUENO, azp: "sin" });
+    expect(await verificarIdentidadDeGoogle(await firmar({ payload: { azp: CLIENTE } }), b.opciones)).toEqual({ ...BUENO, azp: "igual" });
+    for (const azp of ["otro-cliente.apps.example.org", "112233445566778899001", ` ${CLIENTE}`, CLIENTE.toUpperCase(), "", 123, 0, null, true, false, [CLIENTE], { a: CLIENTE }]) {
+      const r = await verificarIdentidadDeGoogle(await firmar({ payload: { azp } }), b.opciones);
+      expect(r, JSON.stringify(azp)).toEqual({ ...BUENO, azp: "distinto" });
+    }
+  });
+
+  it("el valor de azp es uno de tres textos fijos: nunca repite lo que trajo el token", async () => {
+    const b = banco();
+    const r = await verificarIdentidadDeGoogle(await firmar({ payload: { azp: "cliente-ajeno-secreto" } }), b.opciones);
+    expect(r.ok && r.azp).toBe("distinto");
+    expect(JSON.stringify(r)).not.toContain("cliente-ajeno-secreto");
+  });
+
+  it("un correo que solo se parece al de una cuenta de servicio entra, con cualquier azp", async () => {
+    const b = banco();
+    const correos = [
+      // La palabra está antes de la arroba.
+      "gserviceaccount.com@example.org",
+      "ana.gserviceaccount.com@example.org",
+      "name.iam.gserviceaccount.com@escuela.example.org",
+      // El dominio termina en otra cosa.
+      "ana@migserviceaccount.com",
+      "ana@iam.migserviceaccount.com",
+      "ana@gserviceaccount.com.example.org",
+      "ana@gserviceaccount.community",
+      "ana@gserviceaccount.co",
+      "ana@gserviceaccount-com.example.org",
+      "ana@escuela.example.org",
+    ];
+    for (const email of correos) {
+      for (const [azp, valor] of [[{}, "sin"], [{ azp: CLIENTE }, "igual"], [{ azp: "112233445566778899001" }, "distinto"]] as const) {
+        const r = await verificarIdentidadDeGoogle(await firmar({ payload: { email, ...azp } }), b.opciones);
+        expect(r, JSON.stringify([email, azp])).toEqual({ ...BUENO, correo: email, azp: valor });
       }
     }
+  });
+
+  it("los demás rechazos siguen dando su motivo aunque el correo sea de una cuenta de servicio", async () => {
+    const b = banco();
+    const email = "name@proyecto.iam.gserviceaccount.com";
+    expect(await verificarIdentidadDeGoogle(await firmar({ payload: { email, aud: "otro-cliente.apps.example.org" } }), b.opciones)).toEqual({ ok: false, motivo: "audiencia" });
+    expect(await verificarIdentidadDeGoogle(await firmar({ payload: { email, exp: AHORA / 1000 - 1 } }), b.opciones)).toEqual({ ok: false, motivo: "vencido" });
+    expect(await verificarIdentidadDeGoogle(await firmar({ payload: { email, iss: "https://accounts.example.org" } }), b.opciones)).toEqual({ ok: false, motivo: "emisor" });
+    expect(await verificarIdentidadDeGoogle(await firmar({ payload: { email }, par: intruso }), b.opciones)).toEqual({ ok: false, motivo: "firma" });
   });
 });
 
