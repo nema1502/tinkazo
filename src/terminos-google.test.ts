@@ -191,3 +191,26 @@ describe("los Términos: la nota de los servicios cuenta la lista de quienes se 
     expect(leer("terminos.html").includes(`<li data-i="tmMore1">${texto("es", "tmMore1")}</li>`), "terminos.html, tmMore1").toBe(true);
   });
 });
+
+describe("los Términos: la descripción de la página habla de los nombres de la lista", () => {
+  // Con el perfil guardado, Tinkazo tiene el nombre de quien se anota con Google. Lo que no puede leer son los nombres de la
+  // lista de quien organiza, y la descripción que muestran los buscadores promete eso y nada más.
+  it("dice que Tinkazo no puede leer los nombres de la lista de quien organiza, y no los nombres en general", () => {
+    expect(texto("es", "descTerminos")).toContain("los nombres de su lista no se publican: Tinkazo no los puede leer.");
+    expect(texto("en", "descTerminos")).toContain("names on their list are not published: Tinkazo cannot read them.");
+    expect(texto("es", "descTerminos")).not.toContain("los nombres no se publican");
+    expect(texto("en", "descTerminos")).not.toContain("and names are not published");
+  });
+
+  it("terminos.html la repite en la descripción, en los datos estructurados y en la vista previa al compartir", () => {
+    const html = leer("terminos.html");
+    const es = texto("es", "descTerminos");
+    expect(html.includes(`<meta name="description" content="${es}" />`), "la meta description").toBe(true);
+    expect(html.includes(`"description":"${es}"`), "los datos estructurados").toBe(true);
+    for (const etiqueta of ['property="og:description"', 'name="twitter:description"']) {
+      const contenido = new RegExp(`<meta ${etiqueta} content="([^"]*)"`, "u").exec(html)?.[1] ?? "";
+      expect(contenido, etiqueta).toContain("Tinkazo cannot read the names on their list.");
+      expect(contenido, etiqueta).not.toContain("cannot read the names.");
+    }
+  });
+});
