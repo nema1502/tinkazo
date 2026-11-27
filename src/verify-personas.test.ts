@@ -60,6 +60,17 @@ describe("el comprobante: el renglón de la lista de personas", () => {
     expect(aviso().compareDocumentPosition(document.getElementById("v-buscar") as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("un script nuevo con un HTML viejo en la caché, sin el renglón, no rompe el comprobante", async () => {
+    aviso().remove();
+    expect(document.getElementById("v-personas")).toBeNull();
+    const { renderList } = await montar();
+    expect(() => renderList({ names: lineas } as never)).not.toThrow();
+    expect(cuenta()).toBe("5 participantes");
+    expect(filas()).toEqual(["Lugar 1", "Lugar 2", "Lugar 3", "Lugar 4", "Lugar 5"]);
+    // Y una lista de cuentas tampoco lo busca.
+    expect(() => renderList({ names: [cuentaDePrueba(1), cuentaDePrueba(2)] } as never)).not.toThrow();
+  });
+
   it("una lista toda de líneas de persona lo muestra, y la cuenta de arriba es la de siempre", async () => {
     const { renderList } = await montar();
     renderList({ names: lineas } as never);

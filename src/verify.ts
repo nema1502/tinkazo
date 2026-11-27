@@ -779,7 +779,9 @@ export function renderList(proof: Proof): void {
   const reparto = repartoParaVerificacion(names);
   const { personas, participaciones } = contarPersonas(names, reparto);
   // El renglón dice lo que hace esta página con las líneas de persona, y solo aparece si la lista trae alguna.
-  $("v-personas").style.display = hayLineas ? "" : "none";
+  // Un script nuevo puede abrirse con un HTML viejo de la caché que todavía no trae el renglón: sin él no hay nada que mostrar.
+  const renglonDePersonas = document.getElementById("v-personas");
+  if (renglonDePersonas) renglonDePersonas.style.display = hayLineas ? "" : "none";
   $("v-count").textContent =
     personas === participaciones
       ? `${names.length} ${t("kEntries")}`
