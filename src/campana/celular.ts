@@ -870,6 +870,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   const intervaloDe = (pantalla: Pantalla): number | null => {
     if (pantalla === "previa" || pantalla === "hola" || pantalla === "adentro") return 15_000;
     if (pantalla === "gano" || pantalla === "otra") return 60_000;
+    // La entrega de una campaña de personas sigue pidiendo el código mientras no llega: quien tocó Recibir antes de tenerlo no queda sin él.
+    if (pantalla === "entrega" && deps.persona && estado.codigo === null) return 15_000;
     return null;
   };
 
@@ -1277,7 +1279,31 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     await mostrarFasePublica(publico.fase);
   }
 
+  /**
+   * En la entrega solo falta el código: se le pregunta a la sala y se pinta sin salir de la pantalla. Una respuesta que no lo trae
+   * no cambia nada, y una consulta completa llevaría a quien ganó otra vez a Ganaste.
+   */
+  async function pedirElCodigoDeLaEntrega(): Promise<void> {
+    if (desmontado || consultando || !deps.visible() || estado.pantalla !== "entrega") return;
+    consultando = true;
+    try {
+      const propio = await pedirPropio();
+      if (desmontado || propio === "red" || propio === "terminada") return;
+      huboRespuesta();
+      if (propio.codigo === undefined || estado.pantalla !== "entrega") return;
+      estado.codigo = propio.codigo;
+      programar();
+      pintar();
+    } finally {
+      consultando = false;
+    }
+  }
+
   async function preguntar(): Promise<void> {
+    if (estado.pantalla === "entrega") {
+      await pedirElCodigoDeLaEntrega();
+      return;
+    }
     if (desmontado || consultando || !deps.visible()) return;
     if (estado.pantalla !== "previa" && estado.pantalla !== "hola" && estado.pantalla !== "adentro"
       && estado.pantalla !== "gano" && estado.pantalla !== "otra") return;
@@ -1453,6 +1479,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     // En una campaña de personas el premio se entrega por ahora con quien organiza: reclamarlo desde el celular es de otra etapa.
     if (deps.persona) {
       ir("entrega");
+      if (estado.codigo === null) void pedirElCodigoDeLaEntrega();
       return;
     }
     const cuenta = estado.memoria?.cuenta;
