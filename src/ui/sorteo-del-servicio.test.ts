@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ErrorPortero } from "../stellar/patrocinador";
+import { crearRpcRed, esFalloDeRpc } from "../stellar/rpc-red";
 import type { RespuestaDelSorteo } from "../stellar/sorteo-servidor-api";
 import {
   DISYUNTOR_CORTO_MS,
@@ -747,5 +748,65 @@ describe("lo que se recuerda", () => {
   });
   it("el corto, de una red ocupada o de una ronda que no llega, dura un minuto", () => {
     expect(DISYUNTOR_CORTO_MS).toBe(60_000);
+  });
+});
+
+describe("un RPC colgado se cambia por el otro", () => {
+  const colgada = (): Promise<never> => new Promise<never>(() => undefined);
+  /** Un par de RPC de verdad (`crearRpcRed`) cableado como `fuentesDeVerdad`: las lecturas salen del vigente. */
+  function conDosRpc(m: Mock, enElBueno: { leer?: Ganadores | null; consultar?: { status: string; cierre: number; valor?: unknown } }): { vigentes: string[] } {
+    const rpc = crearRpcRed("mainnet", ["https://a.example", "https://b.example"], { ahora: Date.now });
+    const vigentes: string[] = [];
+    m.fuentes.fijar = () => rpc.fijar();
+    m.fuentes.alFallar = (e) => void rpc.fallo(e);
+    m.leer.mockImplementation((async () => {
+      vigentes.push(rpc.actual());
+      return rpc.actual() === "https://a.example" ? colgada() : (enElBueno.leer ?? null);
+    }) as never);
+    m.consultar.mockImplementation((async () => {
+      vigentes.push(rpc.actual());
+      return rpc.actual() === "https://a.example" ? colgada() : (enElBueno.consultar ?? { status: "NOT_FOUND", cierre: Date.now() / 1000 });
+    }) as never);
+    return { vigentes };
+  }
+
+  it("el tope propio de una lectura es un error de red: el RPC que no contesta se cambia", async () => {
+    const m = armar({ pedir: async () => ({ accion: "ya" }) });
+    m.leer.mockImplementation(colgada as never);
+    await correr(sortear(m));
+    expect(m.alFallar).toHaveBeenCalled();
+    for (const [e] of m.alFallar.mock.calls) expect(esFalloDeRpc(e)).toBe(true);
+  });
+
+  it("la duda: con el primer RPC colgado, la segunda lectura sale por el otro y se da por hecho el sorteo", async () => {
+    const m = armar({ pedir: async () => ({ accion: "incierto" }) });
+    const { vigentes } = conDosRpc(m, { leer: GANADORES });
+    const r = await correr(sortear(m));
+    expect(r).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
+    expect(vigentes.slice(0, 2)).toEqual(["https://a.example", "https://b.example"]);
+    expect(transcurrido()).toBeLessThan(20_000);
+  });
+
+  it("la confirmación: con el RPC fijado colgado, la última vuelta sale por el otro y el sorteo se confirma", async () => {
+    const m = armar({ pedir: async () => mandado(H1), valorDe: async () => GANADORES });
+    conDosRpc(m, { leer: GANADORES, consultar: { status: "SUCCESS", cierre: Date.now() / 1000, valor: "scval" } });
+    const r = await correr(sortear(m));
+    expect(r).toEqual({ estado: "listo", valor: { ...GANADORES, txHash: H1 }, yaEstaba: false });
+    expect(transcurrido()).toBeLessThan(40_000);
+  });
+
+  it("una transacción que entró y un contrato que se cuelga en el RPC vigente: se cambia sin esperar al final", async () => {
+    const m = armar({ pedir: async () => mandado(H1, false), consultar: entro });
+    const rpc = crearRpcRed("mainnet", ["https://a.example", "https://b.example"], { ahora: Date.now });
+    const vigentes: string[] = [];
+    m.fuentes.fijar = () => rpc.fijar();
+    m.fuentes.alFallar = (e) => void rpc.fallo(e);
+    m.leer.mockImplementation((async () => {
+      vigentes.push(rpc.actual());
+      return rpc.actual() === "https://a.example" ? colgada() : GANADORES;
+    }) as never);
+    const r = await correr(sortear(m));
+    expect(r).toEqual({ estado: "listo", valor: GANADORES, yaEstaba: true });
+    expect(vigentes).toEqual(["https://a.example", "https://b.example"]);
   });
 });
