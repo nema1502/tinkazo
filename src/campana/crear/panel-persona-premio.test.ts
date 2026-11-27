@@ -324,13 +324,14 @@ describe("el armador de siempre", () => {
   });
 
   it("un archivo de personas de la etapa anterior, con montos y sin premio escrito, pide el texto y se descarga firmable", async () => {
-    crear({ identidad: "persona" });
-    llenarEnMano();
+    // Un archivo de la etapa anterior: la campaña de cuentas de siempre, con la identidad de personas y los montos en dólares.
+    crear();
+    llenarDeCuentas();
     clic("ccp-descargar");
     await asentar();
     const viejo = JSON.parse(bajadas[0] ?? "{}") as Record<string, unknown>;
-    delete viejo.premio_en_mano;
-    viejo.premios = ["400000000", "400000000", "400000000"];
+    viejo.identidad = "persona";
+    expect(viejo.premios).toEqual(["400000000", "400000000", "400000000"]);
     expect(validarCampanaParaElFirmador(JSON.stringify(viejo), AHORA)).toMatchObject({ ok: false, campo: "premio_en_mano" });
     localStorage.clear();
     for (const c of montados) c.desmontar();

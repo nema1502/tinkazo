@@ -78,7 +78,7 @@ export interface FormularioDeCampana {
   monto: number | null;
   /**
    * Solo en una campaña de personas: lo que se lleva cada persona, escrito, y que se entrega en mano. Con el campo presente (aunque
-   * esté vacío) no hay montos. Falta en las campañas de cuentas y en un archivo de personas que traía dólares.
+   * esté vacío) no hay montos. Falta en las campañas de cuentas. Un archivo de personas que traía dólares se abre con el campo vacío.
    */
   premioEnMano?: string;
   /** Si se ve el contador de otro monto. */
