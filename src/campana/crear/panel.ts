@@ -932,7 +932,10 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     const pedidos = f.pasos.length;
     const clavePedidos = pedidos === 0 ? "ccResumenPedidos0" : pedidos === 1 ? "ccResumenPedidos1" : "ccResumenPedidosN";
     const lugar = el("div", "ccp-resumen", fmt(clavePedidos, { lugar: f.lugar.trim(), n: String(pedidos) }));
-    b.append(nombre, premio, cuando, lugar, botonVerVista());
+    b.append(nombre, premio, cuando, lugar);
+    // En el modo de personas, un renglón dice cómo se anota la gente y cómo se entrega el premio. Sin el modo no hay renglón.
+    if (f.premioEnMano !== undefined) b.append(el("div", "ccp-resumen ccp-resumen-modo", tx("ccResumenEnMano")));
+    b.append(botonVerVista());
     return b;
   }
 
