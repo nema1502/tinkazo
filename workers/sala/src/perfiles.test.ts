@@ -107,17 +107,19 @@ describe("lo que dicen los documentos de la sala", () => {
     return linea === undefined ? null : linea.split("|").slice(1, -1).map((c) => c.trim());
   };
 
-  it("la hoja de operación trae los dos interruptores apagados, cada uno en su tabla", () => {
-    // La tabla de banderas del sitio, con la misma forma que la fila de anotarse sin billetera.
+  it("la hoja de operación trae los dos interruptores, cada uno en su tabla", () => {
+    // La tabla de banderas del sitio. Qué pasa sin la variable es un hecho del código. La columna de producción la cambia quien
+    // prende o apaga la bandera, en el mismo cambio: acá solo se mira que diga uno de los valores que puede tener.
     const delSitio = fila(hoja, "VITE_GUARDAR_PERFIL");
     expect(delSitio).toHaveLength(4);
-    expect(delSitio?.slice(0, 3)).toEqual(["`VITE_GUARDAR_PERFIL`", "apagada, solo con `1`", "`sin definir`"]);
-    expect(fila(hoja, "VITE_ANOTARSE_SIN_BILLETERA")?.slice(1, 3)).toEqual(delSitio?.slice(1, 3));
-    // La tabla de las variables de la sala, con el mismo valor que trae su archivo.
+    expect(delSitio?.slice(0, 2)).toEqual(["`VITE_GUARDAR_PERFIL`", "apagada, solo con `1`"]);
+    expect(["`sin definir`", "`0`", "`1`"]).toContain(delSitio?.[2]);
+    // La tabla de las variables de la sala dice el valor que trae su archivo, sea cual sea.
     const deLaSala = fila(hoja, "PERFILES");
     expect(deLaSala).toHaveLength(3);
-    expect(deLaSala?.slice(0, 2)).toEqual(["`PERFILES`", '`"0"`']);
-    expect(leer("workers/sala/wrangler.toml")).toMatch(/^PERFILES = "0"\r?$/m);
+    const enElArchivo = /^PERFILES = ("[^"]*")\r?$/m.exec(leer("workers/sala/wrangler.toml"))?.[1];
+    expect(enElArchivo).toBeDefined();
+    expect(deLaSala?.slice(0, 2)).toEqual(["`PERFILES`", `\`${enElArchivo}\``]);
   });
 
   /** El texto en un solo renglón: los párrafos del README vienen cortados y una frase puede caer en dos. */
