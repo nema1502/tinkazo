@@ -3,6 +3,7 @@ import { initialLang } from "../idioma";
 import type { Lang } from "../idioma";
 import { enNavegadorDeApp } from "../navegador";
 import { hayPasskeys } from "../stellar/passkey";
+import type { Cobro } from "./cobro";
 import { ANFITRIONES_PERMITIDOS } from "./en-el-build";
 import { pantallaDe, type Aparato, type Estado } from "./estados";
 import type { Flujo, DatosDeEstado } from "./flujo";
@@ -35,6 +36,8 @@ const elCostos = $<HTMLDetailsElement>("costos");
 
 let flujo: Flujo | null = null;
 let estadoActual: Estado = "cargando";
+/** La página abrió con `?modo=premio`: el plegado de costos muestra recibir y mandar, no sellar y sortear. */
+let modoPremio = false;
 let temporizador: ReturnType<typeof setTimeout> | undefined;
 
 const aparato = (): Aparato => (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? "cel" : "compu");
@@ -84,13 +87,19 @@ function fila(tabla: HTMLTableSectionElement, etiqueta: string, valor: string): 
 }
 
 function pintarCostos(m: Medidas | null, codigo: string | undefined): void {
-  const pasos: Array<[string, Medidas["cuenta"] | Medidas["sello"] | Medidas["sorteo"]]> = m
-    ? [
-        [texto(lang, "costosCrear"), m.cuenta],
-        [texto(lang, "costosSellar"), m.sello],
-        [texto(lang, "costosSortear"), m.sorteo],
-      ]
-    : [];
+  const pasos: Array<[string, { cobro: Cobro | null } | null]> = !m
+    ? []
+    : modoPremio
+      ? [
+          [texto(lang, "costosCrear"), m.cuenta],
+          [texto(lang, "costosRecibir"), m.premio],
+          [texto(lang, "costosMandar"), m.envios.at(-1) ?? null],
+        ]
+      : [
+          [texto(lang, "costosCrear"), m.cuenta],
+          [texto(lang, "costosSellar"), m.sello],
+          [texto(lang, "costosSortear"), m.sorteo],
+        ];
   const hayAlgo = pasos.some(([, p]) => p !== null) || !!codigo;
   elCostos.hidden = !hayAlgo;
   elCostos.replaceChildren();
@@ -104,7 +113,7 @@ function pintarCostos(m: Medidas | null, codigo: string | undefined): void {
     h.style.fontWeight = "600";
     h.style.margin = "12px 0 0";
     elCostos.append(h);
-    if (!paso) {
+    if (!paso || !paso.cobro) {
       const vacio = document.createElement("p");
       vacio.textContent = texto(lang, "costosSinDatos");
       vacio.style.margin = "0";
@@ -137,7 +146,23 @@ function pintarCostos(m: Medidas | null, codigo: string | undefined): void {
 
 function pintar(estado: Estado, datos: DatosDeEstado = {}): void {
   estadoActual = estado;
-  const p = pantallaDe(estado, { aparato: aparato(), cancelada: datos.cancelada === true, ...(datos.ganador !== undefined ? { ganador: datos.ganador } : {}) }, lang);
+  const p = pantallaDe(
+    estado,
+    {
+      aparato: aparato(),
+      cancelada: datos.cancelada === true,
+      ...(datos.ganador !== undefined ? { ganador: datos.ganador } : {}),
+      ...(datos.monto !== undefined ? { monto: datos.monto } : {}),
+      ...(datos.fin !== undefined ? { fin: datos.fin } : {}),
+      ...(datos.direccion !== undefined ? { direccion: datos.direccion } : {}),
+      ...(datos.nota !== undefined ? { nota: datos.nota } : {}),
+      ...(datos.recibido !== undefined ? { recibido: datos.recibido } : {}),
+      ...(datos.destinoDelEnlace !== undefined ? { destinoDelEnlace: datos.destinoDelEnlace } : {}),
+      ...(datos.notaEnvio !== undefined ? { notaEnvio: datos.notaEnvio } : {}),
+      ...(datos.yaEnviadas !== undefined ? { yaEnviadas: datos.yaEnviadas } : {}),
+    },
+    lang,
+  );
   elTitulo.textContent = p.titulo;
   // Las líneas son constantes de textos.ts: nunca llevan texto de afuera.
   elLinea.innerHTML = p.linea;
@@ -180,6 +205,12 @@ async function hacer(accion: string): Promise<void> {
     location.href = "/";
     return;
   }
+  if (accion === "sin-destino") {
+    // La misma página en el modo premio, sin destino ni nota: nadie edita un enlace a mano.
+    const { rutaSinDestino } = await import("./destino");
+    location.href = rutaSinDestino(location.pathname, location.search);
+    return;
+  }
   const f = flujo;
   if (!f) {
     if (accion === "empezar") location.reload();
@@ -210,6 +241,12 @@ async function hacer(accion: string): Promise<void> {
       return f.reintentar();
     case "mirar":
       return f.mirar();
+    case "mandar":
+      return f.mandar();
+    case "costos":
+      elCostos.open = true;
+      elCostos.scrollIntoView({ block: "center" });
+      return;
     case "comprobante":
     case "comprobar":
       if (f.enlace) window.open(f.enlace, "_blank", "noopener");
@@ -279,6 +316,14 @@ async function arrancar(): Promise<void> {
     return;
   }
   try {
+    // El modo premio se lee de la dirección antes de bajar el kit: un enlace mal escrito no pide nada.
+    const { leerPedidoDePremio, pideNota } = await import("./destino");
+    const pedido = leerPedidoDePremio(location.search);
+    if (!pedido.ok) {
+      pintar("enlace-mal", { codigo: pedido.motivo });
+      return;
+    }
+    modoPremio = pedido.premio !== null;
     const [{ Flujo }, { abrirKit }, { RpcDePrueba }, { crearPagador }, { fetchRound }, { decompressG1 }] = await Promise.all([
       import("./flujo"),
       import("./puente-kit"),
@@ -300,6 +345,7 @@ async function arrancar(): Promise<void> {
       hayFoco: () => document.hasFocus(),
       almacen: almacenDelNavegador(),
       origen: location.origin,
+      ...(pedido.premio ? { premio: pedido.premio, pideNota: (cuenta: string) => pideNota(cuenta) } : {}),
     });
     flujo = f;
     f.onEstado((estado, datos) => pintar(estado, datos));
