@@ -26,15 +26,18 @@ import type { AnchorStep } from "./anchor";
  *   pendiente para ESTE sorteo en esta pestaña, ya confirmada. Nunca de lo que diga el servicio. Solo esa transacción
  *   lleva su número, en el resultado y en un error, y en el resultado solo si lo que devolvió coincide con el contrato o si
  *   el contrato no dio nada que comparar. Un número repetido puede ser el de otro sorteo con el mismo sello: no se muestra.
+ *   Lo que dice el servicio no se cree sin más: quien llama (`grabar-sorteo.ts`) compara los ganadores del resultado con los
+ *   que la sala calculó y vio, y si no coinciden lo muestra como error grave. Es la protección contra un número ajeno.
  * - **Los noes seguros del servicio.** El servicio de esta versión atiende un sorteo a la vez. Si está con otro contesta
  *   ocupado, y si sus propias llamadas a la red tardaron tanto que su respuesta no llegaría a tiempo contesta tarde. En los
  *   dos casos no reservó, no mandó y no va a mandar este sorteo, y lo mismo con un error interno que declara sin mandar.
  *   Con cualquiera de los tres se sigue en el acto por el camino de siempre, sin el respiro de la duda, y esa respuesta no
- *   deja ninguna reserva que recordar. Ocupado no deja de lado al servicio porque anda bien, tarde lo deja de lado diez
- *   minutos porque su red anda mal, y el error interno, un minuto.
- * - **Un pedido que no contestó en su tope se vuelve a pedir una vez dentro de la etapa.** El servicio junta en un solo
- *   trabajo los pedidos iguales de un sorteo y no empieza a mandar uno que ya lleva 9 segundos, así que está hecho para que
- *   su respuesta (el envío, ocupado o tarde) salga dentro de los 20 segundos de la etapa, y el segundo pedido es el que la
+ *   deja ninguna reserva nueva. La que dejó un pedido anterior de este mismo sorteo que no contestó en su tope se conserva
+ *   hasta que se cierre sola: es el lado seguro, porque a lo sumo se espera de más. Ocupado no deja de lado al servicio
+ *   porque anda bien, tarde lo deja de lado diez minutos porque su red anda mal, y el error interno, un minuto.
+ * - **Un pedido que no contestó en su tope se vuelve a pedir mientras queden en la etapa al menos
+ *   `TOPE_MINIMO_DEL_PEDIDO_MS`.** El servicio junta en un solo trabajo los pedidos iguales de un sorteo y no empieza a
+ *   mandar uno que ya lleva 9 segundos, así que está hecho para que su respuesta (el envío, ocupado o tarde) salga dentro de los 20 segundos de la etapa, y el segundo pedido es el que la
  *   recibe. Con el servicio de antes, que hace cola, el segundo pedido espera su turno detrás del primero y, si el primero
  *   llegó a reservar, contesta el repetido.
  * - **Cuándo puede salir por los dos caminos.** Se pasa al camino de siempre (`camino-de-hoy`) solo cuando el servicio
@@ -60,7 +63,8 @@ import type { AnchorStep } from "./anchor";
  * - **Reserva del servicio.** Si el pedido salió y no se sabe cómo terminó, el servicio puede tener reservado ese sorteo en
  *   el cupo de la cuenta unos catorce minutos (`reservaDelServicioViva`): quien sigue por el camino de siempre lo usa para
  *   no dar por definitivo un tope de sorteos que es de esa reserva. Un pedido que no se mandó por falta de tiempo no deja
- *   nada que recordar. Uno que falla sin conexión cuenta como salido, porque desde acá no se distingue de un corte.
+ *   nada que recordar. Uno que falla sin conexión cuenta como salido, porque desde acá no se distingue de un corte. La
+ *   reserva se mira también cuando el mismo sorteo, ya marcado, se vuelve a guardar en la misma pestaña.
  * - **Seguro con el servicio de antes.** Nada de lo que hace seguro a este archivo depende de las respuestas nuevas
  *   (ocupado, tarde, el error interno sin mandar): con un servicio que no las conoce, cada respuesta cae en una regla de
  *   siempre. Solo lo hacen más barato.
