@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { anotarseSinBilleteraActivo, clienteDeGoogleDelSitio, guardarPerfilActivo } from "./persona-bandera";
+import {
+  anotarseSinBilleteraActivo,
+  claveDeNotaDeEntrar,
+  claveDeQueGuardamos,
+  clienteDeGoogleDelSitio,
+  guardarPerfilActivo,
+} from "./persona-bandera";
 
 describe("las banderas de anotarse sin billetera", () => {
   afterEach(() => {
@@ -73,6 +79,22 @@ describe("la bandera de guardar el perfil de quien se anota", () => {
     expect(guardarPerfilActivo()).toBe(true);
     vi.stubEnv("VITE_GUARDAR_PERFIL", "0");
     expect(guardarPerfilActivo()).toBe(false);
+  });
+
+  it("elige las claves de los textos de la pantalla: las de siempre apagada y las del perfil con las dos prendidas", () => {
+    const prendido = { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "1" };
+    expect(claveDeNotaDeEntrar({})).toBe("cpEntrarNotaPersona");
+    expect(claveDeQueGuardamos({})).toBe("cpQueGuardamosPersona");
+    expect(claveDeNotaDeEntrar({ VITE_GUARDAR_PERFIL: "1" })).toBe("cpEntrarNotaPersona");
+    expect(claveDeQueGuardamos({ VITE_GUARDAR_PERFIL: "1" })).toBe("cpQueGuardamosPersona");
+    expect(claveDeNotaDeEntrar(prendido)).toBe("cpEntrarNotaPerfil");
+    expect(claveDeQueGuardamos(prendido)).toBe("cpQueGuardamosPerfil");
+    // Sin pasarle nada lee la variable de construcción, como la bandera.
+    expect(claveDeNotaDeEntrar()).toBe("cpEntrarNotaPersona");
+    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
+    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
+    expect(claveDeNotaDeEntrar()).toBe("cpEntrarNotaPerfil");
+    expect(claveDeQueGuardamos()).toBe("cpQueGuardamosPerfil");
   });
 
   it("no cambia lo que dicen las otras dos banderas", () => {

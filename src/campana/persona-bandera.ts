@@ -48,3 +48,18 @@ export function clienteDeGoogleDelSitio(entorno: EntornoDePersonas = ENTORNO_DEL
 export function guardarPerfilActivo(entorno: EntornoDePersonas = ENTORNO_DEL_BUILD()): boolean {
   return anotarseSinBilleteraActivo(entorno) && entorno.VITE_GUARDAR_PERFIL === "1";
 }
+
+/**
+ * La clave del texto que va junto al botón de Google en la pantalla de entrar: el de siempre, o el que dice que se guarda el
+ * correo, el nombre y la foto cuando la página se construyó para guardar el perfil. Las claves van escritas enteras acá, porque
+ * el armado de la página busca en el código las claves que usa, y la elección vive junto a la bandera para que la pantalla
+ * solo pida la clave.
+ */
+export function claveDeNotaDeEntrar(entorno?: EntornoDePersonas): string {
+  return guardarPerfilActivo(entorno) ? "cpEntrarNotaPerfil" : "cpEntrarNotaPersona";
+}
+
+/** La clave del párrafo Qué guardamos de las reglas de una campaña de personas: el de siempre, o el que cuenta el perfil. */
+export function claveDeQueGuardamos(entorno?: EntornoDePersonas): string {
+  return guardarPerfilActivo(entorno) ? "cpQueGuardamosPerfil" : "cpQueGuardamosPersona";
+}
