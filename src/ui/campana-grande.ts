@@ -1,6 +1,6 @@
 import type { Lang } from "../idioma";
 import { type Campana } from "../campana/modelo";
-import { horaTexto, premiosTexto } from "../campana/formato";
+import { horaTexto, textoDelPremio } from "../campana/formato";
 import { regresiva } from "../equipos/pantalla-stand";
 
 /**
@@ -120,7 +120,7 @@ export function crearPantallaGrande(deps: DepsDeLaGrande): PantallaGrande {
     const idioma = deps.idioma();
     const { tx } = deps;
     titulo.textContent = rellenar(tx("cpTitulo"), { empresa: d.campana.empresa.nombre });
-    premio.textContent = premiosTexto(d.campana.premios, idioma);
+    premio.textContent = textoDelPremio(d.campana, idioma);
     cartel.textContent = tx("cpoCartel");
     apps.textContent = tx("cpoNoDesdeApps");
     img.alt = tx("cpoQrAlt");

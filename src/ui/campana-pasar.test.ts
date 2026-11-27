@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { cuentaDePrueba } from "../campana/cuentas-de-prueba";
+import { cuentaDePrueba, lineaDePrueba } from "../campana/cuentas-de-prueba";
 import type { SorteoDeCampana } from "../campana/en-curso";
 import { premioParaElCuadro } from "../campana/formato";
 import type { Campana } from "../campana/modelo";
-import { type PasoDelPuente, ponerRechazo } from "../campana/puente";
+import { type PasoDelPuente, botonDelPaso, lineaDelPaso, ponerRechazo } from "../campana/puente";
 import { cifrarEquipo } from "../equipos/datos";
 import type { SalaDeCampana } from "../sala/campana-org";
 import type { EquipoDeSala } from "../sala/cliente";
 import { montoDelPremio } from "../stellar/pagos";
-import { type ContextoDelPaso, type DepsDelPaso, crearPaso } from "./campana-pasar";
+import { type ContextoDelPaso, type DepsDeLaReposicion, type DepsDelPaso, type FilaParaReponer, crearPaso, reponerLasEtiquetas } from "./campana-pasar";
 
 /**
  * Pasar la lista cerrada al cuadro del sorteo, con la sala, el cuadro y el reloj de mentira. Los textos que se comparan
@@ -38,6 +38,8 @@ const entradaDe = (huella: string): SorteoDeCampana => ({
   pasadaEn: 1,
 });
 const fila = (n: number): EquipoDeSala => ({ n, cuenta: cuentaDePrueba(n), d: `d${n}`, estado: "aceptado", v: n });
+/** Una fila de una campaña de personas: en lugar de la cuenta, la línea de persona. */
+const filaDePersona = (n: number): EquipoDeSala => ({ ...fila(n), cuenta: lineaDePrueba(n) });
 
 interface Mundo {
   d: DepsDelPaso;
@@ -47,7 +49,7 @@ interface Mundo {
   pasos: PasoDelPuente[];
   cuadro: { lista: string; premio: string; ganadores: number; fijo: boolean; bloqueada: boolean; turnos: boolean; sorteado: boolean };
   entradas: Map<string, SorteoDeCampana>;
-  filas: (EquipoDeSala[] | null)[];
+  filas: (EquipoDeSala[] | "mezclada" | null)[];
   lecturas: number;
   esperas: number[];
   cuenta: string | null;
@@ -420,5 +422,236 @@ describe("lo que no se pasa", () => {
     m.entradas.set("testnet/evento-uno", { ...entradaDe("otra"), sorteo: "5", mandados: ["5"], aviso: "pendiente" });
     await crearPaso(m.d).correr(SALA, contexto(m));
     expect(m.entradas.get("testnet/evento-uno")).toMatchObject({ sorteo: "5", mandados: ["5"], aviso: "pendiente" });
+  });
+});
+
+describe("pasar la lista de una campaña de personas", () => {
+  it("una lista toda de líneas de persona pasa al cuadro, ordenada, y llega a en-el-sorteo", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(3), filaDePersona(1), filaDePersona(2)]];
+    const fin = await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(fin).toBe("pasada");
+    const lineas = m.cuadro.lista.split("\n");
+    expect(lineas).toEqual([lineaDePrueba(1), lineaDePrueba(2), lineaDePrueba(3)].sort());
+    expect(ultimo(m)).toEqual({ paso: "en-el-sorteo", n: 3 });
+    expect(m.entradas.get("testnet/evento-uno")?.huella).toBe(`huella:${lineas.join(",")}`);
+  });
+
+  it("las etiquetas son de personas y las de quien no tiene nombre son Persona con su número de la sala", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(1), filaDePersona(2)]];
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(m.etiquetasDe).toEqual(["personas"]);
+    expect(m.registro).toContain("etiquetas:2");
+  });
+
+  it("con menos líneas que premios dice cuántas hacen falta, como con cuentas", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(1), filaDePersona(2)]];
+    expect(await crearPaso(m.d).correr(SALA, contexto(m, [1n, 1n, 1n]))).toBe("pocos");
+    expect(ultimo(m)).toEqual({ paso: "pocos", n: 3 });
+    expect(m.cuadro.lista).toBe("");
+  });
+
+  it("una fila que no es cuenta ni línea de persona sigue siendo una lectura que falló", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(1), { ...fila(2), cuenta: "p1:corta" }]];
+    expect(await crearPaso(m.d).correr(SALA, contexto(m))).toBe("no-leyo");
+    expect(m.cuadro.lista).toBe("");
+  });
+});
+
+describe("una lista mezclada de cuentas y líneas de persona", () => {
+  it("termina en lista-rara, sin repetir la lectura y sin tocar el cuadro ni la entrada", async () => {
+    const m = mundo();
+    m.filas = ["mezclada", [fila(1), fila(2)], [fila(1), fila(2)]];
+    const fin = await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(fin).toBe("lista-rara");
+    expect(m.lecturas).toBe(1);
+    expect(m.esperas).toEqual([]);
+    expect(ultimo(m)).toEqual({ paso: "lista-rara" });
+    expect(m.registro).toEqual([]);
+    expect(m.cuadro.lista).toBe("");
+    expect(m.entradas.size).toBe(0);
+  });
+
+  it("no consulta a la organizadora ni descifra nada", async () => {
+    const m = mundo();
+    let consultas = 0;
+    m.d.organizadora = async () => {
+      consultas++;
+      return m.organizadora;
+    };
+    m.d.descifrar = async () => {
+      consultas++;
+      return null;
+    };
+    m.filas = ["mezclada"];
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(consultas).toBe(0);
+  });
+
+  it("el aviso no lleva botón de reintentar y dice lo de la lista, no lo de no pudimos leer", async () => {
+    const m = mundo();
+    m.filas = ["mezclada"];
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    const paso = ultimo(m) as PasoDelPuente;
+    expect(botonDelPaso(paso)).toBeNull();
+    expect(lineaDelPaso(paso)).toEqual({ clave: "cpoListaRara", vars: {} });
+  });
+
+  it("una corrida cancelada mientras lee no dice nada", async () => {
+    const m = mundo();
+    m.filas = ["mezclada"];
+    const paso = crearPaso(m.d);
+    const corrida = paso.correr(SALA, contexto(m));
+    paso.cancelar();
+    expect(await corrida).toBe("cancelada");
+    expect(ultimo(m)).toEqual({ paso: "leyendo" });
+  });
+
+  it("después de una mezcla, una lectura buena vuelve a pasar la lista", async () => {
+    const m = mundo();
+    m.filas = ["mezclada", [fila(1), fila(2)]];
+    const paso = crearPaso(m.d);
+    expect(await paso.correr(SALA, contexto(m))).toBe("lista-rara");
+    expect(await paso.correr(SALA, contexto(m))).toBe("pasada");
+    expect(ultimo(m)).toEqual({ paso: "en-el-sorteo", n: 2 });
+  });
+});
+
+describe("reponer los nombres de una campaña de personas ya pasada", () => {
+  /** Lo que el panel tiene de cada anotada: el nombre ya descifrado, o nada, y si el filtro lo marcó. */
+  const delPanel = (n: number, nombre: string | null, revisar = false, cuenta = lineaDePrueba(n)): FilaParaReponer => ({ n, cuenta, nombre, revisar });
+
+  /** Las etiquetas que arma el paso al pasar la lista, con tres nombres, uno repetido, uno tapado y uno vacío. */
+  async function alPasarLaLista(m: Mundo): Promise<Map<string, string>> {
+    m.nombres.set("d1", { nombre: "Ana", revisar: false });
+    m.nombres.set("d2", { nombre: "Beto", revisar: true });
+    m.nombres.set("d4", { nombre: "ana", revisar: false });
+    m.filas = [[filaDePersona(1), filaDePersona(2), filaDePersona(3), filaDePersona(4)]];
+    let armadas = new Map<string, string>();
+    const poner = m.d.ponerEtiquetas;
+    m.d.ponerEtiquetas = (e, de) => {
+      armadas = new Map(e);
+      poner(e, de);
+    };
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    m.d.ponerEtiquetas = poner;
+    return armadas;
+  }
+
+  const panelDeLoMismo = (): FilaParaReponer[] => [delPanel(4, "ana"), delPanel(3, null), delPanel(2, "Beto", true), delPanel(1, "Ana")];
+
+  function reposicion(m: Mundo, hay = false): { d: DepsDeLaReposicion; puestas: { e: Map<string, string>; de: string | undefined }[] } {
+    const puestas: { e: Map<string, string>; de: string | undefined }[] = [];
+    const d: DepsDeLaReposicion = {
+      entrada: m.d.entrada,
+      huella: m.d.huella,
+      listaDelCuadro: m.d.listaDelCuadro,
+      persona: m.d.persona,
+      hayEtiquetas: () => hay,
+      ponerEtiquetas: (e, de) => void puestas.push({ e: new Map(e), de }),
+    };
+    return { d, puestas };
+  }
+
+  it("arma los mismos nombres que al pasar la lista, como de personas", async () => {
+    const m = mundo();
+    const alPasar = await alPasarLaLista(m);
+    // Con el filtro, un nombre vacío y un repetido: el segundo en el orden de la lista lleva (2).
+    const valores = [...alPasar.values()];
+    expect(valores.filter((v) => v.startsWith("Persona"))).toHaveLength(2);
+    expect(valores).toContain("Persona 2");
+    expect(valores).toContain("Persona 3");
+    expect(valores.filter((v) => /^ana( \(2\))?$/i.test(v) && v.endsWith("(2)"))).toHaveLength(1);
+    const { d, puestas } = reposicion(m);
+    expect(reponerLasEtiquetas(d, SALA, panelDeLoMismo())).toBe(true);
+    expect(puestas).toHaveLength(1);
+    expect(puestas[0]?.de).toBe("personas");
+    expect(puestas[0]?.e).toEqual(alPasar);
+  });
+
+  it("no toca nada si la pestaña ya tiene etiquetas", async () => {
+    const m = mundo();
+    await alPasarLaLista(m);
+    const { d, puestas } = reposicion(m, true);
+    expect(reponerLasEtiquetas(d, SALA, panelDeLoMismo())).toBe(false);
+    expect(puestas).toHaveLength(0);
+  });
+
+  it("con una lista de cuentas no hace nada, aunque el cuadro y la entrada coincidan", () => {
+    const m = mundo();
+    const lineas = [cuentaDePrueba(1), cuentaDePrueba(2)];
+    m.cuadro.lista = lineas.join("\n");
+    m.entradas.set("testnet/evento-uno", entradaDe(m.d.huella(lineas)));
+    const { d, puestas } = reposicion(m);
+    const filas = [delPanel(1, "Ana", false, cuentaDePrueba(1)), delPanel(2, "Nora", false, cuentaDePrueba(2))];
+    expect(reponerLasEtiquetas(d, SALA, filas)).toBe(false);
+    expect(puestas).toHaveLength(0);
+  });
+
+  it("sin entrada, o con otra lista en el cuadro, no hace nada", async () => {
+    const m = mundo();
+    await alPasarLaLista(m);
+    const sinEntrada = reposicion(m);
+    m.entradas.clear();
+    expect(reponerLasEtiquetas(sinEntrada.d, SALA, panelDeLoMismo())).toBe(false);
+    const m2 = mundo();
+    await alPasarLaLista(m2);
+    m2.cuadro.lista = lineaDePrueba(1);
+    const otra = reposicion(m2);
+    expect(reponerLasEtiquetas(otra.d, SALA, panelDeLoMismo())).toBe(false);
+    expect(sinEntrada.puestas).toHaveLength(0);
+    expect(otra.puestas).toHaveLength(0);
+  });
+
+  it("si las filas del panel no son la lista del cuadro, no pone nombres de otra lista", async () => {
+    const m = mundo();
+    await alPasarLaLista(m);
+    const { d, puestas } = reposicion(m);
+    expect(reponerLasEtiquetas(d, SALA, panelDeLoMismo().slice(1))).toBe(false);
+    expect(puestas).toHaveLength(0);
+  });
+
+  it("con una mezcla de cuentas y líneas, o sin filas, no hace nada", async () => {
+    const m = mundo();
+    await alPasarLaLista(m);
+    const { d, puestas } = reposicion(m);
+    expect(reponerLasEtiquetas(d, SALA, [...panelDeLoMismo().slice(1), delPanel(1, "Ana", false, cuentaDePrueba(1))])).toBe(false);
+    expect(reponerLasEtiquetas(d, SALA, [])).toBe(false);
+    expect(puestas).toHaveLength(0);
+  });
+});
+
+describe("el premio de una campaña de premio en mano al pasar la lista", () => {
+  const enMano = { es: "Auriculares", en: "Headphones" };
+  const contextoEnMano = (m: Mundo, premios: bigint[]): ContextoDelPaso => ({
+    campana: { ...campana(premios), premioEnMano: enMano } as Campana,
+    mostradas: new Set<number>(),
+    quitasEnCurso: () => m.quitas,
+  });
+
+  it("pone el premio escrito en español en el cuadro, no un monto, y los ganadores que dice la campaña", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(1), filaDePersona(2), filaDePersona(3), filaDePersona(4)]];
+    expect(await crearPaso(m.d).correr(SALA, contextoEnMano(m, [0n, 0n]))).toBe("pasada");
+    expect(m.cuadro.premio).toBe("Auriculares");
+    expect(m.cuadro.ganadores).toBe(2);
+    expect(ultimo(m)).toEqual({ paso: "en-el-sorteo", n: 4 });
+  });
+
+  it("con premios en cero y sin premio escrito sigue diciendo el monto de siempre", async () => {
+    const m = mundo();
+    m.filas = [[filaDePersona(1), filaDePersona(2)]];
+    await crearPaso(m.d).correr(SALA, contexto(m, [400_000_000n]));
+    expect(m.cuadro.premio).toBe(premioParaElCuadro(400_000_000n));
+  });
+
+  it("una campaña de cuentas pone el monto aunque la lista lleve cuentas", async () => {
+    const m = mundo();
+    m.filas = [[fila(1), fila(2)]];
+    await crearPaso(m.d).correr(SALA, contexto(m));
+    expect(m.cuadro.premio).toBe("40 dólares digitales");
   });
 });

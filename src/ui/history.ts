@@ -2,6 +2,8 @@ import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
 import { isTurnOrder, ordenGuardadoSinSello, turnOrderDisplayNames } from "../modos/turnos";
 import { isSecretSanta } from "../modos/amigo";
+import { esLineaDePersona } from "../campana/forma-persona";
+import { etiquetaDe, nombreOLugar } from "../equipos/etiquetas";
 import type { SorteoDelEvento } from "../protocol/evento";
 import { hayModoOficial, network, txUrl } from "../stellar/config";
 import { logoComun, logoPorHuella } from "../logo-guardado";
@@ -155,9 +157,24 @@ export function remember(entry: Entry): void {
   const same = (e: Entry): boolean =>
     e.organizer === entry.organizer && e.listHash === entry.listHash && e.round === entry.round;
   const at = list.findIndex(same);
-  if (at >= 0) list[at] = { ...list[at], ...entry } as Entry;
-  else list.push(entry);
+  if (at >= 0) list[at] = sinLineasCrudas({ ...list[at], ...entry } as Entry);
+  else list.push(sinLineasCrudas(entry));
   writeAll(list);
+}
+
+/**
+ * En una campaña de personas la lista sellada son líneas, y quienes ganaron llegan como líneas. Una línea no se guarda
+ * ni se muestra nunca: la fila lleva el nombre de esa persona si esta pestaña lo tiene, y si no su lugar en la lista.
+ * Así la tarjeta, el evento, el archivo que se baja y lo que se comparte salen limpios por el mismo camino.
+ */
+function sinLineasCrudas(e: Entry): Entry {
+  if (!e.winners?.some((w) => esLineaDePersona(w))) return e;
+  const winners = e.winners.map((w) => {
+    if (!esLineaDePersona(w)) return w;
+    const lugar = e.names?.indexOf(w) ?? -1;
+    return lugar >= 0 ? nombreOLugar(w, lugar) : etiquetaDe(w);
+  });
+  return { ...e, winners };
 }
 
 /**

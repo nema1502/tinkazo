@@ -73,5 +73,132 @@
       "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       "google:100000000000000000001"
     ]
+  },
+  "entrega": {
+    "descripcion": "Codigo de entrega de cada ganadora, en orden de puesto: HMAC-SHA256 con la sal de la campana (sus bytes) del texto entrega:<vuelta>:<linea>, con la vuelta empezando en 0. Los primeros 4 bytes, como entero sin signo en big endian, modulo 10000, con ceros a la izquierda hasta 4 cifras. Si el codigo ya salio para una ganadora anterior, se prueba la vuelta siguiente. Cada caso trae la vuelta en que quedo cada codigo.",
+    "casos": [
+      {
+        "nombre": "tres ganadoras sin choque",
+        "sal": "00112233445566778899aabbccddeeff",
+        "ganadoras": [
+          "p1:gd3ipw5vlh6roxgq3vs6tb3m5y",
+          "p1:jzczprmdcyres5t5loijt4tzrm",
+          "p1:x6uesmj3nqqeihvd5cto7qqwmm"
+        ],
+        "codigos": [
+          "1454",
+          "1576",
+          "9822"
+        ],
+        "vueltas": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "nombre": "cinco ganadoras con otra sal, un codigo con ceros a la izquierda",
+        "sal": "ffeeddccbbaa99887766554433221100",
+        "ganadoras": [
+          "p1:dmtw6vnlfj5s622s6zxn5zw6hi",
+          "p1:26nh2yuikfx7mixwisb4hp5rqq",
+          "p1:f2bg3ps7azokjyiaxd4lskiy5u",
+          "p1:mazifbjmoov2xcwut43mv3m7uy",
+          "p1:xtozxoihbiqeu7w4x6vvmv2xqm"
+        ],
+        "codigos": [
+          "3363",
+          "0804",
+          "1379",
+          "8317",
+          "0225"
+        ],
+        "vueltas": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "nombre": "diez ganadoras",
+        "sal": "0123456789abcdef0123456789abcdef",
+        "ganadoras": [
+          "p1:qbooapnpzxvsujwo4qwo6fctte",
+          "p1:infzn2npswmetzdtn7palgit2u",
+          "p1:btm5fjcezgoi7z7qs37wmybise",
+          "p1:uy32kouuw4xfibwotfzxg3pjju",
+          "p1:h6bsnf3dzenuyqpgoblskbxbbi",
+          "p1:agpmyvc3lxqavn7kddmwqvt3wq",
+          "p1:oob6hqn73lniypkudpxbjavhfy",
+          "p1:tjmixchly53i7o43beedd3pbbi",
+          "p1:m5mprmngidetbkktsexxwanwly",
+          "p1:77khv6nkwusdqhxt5zanzqzydy"
+        ],
+        "codigos": [
+          "4877",
+          "9119",
+          "4945",
+          "2528",
+          "3074",
+          "5945",
+          "7694",
+          "3774",
+          "3198",
+          "7407"
+        ],
+        "vueltas": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "nombre": "dos ganadoras chocan en la primera vuelta y la segunda pasa a la vuelta siguiente",
+        "sal": "00112233445566778899aabbccddeeff",
+        "ganadoras": [
+          "p1:gd3ipw5vlh6roxgq3vs6tb3m5y",
+          "p1:eoyrhead53346fz7zsbqwl7il4",
+          "p1:7m5ljrplm7hkq56qz6uhzsvcbu"
+        ],
+        "codigos": [
+          "1454",
+          "8835",
+          "9336"
+        ],
+        "vueltas": [
+          0,
+          0,
+          1
+        ]
+      },
+      {
+        "nombre": "las mismas del choque en otro orden: pasa a la vuelta siguiente la otra",
+        "sal": "00112233445566778899aabbccddeeff",
+        "ganadoras": [
+          "p1:gd3ipw5vlh6roxgq3vs6tb3m5y",
+          "p1:7m5ljrplm7hkq56qz6uhzsvcbu",
+          "p1:eoyrhead53346fz7zsbqwl7il4"
+        ],
+        "codigos": [
+          "1454",
+          "8835",
+          "8421"
+        ],
+        "vueltas": [
+          0,
+          0,
+          1
+        ]
+      }
+    ]
   }
 }

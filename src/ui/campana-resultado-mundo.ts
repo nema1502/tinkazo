@@ -4,10 +4,12 @@
  * Sin red ni reloj de verdad.
  */
 import type { EstadoDeAltaPremio, SorteoDeCampana } from "../campana/en-curso";
+import { esLineaDePersona } from "../campana/forma-persona";
 import { type PasoDelPuente, alCambiarElPuente, pasoDelPuente, reiniciarElPuente } from "../campana/puente";
 import { roundTime } from "../protocol/quicknet";
 import type {
   EstadoDeSala,
+  FallaDeCodigos,
   FallaDeSala,
   FaseDeSala,
   RespuestaDeAviso,
@@ -66,9 +68,15 @@ export interface Mundo {
   estadoPorDefecto: EstadoDeSala | FallaDeSala;
   resultados: { sorteo: string; comprobante: string; en: number }[];
   respuestasAlResultado: RespuestaDeResultado[];
-  leidoDeLaSala: ResultadoDeSala | "sin-resultado" | "no-existe" | "red";
+  leidoDeLaSala: ResultadoDeSala | "sin-resultado" | "no-existe" | "red" | "mezclada";
+  /** Los nombres que la pestaña conoce de quienes ganaron, por cuenta o por línea. Sin nombre, una línea de persona es Ganadora y su puesto. */
+  nombres: Record<string, string>;
   avisos: string[];
   respuestaAlAviso: RespuestaDeAviso;
+  /** Lo que contesta cada pedido de códigos de entrega, en orden. Una función es un pedido que tarda lo que la prueba quiera. */
+  respuestasALosCodigos: (string[] | FallaDeCodigos | (() => Promise<string[] | FallaDeCodigos>))[];
+  /** Cuándo (ms) se pidieron los códigos y cuántos pasos había pintado el puente en ese momento. */
+  pedidosDeCodigos: { en: number; pasosYaPintados: number }[];
   altas: { sorteo: string; ganadoras: string[] }[];
   altasDe: Record<string, EstadoDeAltaPremio>;
   otraBilletera: boolean;
@@ -115,8 +123,11 @@ export function mundo(): Mundo {
     resultados: [],
     respuestasAlResultado: [],
     leidoDeLaSala: { sorteo: "777", ganadoras: ["GB", "GA"], comprobante: "/verificar.html" },
+    nombres: {},
     avisos: [],
     respuestaAlAviso: "ok",
+    respuestasALosCodigos: [],
+    pedidosDeCodigos: [],
     altas: [],
     altasDe: {},
     otraBilletera: false,
@@ -180,9 +191,16 @@ export function mundo(): Mundo {
       m.avisos.push(cuenta);
       return m.respuestaAlAviso;
     },
+    codigos: async () => {
+      m.pedidosDeCodigos.push({ en: m.ahora, pasosYaPintados: m.pasos.length });
+      const r = m.respuestasALosCodigos.shift();
+      if (r === undefined) return "red";
+      return typeof r === "function" ? r() : r;
+    },
     sePuedeSoltar: () => m.puedeSoltar,
     soltarElSello: async () => void m.soltadas++,
-    nombreDe: (cuenta) => (cuenta === "GA" ? "Ana" : cuenta === "GB" ? "Beto" : cuenta),
+    nombreDe: (cuenta, puesto) =>
+      m.nombres[cuenta] ?? (cuenta === "GA" ? "Ana" : cuenta === "GB" ? "Beto" : esLineaDePersona(cuenta) ? `Ganadora ${puesto + 1}` : cuenta),
     otraBilletera: () => m.otraBilletera,
     iniciarAltas: (sorteo, ganadoras) => void m.altas.push({ sorteo, ganadoras }),
     altasDe: () => m.altasDe,

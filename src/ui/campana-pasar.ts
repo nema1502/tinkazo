@@ -3,12 +3,15 @@
  *
  * Lo que se sella es exactamente lo que la sala va a comprobar: las cuentas anotadas y no quitadas, leídas de la sala (nunca
  * de las filas del panel, que esconden a quien se está quitando), ordenadas por cuenta con la misma función que usa la sala.
+ * En una campaña de personas las filas son líneas de persona y el camino es el mismo. Una lista que mezcla las dos formas no
+ * se sortea nunca: termina en `lista-rara`, sin reintentos y sin botón.
  * Los nombres viajan solo como etiquetas locales. Todo lo de afuera (la sala, el cuadro, el reloj) entra por `DepsDelPaso`,
  * para probarlo sin red ni pantalla.
  *
  * Una sola corrida a la vez: si llega otra llamada mientras corre, queda una pendiente y se corre al terminar. Reabrir o
  * dejar la campaña cancela la que está en curso, que no toca nada de lo que ya no le corresponde.
  */
+import { formaDeLista } from "../campana/forma-de-lista";
 import { type DatosDeAnotada, listaYEtiquetas } from "../campana/lista";
 import {
   type SorteoDeCampana,
@@ -25,6 +28,7 @@ export type FinDelPaso =
   | "pasada"
   | "en-espera"
   | "no-leyo"
+  | "lista-rara"
   | "pocos"
   | "otra-cuenta"
   | "lista-sellada"
@@ -43,7 +47,8 @@ export interface ContextoDelPaso {
 
 export interface DepsDelPaso {
   ahora: () => number;
-  leer: (s: SalaDeCampana) => Promise<EquipoDeSala[] | null>;
+  /** Las anotadas de la sala, `null` si no se pudo leer, o `mezclada` si mezclan cuentas con líneas de persona. */
+  leer: (s: SalaDeCampana) => Promise<EquipoDeSala[] | "mezclada" | null>;
   descifrar: (clave: string, d: string) => Promise<DatosDeEquipo | null>;
   /** El nombre y si el filtro lo marcó, de lo descifrado. */
   nombreYFiltro: (datos: DatosDeEquipo) => { nombre: string; revisar: boolean } | null;
@@ -146,7 +151,7 @@ export function crearPaso(d: DepsDelPaso): PasoDeLaCampana {
       return vigente() ? "en-espera" : "cancelada";
     }
 
-    let leidas: EquipoDeSala[] | null = null;
+    let leidas: EquipoDeSala[] | "mezclada" | null = null;
     for (let intento = 0; intento < INTENTOS_DE_LECTURA && leidas === null; intento++) {
       if (intento > 0) await d.esperar(ESPERA_ENTRE_LECTURAS_MS);
       if (!vigente()) return "cancelada";
@@ -154,6 +159,8 @@ export function crearPaso(d: DepsDelPaso): PasoDeLaCampana {
       if (!vigente()) return "cancelada";
     }
     if (leidas === null) return decir({ paso: "no-leyo" }, "no-leyo");
+    // Una mezcla no cambia al volver a leer: el aviso no tiene botón de reintentar.
+    if (leidas === "mezclada") return decir({ paso: "lista-rara" }, "lista-rara");
 
     if (leidas.length < Math.max(2, premios)) return decir({ paso: "pocos", n: Math.max(2, premios) }, "pocos");
 
@@ -208,7 +215,8 @@ export function crearPaso(d: DepsDelPaso): PasoDeLaCampana {
     if (d.modoTurnos()) d.ponerModoTurnos(false);
     d.ponerEtiquetas(armada.etiquetas, "personas");
     d.setList(armada.lineas.join("\n"));
-    d.ponerPremio(d.premioEnEspanol(campana.premios[0] ?? 0n));
+    // Con premio en mano el cuadro lleva lo que se escribió, siempre en español como el monto, porque es lo que se sella.
+    d.ponerPremio(campana.premioEnMano !== undefined ? campana.premioEnMano.es : d.premioEnEspanol(campana.premios[0] ?? 0n));
     d.ponerGanadores(premios);
     d.fijarPorCampana(true);
     const huella = d.huella(armada.lineas);
@@ -255,4 +263,44 @@ export function crearPaso(d: DepsDelPaso): PasoDeLaCampana {
       pendiente = null;
     },
   };
+}
+
+/** Lo que el panel ya tiene de cada anotada: su número, su línea, el nombre descifrado y si el filtro lo tapa. */
+export interface FilaParaReponer {
+  n: number;
+  cuenta: string;
+  nombre: string | null;
+  /** El filtro la marcó y quien organiza no tocó Mostrar. */
+  revisar: boolean;
+}
+
+/** Lo de afuera de reponer los nombres: el cuadro, la entrada y las etiquetas de esta pestaña. */
+export type DepsDeLaReposicion = Pick<DepsDelPaso, "entrada" | "huella" | "listaDelCuadro" | "ponerEtiquetas" | "persona"> & {
+  /** Si esta pestaña ya tiene etiquetas. */
+  hayEtiquetas: () => boolean;
+};
+
+/**
+ * Repone los nombres de una campaña de personas ya pasada al volver a abrirla en el mismo navegador, cuando la pestaña los
+ * perdió. Es solo para listas de personas: con cuentas no hace nada, como antes.
+ *
+ * Se arman con lo que el panel ya recibió de la sala, sin pedir nada, y solo si esas filas son la lista que está en el cuadro y la
+ * que tiene la huella guardada de la campaña: así nunca se ponen los nombres de otra lista. Los arma `listaYEtiquetas`, igual
+ * que al pasar la lista. Devuelve si puso las etiquetas.
+ */
+export function reponerLasEtiquetas(d: DepsDeLaReposicion, s: SalaDeCampana, filas: readonly FilaParaReponer[]): boolean {
+  if (d.hayEtiquetas() || filas.length === 0) return false;
+  if (formaDeLista(filas.map((f) => f.cuenta)) !== "persona") return false;
+  const guardada = d.entrada(s.red, s.evento);
+  if (guardada === null || guardada.huella === "" || guardada.huella !== d.huella(d.listaDelCuadro())) return false;
+  const porCuenta = new Map<string, DatosDeAnotada>();
+  for (const f of filas) porCuenta.set(f.cuenta, { n: f.n, nombre: f.nombre ?? "", revisar: f.revisar, mostrar: false });
+  const armada = listaYEtiquetas(
+    filas.map((f) => f.cuenta),
+    porCuenta,
+    d.persona,
+  );
+  if (!armada || d.huella(armada.lineas) !== guardada.huella) return false;
+  d.ponerEtiquetas(armada.etiquetas, "personas");
+  return true;
 }

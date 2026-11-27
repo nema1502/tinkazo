@@ -1,3 +1,5 @@
+import { esLineaDePersona } from "../campana/forma-persona";
+import { texto as t } from "../idioma";
 import { canonicalList } from "../protocol/canonical";
 import { cuentaCorta } from "./modelo";
 
@@ -9,6 +11,10 @@ import { cuentaCorta } from "./modelo";
  * servidor, ni entra en el comprobante: el sello, la huella y el comprobante son de las cuentas.
  *
  * Una línea sin etiqueta se muestra tal cual, como siempre: con la bandera apagada esto no cambia nada.
+ *
+ * La excepción es la línea de una persona (campañas de personas, `p1:` y 26 caracteres): no dice quién es y no se muestra
+ * nunca. Si este navegador conoce su nombre va el nombre, y si no, su lugar en la lista («Lugar 3»), o «Sin nombre»
+ * si no está en la lista del cuadro.
  */
 
 /** La clave de este navegador donde quedan las etiquetas (`[[cuenta, nombre], …]`): la escribe el registro de equipos y la leen el show, el resultado y el panel de ganadores. */
@@ -89,6 +95,43 @@ export const etiquetasSonDePersonas = (): boolean => etiquetas.size > 0 && palab
 export const esListaDeEquipos = (lineas: readonly string[]): boolean =>
   palabra === "equipos" && lineas.length > 0 && lineas.every((l) => etiquetas.has(l));
 
+/** El cuadro como estaba la última vez que se miró, con el lugar de cada línea: se recorre una vez por cambio y no una por línea. */
+let valorDelCuadro: string | null = null;
+let lugaresDelCuadro = new Map<string, number>();
+
+/** El lugar de una línea en la lista del cuadro, desde 0, o -1 si el cuadro no la tiene (o la página no tiene cuadro). */
+function lugarEnElCuadro(linea: string): number {
+  if (typeof document === "undefined") return -1;
+  const ta = document.getElementById("ta");
+  if (!(ta instanceof HTMLTextAreaElement)) return -1;
+  if (ta.value !== valorDelCuadro) {
+    valorDelCuadro = ta.value;
+    lugaresDelCuadro = new Map(canonicalList(ta.value).map((l, i): [string, number] => [l, i]));
+  }
+  return lugaresDelCuadro.get(linea) ?? -1;
+}
+
+const conN = (clave: string, n: number): string => t(clave).replace("{n}", String(n));
+
+/** Cómo se nombra a una persona sin nombre: su lugar en la lista, que empieza en 1 («Lugar 3»). */
+const lugarCorto = (n: number): string => conN("vLugar", n);
+
+/** Lo que se ve de una línea de persona sin nombre: su lugar en el cuadro, o «Sin nombre» si el cuadro no la tiene. */
+function sinNombre(linea: string): string {
+  const i = lugarEnElCuadro(linea);
+  return i >= 0 ? lugarCorto(i + 1) : t("vPersonaAnotada");
+}
+
+/** El lugar en la lista sellada, desde 1, dicho para quien lee un enlace o un comprobante: «Lugar 3 de la lista». */
+export const lugarEnLaLista = (indice: number): string => conN("vLugarDeLaLista", indice + 1);
+
+/**
+ * Cómo se nombra a quien está en ese lugar de la lista (desde 0) cuando se la lee en un celular: el nombre, si la lista
+ * lo trae, y si no, el lugar. Nunca la línea. Sirve para una línea de persona: la de una cuenta o un nombre libre sigue
+ * por `etiquetaConCuenta`.
+ */
+export const nombreOLugar = (linea: string, indice: number): string => etiquetas.get(linea) ?? lugarEnLaLista(indice);
+
 /** La lista que está en el cuadro de la herramienta. Vacía en una página que no lo tiene. */
 function lineasDelCuadro(): string[] {
   if (typeof document === "undefined") return [];
@@ -107,14 +150,31 @@ export const cuadroEsDeEquipos = (): boolean => etiquetas.size > 0 && esListaDeE
 /** Los nombres de los equipos de ahora, como se ven en el show: los que nunca se acortan (`games/nombres-enteros.ts`). */
 export const nombresDeLosEquipos = (): string[] => [...etiquetas.values()];
 
-/** El nombre del equipo de esa línea, o la línea tal cual si no es de ningún equipo. */
-export const etiquetaDe = (linea: string): string => etiquetas.get(linea) ?? linea;
+/**
+ * El nombre del equipo de esa línea, o la línea tal cual si no es de ningún equipo. Una línea de persona sin nombre dice su
+ * lugar en el cuadro, y nunca la línea.
+ */
+export function etiquetaDe(linea: string): string {
+  const e = etiquetas.get(linea);
+  if (e !== undefined) return e;
+  return esLineaDePersona(linea) ? sinNombre(linea) : linea;
+}
 
-/** El nombre del equipo y su cuenta acortada: «Los Cóndores (GABC…WXYZ)». Sin etiqueta, la línea tal cual. */
+/**
+ * El nombre del equipo y su cuenta acortada: «Los Cóndores (GABC…WXYZ)». Sin etiqueta, la línea tal cual. Una línea de
+ * persona no lleva cuenta al lado: dice su nombre, o su lugar, y nada de la línea.
+ */
 export function etiquetaConCuenta(linea: string): string {
+  if (esLineaDePersona(linea)) return etiquetaDe(linea);
   const e = etiquetas.get(linea);
   return e === undefined ? linea : `${e} (${cuentaCorta(linea)})`;
 }
 
-/** Las líneas de una lista como se muestran en el show: el nombre de cada equipo. */
-export const paraMostrar = (lineas: readonly string[]): string[] => (etiquetas.size ? lineas.map(etiquetaDe) : [...lineas]);
+/**
+ * Las líneas de una lista como se muestran en el show: el nombre de cada equipo y, de cada persona, su nombre o su lugar en
+ * esta misma lista (el índice más 1, que es el lugar en la lista sellada).
+ */
+export function paraMostrar(lineas: readonly string[]): string[] {
+  if (!etiquetas.size && !lineas.some((l) => esLineaDePersona(l))) return [...lineas];
+  return lineas.map((l, i) => etiquetas.get(l) ?? (esLineaDePersona(l) ? lugarCorto(i + 1) : l));
+}

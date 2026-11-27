@@ -13,7 +13,7 @@ import { mantenerDespierta, soltarDespierta } from "../ui/despierta";
 import { seccion, titulo } from "./adentro";
 import type { DatosDeLaRonda, DepsDelCelular } from "./celular";
 import { type DatosDelRitmo, desfaseDe, horaDeLaRondaMs, type RitmoDeConsulta, ritmoDe, vistaDeLaCuenta } from "./empieza-ritmo";
-import { horaTexto, premiosTexto } from "./formato";
+import { horaTexto, textoDelPremio } from "./formato";
 import { caja, conDestacado, rotulosChicos } from "./piezas";
 import { pintarReglas } from "./previa";
 import { sustituir } from "./sustituir";
@@ -53,7 +53,7 @@ export function pintarEmpieza(raizPrincipal: HTMLElement, deps: DepsDelCelular, 
   if (datos.rotulo) {
     hero.append(cuenta);
   } else {
-    hero.append(rotulosChicos([sustituir(deps.tx("cpTitulo"), { empresa: deps.campana.empresa.nombre }), premiosTexto(deps.campana.premios, idioma)]));
+    hero.append(rotulosChicos([sustituir(deps.tx("cpTitulo"), { empresa: deps.campana.empresa.nombre }), textoDelPremio(deps.campana, idioma)]));
     titulo(hero, tx("ceTitulo"));
     hero.append(cuenta, linea);
     if (datos.otroLado) {

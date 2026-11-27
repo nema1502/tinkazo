@@ -23,7 +23,8 @@ import {
   type DatosParticipante,
   type RondaViva,
 } from "../sala/participante";
-import { etiquetaConCuenta, etiquetaDe, esListaDeEquipos, ponerEtiquetas } from "../equipos/etiquetas";
+import { etiquetaConCuenta, etiquetaDe, esListaDeEquipos, lugarEnLaLista, nombreOLugar, ponerEtiquetas } from "../equipos/etiquetas";
+import { esLineaDePersona } from "../campana/forma-persona";
 import { contar as contarPersonas, nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { refDe } from "../contar";
 import { cuentaCorta } from "../equipos/modelo";
@@ -123,13 +124,16 @@ async function traerBeacon(round: number, onAttempt: (attempt: number, total: nu
 /**
  * Los ganadores como los lee la sala en su resultado: la persona sin el número de su participación, y el equipo con el
  * comienzo de su cuenta al lado (`etiquetaConCuenta`). El nombre del equipo viaja en el enlace y no está sellado: la
- * cuenta sí, y es la que gana.
+ * cuenta sí, y es la que gana. De una persona de una campaña de personas va su nombre, si el enlace lo trae, y si no su lugar
+ * en la lista: nunca un trozo de su línea.
  */
 function nombresDeGanadores(datos: DatosEspectador, winners: readonly number[]): string[] {
   // Con los modos a la vista en este sitio (la bandera de la versión), la misma lectura que la pantalla de la sala.
   const porPersona = seCuentaPorPersona(datos.n, modesVisible());
   return winners.map((i) => {
-    const n = etiquetaConCuenta(datos.n[i] ?? "");
+    const linea = datos.n[i] ?? "";
+    if (esLineaDePersona(linea)) return nombreOLugar(linea, i);
+    const n = etiquetaConCuenta(linea);
     return porPersona ? nombreDePersona(n) : n;
   });
 }
@@ -196,6 +200,9 @@ async function compartirElSorteo(
   // un equipo cuando la sala lo marcó así (`q: 0`). Con etiquetas de personas o sin saber de qué son (un enlace de una
   // sala anterior), sale la cuenta acortada, que es lo que dice el comprobante: la lista sellada son cuentas.
   const ganadores = d.winners.map((i) => {
+    // Una persona de una campaña de personas no tiene cuenta que acortar: sale su lugar en la lista y, solo si la sala marcó
+    // los nombres como de equipo (`q: 0`), su nombre.
+    if (esLineaDePersona(datos.n[i])) return datos.e && datos.q !== 0 ? lugarEnLaLista(i) : nombreOLugar(datos.n[i] ?? "", i);
     if (datos.e && datos.q !== 0) return cuentaCorta(datos.n[i] ?? "");
     const linea = etiquetaDe(datos.n[i] ?? "");
     return porPersona ? nombreDePersona(linea) : linea;

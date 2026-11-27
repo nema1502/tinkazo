@@ -272,10 +272,15 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     };
   }
 
-  const activo = (): boolean => deps.comision() !== null;
+  /**
+   * Lo que se cobra por la campaña de ahora. Una campaña con el premio en mano (de personas) no cobra nada: no hay premio en
+   * dólares que mover ni a quién pagarle, así que es como si el cobro estuviera apagado, esté como esté el sitio.
+   */
+  const config = (): ConfigDeComision | null => (ctx.campana()?.premioEnMano !== undefined ? null : deps.comision());
+  const activo = (): boolean => config() !== null;
 
   function estado(): EstadoDeComision {
-    const cfg = deps.comision();
+    const cfg = config();
     const c = ctx.campana();
     if (!cfg || !c) return { tipo: "pagada" };
     const n = numeros(cfg, c);
@@ -339,7 +344,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
 
   /** `callado`: la mirada que corre sola en la duda no borra lo que se sabía, así la pantalla no parpadea en Un momento. */
   async function mirar(callado = false): Promise<void> {
-    const cfg = deps.comision();
+    const cfg = config();
     const c = ctx.campana();
     if (!cfg || !c || !ctx.enPrevia() || pagando) return;
     const n = numeros(cfg, c);
@@ -414,7 +419,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
   /* --- pagar --- */
 
   async function pagar(): Promise<void> {
-    const cfg = deps.comision();
+    const cfg = config();
     const c = ctx.campana();
     const origen = ctx.cuenta();
     if (!cfg || !c || !origen || estado().tipo !== "lista" || revisandoLaCuenta) return;
@@ -561,7 +566,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
   /* --- lo que se dibuja --- */
 
   function descripcion(): DescripcionDeComision {
-    const cfg = deps.comision();
+    const cfg = config();
     const c = ctx.campana();
     const vacia: DescripcionDeComision = { titulo: null, linea: null, principal: null, secundario: null, plegado: null };
     if (!cfg || !c || !ctx.enPrevia()) return vacia;
@@ -677,7 +682,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
   }
 
   function datosDelPlegado(): { cuenta: string; monto: bigint; nota: string; enlace: string } | null {
-    const cfg = deps.comision();
+    const cfg = config();
     const c = ctx.campana();
     if (!cfg || !c) return null;
     const e = estado();
