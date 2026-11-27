@@ -487,3 +487,45 @@ describe("el alta de una persona con Google y su perfil", () => {
     expect(pantalla.mensajes.join("")).toContain("p1:");
   });
 });
+
+describe("el estado público de la campaña dice si la sala guarda perfiles", () => {
+  /** El estado público de la campaña tal como lo ve cualquiera, con su cuerpo en bruto. */
+  async function estadoDe(mundo: MundoDeSala, sala: SalaDeCampana, cabeceras: Record<string, string> = {}): Promise<Record<string, unknown>> {
+    const r = await mundo.pedir(ruta(sala, "/campana/estado"), { cabeceras });
+    expect(r.status).toBe(200);
+    return (await r.json()) as Record<string, unknown>;
+  }
+
+  it("una campaña de personas con la sala prendida lo dice con perfil en true, para cualquiera y para quien organiza", async () => {
+    const mundo = await montarPersonas({ PERFILES: "1" });
+    const sala = await campanaAbierta(mundo, AHORA, { identidad: "persona" });
+    expect((await estadoDe(mundo, sala)).perfil).toBe(true);
+    expect((await estadoDe(mundo, sala, auth(sala))).perfil).toBe(true);
+  });
+
+  it("con la sala apagada no hay ningún campo nuevo: el cuerpo es el de siempre, con cualquier valor que no sea el 1", async () => {
+    const cuerpos: string[] = [];
+    for (const extra of [{}, { PERFILES: "0" }, { PERFILES: "" }, { PERFILES: "true" }, { PERFILES: " 1" }, { PERFILES: "si" }]) {
+      const mundo = await montarPersonas(extra);
+      const sala = await campanaAbierta(mundo, AHORA, { identidad: "persona" });
+      const estado = await estadoDe(mundo, sala);
+      expect(estado, JSON.stringify(extra)).not.toHaveProperty("perfil");
+      cuerpos.push(JSON.stringify(estado));
+    }
+    expect(new Set(cuerpos).size).toBe(1);
+  });
+
+  it("con la sala prendida y las campañas de personas apagadas no lo dice: no hay a quién guardarle nada", async () => {
+    const mundo = await montarMundo({ PERFILES: "1" });
+    const sala = await campanaAbierta(mundo, AHORA, { evento: "feria-sin-personas" });
+    expect(await estadoDe(mundo, sala)).not.toHaveProperty("perfil");
+  });
+
+  it("una campaña de cuentas no lo dice nunca, con los interruptores como estén", async () => {
+    for (const extra of [{}, { PERFILES: "1" }]) {
+      const mundo = await montarPersonas(extra);
+      const sala = await campanaAbierta(mundo, AHORA, { evento: "feria-de-cuentas" });
+      expect(await estadoDe(mundo, sala), JSON.stringify(extra)).not.toHaveProperty("perfil");
+    }
+  });
+});

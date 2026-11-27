@@ -38,7 +38,7 @@
  *
  * Las salas de campaña, creadas solo con un archivo firmado por Tinkazo:
  *   GET    /v1/sala/<id>/campana           el texto firmado y su firma → 200 {"texto","firma"}
- *   GET    /v1/sala/<id>/campana/estado?p=P  sin token: fase, total, cierre, si el pase vale (siempre, con PASE en 0) y si hay aviso por correo;
+ *   GET    /v1/sala/<id>/campana/estado?p=P  sin token: fase, total, cierre, si el pase vale (siempre, con PASE en 0), si hay aviso por correo y, en una campaña de personas con PERFILES prendida, "perfil": true;
  *                                           con la lista sellada o sorteada, también "sorteo" (el número) y "ronda" (la del sello, si se guardó);
  *                                           con el token de la sala: "tuya" (true si es el vigente, false si ya lo tomó otra compu).
  *                                           Sin pase y sin token se recuerda 2 segundos en el borde (cache.ts)
@@ -80,7 +80,8 @@
  * cuenta de Google, el correo, el nombre y la dirección de la foto, con la primera y la última vez que se anotó (`perfiles.ts`).
  * Ese objeto no se borra con las salas, así que el perfil dura más que la sala. Ninguna ruta lee, lista ni borra perfiles, y nada
  * de un perfil va a una respuesta ni a un registro. Con PERFILES apagada no se guarda nada del token. Una campaña de cuentas
- * nunca guarda un perfil.
+ * nunca guarda un perfil. El estado público de una campaña de personas dice `"perfil": true` solo con la sala prendida: así el
+ * celular muestra que se guarda y manda el permiso únicamente cuando es verdad. Apagada, ese campo no existe.
  *
  * Un Durable Object por sala, con SQLite: guarda los nombres CIFRADOS (la clave
  * viaja en el fragmento del QR y nunca llega acá), sus huellas HMAC para no
@@ -2268,6 +2269,9 @@ export default {
           // Si la sala le avisa por correo a quien gana: la pantalla de quien se anota lo dice solo si es verdad.
           // En una campaña de personas no se promete: la sala no sabe a quién escribir.
           correo: correoPrendido(env) && r.identidad !== "persona",
+          // Si la sala guarda el perfil de quien se anota con Google: la pantalla de quien se anota dice que se guarda solo si es
+          // verdad. Solo una campaña de personas con la sala prendida lo trae; con todo apagado el cuerpo es el de siempre.
+          ...(r.identidad === "persona" && perfilesPrendido(env) ? { perfil: true } : {}),
           ...(r.vias ? { vias: r.vias } : {}),
           // `tuya` solo llega si el pedido trajo un token, y entonces la respuesta nunca se guarda en la caché.
           ...(r.tuya !== undefined ? { tuya: r.tuya } : {}),
