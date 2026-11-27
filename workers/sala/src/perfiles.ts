@@ -5,10 +5,13 @@
  *
  * Nace apagado y pide dos permisos a la vez. Uno es de la sala: la variable `PERFILES` en "1", con las campañas de personas
  * prendidas. El otro viaja en cada pedido: el celular manda `perfil: true` solo si su página mostró los textos que dicen que
- * se guarda. Sin los dos no se guarda nada. Una campaña de cuentas nunca guarda un perfil.
+ * se guarda. Sin los dos no se guarda nada. Una campaña de cuentas nunca guarda un perfil. Tampoco una campaña de personas
+ * cuyas bases firmadas dicen que Tinkazo no guarda el correo (`basesDicenQueNoSeGuarda`): se arman así las de antes de que
+ * existiera el perfil, y lo firmado no se contradice.
  *
- * Este archivo solo decide si está prendido, limpia y guarda. No tiene ninguna función que lea, liste, cuente ni borre
- * perfiles, y ninguna ruta de la sala los devuelve. No depende de Cloudflare: se prueba en Node con un SQLite en memoria.
+ * Este archivo solo decide si está prendido, lee las bases firmadas, limpia y guarda. No tiene ninguna función que lea,
+ * liste, cuente ni borre perfiles, y ninguna ruta de la sala los devuelve. No depende de Cloudflare: se prueba en Node con
+ * un SQLite en memoria.
  */
 import { personasPrendido } from "./personas";
 import type { VariablesDePersonas } from "./personas";
@@ -23,6 +26,42 @@ export interface VariablesDePerfiles {
 /** Si la sala guarda perfiles: la variable en "1" exacto y las campañas de personas prendidas. Falta una cosa y no guarda. */
 export function perfilesPrendido(env: VariablesDePerfiles & VariablesDePersonas): boolean {
   return env.PERFILES === "1" && personasPrendido(env);
+}
+
+/**
+ * La frase de las bases de antes, en español y en inglés, en minúsculas. Una campaña de personas armada antes de que
+ * existiera el perfil la lleva firmada en sus bases.
+ */
+const FRASES_DE_ANTES = ["tinkazo no guarda tu correo", "tinkazo doesn't store your email"];
+
+/** Un texto para comparar: en minúsculas, con el apóstrofo recto y un solo espacio entre palabras. */
+const paraComparar = (texto: string): string => texto.toLowerCase().replace(/[\u2018\u2019\u02bc]/gu, "'").replace(/\s+/gu, " ");
+
+/**
+ * Si las bases firmadas de una campaña dicen, en cualquiera de sus idiomas, que Tinkazo no guarda el correo. Recibe el texto
+ * firmado entero y mira cada texto que haya dentro de su campo `bases`, sin importar mayúsculas. Una campaña así no guarda
+ * perfiles ni le dice al celular que se guardan: se porta como con el perfil apagado. Un texto que no se puede leer cuenta
+ * como si trajera la frase, porque ante la duda no se guarda. Nunca lanza.
+ */
+export function basesDicenQueNoSeGuarda(textoFirmado: string): boolean {
+  try {
+    const campana: unknown = JSON.parse(textoFirmado);
+    if (typeof campana !== "object" || campana === null || Array.isArray(campana)) return true;
+    // Las bases son un texto por idioma. Se recorren con una pila y no con llamadas, para que ninguna forma rara las frene.
+    const pendientes: unknown[] = [(campana as Record<string, unknown>).bases];
+    while (pendientes.length > 0) {
+      const parte = pendientes.pop();
+      if (typeof parte === "string") {
+        const dicho = paraComparar(parte);
+        if (FRASES_DE_ANTES.some((frase) => dicho.includes(frase))) return true;
+      } else if (typeof parte === "object" && parte !== null) {
+        for (const valor of Object.values(parte)) pendientes.push(valor);
+      }
+    }
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 /**

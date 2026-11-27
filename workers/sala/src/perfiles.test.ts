@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import * as modulo from "./perfiles";
-import { crearTablaDePerfiles, guardarPerfil, limpiarPerfil, perfilesPrendido } from "./perfiles";
+import { basesDicenQueNoSeGuarda, crearTablaDePerfiles, guardarPerfil, limpiarPerfil, perfilesPrendido } from "./perfiles";
 import type { Ejecutar, ValorSql } from "./registro";
 
 /**
@@ -51,8 +51,14 @@ const datos = (cambios: Record<string, unknown> = {}): Parameters<typeof limpiar
   ({ usuario: ID, correo: CORREO, nombre: "Ana de Prueba", foto: FOTO, ...cambios }) as Parameters<typeof limpiarPerfil>[0];
 
 describe("lo que hace el módulo y nada más", () => {
-  it("exporta el interruptor, la tabla, la limpieza y el guardado, y ninguna otra cosa", () => {
-    expect(Object.keys(modulo).sort()).toEqual(["crearTablaDePerfiles", "guardarPerfil", "limpiarPerfil", "perfilesPrendido"]);
+  it("exporta el interruptor, la lectura de las bases, la tabla, la limpieza y el guardado, y ninguna otra cosa", () => {
+    expect(Object.keys(modulo).sort()).toEqual([
+      "basesDicenQueNoSeGuarda",
+      "crearTablaDePerfiles",
+      "guardarPerfil",
+      "limpiarPerfil",
+      "perfilesPrendido",
+    ]);
   });
 
   it("su código no lee, no lista, no cuenta y no borra perfiles", () => {
@@ -80,6 +86,59 @@ describe("el interruptor de la sala", () => {
     expect(perfilesPrendido({ PERFILES: "1", DIFERIDA: "1", GOOGLE_CLIENT_ID: "  " })).toBe(false);
     expect(perfilesPrendido({ PERFILES: "1", DIFERIDA: "0", GOOGLE_CLIENT_ID: CLIENTE })).toBe(false);
     expect(perfilesPrendido({ PERFILES: "1", GOOGLE_CLIENT_ID: CLIENTE })).toBe(false);
+  });
+});
+
+describe("las bases firmadas que dicen que no se guarda el correo", () => {
+  const ANTES_ES = "Tu nombre de Google puede verse en la pantalla del evento. Tinkazo no guarda tu correo.";
+  const ANTES_EN = "Your Google name may show on the event screen. Tinkazo doesn't store your email.";
+  const HOY_ES = "Tu nombre de Google puede verse en la pantalla del evento. Lo que guarda Tinkazo está en sus Términos.";
+  const HOY_EN = "Your Google name may show on the event screen. What Tinkazo keeps is in its Terms.";
+  /** El texto de una campaña de personas como queda firmado, con esas bases. */
+  const firmado = (bases: unknown, resto: Record<string, unknown> = {}): string =>
+    JSON.stringify({ v: 1, evento: "feria-del-libro", identidad: "persona", ...resto, ...(bases === undefined ? {} : { bases }) });
+
+  it("la frase de antes en cualquiera de los dos idiomas alcanza", () => {
+    expect(basesDicenQueNoSeGuarda(firmado({ es: ANTES_ES, en: ANTES_EN }))).toBe(true);
+    expect(basesDicenQueNoSeGuarda(firmado({ es: ANTES_ES, en: HOY_EN }))).toBe(true);
+    expect(basesDicenQueNoSeGuarda(firmado({ es: HOY_ES, en: ANTES_EN }))).toBe(true);
+  });
+
+  it("no importan las mayúsculas, los espacios de más ni el apóstrofo curvo", () => {
+    expect(basesDicenQueNoSeGuarda(firmado({ es: "1. Gratis.\n6. TINKAZO NO GUARDA TU CORREO.", en: HOY_EN }))).toBe(true);
+    expect(basesDicenQueNoSeGuarda(firmado({ es: HOY_ES, en: "tinkazo DOESN'T store your EMAIL" }))).toBe(true);
+    expect(basesDicenQueNoSeGuarda(firmado({ es: "Tinkazo  no guarda\ntu\u00a0correo", en: HOY_EN }))).toBe(true);
+    expect(basesDicenQueNoSeGuarda(firmado({ es: HOY_ES, en: "Tinkazo doesn\u2019t store your email." }))).toBe(true);
+  });
+
+  it("las bases de hoy, y una campaña sin bases, no la traen", () => {
+    expect(basesDicenQueNoSeGuarda(firmado({ es: HOY_ES, en: HOY_EN }))).toBe(false);
+    expect(basesDicenQueNoSeGuarda(firmado(undefined))).toBe(false);
+    expect(basesDicenQueNoSeGuarda(firmado(null))).toBe(false);
+    expect(basesDicenQueNoSeGuarda(firmado({ es: "", en: "" }))).toBe(false);
+    // Otra frase que habla del correo no es la de antes.
+    expect(basesDicenQueNoSeGuarda(firmado({ es: "Tinkazo guarda tu correo.", en: "Tinkazo keeps your email." }))).toBe(false);
+  });
+
+  it("la encuentra en cualquier texto de las bases, con la forma que tengan", () => {
+    expect(basesDicenQueNoSeGuarda(firmado(ANTES_ES))).toBe(true);
+    expect(basesDicenQueNoSeGuarda(firmado([HOY_ES, ANTES_EN]))).toBe(true);
+    expect(basesDicenQueNoSeGuarda(firmado({ es: [HOY_ES, { nota: ANTES_ES }], en: HOY_EN }))).toBe(true);
+    expect(basesDicenQueNoSeGuarda(firmado({ es: 7, en: true }))).toBe(false);
+  });
+
+  it("un texto que no se puede leer cuenta como si la trajera: ante la duda no se guarda", () => {
+    for (const texto of ["", "no es un archivo", "[]", "null", "7", '"texto"', '{"bases":']) {
+      expect(basesDicenQueNoSeGuarda(texto), JSON.stringify(texto)).toBe(true);
+    }
+    expect(basesDicenQueNoSeGuarda(undefined as unknown as string)).toBe(true);
+  });
+
+  it("nunca lanza, tampoco con unas bases muy anidadas", () => {
+    let hondas: unknown = ANTES_ES;
+    for (let i = 0; i < 2_000; i++) hondas = [hondas];
+    expect(() => basesDicenQueNoSeGuarda(firmado(hondas))).not.toThrow();
+    expect(basesDicenQueNoSeGuarda(firmado(hondas))).toBe(true);
   });
 });
 

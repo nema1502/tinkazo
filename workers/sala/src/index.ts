@@ -81,7 +81,9 @@
  * Ese objeto no se borra con las salas, así que el perfil dura más que la sala. Ninguna ruta lee, lista ni borra perfiles, y nada
  * de un perfil va a una respuesta ni a un registro. Con PERFILES apagada no se guarda nada del token. Una campaña de cuentas
  * nunca guarda un perfil. El estado público de una campaña de personas dice `"perfil": true` solo con la sala prendida: así el
- * celular muestra que se guarda y manda el permiso únicamente cuando es verdad. Apagada, ese campo no existe.
+ * celular muestra que se guarda y manda el permiso únicamente cuando es verdad. Apagada, ese campo no existe. Una campaña de
+ * personas cuyas bases firmadas dicen que Tinkazo no guarda el correo (las armadas antes de que existiera el perfil) se porta
+ * como con PERFILES apagada: su estado no trae el campo y su alta no guarda, pida lo que pida el celular.
  *
  * Un Durable Object por sala, con SQLite: guarda los nombres CIFRADOS (la clave
  * viaja en el fragmento del QR y nunca llega acá), sus huellas HMAC para no
@@ -262,7 +264,13 @@ import { verificarIdentidadDeGoogle } from "./identidad-google";
 import { codigosDeEntrega, esLineaDePersona, lineaDePersona } from "./linea-persona";
 import { clavePorConexion, clienteDeGoogle, personasPrendido, venceDelToken } from "./personas";
 import type { VariablesDePersonas } from "./personas";
-import { crearTablaDePerfiles, guardarPerfil as guardarPerfilEnTabla, limpiarPerfil, perfilesPrendido } from "./perfiles";
+import {
+  basesDicenQueNoSeGuarda,
+  crearTablaDePerfiles,
+  guardarPerfil as guardarPerfilEnTabla,
+  limpiarPerfil,
+  perfilesPrendido,
+} from "./perfiles";
 import type { DatosDePerfil, PerfilLimpio, VariablesDePerfiles } from "./perfiles";
 import deployments from "../../../src/stellar/deployments.json";
 
@@ -761,6 +769,20 @@ export class Sala extends DurableObject<Env> {
   }
   private personasRecordado: boolean | null = null;
 
+  /**
+   * Si esta campaña guarda el perfil de quien se anota con Google. Hacen falta las tres cosas: que sea de personas, que la sala
+   * tenga los perfiles prendidos y que sus bases firmadas no digan que Tinkazo no guarda el correo, como dicen las de una campaña
+   * armada antes de que existiera el perfil (`basesDicenQueNoSeGuarda`). Es el único lugar donde se decide por campaña: el
+   * estado público y el alta preguntan acá, así la pantalla y el guardado no pueden decir cosas distintas.
+   */
+  private guardaPerfil(): boolean {
+    if (!this.esDePersonas() || !perfilesPrendido(this.env)) return false;
+    // El texto firmado nunca cambia en la vida de la sala: se lee una vez (la creación y el borrado lo sueltan).
+    if (this.basesSinPerfilRecordado === null) this.basesSinPerfilRecordado = basesDicenQueNoSeGuarda(this.dato("campana") ?? "");
+    return !this.basesSinPerfilRecordado;
+  }
+  private basesSinPerfilRecordado: boolean | null = null;
+
   /** La red queda dentro del texto firmado: no la puede cambiar un pedido posterior. */
   private red(): "mainnet" | "testnet" | null {
     const texto = this.dato("campana");
@@ -814,6 +836,7 @@ export class Sala extends DurableObject<Env> {
       this.ctx.storage.sql.exec("INSERT INTO sala (k, v) VALUES ('identidad', 'persona')");
     }
     this.personasRecordado = null;
+    this.basesSinPerfilRecordado = null;
     await this.ctx.storage.setAlarm(ahora + vida);
     return true;
   }
@@ -861,6 +884,7 @@ export class Sala extends DurableObject<Env> {
       sorteo?: string;
       ronda?: number;
       identidad?: "persona";
+      perfil?: true;
     }>
   > {
     if (!this.esCampana()) return { ok: false, motivo: "no-existe" };
@@ -888,6 +912,8 @@ export class Sala extends DurableObject<Env> {
       ...selloPublico(this.sql, fase),
       // Solo una campaña de personas lo dice: el Worker lo usa para no prometer el aviso por correo.
       ...(this.esDePersonas() ? { identidad: "persona" as const } : {}),
+      // Solo una campaña de personas que guarda el perfil lo dice (`guardaPerfil`). En las demás el campo no existe.
+      ...(this.guardaPerfil() ? { perfil: true as const } : {}),
     };
   }
 
@@ -1042,7 +1068,8 @@ export class Sala extends DurableObject<Env> {
 
   /**
    * Lo mismo que `prealta` para una campaña de personas: fase, pase y topes de rechazos, y si la ficha ya se verificó hace poco y
-   * su persona sigue anotada, es un reingreso y `ya` viene en verdadero. No devuelve la línea de la persona.
+   * su persona sigue anotada, es un reingreso y `ya` viene en verdadero. No devuelve la línea de la persona. `perfil` viene en
+   * verdadero solo si esta campaña guarda el perfil (`guardaPerfil`): sin él, el Worker no guarda aunque el celular lo pida.
    */
   async prealtaDePersona(
     ip: string,
@@ -1051,7 +1078,7 @@ export class Sala extends DurableObject<Env> {
     token: string,
     llave: string,
     d?: string,
-  ): Promise<Resultado<{ ya: boolean; apurada: boolean }>> {
+  ): Promise<Resultado<{ ya: boolean; apurada: boolean; perfil?: true }>> {
     const no = this.sinPersonas();
     if (no) return no;
     // Sin pase la respuesta es la misma que en una campaña de cuentas: no depende de la fase.
@@ -1071,7 +1098,13 @@ export class Sala extends DurableObject<Env> {
     });
     if (r.ok && r.nombre) this.avisarNombre(r.cuenta, r.nombre);
     // Si la conexión ya mandó demasiados tokens falsos: el Worker verifica primero y deja de gastar llamadas con los que no valen.
-    return r.ok ? { ok: true, ya: r.cuenta !== null, apurada: conexionDePersonasApurada(this.sql, grupo, ahora) } : r;
+    if (!r.ok) return r;
+    return {
+      ok: true,
+      ya: r.cuenta !== null,
+      apurada: conexionDePersonasApurada(this.sql, grupo, ahora),
+      ...(this.guardaPerfil() ? { perfil: true as const } : {}),
+    };
   }
 
   /**
@@ -1591,6 +1624,7 @@ export class Sala extends DurableObject<Env> {
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
     this.personasRecordado = null;
+    this.basesSinPerfilRecordado = null;
   }
 
   /** Al vencer la vida de la sala no queda nada: 10 h en una sala común y 24 h en una campaña. */
@@ -1899,7 +1933,8 @@ function cuerpoDeEstadoDeCelular(r: EstadoDeCelular): Record<string, unknown> {
  * el pedido trae `perfil` en verdadero (el celular lo manda cuando su página dijo que se guarda), el alta que terminó bien después
  * de verificar el token deja en segundo plano (`enSegundoPlano`, el `waitUntil` del pedido) el guardado del perfil en el objeto de
  * cupos: el identificador de la cuenta de Google, el correo, el nombre y la dirección de la foto (`perfiles.ts`). La respuesta no
- * lo espera ni cambia por él. El reingreso con una ficha reciente no verifica el token y no guarda.
+ * lo espera ni cambia por él. El reingreso con una ficha reciente no verifica el token y no guarda. Tampoco guarda una campaña
+ * cuyas bases firmadas dicen que Tinkazo no guarda el correo: lo dice la sala en su comprobación previa (`antes.perfil`).
  */
 async function altaDePersona(
   env: Env,
@@ -1957,12 +1992,12 @@ async function altaDePersona(
   if (!anterior.ok) return falla(anterior, h);
   if (anterior.cuenta !== null) {
     // Ya estaba anotada y su token se acaba de verificar: el perfil se pone al día.
-    dejarPerfil(env, cuerpo.perfil, quien, enSegundoPlano);
+    dejarPerfil(env, cuerpo.perfil, antes.perfil === true, quien, enSegundoPlano);
     return json({ anotada: true, ya: true }, 200, h);
   }
   const r = await sala.anotarPersonaDeGoogle({ usuario: quien.usuario, d, llave, ip, p, exigirPase, token: google, vence });
   if (!r.ok) return falla(r, h);
-  dejarPerfil(env, cuerpo.perfil, quien, enSegundoPlano);
+  dejarPerfil(env, cuerpo.perfil, antes.perfil === true, quien, enSegundoPlano);
   return r.ya ? json({ anotada: true, ya: true }, 200, h) : json({ anotada: true }, 201, h);
 }
 
@@ -1970,15 +2005,22 @@ async function altaDePersona(
 type CodigoDePerfil = "forma" | "guardar" | "inesperado";
 
 /**
- * Deja en segundo plano el guardado del perfil de quien se acaba de anotar, si corresponde. Hacen falta las dos cosas: que el
- * pedido traiga `perfil` en verdadero (el booleano exacto: cualquier otro valor se ignora y nunca es un error de forma) y que la
- * sala tenga los perfiles prendidos. Así una página vieja, que mostró el texto de antes, nunca hace guardar nada. El alta no
- * espera el guardado y nunca falla por él: lo que salga mal deja solo un código de una lista fija. Ni el correo, ni el nombre, ni
- * la foto, ni el usuario van a un registro.
+ * Deja en segundo plano el guardado del perfil de quien se acaba de anotar, si corresponde. Hacen falta las tres cosas: que el
+ * pedido traiga `perfil` en verdadero (el booleano exacto: cualquier otro valor se ignora y nunca es un error de forma), que la
+ * sala de esa campaña diga que guarda el perfil (`campanaGuarda`: no lo dice si sus bases firmadas niegan que se guarde el
+ * correo) y que la sala tenga los perfiles prendidos. Así una página vieja, que mostró el texto de antes, nunca hace guardar
+ * nada. El alta no espera el guardado y nunca falla por él: lo que salga mal deja solo un código de una lista fija. Ni el
+ * correo, ni el nombre, ni la foto, ni el usuario van a un registro.
  */
-function dejarPerfil(env: Env, pedido: unknown, quien: DatosDePerfil, enSegundoPlano: (trabajo: Promise<unknown>) => void): void {
+function dejarPerfil(
+  env: Env,
+  pedido: unknown,
+  campanaGuarda: boolean,
+  quien: DatosDePerfil,
+  enSegundoPlano: (trabajo: Promise<unknown>) => void,
+): void {
   try {
-    if (pedido !== true || !perfilesPrendido(env)) return;
+    if (pedido !== true || !campanaGuarda || !perfilesPrendido(env)) return;
     const perfil = limpiarPerfil(quien);
     if (perfil === null) {
       perfilSinGuardar("forma");
@@ -2270,8 +2312,9 @@ export default {
           // En una campaña de personas no se promete: la sala no sabe a quién escribir.
           correo: correoPrendido(env) && r.identidad !== "persona",
           // Si la sala guarda el perfil de quien se anota con Google: la pantalla de quien se anota dice que se guarda solo si es
-          // verdad. Solo una campaña de personas con la sala prendida lo trae; con todo apagado el cuerpo es el de siempre.
-          ...(r.identidad === "persona" && perfilesPrendido(env) ? { perfil: true } : {}),
+          // verdad. Solo una campaña de personas con la sala prendida lo trae, y nunca una cuyas bases firmadas dicen que no se
+          // guarda el correo (`r.perfil`, que decide la sala de esa campaña). Con todo apagado el cuerpo es el de siempre.
+          ...(r.identidad === "persona" && r.perfil === true && perfilesPrendido(env) ? { perfil: true } : {}),
           ...(r.vias ? { vias: r.vias } : {}),
           // `tuya` solo llega si el pedido trajo un token, y entonces la respuesta nunca se guarda en la caché.
           ...(r.tuya !== undefined ? { tuya: r.tuya } : {}),

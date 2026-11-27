@@ -105,6 +105,17 @@ function altaGoogle(
 
 const CON_PERMISO = { cuerpo: { perfil: true } };
 
+/** Las bases de una campaña de personas armada antes de que existiera el perfil: dicen que Tinkazo no guarda el correo. */
+const BASES_DE_ANTES = {
+  es: "1. Participar es gratis.\n6. Tu nombre de Google puede verse en la pantalla del evento. Tinkazo no guarda tu correo.",
+  en: "1. Taking part is free.\n6. Your Google name may show on the event screen. Tinkazo doesn't store your email.",
+};
+/** Las de hoy: remiten a los Términos. */
+const BASES_DE_HOY = {
+  es: "1. Participar es gratis.\n6. Tu nombre de Google puede verse en la pantalla del evento. Lo que guarda Tinkazo está en sus Términos.",
+  en: "1. Taking part is free.\n6. Your Google name may show on the event screen. What Tinkazo keeps is in its Terms.",
+};
+
 interface Testigo {
   /** Con qué se llamó a `guardarPerfil` del objeto de cupos, en orden. */
   llamadas: unknown[][];
@@ -395,6 +406,58 @@ describe("el alta de una persona con Google y su perfil", () => {
     expect(delPerfil(registrado(consola))).toEqual([]);
   });
 
+  it("una campaña cuyas bases firmadas dicen que no se guarda el correo no guarda perfiles, ni en el alta ni al volver", async () => {
+    const variantes: Record<string, string>[] = [
+      BASES_DE_ANTES,
+      { es: BASES_DE_ANTES.es, en: BASES_DE_HOY.en },
+      { es: BASES_DE_HOY.es, en: BASES_DE_ANTES.en },
+      { es: BASES_DE_HOY.es.toUpperCase(), en: BASES_DE_ANTES.en.toUpperCase() },
+    ];
+    for (const bases of variantes) {
+      vi.setSystemTime(AHORA);
+      await montar();
+      const vieja = await campanaAbierta(mundo, AHORA, { identidad: "persona", evento: "feria-de-antes", bases });
+      const r = await altaGoogle(mundo, vieja, await tokenDeGoogle(1), CON_PERMISO);
+      expect(r.status).toBe(201);
+      expect(await r.json()).toEqual({ anotada: true });
+      // Otro token de la misma cuenta, pasado el minuto de la ficha: se verifica de nuevo y tampoco guarda.
+      vi.setSystemTime(AHORA + 120_000);
+      const otra = await altaGoogle(mundo, vieja, await tokenDeGoogle(1, { iat: AHORA / 1000 + 100 }), { llave: llaveDe(1, 2), ...CON_PERMISO });
+      expect(otra.status).toBe(200);
+      expect(await otra.json()).toEqual({ anotada: true, ya: true });
+      await mundo.esperarSegundoPlano();
+      expect(testigo.llamadas, JSON.stringify(bases)).toEqual([]);
+      expect(perfiles(mundo)).toEqual([]);
+    }
+    expect(delPerfil(registrado(consola))).toEqual([]);
+  });
+
+  it("en el mismo servicio, una campaña con las bases de hoy sí guarda: la de antes no apaga a las demás", async () => {
+    const vieja = await campanaAbierta(mundo, AHORA, { identidad: "persona", evento: "feria-de-antes", bases: BASES_DE_ANTES });
+    const nueva = await campanaAbierta(mundo, AHORA, { identidad: "persona", evento: "feria-de-hoy", bases: BASES_DE_HOY });
+    expect((await altaGoogle(mundo, vieja, await tokenDeGoogle(1), CON_PERMISO)).status).toBe(201);
+    expect((await altaGoogle(mundo, nueva, await tokenDeGoogle(2), { llave: llaveDe(2), ...CON_PERMISO })).status).toBe(201);
+    await mundo.esperarSegundoPlano();
+    expect(perfiles(mundo)).toMatchObject([{ id: `google:${sub(2)}`, correo: correo(2), veces: 1 }]);
+    expect(delPerfil(registrado(consola))).toEqual([GUARDADO(true)]);
+  });
+
+  it("la respuesta del alta de una campaña con las bases de antes es la misma, byte a byte, que con todo apagado", async () => {
+    const recorrer = async (extra: Record<string, string>): Promise<string[]> => {
+      vi.setSystemTime(AHORA);
+      await montar(extra);
+      const vieja = await campanaAbierta(mundo, AHORA, { identidad: "persona", evento: "feria-de-antes", bases: BASES_DE_ANTES });
+      const t = await tokenDeGoogle(1);
+      const fotos = [await fotoDe(await altaGoogle(mundo, vieja, t, CON_PERMISO)), await fotoDe(await altaGoogle(mundo, vieja, t, CON_PERMISO))];
+      await mundo.esperarSegundoPlano();
+      return fotos;
+    };
+    const apagado = await recorrer({});
+    const prendido = await recorrer({ PERFILES: "1" });
+    expect(prendido).toEqual(apagado);
+    expect(perfiles(mundo)).toEqual([]);
+  });
+
   it("una campaña de cuentas nunca guarda un perfil, con los interruptores como estén", async () => {
     const cuentas = await campanaAbierta(mundo, AHORA, { evento: "feria-de-cuentas" });
     const r = await altaDe(mundo, cuentas.id, personaDePrueba(mundo, 1), { cuerpo: { perfil: true } });
@@ -501,6 +564,33 @@ describe("el estado público de la campaña dice si la sala guarda perfiles", ()
     const sala = await campanaAbierta(mundo, AHORA, { identidad: "persona" });
     expect((await estadoDe(mundo, sala)).perfil).toBe(true);
     expect((await estadoDe(mundo, sala, auth(sala))).perfil).toBe(true);
+  });
+
+  it("con la sala prendida y las bases de hoy firmadas lo dice", async () => {
+    const mundo = await montarPersonas({ PERFILES: "1" });
+    const sala = await campanaAbierta(mundo, AHORA, { identidad: "persona", bases: BASES_DE_HOY });
+    expect((await estadoDe(mundo, sala)).perfil).toBe(true);
+  });
+
+  it("una campaña cuyas bases firmadas dicen que no se guarda el correo no lo dice: su estado es el de la sala apagada, letra por letra", async () => {
+    const variantes: Record<string, string>[] = [
+      BASES_DE_ANTES,
+      { es: BASES_DE_ANTES.es, en: BASES_DE_HOY.en },
+      { es: BASES_DE_HOY.es, en: BASES_DE_ANTES.en },
+      { es: BASES_DE_ANTES.es.toLowerCase(), en: BASES_DE_HOY.en },
+    ];
+    for (const bases of variantes) {
+      const cuerpos: string[] = [];
+      for (const extra of [{ PERFILES: "1" }, {}] as Record<string, string>[]) {
+        const mundo = await montarPersonas(extra);
+        const sala = await campanaAbierta(mundo, AHORA, { identidad: "persona", bases });
+        const estado = await estadoDe(mundo, sala);
+        expect(estado, JSON.stringify([bases, extra])).not.toHaveProperty("perfil");
+        expect(await estadoDe(mundo, sala, auth(sala))).not.toHaveProperty("perfil");
+        cuerpos.push(JSON.stringify(estado));
+      }
+      expect(cuerpos[0]).toBe(cuerpos[1]);
+    }
   });
 
   it("con la sala apagada no hay ningún campo nuevo: el cuerpo es el de siempre, con cualquier valor que no sea el 1", async () => {

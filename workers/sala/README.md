@@ -395,6 +395,10 @@ Nace apagado, y con todo apagado no pasa nada de lo que sigue: ninguna respuesta
   manda el permiso solo si su página se construyó con `VITE_GUARDAR_PERFIL` y la sala lo confirmó en su última consulta. Con el
   sitio prendido y la sala apagada el campo no existe y la pantalla dice lo de siempre. Apagada, el estado es el de siempre, letra
   por letra.
+- **Las bases firmadas mandan.** Una campaña de personas cuyas bases firmadas dicen, en español o en inglés, que Tinkazo no
+  guarda el correo (las armadas antes de este cambio) no guarda perfiles y su estado público no trae `"perfil"`, con los
+  interruptores como estén. Lo decide la sala de esa campaña en un solo lugar (`basesDicenQueNoSeGuarda`, en `perfiles.ts`), para
+  el estado y para el alta: la pantalla y el guardado no pueden decir cosas distintas.
 - **Cuándo se guarda.** Después de que el token de Google se verificó y el alta terminó bien: un alta nueva (`201`) o una persona
   que ya estaba y volvió con un token que la sala verificó (`200` con `ya`). En ese segundo caso la fila se pone al día con el
   correo, el nombre y la foto del token nuevo, `veces` suma una y `primera_ms` no cambia. El reingreso con una ficha de hace menos
@@ -421,7 +425,8 @@ Nace apagado, y con todo apagado no pasa nada de lo que sigue: ninguna respuesta
 publicación nueva), y las campañas se arman después. La sala prendida sola no guarda nada: ningún celular manda el permiso hasta
 que el sitio lo muestra. El sitio prendido con la sala apagada tampoco guarda nada ni lo promete: la pantalla espera la
 confirmación de la sala. Las campañas se arman después porque sus bases quedan firmadas adentro cuando se arman: una campaña de
-personas armada antes de este cambio dice en sus bases que Tinkazo no guarda el correo, y con los perfiles prendidos no se usa.
+personas armada antes de este cambio dice en sus bases que Tinkazo no guarda el correo, y la sala no le guarda perfiles aunque
+todo esté prendido. Para que guarde, se arma y se firma otra.
 
 **Para apagar**, primero el sitio: se quita `VITE_GUARDAR_PERFIL`, se publica, y la pantalla deja de decir que se guarda y de mandar
 el permiso. Después la sala, con `PERFILES = "0"`. Apagar no borra los perfiles ya guardados.
