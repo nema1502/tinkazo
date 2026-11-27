@@ -188,9 +188,9 @@ describe("los textos del regalo de las páginas de lectura", () => {
       /Si canjeás un cupón de evento, ese servicio confirma tu sesión con Pollar y guarda el identificador que Pollar le da a tu cuenta, tu dirección pública, el evento y una huella del cupón, la hora del canje y cuántos sorteos oficiales te quedan\. No guarda tu correo, tu nombre, la llave de tu sesión ni el código del cupón\. Los topes por dirección IP se cuentan en memoria, y la dirección nunca se escribe en disco ni en registros\.$/,
     );
     expect(texto("en", "tmMore1")).toMatch(/^No ads and no trackers that follow you from site to site\./);
-    // La nota ya no dice que no hay ninguna base de participantes: nombra la única lista de personas que se guarda.
-    expect(texto("es", "tmMore1")).toContain("La única lista de personas que guardamos es la de quienes se anotan con su cuenta de Google");
-    expect(texto("en", "tmMore1")).toContain("The only list of people we keep is of those who sign up with their Google account");
+    // La nota ya no dice que no hay ninguna base de participantes: remite al recuadro de quien se anota con Google, sin decir que es la única.
+    expect(texto("es", "tmMore1")).toContain("Si te anotás con tu cuenta de Google y la pantalla lo dice, guardamos tu correo, tu nombre y tu foto");
+    expect(texto("en", "tmMore1")).toContain("If you sign up with your Google account and the screen says so, we keep your email, name and photo");
     expect(texto("en", "tmMore1")).toContain(
       "To give you your 3 free Live draws only once, that service checks your session with Pollar and stores the identifier Pollar gives " +
         "your account, your public address, when you got them and how many you have left. It doesn't store your email or your name. " +

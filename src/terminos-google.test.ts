@@ -22,12 +22,12 @@ const leer = (ruta: string): string => readFileSync(new URL(`../${ruta}`, import
 
 const INICIO_ES =
   "No hay publicidad ni rastreadores que te sigan de un sitio a otro. Las listas y los nombres de un sorteo no quedan en ninguna base " +
-  "que podamos leer. La única lista de personas que guardamos es la de quienes se anotan con su cuenta de Google, y está contada en el " +
-  "recuadro Si te anotás con tu cuenta de Google, más arriba.";
+  "que podamos leer. Si te anotás con tu cuenta de Google y la pantalla lo dice, guardamos tu correo, tu nombre y tu foto, como cuenta " +
+  "el recuadro Si te anotás con tu cuenta de Google, más arriba.";
 const INICIO_EN =
   "No ads and no trackers that follow you from site to site. The lists and names of a draw are not kept in any database we can read. " +
-  "The only list of people we keep is of those who sign up with their Google account, described in the box If you sign up with your " +
-  "Google account above.";
+  "If you sign up with your Google account and the screen says so, we keep your email, name and photo, as the box If you sign up with " +
+  "your Google account above explains.";
 
 describe("los Términos: el recuadro de quien se anota con su cuenta de Google", () => {
   it("tiene su título y su texto en los dos idiomas", () => {
@@ -161,7 +161,7 @@ describe("los Términos: el recuadro de quien se anota con su cuenta de Google",
   });
 });
 
-describe("los Términos: la nota de los servicios cuenta la lista de quienes se anotan con Google", () => {
+describe("los Términos: la nota de los servicios remite al recuadro de quienes se anotan con Google", () => {
   it("empieza con el texto nuevo en el diccionario del modo Oficial, y lo demás sigue como estaba", () => {
     expect(TEXTOS_MODO_OFICIAL.es.tmMore1?.startsWith(`${INICIO_ES} Durante un sorteo el sitio pide afuera el número que publica un faro público`)).toBe(true);
     expect(TEXTOS_MODO_OFICIAL.en.tmMore1?.startsWith(`${INICIO_EN} During a draw the site fetches the number a public beacon publishes`)).toBe(true);
@@ -187,8 +187,19 @@ describe("los Términos: la nota de los servicios cuenta la lista de quienes se 
   });
 
   it("nombra el recuadro por su título, letra por letra, en los dos idiomas", () => {
-    expect(texto("es", "tmMore1")).toContain(`está contada en el recuadro ${texto("es", "tmGoogleT")}, más arriba.`);
-    expect(texto("en", "tmMore1")).toContain(`described in the box ${texto("en", "tmGoogleT")} above.`);
+    expect(texto("es", "tmMore1")).toContain(`como cuenta el recuadro ${texto("es", "tmGoogleT")}, más arriba.`);
+    expect(texto("en", "tmMore1")).toContain(`as the box ${texto("en", "tmGoogleT")} above explains.`);
+  });
+
+  it("no afirma que exista una lista ni que sea la única: dice lo que se guarda solo si la pantalla lo dice", () => {
+    for (const archivo of ["src/i18n.ts", "src/i18n-modo-oficial.ts", "terminos.html"]) {
+      const contenido = leer(archivo);
+      expect(contenido.includes("La única lista de personas"), archivo).toBe(false);
+      expect(contenido.includes("The only list of people"), archivo).toBe(false);
+    }
+    expect(texto("es", "tmMore1")).toContain("y la pantalla lo dice, guardamos");
+    expect(texto("en", "tmMore1")).toContain("and the screen says so, we keep");
+    for (const idioma of IDIOMAS) expect(texto(idioma, "tmMore1"), idioma).not.toMatch(/(única|único|only)/iu);
   });
 
   it("terminos.html trae la nota con el mismo texto en español que el diccionario", () => {
