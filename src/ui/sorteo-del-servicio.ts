@@ -50,9 +50,11 @@ import type { AnchorStep } from "./anchor";
  *   cambia el resultado. Con la red sin poder leerse no se manda nada más.
  * - **Ninguna espera sin tope.** Todo se mide por el reloj de pared, no por vueltas: una pestaña en segundo plano estira
  *   los temporizadores, y al volver se revisa la hora y se abandona lo que ya pasó de su tope. Un pedido sin tiempo en la
- *   etapa no se manda. La etapa de pedir dura como mucho 20 segundos y la duda, con la red leyéndose, unos 8 más: eso es lo
- *   que la sala puede esperar de más antes de que arranque el camino de siempre, al que `grabar-sorteo.ts` le descuenta lo
- *   gastado con un mínimo. Un envío que el servicio dio por pendiente se espera como mucho `TOPE_DE_LA_SALA_MS` desde la
+ *   etapa no se manda. La etapa de pedir dura como mucho 20 segundos y la duda, con la red leyéndose, unos 8 más: son hasta
+ *   unos 28 segundos que la sala espera de más antes de que arranque el camino de siempre, mirando Guardando. Pasa con el
+ *   servicio caído, colgado o con su red lenta, y una sola vez por pestaña: después el disyuntor lo deja de lado. Esos
+ *   segundos no suman al total: `grabar-sorteo.ts` se los descuenta al presupuesto del camino de siempre, con un mínimo de
+ *   20 segundos, así que sala y servicio juntos no pasan de los 90 segundos de hoy. Un envío que el servicio dio por pendiente se espera como mucho `TOPE_DE_LA_SALA_MS` desde la
  *   entrada (lo que vive hoy la transacción de una cuenta de Google), y un repetido, `VISTO_SIN_RED_MS` desde que se vio.
  *   Pasado eso, con la red contestando y el contrato sin el sorteo, se sigue por el camino de siempre, que arma otra
  *   transacción con su comisión de ese momento y reintenta como hoy. Todo final que no sigue por el camino de siempre,
