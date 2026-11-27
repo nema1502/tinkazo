@@ -180,12 +180,16 @@ describe("los textos del modo en el panel", () => {
     expect(TEXTOS_SALA_CAMPANA.en[clave]).toBe(en);
   });
 
-  it("van juntas al final de cada idioma, después de las de premio en mano y en el mismo orden", () => {
+  // Van en su propio bloque, justo antes del de las campañas de personas, y no al final: el final de cada idioma lo siguen
+  // sumando las campañas de personas, y dos cambios que agregan al final del mismo bloque chocan al juntarse.
+  it("van juntas y en el mismo orden en cada idioma, justo antes de las de las campañas de personas", () => {
     const esperadas = NUEVAS.map(([clave]) => clave);
     for (const idioma of ["es", "en"] as const) {
       const claves = Object.keys(TEXTOS_SALA_CAMPANA[idioma]);
-      expect(claves.slice(-esperadas.length), idioma).toEqual(esperadas);
-      expect(claves[claves.length - esperadas.length - 1], idioma).toBe("cpoNoSeMarco");
+      const desde = claves.indexOf(esperadas[0] ?? "");
+      expect(desde, idioma).toBeGreaterThan(0);
+      expect(claves.slice(desde, desde + esperadas.length), idioma).toEqual(esperadas);
+      expect(claves[desde + esperadas.length], idioma).toBe("cpoListaRara");
     }
   });
 
