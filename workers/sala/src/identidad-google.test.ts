@@ -16,6 +16,7 @@ const CLIENTE = "cliente-de-prueba.apps.example.org";
 const AHORA = 1_800_000_000_000;
 const SUB = "100000000000000000001";
 const CORREO = "ana@example.org";
+const FOTO = "https://fotos.example.org/a/ana=s96-c";
 
 interface Par {
   kid: string;
@@ -108,7 +109,35 @@ describe("un token de Google bueno", () => {
   it("da el usuario estable y el correo verificado", async () => {
     const b = banco();
     const r = await verificarIdentidadDeGoogle(await firmar(), b.opciones);
-    expect(r).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO });
+    expect(r).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "" });
+  });
+
+  it("da también el nombre y la dirección de la foto, tal como vienen en el token y sin limpiarlos", async () => {
+    const b = banco();
+    const t = await firmar({ payload: { name: "  Ana   de Prueba \n", picture: "http://fotos.example.org/ana.jpg " } });
+    expect(await verificarIdentidadDeGoogle(t, b.opciones)).toEqual({
+      ok: true,
+      usuario: `google:${SUB}`,
+      correo: CORREO,
+      nombre: "  Ana   de Prueba \n",
+      foto: "http://fotos.example.org/ana.jpg ",
+    });
+  });
+
+  it("un token sin nombre o sin foto entra igual, con ese dato vacío", async () => {
+    const b = banco();
+    const sinNombre = await verificarIdentidadDeGoogle(await firmar({ payload: { picture: FOTO } }), b.opciones);
+    expect(sinNombre).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: FOTO });
+    const sinFoto = await verificarIdentidadDeGoogle(await firmar({ payload: { name: "Ana" } }), b.opciones);
+    expect(sinFoto).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "Ana", foto: "" });
+  });
+
+  it("un nombre o una foto que no son un texto quedan vacíos y no frenan a nadie", async () => {
+    const b = banco();
+    for (const raro of [7, 0, null, true, false, { a: 1 }, ["Ana"], []]) {
+      const r = await verificarIdentidadDeGoogle(await firmar({ payload: { name: raro, picture: raro } }), b.opciones);
+      expect(r, JSON.stringify(raro)).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "" });
+    }
   });
 
   it("pide las llaves a la dirección pública de Google", async () => {
@@ -569,10 +598,10 @@ describe("cuando las llaves no están disponibles", () => {
 });
 
 describe("lo que nunca se escribe", () => {
-  it("ni el token ni el correo ni el identificador pasan por un registro", async () => {
+  it("ni el token, ni el correo, ni el nombre, ni la foto, ni el identificador pasan por un registro", async () => {
     const espias = (["log", "info", "warn", "error", "debug"] as const).map((n) => vi.spyOn(console, n).mockImplementation(() => {}));
     const b = banco();
-    const buenos = await firmar();
+    const buenos = await firmar({ payload: { name: "Ana de Prueba", picture: FOTO } });
     const malos = [await firmar({ payload: { aud: "otro" } }), await firmar({ par: intruso }), "a.b.c", buenos.slice(0, -5)];
     await verificarIdentidadDeGoogle(buenos, b.opciones);
     for (const m of malos) await verificarIdentidadDeGoogle(m, b.opciones);

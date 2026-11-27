@@ -6,9 +6,11 @@
  * Google, el emisor, la audiencia (el identificador de cliente de Tinkazo, que es público), la caducidad y que el correo
  * esté verificado. Con la API de Web Crypto del Worker y sin paquetes.
  *
- * Lo que devuelve es un usuario estable (`google:` y el identificador de la cuenta de Google) y el correo verificado,
- * para que quien llama los use en memoria. Nada del token, del correo ni del identificador va a un registro, y el motivo
- * de un rechazo es siempre uno de una lista corta y fija. Nunca lanza.
+ * Lo que devuelve es un usuario estable (`google:` y el identificador de la cuenta de Google), el correo verificado y, si
+ * el token los trae como texto, el nombre y la dirección de la foto de perfil, para que quien llama los use en memoria. El
+ * nombre y la foto salen tal como vienen: acá solo se mira que sean un texto, y limpiarlos es cosa de `perfiles.ts`. Nada
+ * del token, del correo, del nombre, de la foto ni del identificador va a un registro, y el motivo de un rechazo es siempre
+ * uno de una lista corta y fija. Nunca lanza.
  */
 import { aB64url, deB64url } from "./firma";
 
@@ -24,7 +26,13 @@ export type MotivoDeRechazo =
   | "correo-sin-verificar"
   | "llaves-no-disponibles";
 
-export type ResultadoDeIdentidad = { ok: true; usuario: string; correo: string } | { ok: false; motivo: MotivoDeRechazo };
+/**
+ * `nombre` y `foto` son los campos `name` y `picture` del token cuando son un texto, sin tocar. Si faltan o son otra cosa,
+ * quedan vacíos: nunca hacen rechazar un token.
+ */
+export type ResultadoDeIdentidad =
+  | { ok: true; usuario: string; correo: string; nombre: string; foto: string }
+  | { ok: false; motivo: MotivoDeRechazo };
 
 /** Lo mínimo que se lee de la respuesta de las llaves: sirve la de `fetch` y la de una prueba. */
 export interface RespuestaDeLlaves {
@@ -312,5 +320,11 @@ async function verificar(token: string, opciones: OpcionesDeIdentidad): Promise<
   if ((verificado !== true && verificado !== "true") || typeof correo !== "string" || correo.trim() === "") return rechazo("correo-sin-verificar");
   const sub = cuerpo.sub;
   if (typeof sub !== "string" || !ES_SUB.test(sub)) return rechazo("mal-formado");
-  return { ok: true, usuario: `google:${sub}`, correo: correo.trim() };
+  return {
+    ok: true,
+    usuario: `google:${sub}`,
+    correo: correo.trim(),
+    nombre: typeof cuerpo.name === "string" ? cuerpo.name : "",
+    foto: typeof cuerpo.picture === "string" ? cuerpo.picture : "",
+  };
 }
