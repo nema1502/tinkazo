@@ -239,6 +239,8 @@ type Pantalla =
   | "sin-red"
   | "pase"
   | "llena"
+  /** Solo en una campaña de personas: la sala todavía no tiene el modo prendido y repetir el pedido no lo arregla. */
+  | "apagada"
   /** Solo en una campaña de personas: el premio se entrega con quien organiza (`pintarEntrega`, en `adentro.ts`). */
   | "entrega";
 
@@ -867,6 +869,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     pintarAviso(seccion, texto, accion, false, rotulos);
   };
 
+  /** Solo en una campaña de personas: No soy yo sale de la sesión y olvida lo que este celular recordaba de la persona. */
+  const alOlvidar = (): (() => void) | undefined => (deps.persona ? () => void salir() : undefined);
+
   const intervaloDe = (pantalla: Pantalla): number | null => {
     if (pantalla === "previa" || pantalla === "hola" || pantalla === "adentro") return 15_000;
     if (pantalla === "gano" || pantalla === "otra") return 60_000;
@@ -945,6 +950,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
             conTarjeta: linea === "con-tarjeta",
             salta: saltarLaFase,
             respuestaDesde,
+            ...(deps.persona ? { alOlvidar: alOlvidar() } : {}),
           });
         }
         pintadoAdentro = pintado;
@@ -998,8 +1004,12 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       avisoPublico(deps.tx("cpErrLlena"), null, true);
       return;
     }
+    if (estado.pantalla === "apagada") {
+      avisoPublico(deps.tx("cpPersonaNoAbre"));
+      return;
+    }
     if (estado.pantalla === "entrega") {
-      pintarEntrega(raiz, deps, estado.codigo);
+      pintarEntrega(raiz, deps, estado.codigo, alOlvidar());
       return;
     }
     if (estado.pantalla === "lista") {
@@ -1421,6 +1431,11 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     }
     if (resultado.motivo === "llena") {
       ir("llena");
+      return;
+    }
+    // En una campaña de personas, repetir el pedido a una sala sin el modo prendido no lo arregla: pantalla final, sin Acepto.
+    if (resultado.motivo === "apagada") {
+      ir("apagada");
       return;
     }
     estado.errorAlta = resultado.motivo;
