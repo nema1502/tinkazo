@@ -294,7 +294,9 @@ function conTopeDeReloj<T>(promesa: Promise<T>, hastaMs: number, ahora: () => nu
       if (terminado) return;
       terminar();
       alAbandonar?.();
-      rechazar(new Error("sin-confirmar: tope de tiempo"));
+      // Un tope de reloj es un RPC que no contesta: se rotula como lo hace el camino de siempre (`consulta-lenta`), para que
+      // `alFallar` lo reconozca como un fallo del RPC y cambie al otro. El `sin-confirmar` que se muestra es el del final.
+      rechazar(new Error("consulta-lenta: tope de tiempo"));
     };
     const reloj = setTimeout(abandonar, Math.max(0, hastaMs - ahora()));
     if (hayPagina()) document.addEventListener("visibilitychange", revisar);
@@ -530,6 +532,8 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
           } else {
             vacias = 0;
             ultimoError = l.error;
+            // La transacción ya entró: no hace falta seguir en el mismo RPC. Se suelta para que el cambio que pidió `alFallar` se aplique.
+            suelta();
           }
           if (vacias >= LECTURAS_VACIAS_DEL_QUE_ENTRO) {
             // Entró una transacción que no es de este sorteo (un sello gemelo, con la misma lista y la misma ronda): el
@@ -573,7 +577,9 @@ export async function sortearPorElServicio(p: PedidoDelServicio, f: Fuentes = fu
         }
         if (ultima) return sinConfirmar(d.error, hashDelError);
         f.alFallar(d.error);
-        // Una última vuelta corta: la red puede haber vuelto.
+        // Una última vuelta corta: la red puede haber vuelto. Se suelta el RPC fijado para que el cambio se aplique y la
+        // vuelta salga por el otro, y no por el mismo que no contestó.
+        suelta();
         const hasta = ahora() + ULTIMA_VUELTA_MS;
         try {
           const c = await conTope(f.consultar(hash), Math.min(ahora() + TOPE_DE_LECTURA_MS, hasta));
