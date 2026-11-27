@@ -190,6 +190,8 @@ const DE_ACTIVAR: Record<string, MotivoDeActivar> = {
   "503:sin-llave": "sin-llave",
   "503:sin-pollar": "sin-pollar",
   "503:sin-portero": "apagada",
+  // Una campaña de personas con la sala sin las personas prendidas: no se arregla reintentando enseguida, igual que apagada.
+  "503:personas-apagadas": "apagada",
 };
 
 /** Cuánto espera la pregunta de si la sala puede activar: la sala le pregunta al portero, de a 8 segundos. */

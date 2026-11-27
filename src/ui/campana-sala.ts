@@ -16,7 +16,13 @@ import { anotarDuenaDelBorrador, borradorEsDeOtra, borrarBorrador, leerBorrador 
 import { DOLAR, dolaresEnTexto, esDeCentavosJustos, totalDePremios } from "../campana/comision";
 import { fechaTexto, horaTexto, montoConCentavos, premiosTexto, textoDelPremio } from "../campana/formato";
 import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
-import { esResultadoEnDolares, lineaDelResultadoEnDolares, montoDelPuesto } from "../campana/personas-dolares";
+import {
+  PREMIOS_CON_ENVIO_MAXIMOS,
+  esDePersonasConDolares,
+  esResultadoEnDolares,
+  lineaDelResultadoEnDolares,
+  montoDelPuesto,
+} from "../campana/personas-dolares";
 import { reglaQueFalla } from "../campana/reglas-de-activar";
 import { ESPERA_TOKEN_MS } from "../campana/sesion";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
@@ -255,6 +261,12 @@ export interface DepsDelPanelDeCampana {
    */
   deposito?: DepsDeDeposito;
   /**
+   * Si la sala tiene prendidas las campañas de personas, con el mismo identificador de Google que el sitio
+   * (`sala/personas-estado.ts`). Se pregunta al tomar un borrador de personas, antes de ofrecer el pago: sin un sí, no se cobra.
+   * Un borrador de cuentas no lo pregunta. Sin esto, un borrador de personas no llega a pagarse.
+   */
+  personasListas?: () => Promise<boolean>;
+  /**
    * Mandar el premio de una ganadora desde el resultado de una campaña de personas con premios en dólares. Sin esto, cada fila
    * dice el monto de su premio y no lleva botón.
    */
@@ -332,6 +344,8 @@ export function depsReales(): DepsDelPanelDeCampana {
     tus: depsDeTusReales(),
     // El saldo se lee en la red principal: en la de prueba no hay premio de verdad que mirar.
     ...(network.name === "mainnet" ? { deposito: depsDeDepositoReales() } : {}),
+    // Lo trae recién con un borrador de personas a la vista: el resto del sitio no lo usa.
+    personasListas: () => import("../sala/personas-estado").then((m) => m.personasListas()),
     // La ventana de Mandar y la billetera bajan recién con un resultado en dólares a la vista: el resto del panel no las usa.
     mandarPremio: {
       puede: () => import("./campana-mandar-real").then((m) => m.mandarPremioReal().puede()),
@@ -1802,6 +1816,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (regla === "sorteo_ms") return tx("cpoAcSorteoLejos");
     if (regla === "empresa.nombre") return tx("cpoAcNombre");
     if (regla === "premios") return revisa("premios");
+    // En una campaña de personas con premios en dólares cada premio se manda desde la cuenta de quien organiza, y la sala no
+    // activa más de ocho: se dice acá, antes de cobrar.
+    if (esDePersonasConDolares(c) && c.premios.length > PREMIOS_CON_ENVIO_MAXIMOS) return revisa("premios");
     const v = await deps.validar(texto, deps.ahora());
     if (!v.ok) return v.motivo === "vencida" ? tx("cpoVencida") : revisa(v.campo);
     if (c.cierraMs <= deps.ahora()) return tx("cpoVencida");
@@ -1815,6 +1832,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     abrirYa = false;
     temprana = null;
     salaDeActivar = deps.salaLista ? "preguntando" : "lista";
+    // Un borrador de personas no se cobra sin preguntarle a la sala: sin la forma de preguntar, no se ofrece el pago.
+    if (c.identidad === "persona" && !deps.salaLista) salaDeActivar = "no";
     cm?.reiniciar();
     mensaje = "";
     vista = "previa";
@@ -1839,8 +1858,26 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pintar();
     const lista = await deps.salaLista().catch(() => false);
     if (borrador !== b) return;
+    // Un borrador de personas pide además que la sala tenga las personas listas. Uno de cuentas no pregunta nada más.
+    const sinPersonas = lista && b.identidad === "persona" && !(await personasListasEnLaSala());
+    if (borrador !== b) return;
     salaDeActivar = lista ? "lista" : "no";
+    if (sinPersonas) salaDeActivar = "no";
     pintar();
+  }
+
+  /**
+   * Si la sala tiene prendidas las campañas de personas, con el mismo identificador de Google que el sitio. Sin la forma de
+   * preguntarlo, o si la pregunta falla, es un no: sin un sí no se cobra.
+   */
+  async function personasListasEnLaSala(): Promise<boolean> {
+    const preguntar = deps.personasListas;
+    if (!preguntar) return false;
+    try {
+      return (await preguntar()) === true;
+    } catch {
+      return false;
+    }
   }
 
   /**

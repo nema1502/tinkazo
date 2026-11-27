@@ -579,3 +579,261 @@ describe("con la campaña sin leer, el resultado no habla de plata", () => {
     expect(seVe($(p, "#cpo-pie"))).toBe(false);
   });
 });
+
+/* ------------------------------------------------------------ antes de cobrar */
+
+interface Cobro {
+  /** Lo que se hizo, en orden: pagar, activar. */
+  hecho: string[];
+  activaciones: { texto: string; sesion: string }[];
+  respuestas: ResultadoDeActivar[];
+  red: LecturaDeComision;
+  saldo: bigint;
+  /** Cuántas veces se le preguntó a la sala si puede activar, y qué contesta. */
+  salaLista: boolean;
+  preguntasALaSala: number;
+  /** Cuántas veces se preguntó por las personas, y qué contesta. */
+  personas: boolean | "falla";
+  preguntasPorPersonas: number;
+}
+
+/** El mundo con la cuenta de Google entrada, el cobro, la activación y las dos preguntas de antes de cobrar, todo de mentira. */
+function conCobro(m: Mundo, cambios: Partial<Pick<Cobro, "saldo" | "red" | "salaLista" | "personas">> = {}): Cobro {
+  m.cuenta = ORIGEN;
+  m.deps.cambiarDeCuenta = () => undefined;
+  const x: Cobro = {
+    hecho: [],
+    activaciones: [],
+    respuestas: [],
+    red: { tipo: "no-pagada", suma: 0n },
+    saldo: d(150),
+    salaLista: true,
+    preguntasALaSala: 0,
+    personas: true,
+    preguntasPorPersonas: 0,
+    ...cambios,
+  };
+  const deps: DepsDeComision = {
+    comision: () => CONFIG,
+    billetera: async () => "google",
+    mirarRed: async () => x.red,
+    saldo: async () => x.saldo,
+    portero: async () => "atiende",
+    pagar: async (pedido) => {
+      x.hecho.push("pagar");
+      pedido.alMandar("1001", "b".repeat(64));
+      x.red = { tipo: "pagada", suma: pedido.sale };
+      return { tipo: "listo", hash: "a".repeat(64) };
+    },
+    confirmar: async () => null,
+    puedeVolverALista: async () => true,
+    cargar: () => undefined,
+    candado: (_nombre, f) => f(),
+  };
+  m.deps.comision = deps;
+  m.deps.sesion = async () => "token-de-prueba";
+  m.deps.activar = async (pedido) => {
+    x.hecho.push("activar");
+    x.activaciones.push(pedido);
+    const dada = x.respuestas.shift();
+    if (dada) return dada;
+    const datos = JSON.parse(pedido.texto) as { evento: string; organizadora: string };
+    return { ok: true, archivo: { texto: pedido.texto, firma: FIRMA }, evento: datos.evento, organizadora: datos.organizadora };
+  };
+  m.deps.salaLista = async () => {
+    x.preguntasALaSala++;
+    return x.salaLista;
+  };
+  m.deps.personasListas = async () => {
+    x.preguntasPorPersonas++;
+    if (x.personas === "falla") throw new Error("sin red");
+    return x.personas;
+  };
+  return x;
+}
+
+/** Un borrador sin firma y sin nadie anotada, como lo deja la página de armar la campaña. */
+const borradorDe = (cambios: Record<string, unknown>): string => JSON.stringify(campanaDeArchivo({ anotadas: 0, ...cambios }));
+
+async function eligiendo(m: Mundo, p: Panel, contenido: string): Promise<void> {
+  await elegirArchivo(m, p, contenido);
+  await suelta(8);
+}
+
+describe("antes de cobrar un borrador de personas", () => {
+  it("si la sala no tiene las personas listas no ofrece pagar ni cargar, y dice que todavía no se cobró nada", async () => {
+    const m = mundo();
+    const c = conCobro(m, { personas: false });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(CON_DOLARES));
+    expect(vistaDe(p)).toBe("previa");
+    expect(c.preguntasPorPersonas).toBe(1);
+    expect(texto(p, "#cpo-h")).toBe("Todavía no se puede activar");
+    expect(texto(p, "#cpo-linea")).toBe("Probá de nuevo en un rato. Todavía no se cobró nada.");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Probar de nuevo"]);
+    expect(botonesDe(p).join("|")).not.toMatch(/Pagar|Cargar/u);
+    expect(c.hecho).toEqual([]);
+    expect(m.creadas).toEqual([]);
+  });
+
+  it("Probar de nuevo vuelve a preguntar, y con las personas ya listas sigue al cobro", async () => {
+    const m = mundo();
+    const c = conCobro(m, { personas: false });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(CON_DOLARES));
+    c.personas = true;
+    boton(p, "Probar de nuevo").click();
+    await suelta(8);
+    expect(c.preguntasPorPersonas).toBe(2);
+    expect(texto(p, "#cpo-h")).toBe("Pagá 2,40 a Tinkazo");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Pagar 2,40"]);
+  });
+
+  it("con las personas listas pide cargar los premios, el envío de cada uno y el servicio", async () => {
+    const m = mundo();
+    const c = conCobro(m, { saldo: 0n });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(CON_DOLARES));
+    expect(c.preguntasALaSala).toBe(1);
+    expect(c.preguntasPorPersonas).toBe(1);
+    expect(texto(p, "#cpo-h")).toBe("Cargá 123,90 dólares digitales");
+    expect(texto(p, "#cpo-linea")).toBe("120,00 de premio, 1,50 de envío y 2,40 del servicio de Tinkazo.");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Cargar dólares digitales"]);
+    expect(texto(p, "#cpo-premio")).toBe("3 premios de 40,00 dólares digitales");
+  });
+
+  it("con 122,40 en la cuenta, que en una campaña de cuentas alcanzaba, falta 1,50 del envío", async () => {
+    const m = mundo();
+    conCobro(m, { saldo: d(122.4) });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(CON_DOLARES));
+    expect(texto(p, "#cpo-h")).toBe("Cargá 1,50 dólares digitales más");
+    expect(texto(p, "#cpo-linea")).toBe("Tenés 122,40. Son 120,00 de premio, 1,50 de envío y 2,40 del servicio.");
+  });
+
+  it("con 123,90 paga el servicio y la sala recibe el borrador con la identidad de personas y sus montos", async () => {
+    const m = mundo();
+    const c = conCobro(m, { saldo: d(123.9) });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(CON_DOLARES));
+    expect(texto(p, "#cpo-h")).toBe("Pagá 2,40 a Tinkazo");
+    boton(p, "Pagar 2,40").click();
+    await vi.waitFor(() => expect(c.hecho).toEqual(["pagar", "activar"]));
+    const mandado = JSON.parse(c.activaciones[0]?.texto ?? "{}") as Record<string, unknown>;
+    expect(mandado.identidad).toBe("persona");
+    expect(mandado.premios).toEqual(TRES_DE_40);
+    expect(mandado.premio_en_mano).toBeUndefined();
+    expect(mandado.organizadora).toBe(ORIGEN);
+  });
+
+  it("sin cuenta entrada dice cuánto va a poner en total, con el envío aparte", async () => {
+    const m = mundo();
+    conCobro(m);
+    m.cuenta = null;
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(CON_DOLARES));
+    expect(texto(p, "#cpo-h")).toBe("La campaña de Alcancía Andina está lista");
+    expect(texto(p, "#cpo-linea")).toBe("Entrá con Google y poné 123,90 dólares digitales: 120,00 de premio, 1,50 de envío y 2,40 del servicio.");
+  });
+
+  it("si la sala no puede activar, ni pregunta por las personas", async () => {
+    const m = mundo();
+    const c = conCobro(m, { salaLista: false });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(CON_DOLARES));
+    expect(c.preguntasPorPersonas).toBe(0);
+    expect(texto(p, "#cpo-h")).toBe("Todavía no se puede activar");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Probar de nuevo"]);
+  });
+
+  it("si la pregunta por las personas falla, tampoco se ofrece pagar", async () => {
+    const m = mundo();
+    const c = conCobro(m, { personas: "falla" });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(CON_DOLARES));
+    expect(texto(p, "#cpo-h")).toBe("Todavía no se puede activar");
+    expect(botonesDe(p).join("|")).not.toMatch(/Pagar|Cargar/u);
+    expect(c.hecho).toEqual([]);
+  });
+
+  it("sin la forma de preguntar por las personas, un borrador de personas no llega a pagarse", async () => {
+    const m = mundo();
+    const c = conCobro(m);
+    delete m.deps.personasListas;
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(CON_DOLARES));
+    expect(texto(p, "#cpo-h")).toBe("Todavía no se puede activar");
+    expect(botonesDe(p).join("|")).not.toMatch(/Pagar|Cargar/u);
+    expect(c.hecho).toEqual([]);
+  });
+
+  it("sin la forma de preguntarle a la sala, un borrador de personas tampoco llega a pagarse, y uno de cuentas sigue como siempre", async () => {
+    const m = mundo();
+    const c = conCobro(m);
+    delete m.deps.salaLista;
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(CON_DOLARES));
+    expect(texto(p, "#cpo-h")).toBe("Todavía no se puede activar");
+    expect(botonesDe(p).join("|")).not.toMatch(/Pagar|Cargar/u);
+    expect(c.hecho).toEqual([]);
+    cerrarTodos();
+    document.body.innerHTML = "";
+    const otro = mundo();
+    conCobro(otro);
+    delete otro.deps.salaLista;
+    const q = nuevoPanel(otro);
+    await eligiendo(otro, q, borradorDe(DE_CUENTAS));
+    expect(texto(q, "#cpo-h")).toBe("Pagá 2,40 a Tinkazo");
+  });
+
+  it("un borrador de cuentas ni pregunta por las personas, y pide lo de siempre: 122,40", async () => {
+    const m = mundo();
+    const c = conCobro(m, { saldo: 0n, personas: false });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(DE_CUENTAS));
+    expect(c.preguntasALaSala).toBe(1);
+    expect(c.preguntasPorPersonas).toBe(0);
+    expect(texto(p, "#cpo-h")).toBe("Cargá 122,40 dólares digitales");
+    expect(texto(p, "#cpo-linea")).toBe("120,00 de premio y 2,40 del servicio de Tinkazo.");
+  });
+
+  it("un borrador de cuentas con 122,40 en la cuenta paga, como siempre", async () => {
+    const m = mundo();
+    conCobro(m, { saldo: d(122.4), personas: false });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe(DE_CUENTAS));
+    expect(texto(p, "#cpo-h")).toBe("Pagá 2,40 a Tinkazo");
+  });
+
+  it("con 9 premios dice que se revise el campo premios y no llega a mirar el cobro", async () => {
+    const m = mundo();
+    const c = conCobro(m);
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe({ identidad: "persona", premios: new Array<string>(9).fill("400000000") }));
+    expect(vistaDe(p)).toBe("elegir");
+    expect(texto(p, "#cpo-aviso")).toBe("Revisá el campo premios.");
+    expect(c.preguntasALaSala).toBe(0);
+    expect(c.preguntasPorPersonas).toBe(0);
+    expect(c.hecho).toEqual([]);
+  });
+
+  it("con 8 premios sigue: es lo más que lleva", async () => {
+    const m = mundo();
+    conCobro(m, { saldo: 0n });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe({ identidad: "persona", premios: new Array<string>(8).fill("400000000") }));
+    expect(vistaDe(p)).toBe("previa");
+    // 320 de premios, 4,00 de envío y 6,40 de servicio.
+    expect(texto(p, "#cpo-h")).toBe("Cargá 330,40 dólares digitales");
+    expect(texto(p, "#cpo-linea")).toBe("320,00 de premio, 4,00 de envío y 6,40 del servicio de Tinkazo.");
+  });
+
+  it("un borrador de cuentas con 10 premios sigue como siempre", async () => {
+    const m = mundo();
+    conCobro(m, { saldo: 0n });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p, borradorDe({ premios: new Array<string>(10).fill("400000000") }));
+    expect(vistaDe(p)).toBe("previa");
+    expect(texto(p, "#cpo-h")).toBe("Cargá 408,00 dólares digitales");
+  });
+});

@@ -118,6 +118,11 @@ describe("activar la campaña", () => {
     const x = conRespuesta(503, { error: "sin-portero" });
     expect(await activarCampana({ texto: TEXTO, sesion: SESION }, { fetch: x.fetch }, SERVICIO)).toEqual({ ok: false, motivo: "apagada" });
   });
+
+  it("el 503 personas-apagadas de una campaña de personas se cuenta como apagada", async () => {
+    const x = conRespuesta(503, { error: "personas-apagadas" });
+    expect(await activarCampana({ texto: TEXTO, sesion: SESION }, { fetch: x.fetch }, SERVICIO)).toEqual({ ok: false, motivo: "apagada" });
+  });
 });
 
 describe("preguntar antes de cobrar si la sala puede activar", () => {
