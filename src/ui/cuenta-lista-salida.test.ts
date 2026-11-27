@@ -197,8 +197,8 @@ describe("con el proveedor de cuentas rápido, las llamadas son las de siempre",
 const mal = (clave: string, motivo: string, estado: number): ErrorDeAlta => ({ ok: false, clave, vars: {}, motivo, estado });
 const esperar = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const recargarDelPaso = (): HTMLButtonElement | null => raiz()?.querySelector<HTMLButtonElement>('[data-accion="recargar"]') ?? null;
-const pedidoDeNuevo = (): HTMLButtonElement | null => raiz()?.querySelector<HTMLButtonElement>('[data-accion="pedido-de-nuevo"]') ?? null;
-const hayAlgunaSalida = (): boolean => recargarDelPaso() !== null || pedidoDeNuevo() !== null;
+const dejarElPedido = (): HTMLButtonElement | null => raiz()?.querySelector<HTMLButtonElement>('[data-accion="dejar-el-pedido"]') ?? null;
+const hayAlgunaSalida = (): boolean => recargarDelPaso() !== null || dejarElPedido() !== null;
 const errores = (): number => raiz()?.querySelectorAll(".cl-error").length ?? 0;
 const alerta = (): string => [...(raiz()?.querySelectorAll<HTMLElement>('[role="alert"]') ?? [])].map((x) => x.textContent).join(" ");
 const pie = (): string => raiz()?.querySelector(".cl-estado")?.textContent ?? "";
@@ -557,7 +557,7 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
       await recorrer(segundos - 1, (s) => {
         expect(errores(), `${s} s`).toBe(0);
         expect(recargarDelPaso() !== null, `${s} s`).toBe(s >= 45);
-        expect(pedidoDeNuevo()).toBeNull();
+        expect(dejarElPedido()).toBeNull();
       });
       await vi.advanceTimersByTimeAsync(3_000);
       expect(textoDe()).toContain(t("clListaTitulo"));
@@ -578,7 +578,7 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
       await recorrer(segundos - 1, (s) => {
         expect(errores(), `${s} s`).toBe(0);
         expect(recargarDelPaso() !== null, `${s} s`).toBe(s >= 45);
-        expect(pedidoDeNuevo()).toBeNull();
+        expect(dejarElPedido()).toBeNull();
       });
       await vi.advanceTimersByTimeAsync(3_000);
       expect(textoDe()).toContain(t("clListaTitulo"));
@@ -602,12 +602,12 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
     await vi.advanceTimersByTimeAsync(44_000);
     expect(hayAlgunaSalida()).toBe(false);
     await vi.advanceTimersByTimeAsync(2_000 + (toque - t0));
-    expect(pedidoDeNuevo()).not.toBeNull();
+    expect(dejarElPedido()).not.toBeNull();
     expect(recargarDelPaso()).toBeNull();
     // A los 48 s del primer momento aparece el pedido: sigue la cadena, y la salida pasa a recargar.
     await vi.advanceTimersByTimeAsync(3_000);
     expect(recargarDelPaso()).not.toBeNull();
-    expect(pedidoDeNuevo()).toBeNull();
+    expect(dejarElPedido()).toBeNull();
     await vi.advanceTimersByTimeAsync(5_000);
     expect(textoDe()).toContain(t("clListaTitulo"));
     expect(hayAlgunaSalida()).toBe(false);
@@ -626,7 +626,7 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
     expect(hayAlgunaSalida()).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect(recargarDelPaso()).not.toBeNull();
-    expect(pedidoDeNuevo()).toBeNull();
+    expect(dejarElPedido()).toBeNull();
     expect(pie()).toBe(t("clErrTarda"));
     recargarDelPaso()?.click();
     await vi.advanceTimersByTimeAsync(10);
@@ -690,7 +690,7 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
   });
 
   describe("esperando el pedido de crear la cuenta, la salida no recarga", () => {
-    it("a los 45 s ofrece Probar de nuevo, y tocarlo vuelve a contar las 20 vueltas sin recargar", async () => {
+    it("a los 45 s ofrece Probar de nuevo, y tocarlo corta la espera y deja la falla de hoy, sin recargar", async () => {
       const reg: Registro = [];
       const cf = cuentaFalsa(reg);
       pedidoDespues(cf, reg, 3_000, () => false);
@@ -699,34 +699,42 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
       await vi.advanceTimersByTimeAsync(44_999);
       expect(hayAlgunaSalida()).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
-      expect(pedidoDeNuevo()?.textContent).toBe(t("clProbarDeNuevo"));
+      expect(dejarElPedido()?.textContent).toBe(t("clProbarDeNuevo"));
       expect(recargarDelPaso()).toBeNull();
       expect(pie()).toBe(t("clErrTarda"));
-      // Entre dos lecturas: la salida se toca sin cortar nada.
       await vi.advanceTimersByTimeAsync(4_000);
       const lecturas = (): number => reg.filter((x) => x === "estadoOficial(false)").length;
       const antes = lecturas();
       const antesDelToque = [...reg];
-      pedidoDeNuevo()?.click();
+      dejarElPedido()?.click();
       await vi.advanceTimersByTimeAsync(0);
-      expect(pedidoDeNuevo()).toBeNull();
+      // La lectura en curso no se corta, y la salida se va sin ofrecer otra.
+      expect(dejarElPedido()).toBeNull();
       expect(recargarDelPaso()).toBeNull();
       expect(reg.slice(0, antesDelToque.length)).toEqual(antesDelToque);
       expect(cf.cuenta.activarCuenta).not.toHaveBeenCalled();
-      await recorrer(200, () => {
-        expect(recargarDelPaso()).toBeNull();
+      await recorrer(8, () => {
+        expect(hayAlgunaSalida()).toBe(false);
         expect(raiz()?.querySelector('[data-accion="salir-y-entrar"]')).toBeNull();
         expect(raiz()?.querySelector('[data-accion="entrar-de-nuevo"]')).toBeNull();
       });
-      // El toque cayó en una pausa entre dos lecturas: son veinte lecturas más, contadas desde el toque, y después la falla de hoy.
-      expect(lecturas() - antes).toBe(20);
+      // A lo sumo una lectura más, y enseguida la falla de hoy con su Probar de nuevo que sigue desde ahí.
+      expect(lecturas() - antes).toBeLessThanOrEqual(2);
       expect(alerta()).toContain(t("clErrFallo"));
       expect(principal().dataset.accion).toBe("seguir-cupon");
       expect(principal().textContent).toBe(t("clProbarDeNuevo"));
+      const quedo = lecturas();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(lecturas()).toBe(quedo);
       expect(salidas.recargar).not.toHaveBeenCalled();
+      // Probar de nuevo desde la falla vuelve a esperar el pedido desde la primera vuelta.
+      principal().click();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(lecturas()).toBeGreaterThan(quedo);
+      expect(cf.cuenta.activarCuenta).not.toHaveBeenCalled();
     });
 
-    it("variante A: el pedido aparece después del toque y la cadena sigue sola, sin recargar", async () => {
+    it("variante A: el pedido aparece mientras corre la lectura del toque y la cadena sigue sola, sin recargar", async () => {
       const reg: Registro = [];
       const cf = cuentaFalsa(reg, { proteccion: "lista" });
       let aparece = false;
@@ -734,14 +742,14 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
       const { salidas } = await abrir(servidorFalso(reg, { regalo: true }), cf);
       await tocar();
       await vi.advanceTimersByTimeAsync(49_000);
-      expect(pedidoDeNuevo()).not.toBeNull();
-      pedidoDeNuevo()?.click();
-      await vi.advanceTimersByTimeAsync(11_000);
+      expect(dejarElPedido()).not.toBeNull();
+      dejarElPedido()?.click();
       aparece = true;
       await vi.advanceTimersByTimeAsync(10_000);
       expect(cf.cuenta.activarCuenta).toHaveBeenCalledTimes(1);
       expect(textoDe()).toContain(t("clListaTitulo"));
       expect(hayAlgunaSalida()).toBe(false);
+      expect(errores()).toBe(0);
       expect(salidas.recargar).not.toHaveBeenCalled();
     });
 
@@ -752,7 +760,7 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
       await abrir(servidorFalso(reg, { regalo: true }), cf);
       await tocar();
       await recorrer(46, () => undefined);
-      pedidoDeNuevo()?.click();
+      dejarElPedido()?.click();
       await recorrer(220, () => {
         expect(raiz()?.querySelector('[data-accion="salir-y-entrar"]')).toBeNull();
         expect(raiz()?.querySelector('[data-accion="entrar-de-nuevo"]')).toBeNull();
@@ -784,7 +792,7 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
       expect(recargarDelPaso()).not.toBeNull();
       await recorrer(30, (s) => {
         // Desde que empieza la espera del pedido (a los 46 s), siempre Probar de nuevo, nunca recargar.
-        expect(pedidoDeNuevo() !== null, `${s} s`).toBe(true);
+        expect(dejarElPedido() !== null, `${s} s`).toBe(true);
         expect(recargarDelPaso(), `${s} s`).toBeNull();
       });
       expect(salidas.recargar).not.toHaveBeenCalled();

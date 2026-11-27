@@ -272,8 +272,8 @@ export type Accion =
   | "volver-pago"
   /** Volver a cargar, con una espera pasada de tiempo: recarga la página. Nunca vota. */
   | "recargar"
-  /** Probar de nuevo con la espera del pedido de crear la cuenta pasada de tiempo: la vuelve a empezar, sin recargar. */
-  | "pedido-de-nuevo";
+  /** Probar de nuevo con la espera del pedido de crear la cuenta pasada de tiempo: la deja, sin recargar, y sigue la falla de hoy. */
+  | "dejar-el-pedido";
 
 /** Un texto: la clave y lo que va en sus huecos (`{mail}`, `{s}`). */
 export interface Texto {
@@ -444,8 +444,8 @@ export interface EntradaVista {
   enlace?: { puedeCompartir: boolean; aMano: boolean };
   /**
    * Lo que gira lleva 45 segundos o más con la hora de verdad (`cuenta-lista.ts`): la caja que gira ofrece una salida y lo
-   * que corre sigue. `recargar`: Volver a cargar. `pedido`: Probar de nuevo, que vuelve a esperar el pedido de crear la
-   * cuenta desde la primera vuelta, sin recargar. Sin decirlo, no hay salida.
+   * que corre sigue. `recargar`: Volver a cargar. `pedido`: Probar de nuevo, que deja la espera del pedido de crear la
+   * cuenta, sin recargar, y sigue la falla de hoy. Sin decirlo, no hay salida.
    */
   demora?: "recargar" | "pedido";
 }
@@ -545,7 +545,7 @@ export function esperaDelPaso(e: EntradaVista, v: Vista): boolean {
 
 /** La caja que gira, con la salida al final: se dibuja aunque estuviera revisando, sola, y lo demás queda como estaba. */
 function conLaSalida(c: CajaVista, demora: "recargar" | "pedido"): CajaVista {
-  const b = demora === "pedido" ? boton("pedido-de-nuevo", "clProbarDeNuevo") : boton("recargar", "loginRecargar");
+  const b = demora === "pedido" ? boton("dejar-el-pedido", "clProbarDeNuevo") : boton("recargar", "loginRecargar");
   return { ...c, estado: c.estado === "revisando" ? "haciendo" : c.estado, abierta: true, sola: true, secundarios: [...c.secundarios, { ...b, forma: "boton" }] };
 }
 

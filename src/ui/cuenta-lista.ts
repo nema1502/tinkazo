@@ -565,8 +565,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   /** El temporizador de la espera ya cumplió: la salida queda a la vista aunque la hora de pared se corrija hacia atrás. */
   let esperaPasada = false;
   let relojDeLaEspera: ReturnType<typeof setTimeout> | null = null;
-  /** Mientras corre `esperarPedido`: vuelve a contar sus vueltas desde la primera. Si no, `null`. */
-  let pedidoDeNuevo: (() => void) | null = null;
+  /** Mientras corre `esperarPedido`: si ya se pidió dejarla (Probar de nuevo con la espera pasada de tiempo). Si no, `null`. */
+  let esperaDelPedido: { dejada: boolean } | null = null;
 
   /* ------------------------------------------------ el armado */
 
@@ -671,7 +671,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
    */
   function demoraDeAhora(): "recargar" | "pedido" | null {
     if (giraDesde === 0 || (!esperaPasada && Date.now() - giraDesde < ESPERA_SIN_SALIDA_MS)) return null;
-    if (pedidoDeNuevo) return "pedido";
+    if (esperaDelPedido) return esperaDelPedido.dejada ? null : "pedido";
     if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
     return "recargar";
   }
@@ -1683,15 +1683,12 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
 
   /** Después del canje, con la cuenta que se abre en el momento: el pedido de crearla, cada 2 segundos y hasta 20 veces. */
   async function esperarPedido(): Promise<"hay" | "lista" | "no"> {
-    let quedan = PEDIDO_VECES;
-    // Probar de nuevo con la espera pasada de tiempo: las vueltas vuelven a empezar, sin cortar la lectura en curso.
-    pedidoDeNuevo = () => {
-      quedan = PEDIDO_VECES;
-    };
+    const espera = { dejada: false };
+    esperaDelPedido = espera;
     // Si la espera ya venía pasada de tiempo (el regalo que ya estaba y una lectura lenta antes), la salida dice la de acá.
     if (demoraDeAhora() !== null) pintar();
     try {
-      for (let i = 0; quedan > 0; i++, quedan--) {
+      for (let i = 0; i < PEDIDO_VECES; i++) {
         if (i > 0) await pausa(PEDIDO_CADA_MS);
         let e: EstadoOficial | null = null;
         try {
@@ -1706,10 +1703,12 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
           if (e.activacion === "lista") return "lista";
           if (e.activacion === "falta") return "hay";
         }
+        // Probar de nuevo con la espera pasada de tiempo: tras la lectura en curso, que no se corta, sigue la falla de hoy.
+        if (espera.dejada) return "no";
       }
       return "no";
     } finally {
-      pedidoDeNuevo = null;
+      if (esperaDelPedido === espera) esperaDelPedido = null;
     }
   }
 
@@ -2303,12 +2302,10 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         if (salidas.recargar) salidas.recargar();
         else location.reload();
         return;
-      case "pedido-de-nuevo":
-        if (!pedidoDeNuevo) return;
-        pedidoDeNuevo();
-        // La espera vuelve a contar desde ahora: la salida se va y vuelve a los 45 segundos si el pedido sigue sin aparecer.
-        seguirLaEspera(false);
-        armarLento();
+      case "dejar-el-pedido":
+        if (!esperaDelPedido || esperaDelPedido.dejada) return;
+        // No recarga ni vota: la lectura en curso termina y, si el pedido no aparece, sigue la falla de hoy con su Probar de nuevo.
+        esperaDelPedido.dejada = true;
         return pintar();
     }
   }

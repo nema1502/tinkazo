@@ -110,7 +110,7 @@ describe("la salida de una espera larga", () => {
       vistas++;
       for (const [demora, accion, clave] of [
         ["recargar", "recargar", "loginRecargar"],
-        ["pedido", "pedido-de-nuevo", "clProbarDeNuevo"],
+        ["pedido", "dejar-el-pedido", "clProbarDeNuevo"],
       ] as const) {
         const v = con(e, demora);
         const caja = cajaConSalida(v, accion);
@@ -147,7 +147,7 @@ describe("la salida de una espera larga", () => {
         expect(v.cajas, ctx).toHaveLength(sin.cajas.length);
         v.cajas.forEach((c, i) => {
           const antes = sin.cajas[i] as CajaVista;
-          const salio = c.secundarios.some((s) => s.accion === "recargar" || s.accion === "pedido-de-nuevo");
+          const salio = c.secundarios.some((s) => s.accion === "recargar" || s.accion === "dejar-el-pedido");
           // Los secundarios de antes siguen en el mismo orden, y la salida va al final.
           expect(c.secundarios.slice(0, antes.secundarios.length), ctx).toEqual(antes.secundarios);
           expect(c.secundarios.length, ctx).toBe(antes.secundarios.length + (salio ? 1 : 0));
