@@ -228,8 +228,13 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   /** Si los enlaces a Tus campañas se muestran: desde el principio, o cuando la sala dice que tiene la función. */
   let tusHay = deps.tusDisponible === undefined;
 
-  /** Se puede activar desde esta página: hay con qué guardar el borrador y no es la demostración, que no guarda nada. */
-  const puedeActivar = (): boolean => deps.activar !== undefined && !deps.demo;
+  /**
+   * Una campaña de personas no lleva cobro ni comisión, y la activación sola nunca la firma: la firma Tinkazo. Por eso el armador
+   * no calcula el servicio, no muestra el total a poner y no ofrece activar, esté como esté el sitio.
+   */
+  const sinCobro = (): boolean => deps.identidad === "persona";
+  /** Se puede activar desde esta página: hay con qué guardar el borrador, no es la demostración (no guarda nada) y hay cobro. */
+  const puedeActivar = (): boolean => deps.activar !== undefined && !deps.demo && !sinCobro();
   const clavePaso = (n: NumeroDePaso): string => (n === 6 && puedeActivar() ? CLAVE_DEL_ULTIMO_PASO_CON_ACTIVAR : (CLAVE_DE_PASO[n - 1] ?? "ccPaso1"));
 
   /* --- lo que se calcula del formulario --- */
@@ -856,7 +861,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     premio.append(el("strong", "", premiosTexto(premios(), idioma)));
     if (f.monto !== null) {
       const premiosElegidos = { monto: f.monto, ganan: f.ganan };
-      const costo = costoDeLaCampana({ premios: premiosElegidos, comision: deps.comision?.(premiosElegidos) ?? null });
+      const costo = costoDeLaCampana({ premios: premiosElegidos, comision: sinCobro() ? null : (deps.comision?.(premiosElegidos) ?? null) });
       premio.append(el("span", "ccp-total", fmt("ccTotal", { total: String(costo.premios), n: String(f.ganan), monto: String(f.monto) })));
       if (costo.comision !== null) {
         // Con centavos, siempre dos decimales: 1,50 y no 1,5.
