@@ -23,6 +23,7 @@ import { esDeRed } from "../stellar/errores";
 import { TOPE_TOKEN_MS, VENTANA_TOKEN_MS } from "../stellar/pollar-config";
 import type { EstadoOficial, ResultadoDeActivar } from "../stellar/wallet-pollar";
 import { ocultarCorreo } from "./cuenta-estado";
+import { contarPasoOficial } from "./contadores";
 import {
   OTRO_CODIGO_S,
   SPAM_S,
@@ -237,6 +238,7 @@ function canjearUnaVez(a: AccesoDelPaso, codigo: string): Promise<ResultadoDeAlt
     .catch((): ResultadoDeAlta<CanjeDeCupon> => sinServicio)
     .then((r) => {
       if (r.ok) {
+        contarPasoOficial("cupon", network.name);
         // Un cupón ya canjeado no queda guardado; el de otra persona que entró después en la misma pestaña, sí.
         if (cuponDelAcceso(a) === codigo) a.olvidarCupon();
         if (cuentaDelAcceso(a) === cuenta) a.refrescarCupo();
@@ -2214,10 +2216,14 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       case "confirmar-codigo":
         return confirmarCodigo();
       case "pasar-a-prueba":
-        if (salidas.puedePasarAPrueba()) salidas.pasarAPrueba();
+        if (salidas.puedePasarAPrueba()) {
+          contarPasoOficial("prueba", network.name);
+          salidas.pasarAPrueba();
+        }
         return;
       case "practicar":
         if (!salidas.puedePasarAPrueba()) return;
+        contarPasoOficial("prueba", network.name);
         if (salidas.practicarEnPrueba) salidas.practicarEnPrueba();
         else salidas.pasarAPrueba();
         return;

@@ -11,8 +11,8 @@ import { contarEntradaConRed, contarPasoOficial } from "./contadores";
  *   se suman por separado (issue #83). Retomar una sesión no pasa por acá: lo cuida el contador de siempre.
  * - El paso «Dejá tu cuenta lista» cuenta cada etapa una vez por pestaña y por etapa, solo en la red principal.
  *
- * Todo anónimo, como el contador: sin token, sin id, sin cuenta, sin nombre. Las etapas que el código todavía no
- * puede ver (`cupon` y `prueba`), y la lectura del cupón en `cupon-enlace.ts`, quedan para el cambio que las alcanza.
+ * Todo anónimo, como el contador: sin token, sin id, sin cuenta, sin nombre. Las etapas `cupon` y `prueba` se prueban
+ * desde `cuenta-lista.test.ts`, y la lectura del cupón en `cupon-metricas.test.ts`.
  */
 
 const DESTINO = "https://c.tinkazo.app/v1/contar";

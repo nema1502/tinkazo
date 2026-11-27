@@ -1,5 +1,6 @@
 import "./cupon-franja.css";
 import { onLangChange, t } from "../i18n";
+import { contar } from "../contar";
 import { type AlmacenDeCupon, cuponDelFragmento, cuponGuardado, direccionSinCupon, enlaceConCupon, guardarCupon, olvidarCupon } from "../stellar/cupon-guardado";
 
 /**
@@ -8,6 +9,7 @@ import { type AlmacenDeCupon, cuponDelFragmento, cuponGuardado, direccionSinCupo
  * guarda y la dirección queda como llegó.
  *
  * - El código del fragmento se normaliza (`stellar/cupon-codigo.ts`) y se guarda en la pestaña. Uno mal formado no se guarda.
+ * - Al leer uno válido se cuenta `cupon_llegada`: solo si llegó en Oficial o en una app, nunca el código ni la dirección.
  * - En el navegador de una app (Instagram, Facebook y parecidos) la dirección no se toca y se pide abrir el enlace
  *   afuera, con un botón que lo copia: ahí Google no deja entrar.
  * - En cualquier otro, el código sale de la dirección (`replaceState`) recién cuando hay sesión, para que no quede en el
@@ -55,7 +57,10 @@ export function iniciarCuponDelEnlace(env: EntornoDelCupon): ControlDelCupon {
   if (!env.activo) return SIN_CONTROL;
 
   const llegada = cuponDelFragmento(env.direccion().fragmento);
-  if (llegada.codigo) guardarCupon(llegada.codigo, env.almacen);
+  if (llegada.codigo) {
+    contar("cupon_llegada", { donde: env.enApp ? "app" : "oficial" });
+    guardarCupon(llegada.codigo, env.almacen);
+  }
 
   let franja: HTMLElement | null = null;
   let modoActual: Modo | null = null;

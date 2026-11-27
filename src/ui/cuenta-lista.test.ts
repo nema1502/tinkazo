@@ -4,6 +4,10 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { T, setLang, t } from "../i18n";
 import type { EstadoOficial } from "../stellar/wallet-pollar";
+import { probarCon } from "../contar";
+import { network } from "../stellar/config";
+import type { CanjeDeCupon, EstadoDeAlta, ReclamoDelRegalo, ResultadoDeAlta } from "../stellar/alta-api";
+import type { AccesoDelPaso } from "./cuenta-lista";
 import { type CuentaDelPaso, GUARDA_DE_TOQUE_MS, MARCA_CODIGO, TOPE_CERRAR_MS, type OpcionesDelPaso, type SalidasDelPaso, abrirCuentaLista, aceptarClicsDePrueba, cuentaListaAbierta } from "./cuenta-lista";
 
 /**
@@ -128,6 +132,161 @@ afterEach(async () => {
   }
   aceptarClicsDePrueba(false);
   vi.useRealTimers();
+});
+
+describe("las métricas del cupón y de salir a Prueba", () => {
+  const CODIGO = "K7M29QXA4HTR";
+  const enviados: unknown[] = [];
+  const redAnterior = network.name;
+
+  function accesoSimulado() {
+    let guardado: string | null = CODIGO;
+    const datos: EstadoDeAlta = { acceso: "ninguno", cuenta: "GCUENTA_SINTETICA", abierta: true, pedido: null, sorteos: { quedan: 0, proximoVence: null }, orden: null, fondeo: "inmediato" };
+    const canjear = vi.fn(async (_codigo: string): Promise<ResultadoDeAlta<CanjeDeCupon>> => {
+      datos.acceso = "cupon";
+      return { ok: true, datos: { ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: null }, sigue: "lista" } };
+    });
+    const acceso: AccesoDelPaso = {
+      estado: async () => ({ ok: true, datos: { ...datos } }),
+      canjear,
+      cuponGuardado: () => guardado,
+      guardarCupon: (codigo) => { guardado = codigo; },
+      olvidarCupon: vi.fn(() => { guardado = null; }),
+      refrescarCupo: vi.fn(),
+      cuenta: () => datos.cuenta,
+    };
+    return { acceso, canjear, datos };
+  }
+
+  beforeEach(() => {
+    // Solo el estado del módulo en esta prueba, nunca changeMode ni una conexión real.
+    network.name = "mainnet";
+    vi.stubGlobal("sessionStorage", window.sessionStorage);
+    sessionStorage.clear();
+    enviados.length = 0;
+    vi.stubGlobal("location", { hostname: "tinkazo.app", search: "", pathname: "/", hash: "" });
+    vi.stubGlobal("navigator", { doNotTrack: null });
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      enviados.push(JSON.parse(String(init.body)));
+      return { status: 204 };
+    }));
+    probarCon("https://contador.invalid/v1/contar");
+  });
+
+  afterEach(async () => {
+    // Un RED también puede dejar el final abierto, donde ya no hay Cerrar sesión.
+    if (raiz()?.classList.contains("cl-final")) esc();
+    else if (raiz()) {
+      boton(t("acctSignOut")).click();
+      await pasa(10);
+    }
+    network.name = redAnterior;
+    probarCon("");
+    vi.unstubAllGlobals();
+  });
+
+  it("cuenta el canje aceptado una vez por pestaña, no la apertura ni el doble toque", async () => {
+    for (let vez = 0; vez < 2; vez++) {
+      const { acceso, canjear } = accesoSimulado();
+      const { promesa, cuenta } = await abrir({ activacion: "lista" }, { acceso });
+      expect(enviados).toHaveLength(vez === 0 ? 0 : 1);
+      expect(principal().dataset.accion).toBe("usar-cupon");
+      principal().click();
+      principal().click();
+      await pasa();
+      expect(canjear).toHaveBeenCalledExactlyOnceWith(CODIGO);
+      expect(acceso.cuponGuardado()).toBeNull();
+      expect(acceso.refrescarCupo).toHaveBeenCalled();
+      expect(cuenta.activarCuenta).not.toHaveBeenCalled();
+      expect(enviados).toEqual([{ e: "oficial_step", p: { paso: "cupon" } }]);
+      boton(t("acctSignOut")).click();
+      await pasa();
+      await expect(promesa).resolves.toBe(false);
+    }
+  });
+
+  it("un rechazo transitorio conserva el cupón y el cupo, no cuenta y permite contar el éxito posterior", async () => {
+    const { acceso, canjear, datos } = accesoSimulado();
+    canjear.mockResolvedValueOnce({ ok: false, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 });
+    await abrir({ activacion: "lista" }, { acceso });
+    principal().click();
+    await pasa();
+    expect(enviados).toEqual([]);
+    expect(acceso.cuponGuardado()).toBe(CODIGO);
+    expect(datos.acceso).toBe("ninguno");
+    expect(acceso.refrescarCupo).not.toHaveBeenCalled();
+    expect(alerta()).toContain(t("altaErrServicio"));
+    principal().click();
+    await pasa();
+    expect(canjear).toHaveBeenCalledTimes(2);
+    expect(enviados).toEqual([{ e: "oficial_step", p: { paso: "cupon" } }]);
+  });
+
+  it("en Prueba el canje sigue funcionando pero no cuenta una etapa de Oficial", async () => {
+    network.name = "testnet";
+    const { acceso, canjear } = accesoSimulado();
+    await abrir({ activacion: "lista" }, { acceso });
+    principal().click();
+    await pasa();
+    expect(canjear).toHaveBeenCalledExactlyOnceWith(CODIGO);
+    expect(acceso.cuponGuardado()).toBeNull();
+    expect(enviados).toEqual([]);
+  });
+
+  it("cuenta antes de salir a Prueba una sola vez, conservando el cambio de modo", async () => {
+    const { salidas } = await abrir({}, { acceso: "libre" });
+    const alSalir: unknown[][] = [];
+    salidas.pasarAPrueba.mockImplementation(() => { alSalir.push([...enviados]); });
+    boton(t("modeSwitchToTest")).click();
+    boton(t("modeSwitchToTest")).click();
+    expect(salidas.pasarAPrueba).toHaveBeenCalledTimes(2);
+    expect(alSalir).toEqual([
+      [{ e: "oficial_step", p: { paso: "prueba" } }],
+      [{ e: "oficial_step", p: { paso: "prueba" } }],
+    ]);
+    expect(enviados).toHaveLength(1);
+  });
+
+  it("una salida bloqueada o un clic no confiable no cambia el modo ni consume el conteo", async () => {
+    const { salidas } = await abrir({}, { acceso: "libre" });
+    aceptarClicsDePrueba(false);
+    boton(t("modeSwitchToTest")).click();
+    aceptarClicsDePrueba(true);
+    salidas.puedePasarAPrueba.mockReturnValue(false);
+    boton(t("modeSwitchToTest")).click();
+    expect(salidas.pasarAPrueba).not.toHaveBeenCalled();
+    expect(enviados).toEqual([]);
+    salidas.puedePasarAPrueba.mockReturnValue(true);
+    boton(t("modeSwitchToTest")).click();
+    expect(salidas.pasarAPrueba).toHaveBeenCalledTimes(1);
+    expect(enviados).toEqual([{ e: "oficial_step", p: { paso: "prueba" } }]);
+  });
+
+  it.each([true, false])("Sortear en Prueba cuenta antes de la salida (salida propia: %s)", async (propia) => {
+    const { acceso, datos } = accesoSimulado();
+    acceso.cuponGuardado = () => null;
+    datos.bienvenida = { estado: "lista", sorteos: 3 };
+    acceso.reclamar = vi.fn(async (): Promise<ResultadoDeAlta<ReclamoDelRegalo>> => {
+      datos.acceso = "admin";
+      return { ok: true, datos: { ok: true, repetido: false, sorteosSumados: 0, sorteos: { quedan: 0, proximoVence: null }, sigue: "lista", regalo: "lleno" } };
+    });
+    const sim = cuentaSimulada({ activacion: "lista", proteccion: "lista" });
+    let alSalir: unknown[] = [];
+    const salida = vi.fn(() => { alSalir = [...enviados]; });
+    const salidas = { ...salidasSimuladas(), ...(propia ? { practicarEnPrueba: salida } : { pasarAPrueba: salida }) };
+    const promesa = abrirCuentaLista(sim.cuenta, salidas, { para: "entrada", celular: false, acceso });
+    await pasa();
+    expect(principal().dataset.accion).toBe("reclamar");
+    principal().click();
+    await pasa();
+    expect(enviados).toEqual([]);
+    boton(t("pagoSortearEnPrueba")).click();
+    expect(salida).toHaveBeenCalledTimes(1);
+    expect(alSalir).toEqual([{ e: "oficial_step", p: { paso: "prueba" } }]);
+    expect(enviados).toEqual([{ e: "oficial_step", p: { paso: "prueba" } }]);
+    principal().click();
+    await expect(promesa).resolves.toBe(true);
+  });
 });
 
 describe("la forma del paso", () => {
