@@ -1,5 +1,5 @@
 /**
- * La bandera de los modos nuevos del sorteo: `VITE_MODOS`. **Prendida por defecto desde el 17 de noviembre de 2026**:
+ * La bandera de los modos nuevos del sorteo: `VITE_MODOS`. **Prendida por defecto desde el cambio 7e414660**:
  * el selector de modos es parte del producto, y una variable solo para apagarlo (`VITE_MODOS=0` al construir) queda
  * para un repliegue de emergencia, como `VITE_FOTO_JUEGO` (src/ui/foto-juego-bandera.ts).
  *

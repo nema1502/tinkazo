@@ -268,7 +268,7 @@ The name is Bolivian: a *tinkazo* is a hunch, a gut feeling.
 
 ## Contributing
 
-Issues and pull requests are welcome. **If you find a way to skew a draw, open an issue**: it is the most useful report there is. To add a reveal, read [docs/juegos.md](docs/juegos.md); it has to pass the auditors to get in.
+Issues and pull requests are welcome. **If you find a way to skew a draw, email hola@tinkazo.app before making it public** ([how to report](SECURITY.md)): it is the most useful report there is. To add a reveal, read [docs/juegos.md](docs/juegos.md); it has to pass the auditors to get in.
 
 ## License
 

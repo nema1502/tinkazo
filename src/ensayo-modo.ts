@@ -46,6 +46,15 @@ export function enEnsayo(): boolean {
   }
 }
 
+/**
+ * Lo que está a la vista y depende de si se practica (el aviso del premio en plata) se entera de que el ensayo o el modo stand
+ * empezaron o terminaron, sin que cada camino de entrada tenga que acordarse de avisarle.
+ */
+export const EVENTO_PRACTICA = "tinkazo:practica";
+function avisarCambioDePractica(): void {
+  if (typeof document !== "undefined" && typeof document.dispatchEvent === "function") document.dispatchEvent(new Event(EVENTO_PRACTICA));
+}
+
 /** Entra al ensayo o sale de él, en esta pestaña. */
 export function marcarEnsayo(si: boolean): void {
   enMemoria = si;
@@ -55,6 +64,7 @@ export function marcarEnsayo(si: boolean): void {
   } catch {
     /* sin almacenamiento, el ensayo dura lo que la página, y nunca graba */
   }
+  avisarCambioDePractica();
 }
 
 /** La demo: `?demo=` en la dirección. Se mira en cada llamada, sin `state.ts`, que lee la dirección al cargarse. */
@@ -111,6 +121,7 @@ export function marcarStand(si: boolean): void {
   } catch {
     /* sin almacenamiento, el modo stand dura lo que la página, y nunca graba */
   }
+  avisarCambioDePractica();
 }
 
 const CLAVE_SALIDA = "tinkazo.stand-salir";
