@@ -113,6 +113,8 @@ function montar(a: Ajustes = {}): Montaje {
       return { status: "SUCCESS", cierre: reloj.s + 1, valor: 12n };
     },
     consultarCruda: async (hash) => cruda(hash),
+    saldoDeContrato: async () => ({ stroops: 0n, vence: null, archivada: false, latestLedger: 1000 }),
+    saldoDeCuenta: async () => null,
   };
 
   const pagador: Pagador = { publica: Keypair.random().publicKey(), firmar: (t) => t, intentosDeGrifo: [{ http: 200, ms: 5 }], limitado: false };

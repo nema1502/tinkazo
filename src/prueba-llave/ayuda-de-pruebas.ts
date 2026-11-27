@@ -1,4 +1,4 @@
-import { Address, StrKey, xdr } from "@stellar/stellar-sdk";
+import { Address, StrKey, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { RED_DE_PRUEBA } from "./red";
 import type { OperacionDeContrato } from "./transacciones";
 
@@ -43,4 +43,22 @@ export function entradaDeTransferencia(cuenta: string, operacion: OperacionDeCon
           new xdr.SorobanAddressCredentials({ address: new Address(cuenta).toScAddress(), nonce: 0n, signatureExpirationLedger: 100, signature: xdr.ScVal.scvVoid() }),
         );
   return new xdr.SorobanAuthorizationEntry({ credentials: credenciales, rootInvocation: raiz }).toXDR("base64");
+}
+
+/**
+ * El evento de contrato que deja una transferencia de monedas, en base64, tal como lo devuelve la red. Con `nota`, el dato
+ * es el mapa con el monto y el número de nota; sin ella, solo el monto.
+ */
+export function eventoDeTransferencia(o: { contrato: string; desde: string; hacia: string; monto: bigint; nota: bigint | null }): string {
+  const temas = [nativeToScVal("transfer", { type: "symbol" }), new Address(o.desde).toScVal(), new Address(o.hacia).toScVal(), nativeToScVal("native", { type: "string" })];
+  const dato =
+    o.nota === null
+      ? nativeToScVal(o.monto, { type: "i128" })
+      : nativeToScVal({ amount: o.monto, to_muxed_id: o.nota }, { type: { amount: ["symbol", "i128"], to_muxed_id: ["symbol", "u64"] } });
+  return new xdr.ContractEvent({
+    ext: xdr.ExtensionPoint.v0(),
+    contractId: new xdr.ContractId(StrKey.decodeContract(o.contrato)),
+    type: xdr.ContractEventType.contract,
+    body: xdr.ContractEventBody.v0(new xdr.ContractEventV0({ topics: temas, data: dato })),
+  }).toXDR("base64");
 }

@@ -6,37 +6,58 @@ import { select } from "../protocol/select";
 import { enviarYConfirmar, type Desenlace, type RespuestaConsulta, type RespuestaEnvio } from "../stellar/envio";
 import { leerCobro, retornoDe, type Cobro, type RespuestaCruda } from "./cobro";
 import { armarComprobante, enlaceDeComprobante } from "./comprobante";
+import { armarCuentaQuePideNota, destinoDeLaPagina, destinoDelEnlace, llaveDeDestinoNueva, type Destino, type LlaveDeDestino, type OpcionesDePremio } from "./destino";
 import { ErrorDeEntrada } from "./error-de-entrada";
 import { estadoInicial, type Estado } from "./estados";
+import { notaDelEnvio, transferenciaDelEvento, type NotaDelEnvio } from "./evento";
 import { datosDeLaLista, GANADORES } from "./lista";
-import { medidasVacias, type FallaMedida, type Medidas } from "./medidas";
+import { medidasVacias, type FallaMedida, type Medidas, type PasoDeEnvio } from "./medidas";
 import { motivoDeLaLlave } from "./motivo-llave";
 import { revisarNacimiento } from "./nacimiento";
 import { ErrorDeGrifo, type Pagador } from "./pagador";
+import { MONTO_DEL_PREMIO, TOPE_DE_RECURSOS_STROOPS } from "./premio";
 import {
+  anotarRegistroDePremio,
+  avanzarRegistro,
   borrarCreacionPendiente,
+  borrarEnvioPendiente,
+  borrarPremioPendiente,
   borrarSelloPendiente,
   guardarCreacionPendiente,
+  guardarEnvioPendiente,
+  guardarPremioPendiente,
   guardarSelloPendiente,
   leerCreacionPendiente,
+  leerEnvioPendiente,
+  leerPremioPendiente,
+  leerRegistroDePremio,
   leerSelloPendiente,
   type Almacen,
+  type EnvioPendiente,
+  type PremioPendiente,
+  type RegistroDePremio,
   type SelloPendiente,
 } from "./pendiente";
 import type { CreacionDeLlave, LlaveGuardada, PuenteKit } from "./puente-tipos";
+import { RED_DE_PRUEBA } from "./red";
 import { elegirRonda, MINIMO_ANTES_DEL_DESBLOQUEO_S, MINIMO_DESPUES_DEL_DESBLOQUEO_S, quedaTiempo, vencimientoDeLaFirma } from "./ronda";
-import { codigoDeContrato, type ResultadoDeSimulacion } from "./rpc";
+import { codigoDeContrato, type ResultadoDeSimulacion, type SaldoLeido } from "./rpc";
 import {
   armarConOperacion,
   armarCreacion,
   armarLectura,
   armarSorteo,
   conEntradasFirmadas,
+  credencialDe,
   entradasPorFirmar,
   hashDeTransaccion,
   maxTimeDe,
   mismaAutorizacion,
+  mismaOperacion,
   operacionDeSello,
+  operacionDeTransferencia,
+  raizDeLaEntrada,
+  recursoDeclarado,
 } from "./transacciones";
 
 /**
@@ -58,6 +79,10 @@ export interface RpcDelFlujo {
   enviar(txB64: string): Promise<RespuestaEnvio>;
   consultar(hash: string, decodificar?: (c: RespuestaCruda) => unknown): Promise<RespuestaConsulta>;
   consultarCruda(hash: string): Promise<RespuestaCruda>;
+  /** Las monedas de una cuenta de contrato. */
+  saldoDeContrato(contrato: string): Promise<SaldoLeido>;
+  /** Las monedas de una cuenta G, o `null` si todavía no existe. */
+  saldoDeCuenta(cuenta: string): Promise<bigint | null>;
 }
 
 export interface EntornoDelFlujo {
@@ -81,6 +106,12 @@ export interface EntornoDelFlujo {
   armarCreacion?: typeof armarCreacion;
   /** Solo para pruebas: con `false`, después del sello no se espera ni se hace el sorteo solo. */
   esperarSorteo?: boolean;
+  /** Presente solo en el modo premio de la página: sin él, todo es como siempre. */
+  premio?: OpcionesDePremio;
+  /** Si una cuenta pide nota para recibir. Solo se usa con un destino del enlace que es una G sin nota. */
+  pideNota?: (cuenta: string) => Promise<boolean | null>;
+  /** Solo para pruebas: la llave de la cuenta de destino que arma la página. */
+  llaveDeDestino?: () => LlaveDeDestino;
 }
 
 export interface DatosDeEstado {
@@ -89,6 +120,15 @@ export interface DatosDeEstado {
   cancelada?: boolean;
   /** El código de la última falla, para el plegado. */
   codigo?: string;
+  /** Las monedas de la pantalla, en la unidad mínima y como texto. */
+  monto?: string;
+  fin?: string;
+  direccion?: string;
+  nota?: string;
+  recibido?: boolean;
+  destinoDelEnlace?: boolean;
+  notaEnvio?: NotaDelEnvio;
+  yaEnviadas?: boolean;
 }
 
 export interface OpcionesDeInicio {
@@ -107,6 +147,19 @@ const ESPERA_DE_CONEXION_MS = 3_000;
 
 /** Lo que se espera el sorteo después de que la ronda nace, en segundos. */
 const TOPE_DEL_SORTEO_S = 120;
+
+/** Lo que se sabe de un envío cuando se cierra en la misma carga en que se armó. Al retomarlo tras recargar, casi nada. */
+interface ExtraDelEnvio {
+  inicioMs: number;
+  desbloqueos: number | null;
+  raiz: "exacta" | "normalizada" | null;
+  saldoOrigenAntes: bigint | null;
+  saldoDestinoAntes: bigint | null;
+}
+
+const SIN_EXTRA: Omit<ExtraDelEnvio, "inicioMs"> = { desbloqueos: null, raiz: null, saldoOrigenAntes: null, saldoDestinoAntes: null };
+
+const textoDeError = (e: unknown): string => (e instanceof Error ? e.message : "desconocido");
 
 const valorDeBase64 = (b64: string): unknown => scValToNative(xdr.ScVal.fromXDR(b64, "base64"));
 
@@ -146,6 +199,12 @@ export class Flujo {
   private desbloqueos = 0;
   private sorteando = false;
   private generacion = 0;
+  /** Cómo va el premio de cada billetera, en memoria. El almacén del aparato lleva el mismo registro. */
+  private readonly registros = new Map<string, RegistroDePremio>();
+  /** El destino que la página armó en esta carga: se reusa si hay que reintentar. */
+  private destinoListo: Destino | null = null;
+  /** Lo último que mostró la pantalla con las monedas, para volver a ella si se cancela el desbloqueo. */
+  private ultimoPremio: DatosDeEstado | null = null;
 
   constructor(entorno: EntornoDelFlujo) {
     this.e = entorno;
@@ -179,6 +238,7 @@ export class Flujo {
       llaves = [];
     }
     const creacion = leerCreacionPendiente(this.e.almacen);
+    const modoPremio = this.e.premio !== undefined;
     let estado = estadoInicial({
       host: o.host,
       hayPasskeys: o.hayPasskeys,
@@ -187,13 +247,15 @@ export class Flujo {
       punteroGrueso: o.punteroGrueso,
       hayLlaveLocal: llaves.some((l) => l.estado === "deployed"),
       selloPendiente: pendiente !== null,
+      modoPremio,
+      pendienteDeDinero: modoPremio && (leerEnvioPendiente(this.e.almacen) !== null || leerPremioPendiente(this.e.almacen) !== null),
     });
     if (estado === "esperando" && pendiente) {
       this.sello = pendiente;
       await this.retomarSello();
       return;
     }
-    if ((estado === "inicio" || estado === "ya-hay-llave") && (creacion || llaves.some((l) => l.estado !== "deployed"))) {
+    if ((estado === "inicio" || estado === "premio-inicio" || estado === "ya-hay-llave") && (creacion || llaves.some((l) => l.estado !== "deployed"))) {
       this.credencialPendiente = creacion?.credentialId ?? llaves.find((l) => l.estado !== "deployed")?.credentialId ?? null;
       if (this.credencialPendiente) estado = "cuenta-sin-armar";
     }
@@ -236,7 +298,7 @@ export class Flujo {
         break;
       case "mira-crear":
         this.falla("crear", "cancelada");
-        this.ir("inicio", { cancelada: true });
+        this.alComienzo({ cancelada: true });
         break;
       case "mira-sellar":
         this.falla("sellar", "cancelada");
@@ -252,6 +314,15 @@ export class Flujo {
         this.falla(estado === "armando" ? "crear" : "sellar", "tiempo");
         this.ir("lento", { codigo: this.error });
         break;
+      case "mira-mandar":
+        this.falla("mandar", "cancelada");
+        this.ir("premio-listo", { ...(this.ultimoPremio ?? {}), cancelada: true });
+        break;
+      case "recibiendo":
+      case "enviando":
+        this.falla(estado === "recibiendo" ? "recibir" : "mandar", "tiempo");
+        this.ir("lento", { codigo: this.error });
+        break;
       default:
         break;
     }
@@ -259,6 +330,32 @@ export class Flujo {
 
   private vigente(g: number): boolean {
     return g === this.generacion;
+  }
+
+  /**
+   * Volver al principio. Sin el modo premio, a la pantalla de siempre. Con él, al inicio del premio o, si `porConexion` y hay
+   * una cuenta conectada, a lo que corresponde a esa cuenta.
+   */
+  private alComienzo(datos: DatosDeEstado = {}, porConexion = false): void {
+    if (!this.e.premio) {
+      this.ir(porConexion && this.conexion ? "cuenta-lista" : "inicio", datos);
+      return;
+    }
+    if (porConexion && this.conexion) {
+      void this.trasLaConexion(++this.generacion, { recienCreada: false });
+      return;
+    }
+    this.ir("premio-inicio", datos);
+  }
+
+  private registro(contractId: string): RegistroDePremio | null {
+    return this.registros.get(contractId) ?? leerRegistroDePremio(contractId, this.e.almacen);
+  }
+
+  private anotar(r: RegistroDePremio): void {
+    const nuevo = avanzarRegistro(this.registro(r.contractId), r);
+    this.registros.set(r.contractId, nuevo);
+    anotarRegistroDePremio(nuevo, this.e.almacen);
   }
 
   /** Un solo pagador por carga de la página. Si falla, la próxima vez se vuelve a intentar. */
@@ -315,7 +412,7 @@ export class Flujo {
       if (!this.vigente(g)) return;
       const motivo = motivoDeLaLlave(e, this.conFoco);
       this.falla("crear", motivo);
-      if (motivo === "cancelada" || motivo === "sin-foco") this.ir("inicio", { cancelada: true });
+      if (motivo === "cancelada" || motivo === "sin-foco") this.alComienzo({ cancelada: true });
       else this.ir("falla", { codigo: this.error });
       return;
     }
@@ -330,7 +427,7 @@ export class Flujo {
     const g = ++this.generacion;
     const id = this.credencialPendiente ?? leerCreacionPendiente(this.e.almacen)?.credentialId ?? null;
     if (!id) {
-      this.ir("inicio");
+      this.alComienzo();
       return;
     }
     this.ir("armando");
@@ -437,11 +534,24 @@ export class Flujo {
     }
     borrarCreacionPendiente(this.e.almacen);
     this.medidas.cuenta = { contractId, hash, ledger: cobro.ledger, segundos: Math.round((this.e.ahoraMs() - inicioMs) / 1000), cobro };
-    this.ir("cuenta-lista");
+    await this.trasLaConexion(g, { recienCreada: true });
   }
 
   /** Se tocó Mirar de nuevo en la pantalla de que esto tarda: se pregunta otra vez por la creación. */
   async mirar(): Promise<void> {
+    if (this.e.premio) {
+      const g = ++this.generacion;
+      const envio = leerEnvioPendiente(this.e.almacen);
+      if (envio) {
+        await this.mirarEnvio(g, envio);
+        return;
+      }
+      const pago = leerPremioPendiente(this.e.almacen);
+      if (pago) {
+        await this.mirarPremio(g, pago);
+        return;
+      }
+    }
     const previa = leerCreacionPendiente(this.e.almacen);
     if (previa?.hashCreacion) {
       await this.rehacerCuenta();
@@ -452,7 +562,7 @@ export class Flujo {
       this.seguirConElSorteo();
       return;
     }
-    this.ir("inicio");
+    this.alComienzo({}, this.e.premio !== undefined);
   }
 
   /* ------------------------------------------------------------------ entrar */
@@ -464,16 +574,16 @@ export class Flujo {
       const sesion = await this.e.puente.volver();
       if (sesion) {
         this.conexion = sesion;
-        if (this.vigente(g)) this.ir("cuenta-lista");
+        if (this.vigente(g)) await this.trasLaConexion(g, { recienCreada: false });
         return;
       }
       const k = (await this.e.puente.llavesGuardadas()).find((l) => l.estado === "deployed");
       if (!k) {
-        this.ir("inicio");
+        this.alComienzo();
         return;
       }
       this.conexion = await this.e.puente.conectar(k.credentialId, k.contractId);
-      if (this.vigente(g)) this.ir("cuenta-lista");
+      if (this.vigente(g)) await this.trasLaConexion(g, { recienCreada: false });
     } catch (e) {
       if (e instanceof ErrorDeEntrada) {
         this.irPorErrorDeEntrada("usar", e);
@@ -508,7 +618,7 @@ export class Flujo {
       if (!this.vigente(g)) return;
       this.conexion = { credentialId: c.credentialId, contractId: c.contractId };
       if (c.entrada) this.medidas.entrada = { ...c.entrada, motivo: null };
-      this.ir("cuenta-lista");
+      await this.trasLaConexion(g, { recienCreada: false });
     } catch (e) {
       if (!this.vigente(g)) return;
       const segundos = busqueda.desdeMs === null ? 0 : Math.round((this.e.ahoraMs() - busqueda.desdeMs) / 100) / 10;
@@ -519,7 +629,7 @@ export class Flujo {
       const motivo = motivoDeLaLlave(e, this.conFoco);
       if (motivo === "cancelada" || motivo === "sin-foco") {
         this.falla("entrar", motivo);
-        this.ir("inicio", { cancelada: true });
+        this.alComienzo({ cancelada: true });
         return;
       }
       // Cualquier otra falla del kit al entrar es que no se pudo leer la red ahora: no hay conexión y se puede probar de nuevo.
@@ -538,7 +648,7 @@ export class Flujo {
   nuevoSorteo(): void {
     this.sello = null;
     this.enlace = "";
-    this.ir(this.conexion ? "cuenta-lista" : "inicio");
+    this.alComienzo({}, true);
   }
 
   /* ------------------------------------------------------------------ sellar */
@@ -548,7 +658,7 @@ export class Flujo {
     const g = ++this.generacion;
     const conexion = this.conexion;
     if (!conexion) {
-      this.ir("inicio");
+      this.alComienzo();
       return;
     }
     const inicio = this.e.ahoraMs();
@@ -802,11 +912,25 @@ export class Flujo {
   async reintentar(): Promise<void> {
     switch (this.estado) {
       case "sin-fondos":
-        if (this.sello) {
+        if (this.e.premio) {
+          const c = this.conexion;
+          if (!c) await this.crear();
+          else if (this.registro(c.contractId)?.estado === "por-pagar") await this.recibir();
+          else await this.trasLaConexion(++this.generacion, { recienCreada: false });
+        } else if (this.sello) {
           this.ir("esperando");
           await this.sortear();
         } else if (this.conexion) await this.sellar();
         else await this.crear();
+        break;
+      case "no-se-envio":
+        await this.mandar();
+        break;
+      case "no-llego-premio":
+        await this.recibir();
+        break;
+      case "saldo-sin-leer":
+        await this.trasLaConexion(++this.generacion, { recienCreada: false });
         break;
       case "no-se-sello":
         await this.sellar();
@@ -824,7 +948,7 @@ export class Flujo {
         await this.rehacerCuenta();
         break;
       default:
-        this.ir(this.conexion ? "cuenta-lista" : "inicio");
+        this.alComienzo({}, true);
     }
   }
 
@@ -833,6 +957,535 @@ export class Flujo {
     this.generacion++;
     this.sello = null;
     this.error = "";
-    this.ir(this.conexion ? "cuenta-lista" : "inicio");
+    this.alComienzo({}, true);
+  }
+
+  /* ------------------------------------------------------------------ las monedas de prueba */
+
+  /** Lo que sigue después de tener una cuenta conectada. Sin el modo premio, la pantalla de siempre. */
+  private async trasLaConexion(g: number, o: { recienCreada: boolean }): Promise<void> {
+    const c = this.conexion;
+    if (!this.e.premio) {
+      this.ir("cuenta-lista");
+      return;
+    }
+    if (!c) {
+      this.alComienzo();
+      return;
+    }
+    if (o.recienCreada) {
+      // El premio se paga por este registro, anotado una sola vez al crear la billetera en este aparato. Nunca por un saldo en cero.
+      this.anotar({ contractId: c.contractId, estado: "por-pagar", hashPremio: null, hashEnvio: null });
+      await this.recibir();
+      return;
+    }
+    const envio = leerEnvioPendiente(this.e.almacen);
+    if (envio && envio.contractId === c.contractId) {
+      await this.mirarEnvio(g, envio);
+      return;
+    }
+    const pago = leerPremioPendiente(this.e.almacen);
+    if (pago && pago.contractId === c.contractId) {
+      await this.mirarPremio(g, pago);
+      return;
+    }
+    let saldo: SaldoLeido;
+    try {
+      saldo = await this.e.rpc.saldoDeContrato(c.contractId);
+    } catch (e) {
+      if (!this.vigente(g)) return;
+      this.falla("saldo", "lectura", textoDeError(e));
+      this.ir("saldo-sin-leer", { codigo: this.error });
+      return;
+    }
+    if (!this.vigente(g)) return;
+    const registro = this.registro(c.contractId);
+    if (registro?.estado === "por-pagar") {
+      // Se creó la billetera acá y el pago no llegó a mandarse: Probar de nuevo lo paga, una sola vez.
+      this.falla("recibir", "sin-pagar");
+      this.ir("no-llego-premio", { codigo: this.error });
+      return;
+    }
+    if (saldo.stroops > 0n) {
+      if (saldo.archivada) this.falla("saldo", "archivada", String(saldo.vence));
+      this.mostrarPremio({ monto: saldo.stroops, recibido: false });
+      return;
+    }
+    this.ir("sin-monedas", { yaEnviadas: registro?.estado === "enviado" });
+  }
+
+  /** La pantalla con las monedas. No lee nada ni pide nada: solo muestra. */
+  private mostrarPremio(o: { monto: bigint; recibido: boolean }): void {
+    const pedido = this.e.premio?.destino ?? null;
+    const datos: DatosDeEstado = { monto: o.monto.toString(), recibido: o.recibido };
+    if (pedido) {
+      datos.destinoDelEnlace = true;
+      datos.direccion = pedido.direccion;
+      const d = this.conexion ? destinoDelEnlace(pedido, this.conexion.contractId) : null;
+      const nota = d && !("motivo" in d) ? d.nota : pedido.nota;
+      if (nota !== null) datos.nota = nota.toString();
+    } else {
+      // El destino lo arma la página: el pagador se pide de fondo para que Mandar no espere al grifo.
+      void this.obtenerPagador().catch(() => undefined);
+    }
+    this.ultimoPremio = datos;
+    this.ir("premio-listo", datos);
+  }
+
+  /** Recibir el premio: la cuenta descartable le paga a la billetera, sin pedir la llave. */
+  async recibir(): Promise<void> {
+    const g = ++this.generacion;
+    const c = this.conexion;
+    if (!this.e.premio || !c) {
+      this.alComienzo();
+      return;
+    }
+    const previo = leerPremioPendiente(this.e.almacen);
+    if (previo && previo.contractId === c.contractId) {
+      await this.mirarPremio(g, previo);
+      return;
+    }
+    if (this.registro(c.contractId)?.estado !== "por-pagar") {
+      await this.trasLaConexion(g, { recienCreada: false });
+      return;
+    }
+    const inicio = this.e.ahoraMs();
+    this.ir("recibiendo");
+    let pagador: Pagador;
+    try {
+      pagador = await this.obtenerPagador();
+    } catch (e) {
+      if (!this.vigente(g)) return;
+      this.falloDeGrifo("recibir", e);
+      this.ir("sin-fondos", { codigo: this.error });
+      return;
+    }
+    let vueltas = 0;
+    let mandado = false;
+    try {
+      for (;;) {
+        if (!this.vigente(g)) return;
+        const secuencia = await this.e.rpc.secuencia(pagador.publica);
+        if (secuencia === null) throw new Error("pagador-sin-cuenta");
+        const operacion = operacionDeTransferencia({ desde: pagador.publica, hacia: c.contractId, monto: MONTO_DEL_PREMIO });
+        const armada = armarConOperacion({ origen: pagador.publica, secuencia, operacion });
+        const sim = await this.e.rpc.simular(armada);
+        if (!sim.ok) {
+          this.falla("recibir", sim.restaurar ? "vencida" : "simulacion", sim.error ?? "sin-detalle");
+          this.ir(sim.restaurar ? "vencida" : "no-llego-premio", { codigo: this.error });
+          return;
+        }
+        // Una entrada que no es exactamente esta transferencia, con la firma del sobre, autorizaría otra cosa: no se manda.
+        if (!sim.authB64.every((a) => credencialDe(a).tipo === "origen" && raizDeLaEntrada(a, operacion) === "exacta")) {
+          this.falla("recibir", "entrada-ajena");
+          this.ir("no-llego-premio", { codigo: this.error });
+          return;
+        }
+        const ensamblada = this.e.rpc.ensamblar(armada, sim.simulacion);
+        if (!mismaOperacion(ensamblada, operacion) || recursoDeclarado(ensamblada) > TOPE_DE_RECURSOS_STROOPS) {
+          this.falla("recibir", "otra-transferencia");
+          this.ir("no-llego-premio", { codigo: this.error });
+          return;
+        }
+        const firmada = pagador.firmar(ensamblada);
+        const hash = hashDeTransaccion(firmada);
+        const pendiente: PremioPendiente = { contractId: c.contractId, hash, vence: maxTimeDe(firmada), monto: MONTO_DEL_PREMIO.toString(), desdeMs: this.e.ahoraMs() };
+        guardarPremioPendiente(pendiente, this.e.almacen);
+        mandado = true;
+        const r = await this.confirmar(firmada, hash);
+        if (!this.vigente(g)) return;
+        if (r.estado === "entro") {
+          await this.cerrarPremio(g, pendiente, inicio);
+          return;
+        }
+        if (r.estado === "sin-respuesta") {
+          this.falla("recibir", "sin-respuesta");
+          this.ir("lento", { codigo: this.error });
+          return;
+        }
+        // Entró y falló, la red la rechazó o venció: no entró ni va a entrar.
+        borrarPremioPendiente(this.e.almacen);
+        mandado = false;
+        if (r.estado === "vencida" && vueltas++ < 1) continue;
+        this.falla("recibir", r.estado, r.estado === "rechazada" ? r.codigo : undefined);
+        this.ir("no-llego-premio", { codigo: this.error });
+        return;
+      }
+    } catch (e) {
+      if (!this.vigente(g)) return;
+      this.falla("recibir", "error", textoDeError(e));
+      // Si ya se mandó, no se sabe: queda el pendiente guardado y Mirar de nuevo lo resuelve.
+      this.ir(mandado ? "lento" : "no-llego-premio", { codigo: this.error });
+    }
+  }
+
+  /** El pago entró: se anota, se mide y se muestra. Ninguna lectura de medidas puede llevar a una falla. */
+  private async cerrarPremio(g: number, p: PremioPendiente, inicioMs: number): Promise<void> {
+    borrarPremioPendiente(this.e.almacen);
+    this.anotar({ contractId: p.contractId, estado: "pagado", hashPremio: p.hash, hashEnvio: null });
+    let cobro: Cobro | null = null;
+    try {
+      cobro = leerCobro(await this.e.rpc.consultarCruda(p.hash));
+    } catch (e) {
+      this.falla("recibir", "lectura-cobro", textoDeError(e));
+    }
+    let saldoDespues: string | null = null;
+    let vidaDelSaldo: number | null = null;
+    try {
+      const s = await this.e.rpc.saldoDeContrato(p.contractId);
+      saldoDespues = s.stroops.toString();
+      vidaDelSaldo = s.vence;
+    } catch (e) {
+      this.falla("recibir", "lectura-saldo", textoDeError(e));
+    }
+    this.medidas.premio = { hash: p.hash, ledger: cobro?.ledger ?? 0, segundos: Math.round((this.e.ahoraMs() - inicioMs) / 1000), monto: p.monto, saldoDespues, vidaDelSaldo, cobro };
+    if (!this.vigente(g)) return;
+    this.mostrarPremio({ monto: BigInt(p.monto), recibido: true });
+  }
+
+  /** Mirar de nuevo un pago mandado: si entró se cierra, si falló se dice, y si venció se vuelve a lo que haya en la cuenta. */
+  private async mirarPremio(g: number, p: PremioPendiente): Promise<void> {
+    let cruda: RespuestaCruda;
+    try {
+      cruda = await this.e.rpc.consultarCruda(p.hash);
+    } catch (e) {
+      if (!this.vigente(g)) return;
+      this.falla("mirar", "sin-respuesta", textoDeError(e));
+      this.ir("lento", { codigo: this.error });
+      return;
+    }
+    if (!this.vigente(g)) return;
+    if (cruda.status === "SUCCESS") {
+      await this.cerrarPremio(g, p, p.desdeMs);
+      return;
+    }
+    if (cruda.status === "FAILED") {
+      borrarPremioPendiente(this.e.almacen);
+      this.falla("mirar", "fallo");
+      this.ir("no-llego-premio", { codigo: this.error });
+      return;
+    }
+    const cierre = Number(cruda.latestLedgerCloseTime);
+    if (Number.isFinite(cierre) && cierre > p.vence) {
+      // La red ya pasó la vida de la transacción sin verla: no entró ni va a entrar. El registro sigue diciendo por pagar.
+      borrarPremioPendiente(this.e.almacen);
+      this.falla("mirar", "vencida");
+      if (this.conexion) await this.trasLaConexion(g, { recienCreada: false });
+      else this.alComienzo();
+      return;
+    }
+    this.falla("mirar", "sin-respuesta");
+    this.ir("lento", { codigo: this.error });
+  }
+
+  /** La cuenta de prueba que pide nota y recibe las monedas cuando el enlace no trae un destino. */
+  private async destinoDePrueba(g: number, pagador: Pagador): Promise<Destino | null> {
+    const inicio = this.e.ahoraMs();
+    const llave = (this.e.llaveDeDestino ?? llaveDeDestinoNueva)();
+    try {
+      const secuencia = await this.e.rpc.secuencia(pagador.publica);
+      if (secuencia === null) throw new Error("pagador-sin-cuenta");
+      const firmada = llave.firmar(pagador.firmar(armarCuentaQuePideNota({ origen: pagador.publica, secuencia, destino: llave.publica })));
+      const hash = hashDeTransaccion(firmada);
+      const r = await this.confirmar(firmada, hash);
+      if (!this.vigente(g)) return null;
+      if (r.estado !== "entro") {
+        // Una cuenta que quedó sin saber si entró no se reusa: la próxima vez se arma otra. Todavía no se mandó ninguna moneda.
+        this.falla("mandar", "destino", r.estado);
+        this.ir("no-se-envio", { codigo: this.error });
+        return null;
+      }
+      const destino = destinoDeLaPagina(llave.publica);
+      this.destinoListo = destino;
+      let cobro: Cobro | null = null;
+      try {
+        cobro = leerCobro(await this.e.rpc.consultarCruda(hash));
+      } catch (e) {
+        this.falla("mandar", "lectura-cobro-destino", textoDeError(e));
+      }
+      this.medidas.destinoDePrueba = { publica: llave.publica, hash, segundos: Math.round((this.e.ahoraMs() - inicio) / 1000), cobro };
+      return destino;
+    } catch (e) {
+      if (!this.vigente(g)) return null;
+      this.falla("mandar", "destino", textoDeError(e));
+      this.ir("no-se-envio", { codigo: this.error });
+      return null;
+    }
+  }
+
+  /** Mandar todas las monedas de la billetera: la llave aprueba con un desbloqueo y la cuenta descartable paga. */
+  async mandar(): Promise<void> {
+    const g = ++this.generacion;
+    const c = this.conexion;
+    const premio = this.e.premio;
+    if (!premio || !c) {
+      this.alComienzo();
+      return;
+    }
+    this.ir("enviando");
+    const previo = leerEnvioPendiente(this.e.almacen);
+    if (previo && previo.contractId === c.contractId) {
+      await this.mirarEnvio(g, previo);
+      return;
+    }
+    const inicio = this.e.ahoraMs();
+    let saldo: bigint;
+    try {
+      saldo = (await this.e.rpc.saldoDeContrato(c.contractId)).stroops;
+    } catch (e) {
+      if (!this.vigente(g)) return;
+      this.falla("mandar", "saldo", textoDeError(e));
+      this.ir("no-se-envio", { codigo: this.error });
+      return;
+    }
+    if (!this.vigente(g)) return;
+    // Mandar nunca paga un premio: con el saldo en cero no hay nada que mandar.
+    if (saldo <= 0n) {
+      this.ir("sin-monedas", { yaEnviadas: this.registro(c.contractId)?.estado === "enviado" });
+      return;
+    }
+    let pagador: Pagador;
+    try {
+      pagador = await this.obtenerPagador();
+    } catch (e) {
+      if (!this.vigente(g)) return;
+      this.falloDeGrifo("mandar", e);
+      this.ir("sin-fondos", { codigo: this.error });
+      return;
+    }
+
+    // El destino: el del enlace, que se muestra entero antes del desbloqueo, o el que arma la página.
+    const pedido = premio.destino;
+    let destino: Destino;
+    if (pedido) {
+      const d = destinoDelEnlace(pedido, c.contractId);
+      if ("motivo" in d) {
+        this.falla("mandar", d.motivo);
+        this.ir("no-recibe", { codigo: this.error });
+        return;
+      }
+      if (d.tipo === "G") {
+        // Una G sin nota se mira en el historial: si pide nota, no se manda. Una M ya lleva su número y una C no pide nota.
+        const pide = this.e.pideNota ? await this.e.pideNota(d.base) : null;
+        if (!this.vigente(g)) return;
+        if (pide === true) {
+          this.falla("mandar", "pide-nota");
+          this.ir("pide-nota", { codigo: this.error });
+          return;
+        }
+        if (pide === null) {
+          this.falla("mandar", "sin-historial");
+          this.ir("no-se-envio", { codigo: this.error });
+          return;
+        }
+      }
+      destino = d;
+    } else {
+      const hecho = this.destinoListo ?? (await this.destinoDePrueba(g, pagador));
+      if (!hecho) return;
+      destino = hecho;
+    }
+    if (!this.vigente(g)) return;
+
+    let saldoDestinoAntes: bigint | null = null;
+    try {
+      saldoDestinoAntes = destino.tipo === "C" ? (await this.e.rpc.saldoDeContrato(destino.base)).stroops : await this.e.rpc.saldoDeCuenta(destino.base);
+    } catch {
+      saldoDestinoAntes = null;
+    }
+
+    let vueltas = 0;
+    let mandado = false;
+    try {
+      for (;;) {
+        if (!this.vigente(g)) return;
+        // 1. Se simula en modo de grabar: da la entrada que hay que firmar. Este sobre nunca se manda.
+        const secuencia = await this.e.rpc.secuencia(pagador.publica);
+        if (secuencia === null) throw new Error("pagador-sin-cuenta");
+        const operacion = operacionDeTransferencia({ desde: c.contractId, hacia: destino.hacia, monto: saldo });
+        const sim = await this.e.rpc.simular(armarConOperacion({ origen: pagador.publica, secuencia, operacion }));
+        if (!sim.ok) {
+          this.falla("mandar", sim.restaurar ? "vencida" : "simulacion", sim.error ?? "sin-detalle");
+          this.ir(sim.restaurar ? "vencida" : pedido ? "no-recibe" : "no-se-envio", { codigo: this.error });
+          return;
+        }
+        // Lo que se firma es lo que se ve: una sola entrada, de esta cuenta, y exactamente esta transferencia.
+        let entrada: string | undefined;
+        try {
+          entrada = entradasPorFirmar(sim.authB64, c.contractId)[0];
+        } catch {
+          entrada = undefined;
+        }
+        const raiz = entrada === undefined || sim.authB64.length !== 1 ? "otra" : raizDeLaEntrada(entrada, operacion);
+        if (entrada === undefined || raiz === "otra") {
+          this.falla("mandar", "otra-transferencia");
+          this.ir("no-se-envio", { codigo: this.error });
+          return;
+        }
+
+        // 2. La llave aprueba, con un desbloqueo.
+        this.ir("mira-mandar", { monto: saldo.toString(), ...(pedido ? { destinoDelEnlace: true, direccion: pedido.direccion } : {}) });
+        this.conFoco = this.e.hayFoco();
+        const antes = this.e.puente.desbloqueosHechos();
+        let firmada: string;
+        try {
+          firmada = await this.e.puente.firmarEntrada(entrada, vencimientoDeLaFirma(sim.latestLedger));
+        } catch (e) {
+          if (!this.vigente(g)) return;
+          const motivo = motivoDeLaLlave(e, this.conFoco);
+          this.falla("mandar", motivo, motivo === "otro" ? textoDeError(e) : undefined);
+          if (motivo === "cancelada" || motivo === "sin-foco") this.ir("premio-listo", { ...(this.ultimoPremio ?? { monto: saldo.toString(), recibido: false }), cancelada: true });
+          else this.ir("no-se-envio", { codigo: this.error });
+          return;
+        }
+        const desbloqueos = this.e.puente.desbloqueosHechos() - antes;
+        if (!this.vigente(g)) return;
+        this.ir("enviando");
+
+        // 3. El sobre final se arma ahora, con su vida de 30 s, y se simula exigiendo la firma.
+        const secuencia2 = await this.e.rpc.secuencia(pagador.publica);
+        if (secuencia2 === null) throw new Error("pagador-sin-cuenta");
+        const final = armarConOperacion({ origen: pagador.publica, secuencia: secuencia2, operacion: conEntradasFirmadas(operacion, [firmada]) });
+        const sim2 = await this.e.rpc.simular(final);
+        if (!sim2.ok) {
+          this.falla("mandar", sim2.restaurar ? "vencida" : "simulacion-con-firma", sim2.error ?? "sin-detalle");
+          this.ir(sim2.restaurar ? "vencida" : "no-se-envio", { codigo: this.error });
+          return;
+        }
+        const ensamblada = this.e.rpc.ensamblar(final, sim2.simulacion);
+        if (!mismaAutorizacion(ensamblada, [firmada]) || !mismaOperacion(ensamblada, operacion) || recursoDeclarado(ensamblada) > TOPE_DE_RECURSOS_STROOPS) {
+          this.falla("mandar", "autorizacion-cambiada");
+          this.ir("no-se-envio", { codigo: this.error });
+          return;
+        }
+        const sobre = pagador.firmar(ensamblada);
+        const hash = hashDeTransaccion(sobre);
+        const envio: EnvioPendiente = {
+          contractId: c.contractId,
+          hash,
+          vence: maxTimeDe(sobre),
+          hacia: destino.hacia,
+          base: destino.base,
+          tipo: destino.tipo,
+          origen: destino.origen,
+          nota: destino.nota === null ? null : destino.nota.toString(),
+          monto: saldo.toString(),
+          desdeMs: this.e.ahoraMs(),
+        };
+        guardarEnvioPendiente(envio, this.e.almacen);
+        mandado = true;
+        const r = await this.confirmar(sobre, hash);
+        if (!this.vigente(g)) return;
+        if (r.estado === "entro") {
+          await this.cerrarEnvio(g, envio, { inicioMs: inicio, desbloqueos, raiz, saldoOrigenAntes: saldo, saldoDestinoAntes });
+          return;
+        }
+        if (r.estado === "sin-respuesta") {
+          this.falla("mandar", "sin-respuesta");
+          this.ir("lento", { codigo: this.error });
+          return;
+        }
+        borrarEnvioPendiente(this.e.almacen);
+        mandado = false;
+        if (r.estado === "vencida" && vueltas++ < 1) continue;
+        this.falla("mandar", r.estado, r.estado === "rechazada" ? r.codigo : undefined);
+        this.ir("no-se-envio", { codigo: this.error });
+        return;
+      }
+    } catch (e) {
+      if (!this.vigente(g)) return;
+      this.falla("mandar", "error", textoDeError(e));
+      // Después de mandar nunca se vuelve a una falla: no se sabe, y Mirar de nuevo lo resuelve con el hash guardado.
+      this.ir(mandado ? "lento" : "no-se-envio", { codigo: this.error });
+    }
+  }
+
+  /**
+   * El envío entró: se anota y se mide. Cada lectura va en su propio try y, si falla, se anota y se sigue: nada de lo que
+   * pase después de que entró lleva a una pantalla de falla ni arma otra transferencia.
+   */
+  private async cerrarEnvio(g: number, e: EnvioPendiente, extra: ExtraDelEnvio): Promise<void> {
+    borrarEnvioPendiente(this.e.almacen);
+    this.anotar({ contractId: e.contractId, estado: "enviado", hashPremio: null, hashEnvio: e.hash });
+    let cruda: RespuestaCruda | null = null;
+    let cobro: Cobro | null = null;
+    try {
+      cruda = await this.e.rpc.consultarCruda(e.hash);
+      cobro = leerCobro(cruda);
+    } catch (err) {
+      this.falla("mandar", "lectura-cobro", textoDeError(err));
+    }
+    const vista = cruda ? transferenciaDelEvento(cruda, RED_DE_PRUEBA.activo) : null;
+    const notaPedida = e.nota === null ? null : BigInt(e.nota);
+    const notaEnvio = notaDelEnvio(notaPedida, vista);
+    let saldoOrigenDespues: string | null = null;
+    try {
+      saldoOrigenDespues = (await this.e.rpc.saldoDeContrato(e.contractId)).stroops.toString();
+    } catch (err) {
+      this.falla("mandar", "lectura-saldo", textoDeError(err));
+    }
+    let saldoDestinoDespues: string | null = null;
+    try {
+      const s = e.tipo === "C" ? (await this.e.rpc.saldoDeContrato(e.base)).stroops : await this.e.rpc.saldoDeCuenta(e.base);
+      saldoDestinoDespues = s === null ? null : s.toString();
+    } catch (err) {
+      this.falla("mandar", "lectura-saldo-destino", textoDeError(err));
+    }
+    const fin = e.base.slice(-4);
+    const paso: PasoDeEnvio = {
+      hash: e.hash,
+      ledger: cobro?.ledger ?? 0,
+      segundos: Math.round((this.e.ahoraMs() - extra.inicioMs) / 1000),
+      desbloqueos: extra.desbloqueos,
+      raiz: extra.raiz,
+      monto: e.monto,
+      destino: { tipo: e.tipo, direccion: e.base, fin, origen: e.origen },
+      notaPedida: e.nota,
+      notaVista: vista?.nota?.toString() ?? null,
+      notaEnvio,
+      saldoOrigenAntes: extra.saldoOrigenAntes === null ? null : extra.saldoOrigenAntes.toString(),
+      saldoOrigenDespues,
+      saldoDestinoAntes: extra.saldoDestinoAntes === null ? null : extra.saldoDestinoAntes.toString(),
+      saldoDestinoDespues,
+      cobro,
+    };
+    this.medidas.envios.push(paso);
+    if (notaEnvio !== "confirmada" && notaEnvio !== "no-pedida") this.falla("mandar", "nota", `${notaEnvio}:${paso.notaVista ?? "sin-dato"}`);
+    if (!this.vigente(g)) return;
+    this.ir("enviado", { monto: e.monto, fin, notaEnvio, ...(e.nota !== null ? { nota: e.nota } : {}) });
+  }
+
+  /** Mirar de nuevo un envío mandado: si entró se cierra, si falló se dice, y si venció las monedas siguen donde estaban. */
+  private async mirarEnvio(g: number, e: EnvioPendiente): Promise<void> {
+    let cruda: RespuestaCruda;
+    try {
+      cruda = await this.e.rpc.consultarCruda(e.hash);
+    } catch (err) {
+      if (!this.vigente(g)) return;
+      this.falla("mirar", "sin-respuesta", textoDeError(err));
+      this.ir("lento", { codigo: this.error });
+      return;
+    }
+    if (!this.vigente(g)) return;
+    if (cruda.status === "SUCCESS") {
+      await this.cerrarEnvio(g, e, { inicioMs: e.desdeMs, ...SIN_EXTRA });
+      return;
+    }
+    if (cruda.status === "FAILED") {
+      borrarEnvioPendiente(this.e.almacen);
+      this.falla("mirar", "fallo");
+      this.ir("no-se-envio", { codigo: this.error });
+      return;
+    }
+    const cierre = Number(cruda.latestLedgerCloseTime);
+    if (Number.isFinite(cierre) && cierre > e.vence) {
+      borrarEnvioPendiente(this.e.almacen);
+      this.falla("mirar", "vencida");
+      if (this.conexion) await this.trasLaConexion(g, { recienCreada: false });
+      else this.alComienzo();
+      return;
+    }
+    this.falla("mirar", "sin-respuesta");
+    this.ir("lento", { codigo: this.error });
   }
 }
