@@ -411,7 +411,14 @@ export function pintarAdentro(
 export function pintarGano(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
-  datos: { avisado: boolean; comprobante: string | null; variante?: VarianteDeGanaste | null; codigo?: string | null },
+  datos: {
+    avisado: boolean;
+    comprobante: string | null;
+    variante?: VarianteDeGanaste | null;
+    codigo?: string | null;
+    /** Solo personas: la sala ya no existe. En lugar de dónde se entrega el premio va la línea de que el sorteo terminó. */
+    termino?: boolean;
+  },
 ): void {
   const raiz = seccion(raizPrincipal, "#cmp-estado", "cmp-estado cmp-gano cmp-dos");
   if (!raiz) return;
@@ -425,8 +432,10 @@ export function pintarGano(
     empresa: deps.campana.empresa.nombre,
   }), "cmp-premio-resultado");
   // En una campaña de personas no hay nada que recibir desde el celular: la misma pantalla trae el código y, mientras no llegó,
-  // dice dónde se entrega el premio.
-  if (deps.persona && !lineaDelCodigo(izq, deps, datos.codigo)) parrafo(izq, deps.tx("cpEntregaL"), "cmp-apoyo");
+  // dice dónde se entrega el premio. Con la sala ya terminada, con código o sin él, dice que hable con quien organiza.
+  if (deps.persona && (!lineaDelCodigo(izq, deps, datos.codigo) || datos.termino)) {
+    parrafo(izq, deps.tx(datos.termino ? "cpTerminoGanaste" : "cpEntregaL"), "cmp-apoyo");
+  }
   // El enlace para ver cómo se eligió va al pie del bloque, y el cartel del stand arriba del bloque.
   if (datos.comprobante) enlaceComprobante(izq, deps, datos.comprobante);
   if (datos.avisado) {
@@ -513,13 +522,20 @@ export function pintarSalio(raizPrincipal: HTMLElement, deps: DepsDelCelular, mo
 /**
  * El cierre conserva lo que este celular llegó a saber del resultado. Quien ganó sigue viendo que ganó y puede
  * recibir su premio: la campaña terminó, pero el premio se recibe aunque ya no esté en el stand.
+ * `ganaba`, solo en una campaña de personas: la sala terminó con Ganaste a la vista. La pantalla sigue siendo Ganaste, con el
+ * código que la página ya tenía y la línea de que el sorteo terminó.
  */
 export function pintarTermino(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
   memoria: MemoriaDeCampana | null,
+  ganaba: { codigo: string | null; comprobante: string | null } | null = null,
 ): void {
   const gano = memoria?.resultado === "gano";
+  if (ganaba) {
+    pintarGano(raizPrincipal, deps, { avisado: false, ...ganaba, termino: true });
+    return;
+  }
   if (gano && !deps.persona) {
     pintarGano(raizPrincipal, deps, { avisado: false, comprobante: memoria?.comprobante ?? null });
     return;
