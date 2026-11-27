@@ -153,6 +153,6 @@ export function informe(medida, topes = TOPES) {
     "Trozos del celular:",
     ...medida.detalle.map((d) => `  ${d.ruta}  ${enKb(d.comprimido)}  (${enKb(d.crudo)} sin comprimir)`),
   ];
-  for (const e of excesos(medida, topes)) renglones.push("", `PASA EL TOPE: ${e.nombre} pesa ${enKb(e.medida)} y el tope es ${enKb(e.tope)}.`);
+  for (const e of excesos(medida, topes)) renglones.push("", `PASA EL TOPE: ${e.nombre} pesa ${enKb(e.medida)} y el tope es ${enKb(e.tope)} (${e.medida} bytes contra ${Math.round(e.tope)}).`);
   return renglones.join("\n");
 }

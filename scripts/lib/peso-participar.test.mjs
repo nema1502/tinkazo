@@ -73,6 +73,8 @@ describe("la prueba de peso de la página del celular", () => {
     expect(medida.entrada).toBeGreaterThan(TOPES.entrada);
     expect(excesos(medida).map((e) => e.nombre)).toContain("entrada");
     expect(informe(medida)).toContain("PASA EL TOPE: entrada");
+    // Con los bytes exactos: en un tope de 15 KB, el décimo de KB no dice cuánto falta recortar.
+    expect(informe(medida)).toContain(`(${medida.entrada} bytes contra ${TOPES.entrada})`);
   });
 
   it("pasa cuando todo entra", () => {
