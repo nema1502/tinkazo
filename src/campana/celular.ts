@@ -1153,7 +1153,13 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     }
     if (propio.fase === "sorteada") {
       const resultado = await pedirResultado();
-      if (desmontado || resultado === "red" || resultado === null) return;
+      if (desmontado) return;
+      // En una campaña de personas la lista de elegidas no decide nada: ya dijo la sala si esta persona ganó. Sin ella la pantalla sale igual.
+      if (deps.persona && (resultado === "red" || resultado === null)) {
+        await aplicarResultado({ ganadoras: [], comprobante: estado.comprobante }, propio);
+        return;
+      }
+      if (resultado === "red" || resultado === null) return;
       await aplicarResultado(resultado, propio);
       return;
     }

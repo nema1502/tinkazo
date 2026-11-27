@@ -526,6 +526,34 @@ describe("una campaña de personas: quien abre el enlace sin recuerdo en este na
     expect(dice(caida.mundo)).not.toContain("otra persona");
   });
 
+  it("si la lista de elegidas no llega, quien ganó igual ve Ganaste con su código: la sala ya dijo que ganó", async () => {
+    const yo = async () => ({ ...propio("sorteada"), gano: true, codigo: "4821" });
+    for (const resultado of [
+      async (): Promise<null> => null,
+      async (): Promise<never> => {
+        throw new Error("red");
+      },
+    ]) {
+      document.body.innerHTML = "";
+      const { mundo } = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo, resultado }));
+      expect(texto(mundo, "#cmp-estado h1")).toBe("Ganaste");
+      expect(texto(mundo, "#cmp-estado .cmp-codigo")).toBe("4821");
+    }
+  });
+
+  it("si la lista de elegidas no llega, quien no ganó ve que salió otra persona y nunca queda en Cargando", async () => {
+    const yo = async () => ({ ...propio("sorteada"), gano: false });
+    const { mundo } = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo, resultado: async () => null }));
+    expect(texto(mundo, "#cmp-estado h1")).toBe("Esta vez salió otra persona");
+  });
+
+  it("si la lista de elegidas no llega y la sala no sabe de quién es la llave, dice que el sorteo ya se hizo", async () => {
+    const yo = async () => ({ ...propio("sorteada"), anotada: false });
+    const { mundo } = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo, resultado: async () => null }));
+    expect(dice(mundo)).toContain(TEXTOS_CAMPANA.es.cpPreguntaEnStand);
+    expect(dice(mundo)).not.toContain("otra persona");
+  });
+
   it("con la lista cerrada y la llave, quien ya estaba anotada ve que sigue en la lista y no que se cerró", async () => {
     const { mundo } = await montarPersona(despues("cerrada", { llaveGuardada: () => true, yo: async () => propio("cerrada") }));
     expect(texto(mundo, "#cmp-adentro h1")).toBe("Ya estabas en la lista");
