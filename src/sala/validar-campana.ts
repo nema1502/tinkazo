@@ -29,8 +29,9 @@ export function validarCampanaParaFirmar(texto: string, ahora: number): Validaci
 /**
  * Lo que valida el firmador de Tinkazo: lo que aceptan la sala y el sitio, y además que una campaña de personas lleve su premio
  * en mano. Una campaña de personas no tiene cuenta a quien pagarle en dólares y las bases prometerían un pago que no hay, así que
- * la sala y el sitio la leen (para no atar las dos cosas) pero el firmador no la firma. El armador sigue con la validación de
- * arriba: solo el firmador cierra esta puerta.
+ * la sala y el sitio la leen (para no atar las dos cosas) pero el firmador no la firma. Esta validación también la corre el armador
+ * antes de bajar el archivo, y por eso el armador pide siempre el premio escrito en una campaña de personas, incluso al abrir un
+ * archivo viejo que traía montos: así lo que baja es lo que el firmador acepta.
  */
 export function validarCampanaParaElFirmador(texto: string, ahora: number): ValidacionDeCampana {
   const lectura = validarCampanaParaFirmar(texto, ahora);
