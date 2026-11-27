@@ -13,7 +13,7 @@
  */
 
 import { cifrarEquipo } from "../equipos/datos";
-import { llaveDelCelular, olvidarLlaveDelCelular } from "../equipos/celular";
+import { hayLlaveDelCelular, llaveDelCelular, olvidarLlaveDelCelular } from "../equipos/celular";
 import { estadoPublico, type DependenciasDeCampana, type SosiegoDelAlta } from "../sala/campana";
 import { anotarPersonaEnCampana, miEstadoDePersona, resultadoDeCampanaDePersona } from "../sala/celular-persona";
 import type { NetworkName } from "../stellar/config";
@@ -140,6 +140,7 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
     anotar: (nombre, alReintentar) =>
       bloquear(`tinkazo.campana.alta.${p.sala}`, () => anotarEnLaSala(nombre, alReintentar, ahora())),
     yo: () => miEstadoDePersona(p.servicio, p.sala, llave(), dep),
+    llaveGuardada: () => hayLlaveDelCelular(p.sala, almacenDeLlaves),
     azar,
     resultado: async () => {
       const r = await resultadoDeCampanaDePersona(p.servicio, p.sala, dep);

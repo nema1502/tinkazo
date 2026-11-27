@@ -26,3 +26,25 @@ describe("los documentos de la línea de persona dicen quién puede comprobar un
     expect(lee.toLowerCase().split(FRASE).length - 1).toBe(1);
   });
 });
+
+describe("los documentos dicen lo que ve quien ganó y lo que no recupera", () => {
+  it("el README de la sala y la operación dicen que en otro navegador, después del sorteo, no se ve el código y decide quien organiza", () => {
+    const sala = leer("../workers/sala/README.md");
+    const desde = sala.indexOf("Cómo se entera quien gana");
+    expect(sala.slice(desde, desde + 2500)).toContain("quien abre el enlace en otro navegador después del sorteo no ve su código");
+    const operacion = leer("../docs/operacion.md");
+    const limite = operacion.indexOf("Desde otro celular o desde otro navegador no sirve");
+    expect(limite).toBeGreaterThan(-1);
+    expect(operacion.slice(limite, limite + 900)).toContain("pregunte en el stand");
+    expect(operacion.slice(limite, limite + 900)).toContain("decide quien organiza");
+  });
+
+  it("la UX dice que Ganaste no tiene botón y que No soy yo existe solo con la lista abierta", () => {
+    const ux = leer("../docs/ux.md");
+    const desde = ux.indexOf("Con premio en mano, el panel no habla de plata");
+    const parrafo = ux.slice(desde, desde + 6000);
+    expect(parrafo).toContain("sin ningún botón de recibir");
+    expect(parrafo).toContain("No soy yo existe solo en la pantalla de anotada con la lista abierta");
+    expect(parrafo).toContain("después del cierre ninguna pantalla ofrece olvidar");
+  });
+});

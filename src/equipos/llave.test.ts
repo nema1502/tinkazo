@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ES_LLAVE } from "../../workers/sala/src/registro";
 import { anotarEquipoEnSala } from "../sala/equipos";
-import { llaveDelCelular, olvidarLlaveDelCelular } from "./celular";
+import { hayLlaveDelCelular, llaveDelCelular, olvidarLlaveDelCelular } from "./celular";
 
 /**
  * La llave con que el celular del encargado prueba ante la sala que es el mismo que anotó la cuenta, y lo que
@@ -115,5 +115,22 @@ describe("lo que contesta la sala cuando la cuenta no es de este celular", () =>
   });
   it("429 con «cupo-conexion» es el tope de esta red, no el de la sala", async () => {
     expect(await anotarEquipoEnSala("s", "i", G, "d", "L".repeat(22), con(429, { error: "cupo-conexion" }))).toEqual({ ok: false, motivo: "cupo-conexion" });
+  });
+});
+
+describe("si el celular ya tiene su llave", () => {
+  it("lo dice sin crear una, y deja de decirlo cuando se suelta", () => {
+    const al = memoria();
+    expect(hayLlaveDelCelular("AbCd1234", al)).toBe(false);
+    expect(al.getItem("tinkazo.equipo.llaves")).toBeNull();
+    llaveDelCelular("AbCd1234", al);
+    expect(hayLlaveDelCelular("AbCd1234", al)).toBe(true);
+    expect(hayLlaveDelCelular("ZzYy9876", al)).toBe(false);
+    olvidarLlaveDelCelular("AbCd1234", al);
+    expect(hayLlaveDelCelular("AbCd1234", al)).toBe(false);
+  });
+  it("con algo roto guardado dice que no", () => {
+    expect(hayLlaveDelCelular("AbCd1234", { getItem: () => "{no es json" } as unknown as Storage)).toBe(false);
+    expect(hayLlaveDelCelular("AbCd1234", { getItem: () => { throw new Error("bloqueado"); } } as unknown as Storage)).toBe(false);
   });
 });

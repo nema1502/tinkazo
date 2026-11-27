@@ -344,7 +344,7 @@ el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
   gana se entera al abrir la página de la campaña en su celular: la consulta propia le dice que ganó y le da su código de entrega.
   Quien organiza nombra a quien ganó y le entrega el premio en mano, en el evento, pidiéndole ese código. Quien gana y cierra la
   página no recibe ningún aviso y tiene que volver a abrirla en el mismo celular: desde otro no sirve, porque la sala no anota a
-  nadie con la lista cerrada. La línea sale de la sal de la sala, y esa sal se borra con ella a las 24 horas de crearla. Mientras la sala vive, quien tiene
+  nadie con la lista cerrada, y quien abre el enlace en otro navegador después del sorteo no ve su código. La línea sale de la sal de la sala, y esa sal se borra con ella a las 24 horas de crearla. Mientras la sala vive, quien tiene
   acceso a su almacenamiento puede comprobar si una cuenta de Google conocida se anotó, porque tiene la sal y las huellas. Pasado
   ese plazo nada permite volver de una línea ganadora a una persona ni calcular su código. Avisar a quien ya cerró la página y
   reclamar el premio exigirían guardar un dato que lleve de vuelta a la persona, aunque sea cifrado y hasta el fin del reclamo, y
