@@ -269,7 +269,11 @@ export type Accion =
   /** «Pedir una nota nueva»: la orden venció; se pide de nuevo. */
   | "otra-nota"
   /** «Volver» desde el pago: a la caja del acceso. */
-  | "volver-pago";
+  | "volver-pago"
+  /** Volver a cargar, con una espera pasada de tiempo: recarga la página. Nunca vota. */
+  | "recargar"
+  /** Probar de nuevo con la espera del pedido de crear la cuenta pasada de tiempo: la vuelve a empezar, sin recargar. */
+  | "pedido-de-nuevo";
 
 /** Un texto: la clave y lo que va en sus huecos (`{mail}`, `{s}`). */
 export interface Texto {
@@ -438,6 +442,12 @@ export interface EntradaVista {
    * campo, ya elegido, para copiarlo con la mano. Sin decirlo, no hay enlace que ofrecer.
    */
   enlace?: { puedeCompartir: boolean; aMano: boolean };
+  /**
+   * Lo que gira lleva 45 segundos o más con la hora de verdad (`cuenta-lista.ts`): la caja que gira ofrece una salida y lo
+   * que corre sigue. `recargar`: Volver a cargar. `pedido`: Probar de nuevo, que vuelve a esperar el pedido de crear la
+   * cuenta desde la primera vuelta, sin recargar. Sin decirlo, no hay salida.
+   */
+  demora?: "recargar" | "pedido";
 }
 
 /** El acceso de siempre: activar no pide nada. */
@@ -512,6 +522,32 @@ const boton = (accion: Accion, clave: string, apagado = false, vars?: Record<str
 
 /** La principal mientras corre lo suyo: apagada, y con la ruedita que dice que se está haciendo. */
 const ocupado = (accion: Accion, clave: string): Boton => ({ accion, clave, apagado: true, ocupado: true });
+
+/** Lo que gira mientras se activa la cuenta: el camino de siempre, el del regalo, el del cupón, el acceso y el premio. */
+const GIRAN_AL_ACTIVAR: ReadonlySet<Accion> = new Set<Accion>(["activar", "leer", "usar-cupon", "leer-acceso", "reclamar"]);
+/** Lo que gira mientras se manda el código para proteger la cuenta. */
+const GIRAN_AL_MANDAR: ReadonlySet<Accion> = new Set<Accion>(["mandar-codigo", "mandar-a-mano", "otro-codigo"]);
+
+/**
+ * Algo gira y merece una salida si tarda. Con la cuenta ya activada, lo de activar no cuenta: ahí solo se canjea un
+ * cupón o se lee el acceso, cada espera con su tope, y no hay voto en juego. Tampoco cuentan confirmar el código ni el
+ * desbloqueo (su tope de un minuto termina con su botón), el pago (tiene su propia espera) ni cerrar la sesión.
+ */
+function giraConSalida(e: EntradaVista, botones: readonly (Boton | null)[]): boolean {
+  if (e.corre === "cerrando") return false;
+  return botones.some((b) => b?.ocupado === true && (GIRAN_AL_ACTIVAR.has(b.accion) ? e.activacion !== "lista" : GIRAN_AL_MANDAR.has(b.accion)));
+}
+
+/** La vista tiene una espera que lleva el reloj de la salida (`cuenta-lista.ts`). */
+export function esperaDelPaso(e: EntradaVista, v: Vista): boolean {
+  return !v.final && giraConSalida(e, [v.principal, ...v.cajas.flatMap((c) => c.secundarios)]);
+}
+
+/** La caja que gira, con la salida al final: se dibuja aunque estuviera revisando, sola, y lo demás queda como estaba. */
+function conLaSalida(c: CajaVista, demora: "recargar" | "pedido"): CajaVista {
+  const b = demora === "pedido" ? boton("pedido-de-nuevo", "clProbarDeNuevo") : boton("recargar", "loginRecargar");
+  return { ...c, estado: c.estado === "revisando" ? "haciendo" : c.estado, abierta: true, sola: true, secundarios: [...c.secundarios, { ...b, forma: "boton" }] };
+}
 
 /** Lo que hace la principal cuando una falla de la activación no tiene otro arreglo. */
 function principalDeLaFalla(f: Falla): Boton {
@@ -1142,16 +1178,19 @@ export function vistaDe(entrada: EntradaVista): Vista {
   // Cerrando sesión, la principal espera: la salida ya está en marcha.
   const p = principal as Boton | null;
   const principalFinal = p && e.corre === "cerrando" ? { ...p, apagado: true } : p;
+  // Una espera pasada de tiempo: la principal sigue girando, la caja que gira ofrece la salida y el pie dice que tarda.
+  const demora = e.demora;
+  const conDemora = demora !== undefined && giraConSalida(e, [principalFinal, ...cajas.flatMap((c) => c.secundarios)]);
   const notas: string[] = e.puedePasarAPrueba || premio || pago ? [] : ["modeSwitchBlocked"];
   return {
     final: false,
     titulo: "clTitulo",
     bajada: "clBajada",
-    cajas,
+    cajas: conDemora && demora ? cajas.map((c) => (c.parte === actual ? conLaSalida(c, demora) : c)) : cajas,
     principal: principalFinal,
     volver: puedeVolverDelCupon(e) ? boton("volver", "clVolver") : null,
     primerOficial: false,
-    estado: lineaDeEstado(e),
+    estado: conDemora ? { clave: "clErrTarda" } : lineaDeEstado(e),
     notas,
     salidas: {
       prueba: premio || pago || principalFinal?.accion === "pasar-a-prueba" ? null : { apagado: !e.puedePasarAPrueba },
