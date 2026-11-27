@@ -92,12 +92,17 @@ describe("el código de quien ganó", () => {
     }
   });
 
-  it("al tocar Recibir mi premio, la pantalla de la entrega sigue mostrando el código", async () => {
-    const mundo = await prepararCelular({ ...sorteada({ gano: true, codigo: CODIGO }), memoria: memoriaDeAnotada() });
-    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
-    await asentar();
-    expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
-    expect(texto(mundo.raiz, "#cmp-estado .cmp-codigo")).toBe(CODIGO);
+  it("Ganaste no ofrece Recibir mi premio ni la línea de tocar el botón: el código está en la misma pantalla", async () => {
+    for (const en of [false, true]) {
+      const mundo = await prepararCelular({ ...sorteada({ gano: true, codigo: CODIGO }), ...(en ? EN : {}), memoria: memoriaDeAnotada() });
+      expect(texto(mundo.raiz, "#cmp-estado h1")).toBe(en ? "You won" : "Ganaste");
+      expect(texto(mundo.raiz, "#cmp-estado .cmp-codigo")).toBe(CODIGO);
+      expect(mundo.raiz.querySelector("#cmp-estado button")).toBeNull();
+      expect(mundo.raiz.querySelector("#cmp-estado .primary")).toBeNull();
+      expect(mundo.raiz.querySelector("#cmp-estado .cmp-accion")).toBeNull();
+      const dice = pantalla(mundo.raiz);
+      expect(dice).not.toMatch(/Recibir mi premio|Get my prize|Tocá el botón|Tap the button/u);
+    }
   });
 
   it("sin código en la respuesta de la sala no hay línea de código", async () => {
@@ -105,6 +110,9 @@ describe("el código de quien ganó", () => {
     expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Ganaste");
     expect(mundo.raiz.querySelector(".cmp-codigo-linea")).toBeNull();
     expect(pantalla(mundo.raiz)).not.toContain("Mostrale");
+    // Sin código la pantalla dice dónde entregan el premio, y sigue sin ningún botón.
+    expect(pantalla(mundo.raiz)).toContain(TEXTOS_CAMPANA.es.cpEntregaL);
+    expect(mundo.raiz.querySelector("#cmp-estado button")).toBeNull();
   });
 
   it("un código que no son cuatro cifras no se muestra", async () => {
@@ -141,7 +149,7 @@ describe("el código de quien ganó", () => {
   });
 });
 
-describe("quien llega a la entrega antes de que llegue su código", () => {
+describe("quien ve Ganaste antes de que llegue su código", () => {
   /** Quien recarga ya habiendo ganado ve Ganaste desde su memoria, y la sala contesta recién después. */
   async function conLaSalaCaida(): Promise<{ mundo: Awaited<ReturnType<typeof prepararCelular>>; dar: (codigo: string) => void; preguntas: () => number }> {
     let respuesta: EstadoPropio | "red" = "red";
@@ -157,28 +165,29 @@ describe("quien llega a la entrega antes de que llegue su código", () => {
     return { mundo, dar: (codigo) => { respuesta = { ...propio("sorteada"), gano: true, codigo }; }, preguntas: () => preguntas };
   }
 
-  it("lo pide al llegar y lo muestra sin sacarla de la entrega", async () => {
+  it("dice dónde entregan el premio, sin ningún botón, y lo muestra en la misma pantalla cuando llega", async () => {
     const { mundo, dar } = await conLaSalaCaida();
     expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Ganaste");
     expect(mundo.raiz.querySelector(".cmp-codigo-linea")).toBeNull();
+    expect(pantalla(mundo.raiz)).toContain(TEXTOS_CAMPANA.es.cpEntregaL);
+    expect(mundo.raiz.querySelector("#cmp-estado button")).toBeNull();
     dar(CODIGO);
-    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
-    await asentar();
-    expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
+    await mundo.disparar(15_000);
+    expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Ganaste");
     expect(texto(mundo.raiz, "#cmp-estado .cmp-codigo")).toBe(CODIGO);
+    expect(pantalla(mundo.raiz)).not.toContain(TEXTOS_CAMPANA.es.cpEntregaL);
+    expect(mundo.raiz.querySelector("#cmp-estado button")).toBeNull();
   });
 
-  it("si la sala no contestó, sigue preguntando cada pocos segundos hasta tenerlo y después deja de preguntar", async () => {
+  it("si la sala no contestó, sigue preguntando cada pocos segundos hasta tenerlo y después deja de preguntar a ese ritmo", async () => {
     const { mundo, dar, preguntas } = await conLaSalaCaida();
-    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
-    await asentar();
-    expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
-    expect(mundo.raiz.querySelector(".cmp-codigo-linea")).toBeNull();
     await mundo.disparar(15_000);
     expect(mundo.raiz.querySelector(".cmp-codigo-linea")).toBeNull();
+    const antes = preguntas();
+    await mundo.disparar(15_000);
+    expect(preguntas()).toBe(antes + 1);
     dar(CODIGO);
     await mundo.disparar(15_000);
-    expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
     expect(texto(mundo.raiz, "#cmp-estado .cmp-codigo")).toBe(CODIGO);
     const hasta = preguntas();
     await mundo.disparar(15_000);

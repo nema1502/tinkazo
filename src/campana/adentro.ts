@@ -424,7 +424,9 @@ export function pintarGano(
     premio,
     empresa: deps.campana.empresa.nombre,
   }), "cmp-premio-resultado");
-  if (deps.persona) lineaDelCodigo(izq, deps, datos.codigo);
+  // En una campaña de personas no hay nada que recibir desde el celular: la misma pantalla trae el código y, mientras no llegó,
+  // dice dónde se entrega el premio.
+  if (deps.persona && !lineaDelCodigo(izq, deps, datos.codigo)) parrafo(izq, deps.tx("cpEntregaL"), "cmp-apoyo");
   // El enlace para ver cómo se eligió va al pie del bloque, y el cartel del stand arriba del bloque.
   if (datos.comprobante) enlaceComprobante(izq, deps, datos.comprobante);
   if (datos.avisado) {
@@ -433,9 +435,11 @@ export function pintarGano(
     raiz.append(der);
   }
   raiz.append(izq);
+  // Sin botón de recibir ni línea que lo pida: quien ganó se lo muestra a quien organiza.
+  if (deps.persona) return;
   const accion = caja("cmp-accion");
   raiz.append(accion);
-  parrafo(accion, datos.variante?.linea ?? deps.tx(deps.persona ? "cpParaRecibirPersona" : "cpParaRecibir"), "cmp-apoyo");
+  parrafo(accion, datos.variante?.linea ?? deps.tx("cpParaRecibir"), "cmp-apoyo");
   const llevar = datos.variante?.llevar;
   if (!llevar) {
     boton(accion, deps.tx("cpRecibir"), "primary", deps.recibir);
@@ -448,13 +452,14 @@ export function pintarGano(
 /** Cuatro cifras, y nada más: lo que la sala da a quien ganó. Cualquier otra cosa no se muestra. */
 const ES_CODIGO = /^[0-9]{4}$/u;
 
-/** El código de entrega de quien ganó, con la línea que dice que se lo muestre a quien organiza. Sin código válido no pone nada. */
-function lineaDelCodigo(destino: HTMLElement, deps: DepsDelCelular, codigo: string | null | undefined): void {
-  if (codigo === null || codigo === undefined || !ES_CODIGO.test(codigo)) return;
+/** El código de entrega de quien ganó, con la línea que dice que se lo muestre a quien organiza. Sin código válido no pone nada y dice false. */
+function lineaDelCodigo(destino: HTMLElement, deps: DepsDelCelular, codigo: string | null | undefined): boolean {
+  if (codigo === null || codigo === undefined || !ES_CODIGO.test(codigo)) return false;
   const linea = document.createElement("p");
   linea.className = "cmp-apoyo cmp-codigo-linea";
   conDestacado(linea, deps.tx("cpTuCodigo"), "codigo", codigo, "cmp-hora cmp-codigo");
   destino.append(linea);
+  return true;
 }
 
 /** Las líneas de un aviso grande, con el botón de abajo cuando hay un comprobante para ver. */
@@ -494,22 +499,6 @@ export function pintarOtra(
     { titulo: deps.tx("cpOtraPersona"), apoyo: [deps.tx("cpGracias")] },
     datos.comprobante ? { texto: deps.tx("cpComoSeEligio"), enlace: datos.comprobante } : null,
   );
-}
-
-/**
- * Lo que pasa cuando quien ganó una campaña de personas toca Recibir mi premio: por ahora, una pantalla corta, un título y una
- * línea, que dice que el premio se entrega con quien organiza. Reclamar y cobrar desde el celular es de otra etapa, que
- * reemplaza esta función por el camino de verdad. Quien recarga vuelve a Ganaste.
- */
-export function pintarEntrega(raizPrincipal: HTMLElement, deps: DepsDelCelular, codigo?: string | null): void {
-  const raiz = seccion(raizPrincipal, "#cmp-estado", "cmp-estado cmp-entrega cmp-solo");
-  if (!raiz) return;
-  const hero = caja("cmp-izq cmp-hero");
-  hero.append(llama());
-  titulo(hero, deps.tx("cpEntregaT"));
-  parrafo(hero, deps.tx("cpEntregaL"), "cmp-apoyo");
-  lineaDelCodigo(hero, deps, codigo);
-  raiz.append(hero);
 }
 
 /** La salida de la lista siempre explica el motivo que informó la sala. */

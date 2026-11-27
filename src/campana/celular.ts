@@ -11,7 +11,6 @@ import {
   actualizarElContador,
   latirAlDia,
   pintarAdentro,
-  pintarEntrega,
   pintarGano,
   pintarHola,
   pintarOtra,
@@ -240,9 +239,7 @@ type Pantalla =
   | "pase"
   | "llena"
   /** Solo en una campaña de personas: la sala todavía no tiene el modo prendido y repetir el pedido no lo arregla. */
-  | "apagada"
-  /** Solo en una campaña de personas: el premio se entrega con quien organiza (`pintarEntrega`, en `adentro.ts`). */
-  | "entrega";
+  | "apagada";
 
 interface EstadoInterno {
   pantalla: Pantalla;
@@ -874,9 +871,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
 
   const intervaloDe = (pantalla: Pantalla): number | null => {
     if (pantalla === "previa" || pantalla === "hola" || pantalla === "adentro") return 15_000;
-    if (pantalla === "gano" || pantalla === "otra") return 60_000;
-    // La entrega (solo en personas) sigue pidiendo el código mientras no llega: quien tocó Recibir antes de tenerlo no queda sin él.
-    if (pantalla === "entrega" && estado.codigo === null) return 15_000;
+    // Ganaste, en una campaña de personas, sigue pidiendo el código mientras no llega: quien recargó no queda sin él.
+    if (pantalla === "gano") return deps.persona && estado.codigo === null ? 15_000 : 60_000;
+    if (pantalla === "otra") return 60_000;
     return null;
   };
 
@@ -1005,10 +1002,6 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       avisoPublico(deps.tx(estado.pantalla === "llena" ? "cpErrLlena" : "cpPersonaNoAbre"), null, true);
       return;
     }
-    if (estado.pantalla === "entrega") {
-      pintarEntrega(raiz, deps, estado.codigo);
-      return;
-    }
     if (estado.pantalla === "lista") {
       avisoPublico(sustituir(deps.tx("cpAbre"), {
         fecha: fechaTexto(deps.campana.abreMs, deps.campana.zona, deps.idioma()),
@@ -1120,8 +1113,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       comprobante: resultado.comprobante,
     });
     if (gano) {
-      // Quien ya está en la entrega recibe su código ahí mismo, sin que lo devuelvan a Ganaste.
-      ir(estado.pantalla === "entrega" ? "entrega" : "gano");
+      ir("gano");
       if (estado.avisado && !avisadoAntes) deps.vibrar([60, 40, 60]);
     } else {
       ir("otra");
@@ -1290,7 +1282,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   async function preguntar(): Promise<void> {
     if (desmontado || consultando || !deps.visible()) return;
     if (estado.pantalla !== "previa" && estado.pantalla !== "hola" && estado.pantalla !== "adentro"
-      && estado.pantalla !== "gano" && estado.pantalla !== "otra" && estado.pantalla !== "entrega") return;
+      && estado.pantalla !== "gano" && estado.pantalla !== "otra") return;
     // En la ventana del resultado, al volver a la pestaña se pregunta por el resultado y no por la consulta propia.
     if (sorteo?.consulta()?.cadaMs != null) {
       await preguntarResultado();
@@ -1461,12 +1453,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
    */
   async function recibirElPremio(toque?: Event): Promise<void> {
     if (comparandoLaSesion) return;
-    // En una campaña de personas el premio se entrega por ahora con quien organiza: reclamarlo desde el celular es de otra etapa.
-    if (deps.persona) {
-      ir("entrega");
-      if (estado.codigo === null) void preguntar();
-      return;
-    }
+    // En una campaña de personas el premio se entrega en mano: no hay nada que recibir desde el celular.
+    if (deps.persona) return;
     const cuenta = estado.memoria?.cuenta;
     if (estado.sesion === null && cuenta !== undefined && deps.cuenta?.laSesionEs) {
       comparandoLaSesion = true;

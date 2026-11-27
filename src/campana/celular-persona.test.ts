@@ -310,17 +310,14 @@ describe("una campaña de personas: el resultado", () => {
     return memoria;
   };
 
-  it("quien ganó ve Ganaste, y Recibir mi premio lleva a la pantalla de la entrega con quien organiza", async () => {
+  it("quien ganó ve Ganaste con su premio y dónde se lo entregan, sin botón de recibir ni otra pantalla", async () => {
     const recibir = vi.fn();
     const { mundo } = await montarPersona({ ...sorteada(true), recibir }, adentro());
     expect(texto(mundo, "#cmp-estado h1")).toBe("Ganaste");
-    expect(texto(mundo, "#cmp-estado .cmp-apoyo")).toBe("Tocá el botón para ver cómo recibirlo.");
-    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
-    await asentar();
-    expect(texto(mundo, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
     expect(texto(mundo, "#cmp-estado .cmp-apoyo")).toBe("Acercate a quien atiende el stand y mostrale esta pantalla.");
-    // Después del cierre ninguna pantalla ofrece olvidar: la sala no deja volver a entrar y el código no se recuperaría.
+    // Sin ningún botón: ni Recibir mi premio ni, después del cierre, No soy yo (la sala no deja volver a entrar).
     expect(mundo.raiz.querySelectorAll("#cmp-estado button")).toHaveLength(0);
+    expect(texto(mundo, "#cmp-estado") ?? "").not.toContain("Recibir mi premio");
     expect(recibir).not.toHaveBeenCalled();
   });
 
@@ -436,7 +433,7 @@ describe("una campaña de personas: olvidar a la persona en este celular", () =>
     expect(mundo.raiz.querySelector<HTMLElement>("#cmp-adentro")?.hidden).toBe(true);
   });
 
-  it("después del cierre ninguna pantalla lo ofrece: ni la lista cerrada, ni Ganaste, ni la entrega, ni Esta vez salió otra persona", async () => {
+  it("después del cierre ninguna pantalla lo ofrece: ni la lista cerrada, ni Ganaste, ni Esta vez salió otra persona", async () => {
     // La sala no deja entrar de nuevo con la lista cerrada: quien olvidara su celular perdería su código para siempre.
     const cerrada = await montarPersona({ sala: SALA, yo: async () => propio("cerrada"), publico: async () => ({ ...publico(), fase: "cerrada" }) }, anotada());
     expect(texto(cerrada.mundo, "#cmp-adentro h1")).toBe("Ya estabas en la lista");
@@ -456,12 +453,6 @@ describe("una campaña de personas: olvidar a la persona en este celular", () =>
       }, memoria);
       expect(texto(mundo, "#cmp-estado h1")).toBe(gano ? "Ganaste" : "Esta vez salió otra persona");
       expect(olvidar(mundo)).toBeNull();
-      if (gano) {
-        mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
-        await asentar();
-        expect(texto(mundo, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
-        expect(olvidar(mundo)).toBeNull();
-      }
     }
   });
 
