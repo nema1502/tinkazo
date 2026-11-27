@@ -27,18 +27,15 @@ export function validarCampanaParaFirmar(texto: string, ahora: number): Validaci
 }
 
 /**
- * Lo que valida el firmador de Tinkazo: lo que aceptan la sala y el sitio, y además que una campaña de personas lleve su premio
- * en mano. Una campaña de personas no tiene cuenta a quien pagarle en dólares y las bases prometerían un pago que no hay, así que
- * la sala y el sitio la leen (para no atar las dos cosas) pero el firmador no la firma. Esta validación también la corre el armador
- * antes de bajar el archivo, y por eso el armador pide siempre el premio escrito en una campaña de personas, incluso al abrir un
- * archivo viejo que traía montos: así lo que baja es lo que el firmador acepta.
+ * Lo que valida el firmador de Tinkazo antes de firmar, y el armador antes de bajar el archivo o de mandarlo a activar: lo que
+ * aceptan la sala y el sitio, sin ninguna regla de más. Una campaña de personas se firma en sus dos formas: con el premio en
+ * mano (`premio_en_mano` y los premios en `"0"`) y con premios en dólares, donde quien organiza le manda el premio a cada
+ * persona que gana y la sala la puede activar sola al pagar. Lo que ninguno de los dos lectores acepta sigue sin firmarse,
+ * como unos premios en `"0"` sin el premio escrito.
+ *
+ * Hoy contesta lo mismo que `validarCampanaParaFirmar`. Se conserva con su nombre porque la cargan `scripts/campana-firmar.mjs`
+ * y el armador (`src/crear-campana.ts`): si el firmador vuelve a tener una regla propia, va acá.
  */
 export function validarCampanaParaElFirmador(texto: string, ahora: number): ValidacionDeCampana {
-  const lectura = validarCampanaParaFirmar(texto, ahora);
-  if (!lectura.ok) return lectura;
-  const datos = JSON.parse(texto) as Record<string, unknown>;
-  if (datos.identidad === "persona" && datos.premio_en_mano === undefined) {
-    return { ok: false, quien: "firmador", campo: "premio_en_mano", motivo: "persona-sin-premio-en-mano" };
-  }
-  return { ok: true };
+  return validarCampanaParaFirmar(texto, ahora);
 }

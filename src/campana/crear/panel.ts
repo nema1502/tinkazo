@@ -49,6 +49,7 @@ import {
 } from "./estado";
 import { hoyEn, instantesDe, nombreCortoDeZona, sumarDias } from "./horas";
 import { blobDeLogo, type LogoAchicado } from "./logo";
+import { GANAN_MAXIMO_CON_ENVIO, modoDelFormulario, pedidoDeModo, type ModoDelArmado, type PedidoDeModo } from "./modo";
 import { TIPOS_EN_ORDEN, TOPE_DE_PEDIDOS } from "./redes";
 
 /** Lo que la página necesita de afuera: todo se inyecta para probarla sin navegador de verdad. */
@@ -92,9 +93,20 @@ export interface DepsDelCreador {
   tema: string | null;
   /**
    * Solo con el interruptor de anotarse sin billetera y `?identidad=persona` en la dirección: la campaña se arma con
-   * `"identidad": "persona"`. Sin esto (todo lo demás) el archivo es el de siempre, sin el campo.
+   * `"identidad": "persona"` y el premio escrito. Sin esto y sin `modo` el archivo es el de siempre, sin el campo.
    */
   identidad?: "persona";
+  /**
+   * Qué campaña arma la página, según los interruptores del sitio y la dirección (`pedidoDeModo`): de cuentas, de personas con el
+   * premio en mano o de personas con el premio en dólares. Sin esto el pedido sale de `identidad`, como siempre: cuentas, o
+   * premio en mano si se pidió.
+   */
+  modo?: PedidoDeModo;
+  /**
+   * Lo que cuesta mandar un premio, en dólares digitales, o null si el sitio no lo cobra. Solo cuenta en una campaña de personas
+   * con el premio en dólares, donde quien organiza le manda el premio a cada persona que gana: el resumen suma un envío por premio.
+   */
+  envio?: number | null;
   /**
    * Lo que cobra Tinkazo por activar la campaña, según sus premios (`comisionDelArmado`, la misma cuenta con que cobra el
    * panel). Sin esto, el resumen no tiene renglón del servicio ni del total.
@@ -206,18 +218,26 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   const { tx } = deps;
   const fmt = (clave: string, valores: Record<string, string> = {}): string => sustituir(tx(clave), valores);
   const manana = (): string => sumarDias(hoyEn(deps.ahora(), deps.zona), 1);
+  /** Lo que se pidió armar: lo que dice `modo` y, sin él, lo de siempre (cuentas, o premio en mano con la identidad de personas). */
+  const pedido: PedidoDeModo = deps.modo ?? pedidoDeModo({ sinBilletera: true, conGoogle: false, identidad: deps.identidad ?? null });
+  /** El modo de un formulario: el archivo abierto manda, y sin archivo vale lo pedido. */
+  const modoDe = (g: FormularioDeCampana): ModoDelArmado => modoDelFormulario(g, pedido, deps.demo);
+  /** Una campaña de personas con el premio en dólares: la gente se anota con Google y quien organiza manda cada premio. */
+  const conDolares = (g: FormularioDeCampana): boolean => modoDe(g) === "personas-dolares";
   /**
-   * El modo de la campaña que se arma. Con la dirección de personas, una campaña nueva escribe lo que se lleva cada persona en lugar
-   * de montos. Un archivo abierto manda: uno de cuentas sigue siendo de cuentas aunque la dirección pida personas, y un borrador de
+   * El modo de la campaña que se arma. Con el premio en mano, una campaña nueva escribe lo que se lleva cada persona en lugar de
+   * montos. Un archivo abierto manda: uno de cuentas sigue siendo de cuentas aunque la dirección pida personas, y un borrador de
    * personas abierto sin pedirlas deja de serlo. La demostración queda como está.
    */
   const alModo = (g: FormularioDeCampana): FormularioDeCampana => {
     if (deps.demo) return g;
-    const personas = g.conservado ? g.conservado.identidad === "persona" : deps.identidad === "persona";
-    // Un archivo de personas que no trae premio escrito (de la etapa anterior, con montos) también lo pide: el firmador no lo firma sin él.
-    if (personas) return g.premioEnMano !== undefined ? g : { ...g, premioEnMano: "" };
-    if (g.premioEnMano === undefined) return g;
-    const { premioEnMano: _quitado, ...resto } = g;
+    const modo = modoDe(g);
+    // Un archivo de personas con montos y sin premio escrito también lo pide, salvo donde se arman campañas de personas con dólares.
+    if (modo === "personas-en-mano") return g.premioEnMano !== undefined ? g : { ...g, premioEnMano: "" };
+    // Con dólares cada premio se manda: una campaña nueva lleva como mucho 8. A un archivo abierto no se le baja nada.
+    const acotado = modo === "personas-dolares" && !g.conservado && g.ganan > GANAN_MAXIMO_CON_ENVIO ? { ...g, ganan: GANAN_MAXIMO_CON_ENVIO } : g;
+    if (acotado.premioEnMano === undefined) return acotado;
+    const { premioEnMano: _quitado, ...resto } = acotado;
     return resto;
   };
   let f: FormularioDeCampana = alModo(
@@ -244,20 +264,24 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   let tusHay = deps.tusDisponible === undefined;
 
   /**
-   * Una campaña de personas no lleva cobro ni comisión, y la activación sola nunca la firma: la firma Tinkazo. Por eso el armador
-   * no calcula el servicio, no muestra el total a poner y no ofrece activar, esté como esté el sitio. Lo decide la campaña que se
-   * arma o se abre, no la dirección: un archivo de personas abierto sin pedirlas no cobra, y uno de cuentas abierto pidiendo
-   * personas sigue cobrando como siempre. La dirección solo manda cuando no hay archivo abierto (y en la demostración).
+   * Una campaña de personas con el premio en mano no lleva cobro ni comisión, y la activación sola nunca la firma: la firma
+   * Tinkazo. Por eso el armador no calcula el servicio, no muestra el total a poner y no ofrece activar, esté como esté el sitio.
+   * Lo decide la campaña que se arma o se abre, no la dirección: un archivo de premio en mano abierto sin pedirlo no cobra, y uno
+   * de cuentas abierto pidiendo personas sigue cobrando como siempre. La dirección solo manda cuando no hay archivo abierto. Una
+   * campaña de personas con el premio en dólares cobra y se activa como una de cuentas.
    */
-  const sinCobro = (): boolean =>
-    f.premioEnMano !== undefined || f.conservado?.identidad === "persona" || (f.conservado === undefined && deps.identidad === "persona");
+  const sinCobro = (): boolean => modoDe(f) === "personas-en-mano";
   /** Se puede activar desde esta página: hay con qué guardar el borrador, no es la demostración (no guarda nada) y hay cobro. */
   const puedeActivar = (): boolean => deps.activar !== undefined && !deps.demo && !sinCobro();
   const clavePaso = (n: NumeroDePaso): string => (n === 6 && puedeActivar() ? CLAVE_DEL_ULTIMO_PASO_CON_ACTIVAR : (CLAVE_DE_PASO[n - 1] ?? "ccPaso1"));
 
   /* --- lo que se calcula del formulario --- */
 
-  const datosDeLasBases = (g: FormularioDeCampana): DatosDeLasBases => ({
+  /**
+   * Los datos de las bases que se escriben solas. `personas` dice si son las de una campaña de personas con dólares: sale del modo
+   * del formulario que se recibe, que al abrir un archivo todavía no pasó por `alModo`.
+   */
+  const datosDeLasBases = (g: FormularioDeCampana, personas = conDolares(g)): DatosDeLasBases => ({
     marca: g.nombre.trim() || tx("ccMuestraMarca"),
     ganan: g.ganan,
     monto: g.monto ?? 40,
@@ -266,8 +290,19 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     conRedes: g.pasos.length > 0,
     costo: { es: deps.costo("es"), en: deps.costo("en") },
     ...(g.premioEnMano !== undefined ? { premioEnMano: g.premioEnMano.trim() || tx("ccMuestraPremio") } : {}),
+    ...(personas ? { personas: true as const } : {}),
   });
   const automaticasDe = (g: FormularioDeCampana): { es: string; en: string } => basesAutomaticas(datosDeLasBases(g), deps.dic);
+  /**
+   * Si, en una campaña de personas con dólares, las bases escritas a mano en algún idioma partieron de las que se escriben solas
+   * para una campaña de cuentas con estos mismos datos. Le pasa a quien dejó a medias una campaña con las bases cambiadas y vuelve
+   * cuando el armador ya arma de personas.
+   */
+  const basesSobreLasDeCuentas = (): boolean => {
+    if (!conDolares(f)) return false;
+    const deCuentas = basesAutomaticas(datosDeLasBases(f, false), deps.dic);
+    return (f.bases.es !== null && f.bases.moldeEs === deCuentas.es) || (f.bases.en !== null && f.bases.moldeEn === deCuentas.en);
+  };
   const faltasDe = (): Falta[] => faltas(f, deps.ahora(), automaticasDe(f));
   const premios = (): bigint[] => Array.from({ length: f.ganan }, () => BigInt(f.monto ?? 40) * UNIDADES_POR_DOLAR);
 
@@ -317,6 +352,8 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
       muestraLugar: { es: deps.dic("es", "ccMuestraLugar"), en: deps.dic("en", "ccMuestraLugar") },
       muestraPremio: { es: deps.dic("es", "ccMuestraPremio"), en: deps.dic("en", "ccMuestraPremio") },
       bases,
+      // Con dólares la vista es la de una campaña de personas: se entra con el botón de Google y quien gana ve su código.
+      ...(conDolares(f) ? { identidad: "persona" as const } : {}),
     });
     const reglasAbiertas = pestanaManual === null && pestanaDelPaso(f.paso).reglasAbiertas;
     const mensaje: MensajeDeVista = {
@@ -627,17 +664,23 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     return b;
   }
 
-  /** El número de personas que ganan: el mismo contador en los dos modos. */
+  /**
+   * El número de personas que ganan: el mismo contador en todos los modos. Con dólares cada premio se manda, y llega hasta 8.
+   */
   function cuantosGanan(): HTMLElement {
     const cuantos = el("div", "ccp-campo");
+    const maximo = conDolares(f) ? GANAN_MAXIMO_CON_ENVIO : MAXIMO_DE_GANAN;
     cuantos.append(
       el("p", "ccp-rotulo", tx("ccCuantos")),
       contador(
         f.ganan,
         () => cambiar({ t: "ganan-menos" }),
-        () => cambiar({ t: "ganan-mas" }),
+        () => {
+          // El botón ya está apagado en el tope: esto solo cubre un toque que llegue igual.
+          if (f.ganan < maximo) cambiar({ t: "ganan-mas" });
+        },
         { menos: "ccp-ganan-menos", mas: "ccp-ganan-mas", numero: "ccp-ganan-numero" },
-        { minimo: 1, maximo: MAXIMO_DE_GANAN },
+        { minimo: 1, maximo },
       ),
     );
     return cuantos;
@@ -863,8 +906,12 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
       avisoDeBases.append(
         el("p", "ccp-error", tx("ccBasesCambiaron")),
         boton(tx("ccRehacer"), "ccp-secundario", () => cambiar({ t: "rehacer-bases" }), "ccp-rehacer"),
-        boton(tx("ccDejarlas"), "ccp-secundario", () => cambiar({ t: "dejar-bases", automaticas }), "ccp-dejarlas"),
       );
+      // Unas bases escritas sobre las de una campaña de cuentas prometen lo que una de personas con dólares no hace (el premio en
+      // una cuenta de Tinkazo): ahí no se ofrece dejarlas. Lo escrito no se borra solo: queda volver a escribirlas.
+      if (!basesSobreLasDeCuentas()) {
+        avisoDeBases.append(boton(tx("ccDejarlas"), "ccp-secundario", () => cambiar({ t: "dejar-bases", automaticas }), "ccp-dejarlas"));
+      }
       b.append(avisoDeBases);
     }
     const idiomas = el("div", "ccp-montos ccp-pestanas-bases");
@@ -908,7 +955,9 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     } else premio.append(el("strong", "", premiosTexto(premios(), idioma)));
     if (f.monto !== null && f.premioEnMano === undefined) {
       const premiosElegidos = { monto: f.monto, ganan: f.ganan };
-      const costo = costoDeLaCampana({ premios: premiosElegidos, comision: sinCobro() ? null : (deps.comision?.(premiosElegidos) ?? null) });
+      // Con dólares cada premio se manda desde la cuenta de quien organiza: lo que cuestan esos envíos va en su renglón y en el total.
+      const envios = conDolares(f) && typeof deps.envio === "number" && deps.envio > 0 ? deps.envio * f.ganan : 0;
+      const costo = costoDeLaCampana({ premios: premiosElegidos, comision: sinCobro() ? null : (deps.comision?.(premiosElegidos) ?? null), envios });
       premio.append(el("span", "ccp-total", fmt("ccTotal", { total: String(costo.premios), n: String(f.ganan), monto: String(f.monto) })));
       if (costo.comision !== null) {
         // Con centavos, siempre dos decimales: 1,50 y no 1,5.
@@ -917,7 +966,9 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
           return idioma === "es" ? escrito.replace(".", ",") : escrito;
         };
         const renglon = (clave: string, valor: number): HTMLElement => el("span", "ccp-total", `${tx(clave)}: ${dinero(valor)} ${tx("ccDolares")}`);
-        premio.append(renglon("ccCostoComision", costo.comision), renglon("ccCostoTotal", costo.total));
+        premio.append(renglon("ccCostoComision", costo.comision));
+        if (costo.envios !== undefined) premio.append(renglon("ccCostoEnvios", costo.envios));
+        premio.append(renglon("ccCostoTotal", costo.total));
       }
     }
     const cuando = el("div", "ccp-resumen");
@@ -936,6 +987,8 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     b.append(nombre, premio, cuando, lugar);
     // En el modo de personas, un renglón dice cómo se anota la gente y cómo se entrega el premio. Sin el modo no hay renglón.
     if (f.premioEnMano !== undefined) b.append(el("div", "ccp-resumen ccp-resumen-modo", tx("ccResumenEnMano")));
+    // Con dólares, que quien organiza sepa antes de pagar que después del sorteo manda cada premio.
+    else if (conDolares(f)) b.append(el("div", "ccp-resumen ccp-resumen-modo", tx("ccResumenConGoogle")));
     b.append(botonVerVista());
     return b;
   }
@@ -946,7 +999,9 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   function armadoDeAhora(): { archivo: Record<string, unknown>; texto: string } | null {
     if (faltasDe().length > 0) return null;
     const { bases } = basesFinales(f.bases, automaticasDe(f));
-    const archivo = armarCampana(f, { bases, ...(deps.identidad ? { identidad: deps.identidad } : {}) });
+    // Una campaña nueva lleva la identidad de personas en los dos modos de personas. Con un archivo abierto manda lo que traía.
+    const dePersonas = modoDelFormulario({ conservado: null }, pedido, deps.demo) !== "cuentas";
+    const archivo = armarCampana(f, { bases, ...(dePersonas ? { identidad: "persona" as const } : {}) });
     return { archivo, texto: JSON.stringify(archivo) };
   }
 

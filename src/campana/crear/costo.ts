@@ -44,12 +44,23 @@ export interface CostoDeLaCampana {
   premios: number;
   /** Null sin cobro configurado: entonces no hay renglón. */
   comision: number | null;
+  /**
+   * Lo que cuesta mandar los premios, en dólares digitales. Solo en una campaña de personas con el premio en dólares, donde
+   * quien organiza le manda el premio a cada persona que gana. Sin envíos la clave no está y no hay renglón.
+   */
+  envios?: number;
   total: number;
 }
 
-/** Los renglones de lo que la empresa pone: los premios, la comisión si hay y el total. */
-export function costoDeLaCampana(o: { premios: PremiosDeLaCampana; comision: ComisionDeLaCampana | null }): CostoDeLaCampana {
+/**
+ * Los renglones de lo que la empresa pone: los premios, la comisión si hay, el envío de los premios si hay y el total. `envios` es
+ * la suma de todos los envíos, en dólares digitales: sin él, o en cero, la cuenta es la de siempre.
+ */
+export function costoDeLaCampana(o: { premios: PremiosDeLaCampana; comision: ComisionDeLaCampana | null; envios?: number }): CostoDeLaCampana {
   const premios = o.premios.monto * o.premios.ganan;
   const comision = o.comision ? o.comision.dolares : null;
-  return { premios, comision, total: premios + (comision ?? 0) };
+  const total = premios + (comision ?? 0);
+  const envios = o.envios;
+  if (envios === undefined || !(envios > 0)) return { premios, comision, total };
+  return { premios, comision, envios, total: total + envios };
 }

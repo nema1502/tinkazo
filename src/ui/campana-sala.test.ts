@@ -1838,13 +1838,15 @@ describe("armar otra campaña con la lista ya cerrada o con avisos pendientes", 
       const puente = readFileSync("src/campana/puente.ts", "utf8");
       for (const idioma of ["es", "en"] as const) {
         const claves = Object.keys(TEXTOS_SALA_CAMPANA[idioma]).filter((k) => k.startsWith("cpoOlvidar"));
-        expect(claves.sort(), idioma).toEqual(["cpoOlvidarAviso", "cpoOlvidarSi", "cpoOlvidarT"]);
+        // La de los premios es de las campañas de personas con dólares: ahí lo que falta al dejar la campaña es mandar la plata.
+        expect(claves.sort(), idioma).toEqual(["cpoOlvidarAviso", "cpoOlvidarPremios", "cpoOlvidarSi", "cpoOlvidarT"]);
       }
       for (const vieja of ["cpoOlvidarSello", "cpoOlvidarResultado", "cpoOlvidarGanadora", "avisoQueFalta"]) {
         expect(fuente.includes(vieja), vieja).toBe(false);
         expect(puente.includes(vieja), vieja).toBe(false);
       }
       expect(fuente.includes("cpoOlvidarAviso")).toBe(true);
+      expect(fuente.includes("cpoOlvidarPremios")).toBe(true);
     });
   });
 });

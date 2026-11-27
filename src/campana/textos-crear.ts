@@ -146,6 +146,9 @@ export const TEXTOS_CREAR_CAMPANA: { es: Record<string, string>; en: Record<stri
     ccMuestraMarca: "Tu marca",
     ccMuestraLugar: "Tu evento",
     ccMuestraPremio: "Tu premio",
+    ccBase4Persona: "Quien gana le muestra su código a {marca} el día del evento y le pasa la dirección donde recibe dólares digitales. {marca} le manda el premio ahí. Si no se presenta ese día, {marca} decide qué hacer con el premio.",
+    ccCostoEnvios: "Envío de los premios",
+    ccResumenConGoogle: "La gente se anota con Google. Después del sorteo le mandás el premio a cada persona que gana.",
   },
   en: {
     ccTituloPagina: "Build your campaign, on Tinkazo",
@@ -287,5 +290,8 @@ export const TEXTOS_CREAR_CAMPANA: { es: Record<string, string>; en: Record<stri
     ccMuestraMarca: "Your brand",
     ccMuestraLugar: "Your event",
     ccMuestraPremio: "Your prize",
+    ccBase4Persona: "The winner shows their code to {marca} on the day of the event and gives them the address where they receive digital dollars. {marca} sends the prize there. If the winner doesn't come forward that day, {marca} decides what to do with the prize.",
+    ccCostoEnvios: "Sending the prizes",
+    ccResumenConGoogle: "People sign up with Google. After the draw you send the prize to each winner.",
   },
 };

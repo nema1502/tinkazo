@@ -276,9 +276,19 @@ describe("el premio en mano al firmar", () => {
     expect(JSON.parse(firmada.texto)).toMatchObject({ premio_en_mano: EN_MANO, premios: ["0", "0"] });
   });
 
-  it("no firma una campaña de personas con premios en dólares", () => {
-    expect(() => firmarComoTinkazo({ identidad: "persona" })).toThrow(/premio_en_mano/);
-    expect(() => firmarComoTinkazo({ identidad: "persona", premios: ["400000000"] })).toThrow(/premio_en_mano/);
+  it("firma una campaña de personas con premios en dólares, y la sala y el sitio la leen", () => {
+    for (const cambios of [{ identidad: "persona" }, { identidad: "persona", premios: ["400000000"] }]) {
+      const firmada = firmarComoTinkazo(cambios);
+      expect(verificarFirma(firmada.texto, firmada.firma, publicaHex)).toBe(true);
+      expect(leerCampanaFirmada(firmada, publicaHex, AHORA), JSON.stringify(cambios)).toMatchObject({ ok: true, identidad: "persona" });
+      const texto = JSON.parse(firmada.texto) as Record<string, unknown>;
+      expect(texto.identidad).toBe("persona");
+      expect("premio_en_mano" in texto).toBe(false);
+    }
+  });
+
+  it("no firma una de personas con los premios en cero y sin premio en mano: el sitio no la abriría", () => {
+    expect(() => firmarComoTinkazo({ identidad: "persona", premios: ["0", "0"] })).toThrow(/el sitio rechazaría.*premios/);
   });
 
   it("una campaña de cuentas sigue firmándose con sus montos", () => {
@@ -294,16 +304,20 @@ describe("el premio en mano al firmar", () => {
     expect(() => firmarComoTinkazo({ identidad: undefined, premios: ["0"] })).toThrow(/premios/);
   });
 
-  it("el validador dice por qué una campaña de personas con dólares no se firma", () => {
-    expect(validarCampanaParaElFirmador(cruda({ identidad: "persona" }), AHORA)).toMatchObject({
-      ok: false,
-      quien: "firmador",
-      campo: "premio_en_mano",
-    });
-    expect(() => firmarComoTinkazo({ identidad: "persona" })).toThrow(/Tinkazo no firma esta campaña: revisá el campo premio_en_mano/);
-  });
-
-  it("la validación del armador sigue aceptando lo que leen la sala y el sitio: solo el firmador cierra esta puerta", () => {
+  it("el firmador y el armador validan lo mismo: lo que leen la sala y el sitio, sin ninguna regla de más", () => {
+    expect(validarCampanaParaElFirmador(cruda({ identidad: "persona" }), AHORA)).toEqual({ ok: true });
     expect(validarCampanaParaFirmar(cruda({ identidad: "persona" }), AHORA)).toEqual({ ok: true });
+    const casos: Record<string, unknown>[] = [
+      {},
+      { identidad: "persona" },
+      MANO,
+      { ...MANO, identidad: undefined },
+      { ...MANO, premios: ["400000000", "0"] },
+      { identidad: "persona", premios: ["0", "0"] },
+      { cierra_ms: AHORA },
+    ];
+    for (const cambios of casos) {
+      expect(validarCampanaParaElFirmador(cruda(cambios), AHORA), JSON.stringify(cambios)).toEqual(validarCampanaParaFirmar(cruda(cambios), AHORA));
+    }
   });
 });

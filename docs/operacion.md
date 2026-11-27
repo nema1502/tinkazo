@@ -298,6 +298,7 @@ Las funciones del sitio se prenden con variables `VITE_` que se leen al construi
 | `VITE_SORTEO_SERVIDOR` | apagada, solo con `1` | `sin definir` | El sorteo lo manda el servidor |
 | `VITE_REGALO` | apagada, solo con `1` | `1` | Los primeros 3 sorteos oficiales gratis |
 | `VITE_CAMPANAS` | apagada, con `1` o `true` | `1` | La campaña de una empresa: panel, página del celular y entrada de quien ganó |
+| `VITE_CAMPANAS_CON_GOOGLE` | apagada, solo con `1` | `sin definir` | El armador arma de personas y con premio en dólares toda campaña nueva. Pide `VITE_ANOTARSE_SIN_BILLETERA` en `1` |
 | `VITE_ANOTARSE_SIN_BILLETERA` | apagada, solo con `1` | `sin definir` | Las campañas de personas: la página del celular las abre y el armador las ofrece con `?identidad=persona` |
 | `VITE_GOOGLE_CLIENT_ID` | sin identificador | `sin definir` | El identificador de cliente de Google con que se abre el botón de las campañas de personas. Es público |
 | `VITE_EQUIPOS` | prendida, se apaga con `0` o `false` | `1` | Los equipos con cupón |
@@ -390,6 +391,7 @@ La sala y el conteo se despliegan cada uno desde su carpeta, con la sesión de `
 | Variable | Qué hace |
 |---|---|
 | `VITE_CAMPANAS` | Prende la campaña: el panel de quien organiza (`?campana`), la página del celular (`participar.html`), la entrada de quien ganó (`?premio=1`) y el aviso del sello a la sala. Vale `1` o `true`. Apagada, `participar.html` dice que las campañas no están abiertas. No tiene freno de valor: con otro valor queda apagada sin que el build avise. `?demo=campana` abre aunque esté apagada, así que no sirve para comprobarla. |
+| `VITE_CAMPANAS_CON_GOOGLE` | `1`: el armador arma de personas, y con premio en dólares, toda campaña nueva. La gente se anota con Google sin recibir una cuenta y quien organiza le manda el premio a cada persona que gana. Solo el `1` exacto la prende, y solo junto con `VITE_ANOTARSE_SIN_BILLETERA=1`: sola no hace nada. Cambia el armador y nada más: ni la sala ni la página del celular la miran. Con ella prendida, `?identidad=cuenta` en la dirección arma una campaña de cuentas y `?identidad=persona` una de premio en mano. No se prende antes del ensayo con plata: el orden está en La campaña de personas con premio en dólares, más abajo. |
 | `VITE_ANOTARSE_SIN_BILLETERA` | `1`: la página del celular abre las campañas de personas (su texto firmado trae `"identidad": "persona"`) con el botón de Google para sitios web, y el armador de campañas las ofrece con `?identidad=persona` en la dirección. Solo el `1` exacto la prende. Apagada, una campaña de personas dice que todavía no se puede abrir desde ese sitio y las demás campañas no cambian en nada. Va junto con `VITE_GOOGLE_CLIENT_ID` y con la sala prendida (`DIFERIDA` y `GOOGLE_CLIENT_ID`, en `workers/sala/README.md`). |
 | `VITE_GOOGLE_CLIENT_ID` | El identificador de cliente de Google de Tinkazo, el mismo que la sala tiene en `GOOGLE_CLIENT_ID`. Es público. Sin él, o con el interruptor apagado, ninguna campaña de personas abre. El guion de Google (`accounts.google.com/gsi/client`) se baja solo en la previa de esas campañas. La única política de contenido que manda el sitio es `frame-ancestors 'self'` en `/participar.html` y en `/crear-campana.html` (`vercel.json`), que son las páginas donde se carga el guion, y no frena ni el guion ni el botón. Si se agrega `script-src`, `frame-src` o `connect-src`, tiene que dejar `https://accounts.google.com` y `https://accounts.google.com/gsi/`, y la cabecera existente se amplía: no se reemplaza. |
 | `VITE_RAMPA` | `premios`: Tus dólares digitales deja ver el saldo y recibir un premio, y nada más. La entrada de quien ganó no abre con la rampa apagada. No va junto con `VITE_PAGO_CON_SALDO=1` ni `VITE_COMPRA_QR=1`: el build no sale. En este modo (y en `recibir` y con la rampa apagada), una cuenta de Google que puede guardar dinero no sella ni sortea mientras el voto por contenido no esté prendido: la puerta del premio, en el apartado de abajo. |
@@ -524,7 +526,7 @@ Prender pide publicar el sitio y desplegar la sala, así que se hace con la pala
 
 El archivo trae `identidad` en `persona`, el `premio_en_mano` en español y en inglés (el inglés repite el español) y los `premios` en `"0"`, uno por persona que gana.
 
-**Cómo se firma.** Con `scripts/campana-firmar.mjs`, como dice El archivo de la campaña y su firma, más arriba. El firmador no firma una campaña de personas sin `premio_en_mano` y dice por qué (`persona-sin-premio-en-mano`): una con premios en dólares no sale, porque sin una cuenta en la lista no hay a quién pagarle. Y la activación al pagar nunca la firma: `POST /v1/activar` con `identidad` da `400 forma`, estén los interruptores como estén. Cada evento sigue pidiendo dos archivos con eventos distintos.
+**Cómo se firma.** Con `scripts/campana-firmar.mjs`, como dice El archivo de la campaña y su firma, más arriba. El firmador firma las dos formas de una campaña de personas, la de premio en mano y la de premios en dólares (La campaña de personas con premio en dólares, más abajo): valida lo mismo que la sala y el sitio. La activación al pagar firma sola la de dólares y nunca la de premio en mano: `POST /v1/activar` con `premio_en_mano` da `400 forma`, estén los interruptores como estén. Cada evento sigue pidiendo dos archivos con eventos distintos.
 
 **Sin comisión.** No se cobra nada a quien organiza ni a quien se anota, y el panel no ofrece cobrarlo ni pagarlo. Con el premio en mano, el control de la comisión queda apagado aunque el build la traiga prendida: no hay pantallas de Cargá ni de Pagá a Tinkazo, y Abrir la inscripción está disponible desde el primer momento. Tampoco aparece Pagar premio (el panel de pagos no se monta con ganadoras que son líneas de persona, aunque `VITE_PAGOS` esté en `1`), ni se pide el alta de nadie al portero: no hay 40 créditos por ganadora que sumar al margen. El sello y el sorteo pasan por el portero como en cualquier campaña, así que la cuenta que sella sigue necesitando sus sorteos (Antes del evento, punto 6).
 
@@ -553,6 +555,76 @@ La misma regla vale si quien ganó no está en el evento: las bases dicen que de
 **Cuándo se pierde el rastro.** La sala se borra a las 24 horas de crearse, no desde el sorteo, y con ella la sal de la que sale cada línea. Pasado ese plazo ni el panel ni el celular pueden decir quién ganó ni dar los códigos. El celular que tenía Ganaste a la vista cuando la sala se borró conserva el código que ya mostraba hasta que recargue o cierre la página, y debajo le dice que el sorteo terminó y que hable con quien organiza para recibir su premio. El sorteo, el show y el comprobante siguen. Por eso se crea la sala el mismo día del evento y quien organiza anota el nombre de quien ganó y a quién entregó cada premio mientras la sala vive.
 
 **Cómo cortarla.** Apagar los interruptores no corta una campaña en curso y tiene una excepción que hay que conocer: está en Cómo cortar una campaña, más arriba.
+
+### La campaña de personas con premio en dólares
+
+Es la campaña de personas que reparte dólares digitales, y la arma y la activa quien organiza, sin que nadie de Tinkazo firme. La gente se anota con Google y no recibe ninguna cuenta: en la lista va una línea de persona, como en la de premio en mano. Después del sorteo quien organiza le manda el premio a cada persona que gana, desde su cuenta, a la dirección que esa persona le pasa. Comparada con una campaña de cuentas, cambia dónde está el gasto: no se crea una cuenta por cada persona que se anota, y solo abre una quien gana y no tiene dónde recibir. El contrato de la sala está en [workers/sala/README.md](../workers/sala/README.md), en Campañas de personas y en Activar una campaña al pagar, y el marco del premio en [premios.md](premios.md).
+
+**El orden para prender.** Con la palabra de quien mantiene el proyecto, y cada paso se comprueba antes de seguir.
+
+1. **La sala**, con `DIFERIDA = "1"` y `GOOGLE_CLIENT_ID` escritos en `[vars]` de `workers/sala/wrangler.toml`, en un commit propio y no puestos a mano, y desplegada. Es lo mismo que pide la campaña de premio en mano. Se comprueba con `GET https://s.tinkazo.app/v1/personas/estado`: tiene que decir `"prendido": true` y, en `cliente`, el identificador de Google del sitio.
+2. **El sitio**, con `VITE_ANOTARSE_SIN_BILLETERA=1` y `VITE_GOOGLE_CLIENT_ID`, y una publicación nueva. Todavía sin `VITE_CAMPANAS_CON_GOOGLE`.
+3. **El ensayo con plata**, una vez y en la red principal. Está al final de este apartado. Si algo del ensayo no sale, la bandera nueva no se prende y las campañas son de cuentas o de premio en mano.
+4. **`VITE_CAMPANAS_CON_GOOGLE=1`**, una publicación nueva y, en el mismo cambio, su fila de la tabla de banderas.
+
+**La bandera nueva solo cambia el armador.** No es un candado de la sala. Con las personas prendidas, la sala activa cualquier borrador de personas con premios en dólares que se pague, venga del armador o de un archivo armado a mano. Para que el armador deje de armarlas se saca `VITE_CAMPANAS_CON_GOOGLE` y se publica. Para que la sala deje de activarlas todas se apaga `DIFERIDA`, que también corta crear las campañas de premio en mano y anotar gente nueva en las que están en curso. Con campañas ya pagadas eso las deja sin poder abrir: ver Lo que no se hace con campañas activadas, más abajo.
+
+**Cómo se arma.** Con la bandera prendida, `crear-campana.html` arma de personas toda campaña nueva con premio en dólares, con los pasos de siempre y sin ninguna pregunta de más: los montos, cuántas personas ganan (de 1 a 8), las horas, las redes, las bases y Activar mi campaña. `?identidad=cuenta` en la dirección arma una campaña de cuentas, para cuando Tinkazo la necesite, y `?identidad=persona` sigue armando una de premio en mano. Un archivo abierto manda sobre la dirección: uno de cuentas sigue de cuentas, uno con su premio escrito sigue en mano y uno de personas con montos queda de personas con dólares. La demostración (`?demo=1`) es siempre de cuentas.
+
+**Qué pone quien organiza.** Los premios, el servicio de Tinkazo y el costo de mandar cada premio. Con tres premios de 40, el servicio en 2 % (mínimo 1,50) y el costo del retiro en 0,50:
+
+| Qué | Cuánto |
+|---|---|
+| Premios | 120,00 |
+| Servicio de Tinkazo | 2,40 |
+| Envío de los premios, 0,50 por cada uno | 1,50 |
+| Total a poner | 123,90 |
+| Queda después de pagar el servicio, que es lo que la sala exige para activar | 121,50 |
+| Cada envío | sale 40,50, el costo es 0,50 y llega 40,00 |
+
+El armador lo dice en el último paso (Envío de los premios y Total a poner), el panel pide cargar ese total y la sala lo exige con `COSTO_RETIRO`, que tiene que ser el mismo número que `VITE_RETIRO_COSTO`. El premio le llega entero a quien gana.
+
+**Hasta 8 ganadoras.** El servicio de comisiones acepta 10 envíos por cuenta cada 24 horas, y el pago del servicio de la campaña gasta uno: con 8 premios queda uno de margen para un intento que falle. El armador no deja elegir más, el panel no cobra un borrador con más y la sala no lo activa (`400 forma` con el campo `premios`). Con dos campañas el mismo día desde la misma cuenta se llega al tope igual: el envío que pase de diez no sale hasta que se cumpla un día del primero.
+
+**El pase del QR se sigue exigiendo** (`PASE = "1"`). Los eventos son presenciales y se anota quien escanea el QR de la pantalla.
+
+**El día.** Hasta el sorteo, el recorrido es el de El día de la campaña, con la lista como en la campaña de premio en mano. Después del sorteo:
+
+- La pantalla del resultado trae a cada ganadora con su nombre, su código, el monto de su premio y el botón Mandar con ese monto. Mientras falte algún código, la línea pide esperar a verlos, y el botón sale solo en la fila que ya tiene el suyo.
+- Quien ganó ve en su celular Ganaste, el monto y su código. **El código se mira en el celular de quien ganó** y se compara con el de su fila: acá decide a quién se le manda plata.
+- Se toca Mandar en esa fila. La ventana abre con el premio puesto y dice de quién es. No hay monto que elegir. Se pega la dirección que pasa quien ganó y, antes de tocar Mandar, se confirma mirando los tres números: Sale de tu cuenta, Costo del retiro y Llega. Llega tiene que ser el premio entero. Si el saldo no alcanza, la ventana no baja el monto: dice cuánto falta y no manda nada.
+- El botón Mandar está solo con la cuenta de Google de quien organiza, en el modo Oficial. Con otra cuenta no sale: el nombre, el código y el monto se ven igual, y el premio se manda por fuera.
+- Si la app donde recibe quien ganó le pide una nota o memo, se pega con Pegar nota antes de mandar.
+- **El resultado con los códigos no se deja en la pantalla del salón.** Lo que se proyecta es Mostrar en grande y el show, nunca el panel.
+- **No hay estado de pagado.** Después de Listo la fila queda igual: el panel no sabe ni guarda si un premio se mandó. Quien organiza anota a quién le mandó, para no mandar dos veces ni saltear a nadie.
+
+**Si un envío queda en duda.** La ventana dice Se está mandando. No lo mandes de nuevo. Y no se manda de nuevo. Mientras ese envío puede entrar, hasta unos 6 minutos, el panel no abre otro y la ventana no manda: dice que hay otro envío en camino. Antes de repetirlo se mira el saldo en Tus dólares digitales: si bajó, ya salió.
+
+**Si Mandar falla.** El nombre, el código y el monto de cada ganadora siguen a la vista en el panel hasta la hora que dice el pie de la lista (la sala vive 24 horas desde que se crea). Se anotan y se paga por otro medio. Es el plan B y no depende de Mandar.
+
+**Si quien ganó no tiene dónde recibir.** Su celular le ofrece No tengo dónde recibirlos, con tres pasos y el enlace Abrir Tinkazo, que abre el modo Oficial en otra pestaña:
+
+1. Entrar a Tinkazo con Google y dejar la cuenta lista.
+2. Tocar la cuenta, abrir Tus dólares digitales y tocar Preparar mi cuenta.
+3. En la cuenta, tocar Copiar y pasarle esa dirección a quien organiza.
+
+Ese enlace no es la entrada de quien ganó (`?premio=1`), que en una campaña de personas no sirve: espera un acceso que solo se da a las cuentas ganadoras, y acá no hay cuentas.
+
+**Lo que cuesta.** Nadie recibe una cuenta al anotarse. Quedan dos gastos de créditos del proveedor de cuentas: una firma de la cuenta de quien organiza por cada envío, y una cuenta nueva, con su activación y el voto de su línea, por cada persona que gana y sigue los tres pasos. La medida está en El ensayo con plata de verdad, en la sección de los pagos: una activación y unas siete firmas son unos 180 créditos.
+
+**Lo que no se hace con campañas activadas.** Entre la primera activación y el fin del último evento no se apaga `DIFERIDA`, no se despliega la sala con las personas apagadas y no se publica el sitio sin `VITE_ANOTARSE_SIN_BILLETERA` y `VITE_GOOGLE_CLIENT_ID`. Una campaña ya pagada no podría abrir su inscripción, porque la sala no crearía su sala. Un despliegue reemplaza las variables por las del archivo: por eso los valores van escritos en `wrangler.toml`.
+
+**Las bases quedan escritas en el texto firmado.** Dicen que se entra con la cuenta de Google, el premio en dólares, que quien gana muestra su código y recibe el premio en la dirección que indique, y qué guarda Tinkazo. Eso último tiene que ser cierto mientras la campaña viva: antes de prender la bandera se lee ese renglón en el armador y se compara con lo que la sala desplegada guarda de quien se anota, y eso no se cambia con una campaña activada.
+
+**Lo que nunca corrió con plata de verdad.** Mandar mis dólares digitales y el retiro con su costo nunca corrieron de punta a punta con plata de verdad en producción, y el pago del servicio de una campaña viaja por ese mismo camino. Tampoco se probó con una cuenta de verdad que una cuenta nueva se active con el acceso de bienvenida, prepare su cuenta y copie su dirección. Por eso el ensayo va antes de la bandera:
+
+1. **El borrador.** Sin la bandera el armador todavía no arma este modo. Se arma una campaña de cuentas con un premio de 5 dólares digitales, que es lo menos que arma el armador, se baja con Descargar mi campaña y se le agrega `"identidad": "persona"` a mano. Sus bases son las de una campaña de cuentas: sirve solo para el ensayo.
+2. **Activarla.** En `/?campana&red=oficial`, con la cuenta de Google que organiza, se elige ese archivo, se cargan 7 dólares digitales (5 de premio, 1,50 de servicio y 0,50 de envío), se paga el servicio y se abre la inscripción.
+3. **Anotarse y ganar.** Dos cuentas de Google propias, distintas de la que organiza, se anotan cada una desde su celular, escaneando el QR: la lista no cierra con menos de dos personas. Se cierra la lista, se sella y se sortea. Gana una de las dos, y su celular muestra Ganaste, el monto y el código.
+4. **Tener dónde recibir.** Desde ese celular, con una cuenta de Google que nunca entró al modo Oficial, se hacen los tres pasos de arriba y se pasa la dirección.
+5. **Mandar.** En el panel se mira el código, se toca Mandar 5,00, se pega esa dirección y se confirman los tres números. Llegan 5 a esa cuenta, que es propia.
+
+Si algo de esto no sale, `VITE_CAMPANAS_CON_GOOGLE` no se prende.
 
 ## El cobro a las campañas de empresa
 

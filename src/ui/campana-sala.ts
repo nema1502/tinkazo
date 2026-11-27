@@ -15,10 +15,18 @@ import {
 } from "../campana/puente";
 import { anotarDuenaDelBorrador, borradorEsDeOtra, borrarBorrador, leerBorrador } from "../campana/borrador";
 import { DOLAR, dolaresEnTexto, esDeCentavosJustos, totalDePremios } from "../campana/comision";
-import { fechaTexto, horaTexto, textoDelPremio } from "../campana/formato";
+import { fechaTexto, horaTexto, montoConCentavos, premiosTexto, textoDelPremio } from "../campana/formato";
 import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
 import { clienteDeGoogleDelSitio } from "../campana/persona-bandera";
 import { reglaQueFalla } from "../campana/reglas-de-activar";
+import {
+  PREMIOS_CON_ENVIO_MAXIMOS,
+  enviosDe,
+  esDePersonasConDolares,
+  esResultadoEnDolares,
+  lineaDelResultadoEnDolares,
+  montoDelPuesto,
+} from "../campana/personas-dolares";
 import { ESPERA_TOKEN_MS } from "../campana/sesion";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
 import { descifrarEquipo, revisarEquipo } from "../equipos/datos";
@@ -133,6 +141,24 @@ export interface DepsDeTus {
   ayuda: (asunto: string) => string;
 }
 
+/** Cómo terminó el pedido de abrir Mandar con un premio puesto. */
+export type ResultadoDeAbrirMandar = "abierta" | "ocupada" | "sin-lectura";
+
+/**
+ * Lo de afuera de mandar un premio desde el resultado de una campaña de personas con premios en dólares: si esta sesión puede
+ * mandar, y abrir Mandar mis dólares digitales con el premio ya puesto. El panel nunca manda nada: abre la ventana, que es donde
+ * quien organiza pega la dirección y confirma.
+ */
+export interface DepsDeMandarPremio {
+  /** Si esta sesión puede mandar dólares digitales desde el panel. */
+  puede: () => Promise<boolean>;
+  /**
+   * Abre la ventana con lo que tiene que llegar (`llega`, en stroops) y de quién es el premio (`para`). `ocupada` es que hay otro
+   * envío en camino y `sin-lectura` que no se pudo leer el saldo: en los dos casos no se abrió nada.
+   */
+  abrir: (premio: { llega: bigint; para: string }) => Promise<ResultadoDeAbrirMandar>;
+}
+
 export interface DepsDelPanelDeCampana {
   tx: (clave: string) => string;
   idioma: () => Lang;
@@ -244,6 +270,17 @@ export interface DepsDelPanelDeCampana {
    * una campaña de la red principal el panel suma una línea que dice si el premio está o cuánto falta. Sin esto no mira nada.
    */
   deposito?: DepsDeDeposito;
+  /**
+   * Si la sala tiene prendidas las campañas de personas, con el mismo identificador de Google que el sitio
+   * (`sala/personas-estado.ts`). Se pregunta al tomar un borrador de personas, antes de ofrecer el pago: sin un sí, no se cobra.
+   * Un borrador de cuentas no lo pregunta. Sin esto, un borrador de personas no llega a pagarse.
+   */
+  personasParaCobrar?: () => Promise<boolean>;
+  /**
+   * Mandar el premio de una ganadora desde el resultado de una campaña de personas con premios en dólares. Sin esto, cada fila
+   * dice el monto de su premio y no lleva botón.
+   */
+  mandarPremio?: DepsDeMandarPremio;
 }
 
 const NOMBRE_DEL_CANAL = "tinkazo-campana-org";
@@ -319,6 +356,13 @@ export function depsReales(): DepsDelPanelDeCampana {
     personasListas: () => personasSePuedenAbrir(clienteDeGoogleDelSitio()),
     // El saldo se lee en la red principal: en la de prueba no hay premio de verdad que mirar.
     ...(network.name === "mainnet" ? { deposito: depsDeDepositoReales() } : {}),
+    // Lo trae recién con un borrador de personas a la vista: el resto del sitio no lo usa.
+    personasParaCobrar: () => import("../sala/personas-estado").then((m) => m.personasListas()),
+    // La ventana de Mandar y la billetera bajan recién con un resultado en dólares a la vista: el resto del panel no las usa.
+    mandarPremio: {
+      puede: () => import("./campana-mandar-real").then((m) => m.mandarPremioReal().puede()),
+      abrir: (premio) => import("./campana-mandar-real").then((m) => m.mandarPremioReal().abrir(premio)),
+    },
   };
 }
 
@@ -1792,6 +1836,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (regla === "sorteo_ms") return tx("cpoAcSorteoLejos");
     if (regla === "empresa.nombre") return tx("cpoAcNombre");
     if (regla === "premios") return revisa("premios");
+    // En una campaña de personas con premios en dólares cada premio se manda desde la cuenta de quien organiza, y la sala no
+    // activa más de ocho: se dice acá, antes de cobrar.
+    if (esDePersonasConDolares(c) && c.premios.length > PREMIOS_CON_ENVIO_MAXIMOS) return revisa("premios");
     const v = await deps.validar(texto, deps.ahora());
     if (!v.ok) return v.motivo === "vencida" ? tx("cpoVencida") : revisa(v.campo);
     if (c.cierraMs <= deps.ahora()) return tx("cpoVencida");
@@ -1805,6 +1852,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     abrirYa = false;
     temprana = null;
     salaDeActivar = deps.salaLista ? "preguntando" : "lista";
+    // Un borrador de personas no se cobra sin preguntarle a la sala: sin la forma de preguntar, no se ofrece el pago.
+    if (c.identidad === "persona" && !deps.salaLista) salaDeActivar = "no";
     cm?.reiniciar();
     mensaje = "";
     vista = "previa";
@@ -1829,8 +1878,26 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pintar();
     const lista = await deps.salaLista().catch(() => false);
     if (borrador !== b) return;
+    // Un borrador de personas pide además que la sala tenga las personas listas. Uno de cuentas no pregunta nada más.
+    const sinPersonas = lista && b.identidad === "persona" && !(await personasListasEnLaSala());
+    if (borrador !== b) return;
     salaDeActivar = lista ? "lista" : "no";
+    if (sinPersonas) salaDeActivar = "no";
     pintar();
+  }
+
+  /**
+   * Si la sala tiene prendidas las campañas de personas, con el mismo identificador de Google que el sitio. Sin la forma de
+   * preguntarlo, o si la pregunta falla, es un no: sin un sí no se cobra.
+   */
+  async function personasListasEnLaSala(): Promise<boolean> {
+    const preguntar = deps.personasParaCobrar;
+    if (!preguntar) return false;
+    try {
+      return (await preguntar()) === true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -2808,6 +2875,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const n = visibles().length;
     const paso = pasoDelPuente();
     const enFila = enLaFila();
+    /** El resultado de una campaña de personas con premios en dólares: ahí dejar la campaña pregunta siempre. */
+    const enDolares = vista === "sorteada" && esResultadoEnDolares(paso, campana);
     const firma = [
       vista,
       vistaAntes,
@@ -2836,6 +2905,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         ? [deps.cuenta() === null, primarioDeTus(), tusTrabajando, tusFalla?.evento, tusFalla?.boton, tus.filter((f) => describirTus(f).usable).length]
         : "",
       vista === "tomada" ? puedeUsarAqui() : "",
+      enDolares,
     ].join("|");
     if (firma === firmaDeAcciones) return;
     firmaDeAcciones = firma;
@@ -2997,6 +3067,10 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         botones.push(principal(tx("cpoDejar"), () => olvidar()));
       }
     }
+    // En el resultado en dólares el panel no guarda a quién ya se le mandó: dejar la campaña pregunta siempre, aunque todas
+    // estén avisadas, porque al dejarla ya no se ve a quién le falta su premio. Elegir otro archivo es el último botón de esa
+    // vista, y acá se cambia por uno que pregunta sin mirar nada más.
+    if (enDolares) botones.splice(-1, 1, boton(tx("cpoOtroArchivo"), "enlace", () => pedirOlvidar()));
     // La fila viva es parte de este bloque y no se vuelve a armar: lo que ya dijo no se repite.
     for (const hijo of [...accionesEl.children]) if (hijo !== filaEl) hijo.remove();
     accionesEl.append(...botones);
@@ -3087,6 +3161,15 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? lineaDelPaso(pasoDelPuente()) : null;
     // Lo que la fila viva ya dice no se repite en la línea: la fila ocupa su lugar.
     if (delPaso) linea = enLaFila()?.texto === tx(delPaso.clave) ? "" : fmt(delPaso.clave, { ...delPaso.vars, boton: deps.botonDeSellar?.() ?? t("freeze") });
+    // En una campaña de personas con premios en dólares el premio no se entrega en mano: la línea dice que se mande, y mientras
+    // falte un código, que se espere.
+    const pasoDeAhora = pasoDelPuente();
+    if (vista === "sorteada" && esResultadoEnDolares(pasoDeAhora, campana)) linea = tx(lineaDelResultadoEnDolares(pasoDeAhora));
+    // La pregunta de dejar la campaña desde ese resultado se decide acá, por encima de lo que diga la de siempre: con un aviso
+    // pendiente va la línea de los avisos y, con todas avisadas, lo que se pierde al dejarla es a quién le falta su premio.
+    if (vista === "olvidar" && vistaAntes === "sorteada" && esResultadoEnDolares(pasoDeAhora, campana)) {
+      linea = tx(avisosPendientes(pasoDeAhora, true) ? "cpoOlvidarAviso" : "cpoOlvidarPremios");
+    }
     if (campana && vista === "previa") {
       const hora = horaTexto(campana.cierraMs, zona, idioma);
       const pedidos = campana.pasos.length;
@@ -3153,6 +3236,81 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     avisoEl.textContent = leyendoLaLista && mensaje === tx("cpoCargando") ? "" : mensaje;
   }
 
+  /* --- mandar el premio, en una campaña de personas con premios en dólares --- */
+
+  /** Si esta sesión puede mandar dólares digitales desde el panel: lo último que contestó `mandarPremio.puede`. */
+  let puedeMandar = false;
+  /** Para qué sala y qué cuenta se preguntó: con otra, lo que se sabía ya no vale. */
+  let mandarDe: string | null = null;
+  /** Hay que preguntar de nuevo: se entró al resultado, o cambió la cuenta conectada. */
+  let mandarPorPreguntar = true;
+  let vueltaDeMandar = 0;
+  /** Se está abriendo la ventana de un premio: otro toque no abre otra. */
+  let abriendoMandar = false;
+
+  /**
+   * Pregunta si esta sesión puede mandar, al entrar al resultado en dólares y cada vez que cambia la cuenta conectada. La
+   * respuesta se guarda y el panel se pinta de nuevo. Mientras llega la respuesta nueva para la misma sala y la misma cuenta
+   * vale la de antes, así los botones no parpadean. Con otra cuenta no vale nada hasta que conteste.
+   */
+  function mirarSiPuedeMandar(): void {
+    const mandar = deps.mandarPremio;
+    if (!mandar || !sala) return;
+    const de = `${sala.id}|${deps.cuenta() ?? ""}`;
+    if (de !== mandarDe) {
+      mandarDe = de;
+      puedeMandar = false;
+      mandarPorPreguntar = true;
+    }
+    if (!mandarPorPreguntar) return;
+    mandarPorPreguntar = false;
+    const vuelta = ++vueltaDeMandar;
+    void Promise.resolve()
+      .then(() => mandar.puede())
+      .catch(() => false)
+      .then((si) => {
+        const puede = si === true;
+        if (vuelta !== vueltaDeMandar || puede === puedeMandar) return;
+        puedeMandar = puede;
+        pintar();
+      });
+  }
+
+  /**
+   * Abre Mandar con el premio de esa fila ya puesto. El panel no manda nada: abre la ventana, que es donde se confirma. Con otro
+   * envío en camino, o sin poder leer el saldo, no se abre nada y el aviso lo dice.
+   */
+  async function mandarElPremio(llega: bigint, para: string): Promise<void> {
+    const mandar = deps.mandarPremio;
+    if (!mandar || abriendoMandar) return;
+    const s = sala;
+    abriendoMandar = true;
+    const r = await Promise.resolve()
+      .then(() => mandar.abrir({ llega, para }))
+      .catch((): ResultadoDeAbrirMandar => "sin-lectura");
+    abriendoMandar = false;
+    // Si mientras tanto se dejó la campaña o cambió la pantalla, ya no hay dónde decirlo.
+    if (sala !== s || vista !== "sorteada") return;
+    const dicho = r === "ocupada" ? tx("cpoCmOcupada") : r === "sin-lectura" ? tx("cpoSinConexion") : "";
+    // Sin nada nuevo que decir no se pinta de nuevo: la fila que se tocó sigue siendo la misma.
+    if (dicho !== mensaje) aviso(dicho);
+  }
+
+  /**
+   * Lo que suma una fila del resultado en dólares: el monto de su puesto, siempre, y con su código a la vista el botón de
+   * mandarlo, si esta sesión puede. El código es lo que dice a quién se le manda el premio: sin él no hay botón.
+   */
+  function premioDeLaFila(puesto: number, nombre: string, conCodigo: boolean): HTMLElement[] {
+    const monto = montoDelPuesto(campana, puesto);
+    if (monto === null) return [];
+    const idioma = deps.idioma();
+    const dicho = document.createElement("span");
+    dicho.className = "cpo-marca";
+    dicho.textContent = premiosTexto([monto], idioma, true);
+    if (!conCodigo || !puedeMandar || !deps.mandarPremio) return [dicho];
+    return [dicho, boton(fmt("cpoMandarMonto", { monto: montoConCentavos(monto, idioma) }), "ghost", () => void mandarElPremio(monto, nombre))];
+  }
+
   /** Cada ganadora con su botón de Avisar a y lo que dijo el servicio del acceso. Solo con el resultado en la sala. */
   function pintarGanadoras(): void {
     const paso = pasoDelPuente();
@@ -3163,6 +3321,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // (pintarAcciones): su fila no lo repite. Las demás quedan con su botón de apoyo.
     const primeraPorAvisar = paso.filas.findIndex((g) => !g.avisada);
     const enMano = paso.enMano === true;
+    // En una campaña de personas con premios en dólares cada fila dice además cuánto es su premio y, con su código, lleva Mandar.
+    const enDolares = esResultadoEnDolares(paso, campana);
+    if (enDolares) mirarSiPuedeMandar();
     const filasDeGanadoras = paso.filas.map((g, i) => {
       const li = document.createElement("li");
       li.className = "cpo-fila";
@@ -3187,6 +3348,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
           codigo.textContent = fmt("cpoCodigoDeEntrega", { codigo: g.codigo });
           li.append(codigo);
         }
+        if (enDolares) li.append(...premioDeLaFila(i, g.nombre, g.codigo !== undefined));
         return li;
       }
       if (g.alta !== "esperando" && g.alta.estado === "puede") {
@@ -3227,7 +3389,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   }
 
   /**
-   * Lo que la línea del premio necesita para existir ahora: la cuenta que entró, el total de premios y la clave que junta esos dos
+   * Lo que la línea del premio necesita para existir ahora: la cuenta que entró, el total de premios (con el envío de cada uno en
+   * una campaña de personas con premios en dólares, que es lo que la sala exige al activar) y la clave que junta esos dos
    * con el estado del cobro. Es `null` cuando no hay línea: sin la dependencia, fuera de la vista previa, en otra red, con el cobro
    * sin pagar, sin cuenta entrada o con una campaña que pide sellar con otra cuenta (la línea nunca habla de una cuenta que no es la
    * de quien mira). Puede lanzar si el premio está mal formado: quien la llama la protege.
@@ -3236,7 +3399,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (!deps.deposito || vista !== "previa" || campana === null || campana.premioEnMano !== undefined || campana.red !== "mainnet" || cm?.bloqueaElAbrir()) return null;
     const cuenta = deps.cuenta();
     if (cuenta === null || (pide !== null && pide !== cuenta)) return null;
-    const total = totalDePremios(campana.premios);
+    const total = totalDePremios(campana.premios) + enviosDe(campana, deps.comision?.comision()?.costo ?? 0n);
     return { cuenta, total, clave: [cuenta, total.toString(), cm?.estado().tipo ?? ""].join("|") };
   }
 
@@ -3481,7 +3644,24 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // La consecuencia dicha en simple: la lista queda a la vista, sin palabras que asusten.
       pieEl.textContent = fmt("cpoSeBorra", { fecha, hora: horaTexto(sala.vence, campana.zona, deps.idioma()) });
     }
+    pintarElPieDelResultado();
     pintarPlegado();
+  }
+
+  /**
+   * En el resultado de una campaña de personas con premios en dólares el pie dice hasta cuándo se ven los nombres y los códigos:
+   * pasada esa hora ya no se sabe a quién le falta su premio. El pie vive en el bloque de la lista, que con el sorteo hecho no se
+   * ve: ahí pasa a estar debajo de las ganadoras, y en las demás vistas vuelve a su lugar.
+   */
+  function pintarElPieDelResultado(): void {
+    if (!sala || !campana || vista !== "sorteada" || !esResultadoEnDolares(pasoDelPuente(), campana)) {
+      if (pieEl.parentElement !== listaBloque) listaBloque.append(pieEl);
+      return;
+    }
+    if (pieEl.previousElementSibling !== ganadorasEl) ganadorasEl.after(pieEl);
+    const idioma = deps.idioma();
+    pieEl.hidden = false;
+    pieEl.textContent = fmt("cpoCodigosHasta", { fecha: fechaTexto(sala.vence, campana.zona, idioma), hora: horaTexto(sala.vence, campana.zona, idioma) });
   }
 
   /* --- el plegado de pagar desde otra billetera --- */
@@ -3732,6 +3912,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   // campaña el cuadro se vacía y se dice con cuál entrar, en lugar de dejar Sellar a la vista; si es, se vuelve a pasar.
   const alCambiarLaSesion = (): void => {
     const conectada = deps.cuenta();
+    // Con otra cuenta cambia si se puede mandar un premio desde acá: se vuelve a preguntar en el próximo dibujo del resultado.
+    mandarPorPreguntar = true;
     // La lista de Tus campañas es de una cuenta: con otra, o sin sesión, no se queda a la vista.
     if ((vista === "tus" || (vista === "seguir" && seguirDe?.desde === "tus")) && tusDeCuenta !== null && tusDeCuenta !== conectada) {
       tus = [];
@@ -3816,6 +3998,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     dejarDeEscuchar();
     cm?.detener();
     marca++;
+    vueltaDeMandar++;
     pararDespertar?.();
     pararTemprano?.();
     pararTemprano = null;

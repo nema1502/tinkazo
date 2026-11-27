@@ -25,6 +25,12 @@ export interface DatosDeLasBases {
    * mano y no hablan de dólares, de cuenta de Tinkazo ni de retiros. Sin él (o en null), las de siempre.
    */
   premioEnMano?: string | null;
+  /**
+   * Solo en una campaña de personas con el premio en dólares: la gente se anota con Google y quien organiza le manda el premio a
+   * cada persona que gana, a la dirección que le pase. Las bases lo dicen y no hablan de una cuenta de Tinkazo, de un plazo para
+   * recibirlo ni de retirar. Con el premio escrito mandan las de premio en mano.
+   */
+  personas?: true;
 }
 
 /** Busca el texto de una clave en un idioma: la página pasa el de su diccionario. */
@@ -47,6 +53,7 @@ export const CLAVES_DE_LAS_BASES = [
   "ccBase3ManoVarios",
   "ccBase4Mano",
   "ccBase6Mano",
+  "ccBase4Persona",
 ] as const;
 
 function renglones(d: DatosDeLasBases, dic: Diccionario, idioma: Lang): string {
@@ -64,6 +71,20 @@ function renglones(d: DatosDeLasBases, dic: Diccionario, idioma: Lang): string {
       d.conRedes ? dicho("ccBase2Redes") : dicho("ccBase2Sin"),
       d.ganan === 1 ? dicho("ccBase3ManoUno") : dicho("ccBase3ManoVarios"),
       dicho("ccBase4Mano"),
+      dicho("ccBase5"),
+      dicho("ccBase6Mano"),
+      dicho("ccBase7"),
+      dicho("ccBase8"),
+    ].join("\n");
+  }
+  // Personas con el premio en dólares: el premio llega entero a la dirección que indique quien gana, así que recibirlo es gratis y
+  // no hay costo de retirar que decir. Lo que guarda Tinkazo es lo mismo que en toda campaña de personas.
+  if (d.personas) {
+    return [
+      dicho("ccBase1"),
+      d.conRedes ? dicho("ccBase2Redes") : dicho("ccBase2Sin"),
+      d.ganan === 1 ? dicho("ccBase3Uno") : dicho("ccBase3Varios"),
+      dicho("ccBase4Persona"),
       dicho("ccBase5"),
       dicho("ccBase6Mano"),
       dicho("ccBase7"),

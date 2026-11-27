@@ -52,6 +52,13 @@ import { con } from "./monedas-vista";
  * el voto a mano no se pide nada, nunca va por `signAndSubmit`. Los montos son siempre enteros en stroops
  * (siete decimales), nunca decimales de coma flotante. Sin el costo configurado, o con otra cuenta que no sea de Google,
  * Mandar es el de siempre: un solo pago y los mismos textos.
+ *
+ * Con el premio puesto (`llega` en `abrirMandar`), quien organiza una campaña de personas le manda su premio a cada persona
+ * que gana, una detrás de otra. Ahí el monto no se elige: sale lo que hace falta para que el premio llegue entero, que es el
+ * premio más el costo que rija. Si el saldo no alcanza no se baja el monto: no se arma nada y la ventana dice cuánto falta. La
+ * ventana dice de quién es el premio (`para`), porque tapa la lista de donde se abrió. Y antes de preparar un envío mira que
+ * no haya otro en camino: la billetera lleva una sola marca de retiro por navegador y, con el anterior todavía en duda,
+ * contestaría por ese y no por este. Sin `llega` nada de esto corre y la ventana es la de siempre.
  */
 
 const STROOPS = 10_000_000n;
@@ -314,7 +321,18 @@ export interface DepsDeMandar {
    * costo solo para una cuenta de Google en la red principal con el costo configurado.
    */
   costo?(origen: string): Promise<CostoDelRetiro | null>;
+  /**
+   * Si hay otro envío de esta cuenta que todavía puede entrar. Solo se pregunta con el premio puesto, antes de preparar
+   * nada: con otro en camino no se manda. El del sitio mira la marca del retiro que deja la billetera.
+   */
+  ocupada?(): Promise<boolean>;
 }
+
+/**
+ * Los envíos que Mandar pidió en esta pestaña y todavía no terminaron. La billetera deja su marca recién al pedir la firma:
+ * hasta entonces, un envío que sigue su camino con la ventana ya cerrada solo se ve acá.
+ */
+let enviosSinTerminar = 0;
 
 /**
  * El costo del retiro que rige para la cuenta `origen`, sacado de la configuración del build y nunca de la pantalla: solo
@@ -345,6 +363,12 @@ export function depsDelSitio(): DepsDeMandar {
     mirar,
     preparar: (d) => prepararEnvio(d, mirar),
     costo: (origen) => costoQueRige(origen),
+    async ocupada() {
+      // La marca guarda hasta cuándo puede entrar el último retiro (segundos Unix). Vencida o sin marca, no hay nada en camino.
+      const { MARCA_DEL_RETIRO, leerMarcaDeLaCuenta } = await import("../stellar/wallet-pollar");
+      const hasta = leerMarcaDeLaCuenta(MARCA_DEL_RETIRO);
+      return hasta !== null && hasta * 1000 > Date.now();
+    },
     async pegar() {
       try {
         return await navigator.clipboard.readText();
@@ -422,15 +446,23 @@ function textoDeListo(datos: DatosDelEnvio): string {
 /**
  * Abre Mandar mis dólares digitales para la cuenta `address`, con `saldo` en stroops (lo que la ventana de los dólares
  * acaba de leer). `deps` reemplaza lo del sitio (en las pruebas).
+ *
+ * Con `llega` (stroops) la ventana abre con el premio puesto: es lo que tiene que llegar al destino, y el monto ya no se
+ * elige. `para` es de quién es ese premio, y solo se dice con `llega`. Sin `llega` la ventana es la de siempre.
  */
-export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Partial<DepsDeMandar> = {}): void {
+export function abrirMandar(o: { address: string; saldo: bigint; llega?: bigint; para?: string }, parcial: Partial<DepsDeMandar> = {}): void {
   if (!mandarPermitido()) return;
   const deps: DepsDeMandar = { ...depsDelSitio(), ...parcial };
+  /** El premio puesto: lo que tiene que llegar al destino. `null` es la ventana de siempre, donde el monto se elige. */
+  const premio = o.llega ?? null;
+  /** De quién es el premio, para decirlo arriba. Vacío si no hay premio puesto o no se sabe el nombre. */
+  const deQuien = premio === null ? "" : (o.para ?? "").trim();
   const estado = {
     destino: null as string | null,
     lectura: null as LecturaDeCuenta | null,
     nota: { tipo: "ninguna" } as Nota,
-    monto: o.saldo,
+    // Todo el saldo o, con el premio puesto, el premio: el costo todavía no se sabe y se suma cuando se conoce.
+    monto: premio ?? o.saldo,
     fin: false,
     /** Mandando: hasta saber cómo terminó no se cambia nada. */
     enviando: false,
@@ -462,6 +494,13 @@ export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Part
 
   /** El costo que rige ahora: el configurado, salvo que el destino sea la propia cuenta del costo (eso no es un retiro). */
   const costoVigente = (): CostoDelRetiro | null => (estado.costo !== null && estado.destino !== estado.costo.destino ? estado.costo : null);
+  /**
+   * A lo que vuelve el monto cuando cambia si hay costo: todo el saldo o, con el premio puesto, lo que hace falta para que
+   * llegue entero (el premio más el costo que rija).
+   */
+  const montoDePartida = (): bigint => (premio === null ? o.saldo : premio + (costoVigente()?.stroops ?? 0n));
+  /** Con el premio puesto, cuánto le falta al saldo para mandarlo entero, o `null` si alcanza. El monto nunca se baja para que alcance. */
+  const faltaParaElPremio = (): bigint | null => (premio !== null && !estado.fin && estado.monto > o.saldo ? estado.monto - o.saldo : null);
   /** Lo que llega al destino con el monto elegido: lo mismo sin costo, y el monto menos el costo con costo. */
   const llegaAhora = (): bigint => {
     const costo = costoVigente();
@@ -477,6 +516,7 @@ export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Part
 
   const listo = (): boolean => {
     if (!estado.costoMirado || estado.destino === null || estado.lectura === null || estado.monto <= 0n) return false;
+    if (faltaParaElPremio() !== null) return false;
     const costo = costoVigente();
     if (costo !== null && (!puedeRetirar(estado.monto, costo.stroops) || notaBloqueada())) return false;
     return puedeRecibir(estado.lectura, deps.red, llegaAhora());
@@ -506,19 +546,19 @@ export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Part
     );
   }
 
-  /** La fila de cuánto: sin costo, el monto y sus botones. Con costo, los tres números: lo que sale, el costo y lo que llega. */
+  /**
+   * La fila de cuánto: sin costo, el monto y sus botones. Con costo, los tres números: lo que sale, el costo y lo que llega.
+   * Con el premio puesto no hay botones: el monto no se elige.
+   */
   function filaDeCuanto(quieto: string): string {
     const costo = costoVigente();
+    const montos = premio === null ? `<dd class="saldo-montos">${botonesDeMonto(quieto)}</dd>` : "";
     if (costo === null) {
       const monto = esc(con(t("saldoMonto"), { n: formato(estado.monto) }));
-      return (
-        `<div class="saldo-dato"><dt>${esc(t("saldoMandarCuanto"))}</dt><dd><b data-mandar="monto">${monto}</b></dd>` +
-        `<dd class="saldo-montos">${botonesDeMonto(quieto)}</dd></div>`
-      );
+      return `<div class="saldo-dato"><dt>${esc(t("saldoMandarCuanto"))}</dt><dd><b data-mandar="monto">${monto}</b></dd>${montos}</div>`;
     }
     return (
-      `<div class="saldo-dato"><dt>${esc(t("saldoRetiroSale"))}</dt><dd><b data-mandar="sale">${esc(dolares(estado.monto))}</b></dd>` +
-      `<dd class="saldo-montos">${botonesDeMonto(quieto)}</dd></div>` +
+      `<div class="saldo-dato"><dt>${esc(t("saldoRetiroSale"))}</dt><dd><b data-mandar="sale">${esc(dolares(estado.monto))}</b></dd>${montos}</div>` +
       `<div class="saldo-dato"><dt>${esc(t("saldoRetiroCosto"))}</dt><dd><span data-mandar="costo">${esc(dolares(costo.stroops))}</span></dd></div>` +
       `<div class="saldo-dato"><dt>${esc(t("saldoRetiroLlega"))}</dt><dd><b data-mandar="llega">${esc(dolares(llegaAhora()))}</b></dd></div>`
     );
@@ -542,17 +582,29 @@ export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Part
         ? `<input class="saldo-bs" data-mandar="campo-${cual}" type="text" autocomplete="off" spellcheck="false" aria-label="${esc(etiqueta)}" placeholder="${esc(etiqueta)}">`
         : "";
     const total = estado.fin ? "" : `<p class="saldo-total">${esc(con(t("saldoTenes"), { n: formato(o.saldo) }))}</p>`;
+    // De quién es el premio, arriba de todo y en cada estado de la ventana: también cuando el saldo no alcanza y ya mandado.
+    const paraQuien = deQuien === "" ? "" : `<h3 class="saldo-titulo" data-mandar="para">${esc(con(t("saldoMandarPremioDe"), { nombre: deQuien }))}</h3>`;
+    const faltaPremio = faltaParaElPremio();
+    if (faltaPremio !== null) {
+      // Con el premio puesto y el saldo corto no se baja el monto ni se arma nada: la pantalla dice cuánto falta.
+      d.cuerpo.innerHTML = paraQuien + total;
+      boton.disabled = true;
+      linea.classList.remove("ok");
+      decir(con(t("saldoMandarFaltaPremio"), { n: montoEnTexto(faltaPremio, getLang()) }));
+      return;
+    }
     const falta = faltaSaldo();
     const costoDeAhora = costoVigente();
     if (falta !== null && costoDeAhora !== null) {
       // El saldo no alcanza para un retiro: sin montos ni botón activo, y la pantalla dice por qué. No se arma nada.
-      d.cuerpo.innerHTML = total;
+      d.cuerpo.innerHTML = paraQuien + total;
       boton.disabled = true;
       linea.classList.remove("ok");
       decir(textoDeQueNoAlcanza(falta, costoDeAhora.stroops));
       return;
     }
     d.cuerpo.innerHTML =
+      paraQuien +
       // El saldo de antes de mandar: después de mandado ya no es el que hay.
       total +
       `<section class="saldo-paso">` +
@@ -601,12 +653,13 @@ export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Part
 
   /**
    * Cambia el destino. Si con eso cambia si hay costo (pagar a la propia cuenta del costo no lo cobra), lo elegido vuelve a
-   * Todo: un monto que servía sin costo puede no servir con costo.
+   * Todo: un monto que servía sin costo puede no servir con costo. Con el premio puesto vuelve a lo que hace falta para que
+   * el premio llegue entero.
    */
   function fijarDestino(dir: string | null): void {
     const habiaCosto = costoVigente() !== null;
     estado.destino = dir;
-    if ((costoVigente() !== null) !== habiaCosto) estado.monto = o.saldo;
+    if ((costoVigente() !== null) !== habiaCosto) estado.monto = montoDePartida();
   }
 
   async function pegar(cual: "dir" | "nota"): Promise<void> {
@@ -668,6 +721,16 @@ export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Part
     void mandar();
   });
 
+  /**
+   * Con el premio puesto: si hay otro envío que todavía puede entrar. Lo dicen los envíos de esta pestaña que no terminaron
+   * y, si no hay ninguno, la marca de la billetera. `null` si no se pudo saber: entonces tampoco se manda.
+   */
+  async function otroEnCamino(): Promise<boolean | null> {
+    if (enviosSinTerminar > 0) return true;
+    if (deps.ocupada === undefined) return false;
+    return deps.ocupada().catch((): null => null);
+  }
+
   async function mandar(): Promise<void> {
     if (estado.enviando || !listo() || !estado.destino) return;
     boton.disabled = true;
@@ -678,7 +741,11 @@ export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Part
     const datos: DatosDelEnvio = { red: deps.red, origen: o.address, destino: estado.destino, monto: estado.monto, nota: estado.nota };
     const costo = costoVigente();
     try {
-      await enviarLoElegido(costo === null ? datos : { ...datos, costo });
+      // Con el premio puesto se mandan varios seguidos. Si el anterior todavía puede entrar, este no se prepara ni se manda:
+      // así un premio nunca se da por mandado con el resultado de otro. El botón queda para probar más tarde.
+      const otro = premio === null ? false : await otroEnCamino();
+      if (otro === false) await enviarLoElegido(costo === null ? datos : { ...datos, costo });
+      else if (estado.abierta) decir(t(otro === null ? "saldoMandarNoSalio" : "saldoMandarOcupado"), true);
     } finally {
       estado.enviando = false;
     }
@@ -695,7 +762,14 @@ export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Part
       decir(t(claveDeQueNoSePudo(p.motivo)), true);
       return;
     }
-    const r = await deps.enviar(p.xdr, o.address, datos).catch(() => "no-salio" as const);
+    // El envío se cuenta mientras dura, también si la ventana se cierra antes de saber cómo terminó.
+    let r: ResultadoDelEnvio;
+    enviosSinTerminar++;
+    try {
+      r = await deps.enviar(p.xdr, o.address, datos).catch(() => "no-salio" as const);
+    } finally {
+      enviosSinTerminar--;
+    }
     if (!estado.abierta) return;
     if (r === "listo" || r === "en-curso") {
       // Mandado, o en camino: no se ofrece mandar de nuevo.
@@ -728,8 +802,8 @@ export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Part
         estado.costoMirado = true;
         if (costo === null && estado.destino === null) return;
         // Si el costo rige, lo elegido antes de saberlo vuelve a Todo: un monto que servía sin costo puede no servir con
-        // costo. Una nota que no puede ir con costo se dice.
-        if (costoVigente() !== null) estado.monto = o.saldo;
+        // costo. Con el premio puesto pasa a ser el premio más el costo. Una nota que no puede ir con costo se dice.
+        if (costoVigente() !== null) estado.monto = montoDePartida();
         if (notaBloqueada()) decir(t("saldoMandarNotaMala"), true);
         pintar(true);
       },

@@ -446,11 +446,13 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
 
   /**
    * Baja lo que Ganaste necesita para decir lo que corresponde, apenas se sabe que la cuenta lo pide: así, al llegar el
-   * resultado, ya está. Con la cuenta sin protección o sin saberse, la línea de siempre alcanza y no se baja nada.
+   * resultado, ya está. Con la cuenta sin protección o sin saberse, la línea de siempre alcanza y no se baja nada. En una campaña
+   * de personas con el premio en dólares se baja siempre: Ganaste dice a quién pasarle la dirección donde se reciben.
    */
   function prepararElPremio(): void {
     const dicho = lecturaVigente();
-    const quiere = dicho !== null && dicho.estado !== "naciendo" && dicho.estado !== "no-se-sabe" && !(dicho.estado === "falta" && !dicho.protegida);
+    const quiere = (deps.persona && !deps.campana.premioEnMano)
+      || (dicho !== null && dicho.estado !== "naciendo" && dicho.estado !== "no-se-sabe" && !(dicho.estado === "falta" && !dicho.protegida));
     // Solo quien ya está adentro puede llegar a Ganaste: antes no se baja nada.
     const adentro = estado.pantalla === "adentro" || estado.pantalla === "gano";
     if (premio !== null || cargandoElPremio || !quiere || !adentro) return;
@@ -995,6 +997,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
         variante: premio?.varianteDeGanaste(deps, cuentaParaGanar()) ?? null,
         codigo: estado.codigo,
       });
+      // En una campaña de personas con el premio en dólares: a quién pasarle la dirección, y qué hacer si no se tiene dónde recibir.
+      premio?.completarEnDolares(raiz, deps);
       if (!estado.festejoGrandeHecho) {
         estado.festejoGrandeHecho = true;
         const seccion = raiz.querySelector<HTMLElement>("#cmp-estado");
