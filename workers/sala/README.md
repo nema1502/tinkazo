@@ -402,9 +402,11 @@ Nace apagado, y con todo apagado no pasa nada de lo que sigue: ninguna respuesta
   escritura) o `inesperado`. Nunca el correo, el nombre, la foto, el identificador ni el token. Se mira con
   `npx wrangler@4.160.0 tail --config wrangler.toml --search perfil-`.
 - **Las campañas de cuentas no cambian** con ninguna combinación de interruptores y nunca guardan un perfil.
-- **Nada los lee.** Ninguna ruta de la sala devuelve, lista, cuenta ni borra perfiles, y `perfiles.ts` no tiene ninguna función
-  que lo haga. Todavía no hay herramienta para leer ni para borrar un perfil: llega en la etapa siguiente. Un pedido de borrado se
-  anota y se cumple cuando llegue esa herramienta.
+- **Nada los lee desde el código.** Ninguna ruta ni función de la sala devuelve, lista, cuenta ni borra perfiles, y `perfiles.ts`
+  no tiene ninguna. Quien tiene acceso de edición al Worker en la cuenta de Cloudflare los cuenta, los ve y borra a quien lo pide
+  desde el panel (Durable Objects, el espacio de la clase `Cupos` de `tinkazo-sala`, Data Studio, el nombre `cupos`), y cada
+  consulta queda en el registro de auditoría de la cuenta. Las consultas están escritas en `docs/operacion.md`, en Leer, contar
+  y borrar un perfil.
 - **La línea y el perfil.** La línea de una persona sale del identificador de su cuenta de Google con la sal de la sala. Con el
   perfil guardado ese identificador queda en la tabla, así que mientras la sala viva (24 horas como máximo) quien tuviera a la vez
   la tabla y la sal podría recalcular la línea de cada perfil. Ningún código lo hace. Borrada la sala, la sal ya no existe y no se

@@ -131,7 +131,7 @@ describe("lo que dicen los documentos de la sala", () => {
   /** Si el texto trae la frase. Se afirma sobre un sí o un no para que una falla nombre la frase y no vuelque el documento. */
   const dice = (texto: string, frase: string | RegExp): boolean => (typeof frase === "string" ? texto.includes(frase) : frase.test(texto));
 
-  it("los dos dicen dónde se guarda, en qué orden se prende y se apaga, y que todavía no hay cómo leer ni borrar", () => {
+  it("los dos dicen dónde se guarda, en qué orden se prende y se apaga, y cómo se lee y se borra desde el panel de Cloudflare", () => {
     const frases: (string | RegExp)[] = [
       "la tabla `perfiles`",
       /no se borra con las? salas?/,
@@ -139,12 +139,45 @@ describe("lo que dicen los documentos de la sala", () => {
       "`VITE_GUARDAR_PERFIL`",
       /\*\*Para prender\*\*.{0,120}primero la sala.{0,200}después el sitio/,
       /\*\*Para apagar\*\*.{0,120}primero el sitio/,
-      "Todavía no hay herramienta para leer ni para borrar un perfil",
-      "Un pedido de borrado se anota y se cumple cuando llegue esa herramienta",
+      "Data Studio",
+      "registro de auditoría de la cuenta",
+      "el nombre `cupos`",
+      /[Nn]inguna ruta ni función/,
     ];
     for (const [nombre, texto] of documentos) {
       for (const frase of frases) expect(dice(texto, frase), `${nombre}: ${String(frase)}`).toBe(true);
+      // Ya no prometen una herramienta que llega después: quien opera tiene los pasos escritos.
+      for (const vieja of ["Todavía no hay herramienta", "llega en la etapa siguiente", "cuando llegue esa herramienta"]) {
+        expect(dice(texto, vieja), `${nombre}: ${vieja}`).toBe(false);
+      }
     }
+    // El README no repite las consultas: remite a la hoja, que las trae.
+    expect(dice(plano(readme), "docs/operacion.md"), "el README remite a la hoja de operación").toBe(true);
+  });
+
+  it("las consultas de la hoja corren de verdad: cuentan, listan y borran a quien lo pide por su correo, contando antes y después", () => {
+    const consultas = [...hoja.matchAll(/```sql\r?\n([\s\S]*?)```/g)]
+      .flatMap((m) => (m[1] ?? "").split(";"))
+      .map((c) => c.trim())
+      .filter((c) => c !== "");
+    expect(consultas).toEqual([
+      "SELECT count(*) FROM perfiles",
+      "SELECT correo, nombre, foto, primera_ms, ultima_ms, veces FROM perfiles ORDER BY primera_ms DESC LIMIT 200",
+      "SELECT count(*) FROM perfiles WHERE lower(correo) = lower('ana@example.org')",
+      "DELETE FROM perfiles WHERE lower(correo) = lower('ana@example.org')",
+      "SELECT count(*) FROM perfiles WHERE lower(correo) = lower('ana@example.org')",
+    ]);
+    const b = banco();
+    guardarPerfil(b.sql, { id: ID, correo: "Ana@Example.org", nombre: "Ana", foto: FOTO }, 1_000);
+    guardarPerfil(b.sql, { id: "google:100000000000000000002", correo: "beto@example.org", nombre: "Beto", foto: "" }, 2_000);
+    const [total, lista, antes, borrar, despues] = consultas.map((c) => b.sql<Record<string, unknown>>(c));
+    expect(total).toEqual([{ "count(*)": 2 }]);
+    expect(lista?.map((f) => f.nombre)).toEqual(["Beto", "Ana"]);
+    expect(Object.keys(lista?.[0] ?? {})).toEqual(["correo", "nombre", "foto", "primera_ms", "ultima_ms", "veces"]);
+    expect(antes).toEqual([{ "count(*)": 1 }]);
+    expect(borrar).toEqual([]);
+    expect(despues).toEqual([{ "count(*)": 0 }]);
+    expect(b.filas().map((f) => f.nombre)).toEqual(["Beto"]);
   });
 
   it("ninguno sigue diciendo, sin más, que del token no se guarda nada", () => {

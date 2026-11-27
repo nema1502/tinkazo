@@ -532,7 +532,22 @@ Prender pide publicar el sitio y desplegar la sala, así que se hace con la pala
 
 **Para apagar**, primero el sitio: se quita `VITE_GUARDAR_PERFIL`, se publica, y la pantalla deja de decir que se guarda y de mandar el permiso. Después la sala, con `PERFILES = "0"` y un despliegue. Apagar no borra los perfiles que ya están guardados.
 
-**Leer y borrar un perfil.** Todavía no hay herramienta para leer ni para borrar un perfil, y ninguna ruta de la sala los devuelve: llega en la etapa siguiente. Un pedido de borrado se anota y se cumple cuando llegue esa herramienta. Lo que se ve mientras tanto es el registro de la sala, que no lleva ningún dato de la persona: `perfil-guardado` dice si la persona es nueva y si quedó con nombre y con foto, y `perfil-error` trae un código fijo (`forma`, `guardar` o `inesperado`). Se mira desde `workers/sala` con `npx wrangler@4.160.0 tail --config wrangler.toml --search perfil-`.
+**Leer, contar y borrar un perfil.** El código no tiene ninguna ruta ni función que lo haga, y ninguna respuesta de la sala devuelve un perfil. Lo hace quien tiene acceso de edición al Worker en la cuenta de Cloudflare, desde el panel: Durable Objects, el espacio de la clase `Cupos` de `tinkazo-sala`, Data Studio, y como identificador del objeto el nombre `cupos`. Cada consulta que se corre ahí queda en el registro de auditoría de la cuenta. Las consultas, para copiar tal cual:
+
+```sql
+SELECT count(*) FROM perfiles;
+SELECT correo, nombre, foto, primera_ms, ultima_ms, veces FROM perfiles ORDER BY primera_ms DESC LIMIT 200;
+```
+
+La primera cuenta cuántas personas hay y la segunda lista las 200 últimas, con las horas en milisegundos. Para borrar a quien lo pide, se le escribe a `hola@tinkazo.app` desde el correo de su cuenta de Google, como dicen los Términos: se borra solo a quien pide desde su propio correo. Se cuenta antes, se borra y se cuenta después, y las dos cuentas tienen que dar 1 y 0 (cambiá `ana@example.org` por el correo de quien lo pidió, sin tocar nada más):
+
+```sql
+SELECT count(*) FROM perfiles WHERE lower(correo) = lower('ana@example.org');
+DELETE FROM perfiles WHERE lower(correo) = lower('ana@example.org');
+SELECT count(*) FROM perfiles WHERE lower(correo) = lower('ana@example.org');
+```
+
+Si la primera cuenta da 0, esa persona no tiene perfil guardado: se le contesta eso. Borrar el perfil no toca la línea de la persona en las salas vivas, que se van solas a las 24 horas. Si la persona se anota otra vez con los interruptores prendidos, su perfil se guarda de nuevo desde cero. El correo del pedido no se copia en ningún chat ni en ningún documento. Lo que se ve de los perfiles sin entrar al panel es el registro de la sala (`perfil-guardado` y `perfil-error`), que no lleva ningún dato de la persona: `perfil-guardado` dice si la persona es nueva y si quedó con nombre y con foto, y `perfil-error` trae un código fijo (`forma`, `guardar` o `inesperado`). Se mira desde `workers/sala` con `npx wrangler@4.160.0 tail --config wrangler.toml --search perfil-`.
 
 **La línea y el perfil.** La línea de una persona sale del identificador de su cuenta de Google con la sal de la sala. Con el perfil guardado ese identificador queda en la tabla, así que mientras la sala viva quien tuviera a la vez la tabla de perfiles y la sal de esa sala podría recalcular la línea de cada perfil. Ningún código lo hace y ninguna respuesta lo deja ver. Cuando la sala se borra, la sal se va con ella y ya no se puede.
 
