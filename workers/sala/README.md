@@ -295,7 +295,12 @@ el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
 
 - **El alta** es `POST /v1/sala/<id>/campana/alta` con `{"google","d","llave","p"?,"perfil"?}`. `google` es el token de identidad que
   entrega el botón de Google, y la sala lo verifica sola con `identidad-google.ts`: firma contra las llaves públicas de Google,
-  emisor, audiencia igual al `GOOGLE_CLIENT_ID`, caducidad y correo verificado. No le pregunta nada al proveedor de cuentas y
+  emisor, audiencia igual al `GOOGLE_CLIENT_ID`, caducidad y correo verificado. Las cuentas de servicio de Google no entran,
+  con los interruptores como estén: Google les firma tokens con las mismas llaves y con la audiencia que pida quien los genera,
+  y sin este rechazo alguien se anotaría una vez por cada cuenta de servicio que cree, cuando el sorteo es una vez por persona.
+  Se rechaza el token cuyo correo tiene después de la última arroba el dominio `gserviceaccount.com` o uno que termina en
+  `.gserviceaccount.com`, con el motivo `correo-sin-verificar`. Ninguna persona tiene un correo así. El campo `azp` no rechaza
+  a nadie: solo se mide. No le pregunta nada al proveedor de cuentas y
   nunca contesta `sin-billetera`. Valen los mismos topes, el mismo pase del QR, el mismo cupo, la misma fase y el mismo cierre por
   hora que en una campaña de cuentas. Un token rechazado da `401 sesion` y suma a los rechazos de su ficha y a un contador propio de
   la conexión, de mil por ventana de diez minutos, muy por encima de las 150 personas de un salón. Nunca suma al tope de la
@@ -343,7 +348,10 @@ el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
   línea, que viene de un HMAC con la sal de la sala. Prendido, y solo si el pedido trae `"perfil": true`, el objeto de cupos guarda
   además el identificador de la cuenta de Google, el correo, el nombre y la dirección de la foto (ver El perfil de quien se anota
   con Google, más abajo). Con el interruptor como esté, nada de eso sale en una respuesta ni en el registro, y la sala de la
-  campaña no lo guarda. El registro lleva el motivo de un rechazo (`google-rechazado`), nunca el token.
+  campaña no lo guarda. El registro lleva el motivo de un rechazo (`google-rechazado`), nunca el token. Lleva también, por cada
+  pedido con el token verificado que termina con la persona anotada, una línea `google-azp` con cómo vino el campo `azp` del
+  token: `{"evento":"google-azp","datos":{"azp"}}`, con `igual` si es el identificador de cliente, `distinto` si trae otra cosa y `sin`
+  si no vino. No lleva el valor del campo ni ningún dato de la persona.
 - **El correo a quien gana no se manda** en estas campañas, y el estado público lo dice con `"correo": false`. La línea no dice a
   quién escribir y la sala de la campaña no guarda ningún dato que lo diga. Con `PERFILES` prendido el correo de quien se anotó
   está en su perfil, pero ningún código busca el perfil de una línea ganadora ni le escribe. Avisar por correo, y el reclamo del

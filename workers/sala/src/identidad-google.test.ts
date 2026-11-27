@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   URL_DE_LLAVES_DE_GOOGLE,
@@ -704,5 +706,40 @@ describe("lo que nunca se escribe", () => {
     const t = await firmar({ payload: { aud: "otro-cliente-secreto", email: "beto@example.org" } });
     const r = await verificarIdentidadDeGoogle(t, b.opciones);
     expect(JSON.stringify(r)).toBe('{"ok":false,"motivo":"audiencia"}');
+  });
+});
+
+describe("lo que dicen la cabecera del archivo y los documentos de la sala", () => {
+  const leer = (ruta: string): string => readFileSync(fileURLToPath(new URL(`../../../${ruta}`, import.meta.url)), "utf8");
+  /** El texto en un solo renglón: una frase puede caer en dos, y en la cabecera cada renglón empieza con su asterisco. */
+  const plano = (texto: string): string => texto.replace(/\r?\n \* ?/g, " ").replace(/\s+/g, " ");
+  const cabecera = plano(leer("workers/sala/src/identidad-google.ts").split("\nimport ")[0] ?? "");
+  const hoja = plano(leer("docs/operacion.md"));
+  const readme = plano(leer("workers/sala/README.md"));
+  const dice = (texto: string, frase: string | RegExp): boolean => (typeof frase === "string" ? texto.includes(frase) : frase.test(texto));
+
+  it("los tres dicen que una cuenta de servicio no entra, por qué, y que el campo azp solo se mide", () => {
+    const frases: (string | RegExp)[] = [
+      /cuentas? de servicio/,
+      "gserviceaccount.com",
+      /una vez por persona/,
+      /[Nn]inguna persona tiene un correo así/,
+      /con los interruptores como estén/,
+      /`azp`(?: del token)? no rechaza a nadie/,
+      /solo se mide/,
+    ];
+    for (const [nombre, texto] of [["cabecera", cabecera], ["hoja de operación", hoja], ["README de la sala", readme]] as const) {
+      for (const frase of frases) expect(dice(texto, frase), `${nombre}: ${String(frase)}`).toBe(true);
+    }
+  });
+
+  it("la hoja y el README nombran la línea del registro con sus tres valores, y la hoja dice cómo mirarla", () => {
+    for (const [nombre, texto] of [["hoja de operación", hoja], ["README de la sala", readme]] as const) {
+      for (const frase of ["`google-azp`", "`igual`", "`distinto`", "`sin`", "`correo-sin-verificar`"]) {
+        expect(dice(texto, frase), `${nombre}: ${frase}`).toBe(true);
+      }
+    }
+    expect(dice(hoja, '{"evento":"google-azp","datos":{"azp":"igual"}}'), "la hoja trae la línea tal como sale").toBe(true);
+    expect(dice(hoja, "--search google-azp"), "la hoja dice cómo mirarla").toBe(true);
   });
 });
