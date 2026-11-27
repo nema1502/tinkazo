@@ -29,8 +29,8 @@ function servidorFalso(
     regalo?: boolean;
     /** Lo que hace cada pedido del estado antes de contestar (el primero es el 1): para hacerlo tardar. */
     antesDelEstado?: (n: number) => Promise<void>;
-    /** Lo que contesta el pedido del regalo, en lugar de darlo. */
-    reclamarImpl?: () => Promise<ResultadoDeAlta<ReclamoDelRegalo>>;
+    /** Lo que contesta el pedido del regalo, en lugar de darlo. Recibe lo que sabe el servidor, para cambiarlo. */
+    reclamarImpl?: (s: { acceso: EstadoDeAlta["acceso"] }) => Promise<ResultadoDeAlta<ReclamoDelRegalo>>;
     /** Lo que contesta el canje, en lugar de darlo. */
     canjearImpl?: () => Promise<ResultadoDeAlta<CanjeDeCupon>>;
   } = {},
@@ -72,7 +72,7 @@ function servidorFalso(
   };
   const reclamar = vi.fn(async (): Promise<ResultadoDeAlta<ReclamoDelRegalo>> => {
     reg.push("reclamar");
-    if (o.reclamarImpl) return o.reclamarImpl();
+    if (o.reclamarImpl) return o.reclamarImpl(s);
     s.acceso = "admin";
     return ok({ ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: { fecha: VENCE, cuantos: 3 } }, regalo: "dado", sigue: "activar" });
   });
@@ -81,7 +81,7 @@ function servidorFalso(
 }
 
 /** La cuenta de mentira: activarla la deja lista. */
-function cuentaFalsa(reg: Registro, inicial: Partial<Est> = {}, partes: Partial<CuentaDelPaso> = {}) {
+function cuentaFalsa(reg: Registro, inicial: Partial<Est> = {}) {
   const estado = { est: { ...NUEVA, ...inicial } as Est };
   const cuenta = {
     estadoOficial: vi.fn(async (fresco?: boolean) => (reg.push(`estadoOficial(${fresco === true})`), { ...estado.est })),
@@ -98,7 +98,6 @@ function cuentaFalsa(reg: Registro, inicial: Partial<Est> = {}, partes: Partial<
     protegerConPasskey: vi.fn(async () => true),
     mandarCodigoDeProteccion: vi.fn(async () => undefined),
     confirmarCodigoDeProteccion: vi.fn(async () => true),
-    ...partes,
   } satisfies CuentaDelPaso;
   return { cuenta, estado };
 }
@@ -207,13 +206,13 @@ const parteActual = (): string | null | undefined => raiz()?.querySelector(".cl-
 const textoDe = (): string => raiz()?.textContent ?? "";
 
 function diferido<T>() {
-  let ok!: (v: T) => void;
-  let mal!: (e: unknown) => void;
+  let resolver!: (v: T) => void;
+  let rechazar!: (e: unknown) => void;
   const p = new Promise<T>((a, b) => {
-    ok = a;
-    mal = b;
+    resolver = a;
+    rechazar = b;
   });
-  return { p, ok, mal };
+  return { p, ok: resolver, mal: rechazar };
 }
 
 /** Avanza de a un segundo, mirando en cada uno. */
@@ -736,9 +735,9 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
       pedidoDespues(cf, reg, 3_000, () => false);
       const srv = servidorFalso(reg, {
         regalo: true,
-        reclamarImpl: async () => {
+        reclamarImpl: async (s) => {
           await esperar(20_000);
-          srv.s.acceso = "admin";
+          s.acceso = "admin";
           return mal("altaErrServicio", "ya-tiene-acceso", 409);
         },
         antesDelEstado: async (n) => {
@@ -761,14 +760,15 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
 });
 
 describe("proteger: Mandando el código tiene salida y confirmar, no", () => {
-  const abrirParaProteger = async (reg: Registro, partes: Partial<CuentaDelPaso>) => {
-    const cf = cuentaFalsa(reg, { activacion: "lista" }, partes);
+  const abrirParaProteger = async (reg: Registro, preparar: (cf: ReturnType<typeof cuentaFalsa>) => void) => {
+    const cf = cuentaFalsa(reg, { activacion: "lista" });
+    preparar(cf);
     return { cf, ...(await abrir(servidorFalso(reg, { acceso: "cupon" }), cf)) };
   };
 
   it("mandar el código que no sale: Volver a cargar a los 45 s, en la caja de proteger", async () => {
     const reg: Registro = [];
-    const { salidas } = await abrirParaProteger(reg, { mandarCodigoDeProteccion: vi.fn(() => new Promise<void>(() => undefined)) });
+    const { salidas } = await abrirParaProteger(reg, (cf) => cf.cuenta.mandarCodigoDeProteccion.mockImplementation(() => new Promise<void>(() => undefined)));
     expect(principal().dataset.accion).toBe("mandar-codigo");
     await tocar();
     await vi.advanceTimersByTimeAsync(44_999);
@@ -786,7 +786,7 @@ describe("proteger: Mandando el código tiene salida y confirmar, no", () => {
 
   it("confirmar el código colgado: sin salida, y a los 60 s su aviso de siempre", async () => {
     const reg: Registro = [];
-    const { cf } = await abrirParaProteger(reg, { confirmarCodigoDeProteccion: vi.fn(() => new Promise<boolean>(() => undefined)) });
+    const { cf } = await abrirParaProteger(reg, (cf) => cf.cuenta.confirmarCodigoDeProteccion.mockImplementation(() => new Promise<boolean>(() => undefined)));
     principal().click();
     await pasa(100);
     const campo = raiz()?.querySelector<HTMLInputElement>("#cl-codigo");
