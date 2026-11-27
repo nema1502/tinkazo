@@ -227,6 +227,17 @@ describe("los documentos dicen lo mismo que los Términos, con el interruptor ap
     expect(legal.includes("tampoco tiene plazo"), "el plazo que falta").toBe(true);
   });
 
+  it("operacion.md, el README de la sala y premios.md cuentan que la pantalla dice que se guarda solo si la sala lo confirma", () => {
+    const operacion = sinSaltos("docs/operacion.md");
+    expect(operacion.includes("**La pantalla dice que se guarda solo si la sala lo confirma.**"), "operacion.md").toBe(true);
+    expect(operacion.includes("trae `\"perfil\": true` únicamente con `PERFILES` prendida"), "operacion.md, el campo").toBe(true);
+    expect(operacion.includes("`curl -s https://s.tinkazo.app/v1/sala/<id>/campana/estado`) tiene que traer `\"perfil\":true`"), "operacion.md, cómo se comprueba").toBe(true);
+    const readme = sinSaltos("workers/sala/README.md");
+    expect(readme.includes("**La pantalla dice que se guarda solo si la sala lo confirma.**"), "README de la sala").toBe(true);
+    expect(readme.includes("suma `\"perfil\": true` (apagada, el campo no existe)"), "README de la sala, la ruta").toBe(true);
+    expect(sinSaltos("docs/premios.md").includes("Esa página lo dice solo si la sala lo confirma en el estado público de la campaña"), "premios.md").toBe(true);
+  });
+
   it("prd.md ya no dice sin más que no hay ninguna base de participantes que Tinkazo pueda leer", () => {
     const prd = sinSaltos("docs/prd.md");
     expect(prd.includes("No hay base de datos de participantes que Tinkazo pueda leer:"), "la frase de antes").toBe(false);

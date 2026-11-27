@@ -102,7 +102,7 @@ con los bits sobrantes del final distintos de cero no es canónica y no verifica
 | --- | --- | --- |
 | `POST /v1/campana` | Crea la sala: `201 {"id","token","vence"}` | Una sala viva por evento y 20 creadas por día UTC, fuera del cupo general |
 | `GET /v1/sala/<id>/campana` | Devuelve `{"texto","firma"}`, exactamente como llegaron | Sin token |
-| `GET /v1/sala/<id>/campana/estado?p=P` | Devuelve `{"fase","total","cierraMs","pase","quitadas","correo"}`. Con la lista sellada o sorteada suma `"sorteo"` (el número) y `"ronda"` (la del sello, si la sala la guardó). Con un token suma `"tuya"`: verdadero si es el vigente, falso si otra compu ya tomó la campaña | Sin token. Sin pase y sin token se recuerda 2 segundos en el borde |
+| `GET /v1/sala/<id>/campana/estado?p=P` | Devuelve `{"fase","total","cierraMs","pase","quitadas","correo"}`. Con la lista sellada o sorteada suma `"sorteo"` (el número) y `"ronda"` (la del sello, si la sala la guardó). Con un token suma `"tuya"`: verdadero si es el vigente, falso si otra compu ya tomó la campaña. En una campaña de personas con `PERFILES` prendida suma `"perfil": true` (apagada, el campo no existe) | Sin token. Sin pase y sin token se recuerda 2 segundos en el borde |
 | `GET /v1/sala/<id>/campana/pase` | Devuelve `{"p","hasta"}` para la pantalla | Con el token |
 | `PUT /v1/sala/<id>/campana/fase` | JSON `{"fase","cierraMs"?}`. Cambia la fase y avisa por el socket | Con el token. Hasta 200 bytes. `204` |
 | `PUT /v1/sala/<id>/campana/resultado` | Comprueba el resultado en la red y guarda las ganadoras. `204` | Con el token |
@@ -390,6 +390,11 @@ Nace apagado, y con todo apagado no pasa nada de lo que sigue: ninguna respuesta
   `VITE_GUARDAR_PERFIL` en `1`, que es cuando mostró los textos que dicen que se guarda. La sala guarda solo si el cuerpo trae ese
   booleano exacto y `PERFILES` está prendida. Cualquier otro valor del campo se ignora y nunca hace fallar un alta. Así una página
   vieja en la memoria de un celular, que mostró el texto de antes, no hace guardar nada.
+- **La pantalla dice que se guarda solo si la sala lo confirma.** El estado público de una campaña de personas trae
+  `"perfil": true` únicamente con `PERFILES` prendida y las campañas de personas prendidas. El celular cambia los dos textos y
+  manda el permiso solo si su página se construyó con `VITE_GUARDAR_PERFIL` y la sala lo confirmó en su última consulta. Con el
+  sitio prendido y la sala apagada el campo no existe y la pantalla dice lo de siempre. Apagada, el estado es el de siempre, letra
+  por letra.
 - **Cuándo se guarda.** Después de que el token de Google se verificó y el alta terminó bien: un alta nueva (`201`) o una persona
   que ya estaba y volvió con un token que la sala verificó (`200` con `ya`). En ese segundo caso la fila se pone al día con el
   correo, el nombre y la foto del token nuevo, `veces` suma una y `primera_ms` no cambia. El reingreso con una ficha de hace menos
@@ -414,7 +419,8 @@ Nace apagado, y con todo apagado no pasa nada de lo que sigue: ninguna respuesta
 
 **Para prender**, en este orden: primero la sala (`PERFILES = "1"` y desplegar), después el sitio (`VITE_GUARDAR_PERFIL=1` y una
 publicación nueva), y las campañas se arman después. La sala prendida sola no guarda nada: ningún celular manda el permiso hasta
-que el sitio lo muestra. Las campañas se arman después porque sus bases quedan firmadas adentro cuando se arman: una campaña de
+que el sitio lo muestra. El sitio prendido con la sala apagada tampoco guarda nada ni lo promete: la pantalla espera la
+confirmación de la sala. Las campañas se arman después porque sus bases quedan firmadas adentro cuando se arman: una campaña de
 personas armada antes de este cambio dice en sus bases que Tinkazo no guarda el correo, y con los perfiles prendidos no se usa.
 
 **Para apagar**, primero el sitio: se quita `VITE_GUARDAR_PERFIL`, se publica, y la pantalla deja de decir que se guarda y de mandar

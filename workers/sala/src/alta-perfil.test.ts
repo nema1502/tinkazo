@@ -505,7 +505,8 @@ describe("el estado público de la campaña dice si la sala guarda perfiles", ()
 
   it("con la sala apagada no hay ningún campo nuevo: el cuerpo es el de siempre, con cualquier valor que no sea el 1", async () => {
     const cuerpos: string[] = [];
-    for (const extra of [{}, { PERFILES: "0" }, { PERFILES: "" }, { PERFILES: "true" }, { PERFILES: " 1" }, { PERFILES: "si" }]) {
+    const apagados: Record<string, string>[] = [{}, { PERFILES: "0" }, { PERFILES: "" }, { PERFILES: "true" }, { PERFILES: " 1" }, { PERFILES: "si" }];
+    for (const extra of apagados) {
       const mundo = await montarPersonas(extra);
       const sala = await campanaAbierta(mundo, AHORA, { identidad: "persona" });
       const estado = await estadoDe(mundo, sala);
@@ -522,7 +523,8 @@ describe("el estado público de la campaña dice si la sala guarda perfiles", ()
   });
 
   it("una campaña de cuentas no lo dice nunca, con los interruptores como estén", async () => {
-    for (const extra of [{}, { PERFILES: "1" }]) {
+    const interruptores: Record<string, string>[] = [{}, { PERFILES: "1" }];
+    for (const extra of interruptores) {
       const mundo = await montarPersonas(extra);
       const sala = await campanaAbierta(mundo, AHORA, { evento: "feria-de-cuentas" });
       expect(await estadoDe(mundo, sala), JSON.stringify(extra)).not.toHaveProperty("perfil");
