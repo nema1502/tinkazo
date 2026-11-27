@@ -261,6 +261,7 @@ import {
 import type { AvisoDeToma, DepsDeTus, ResumenDeSala } from "./tus-campanas";
 import { Pollar, formaDeToken, pollarDe } from "../../patrocinio/src/pollar";
 import { verificarIdentidadDeGoogle } from "./identidad-google";
+import type { AzpDelToken } from "./identidad-google";
 import { codigosDeEntrega, esLineaDePersona, lineaDePersona } from "./linea-persona";
 import { clavePorConexion, clienteDeGoogle, personasPrendido, venceDelToken } from "./personas";
 import type { VariablesDePersonas } from "./personas";
@@ -1935,6 +1936,10 @@ function cuerpoDeEstadoDeCelular(r: EstadoDeCelular): Record<string, unknown> {
  * cupos: el identificador de la cuenta de Google, el correo, el nombre y la dirección de la foto (`perfiles.ts`). La respuesta no
  * lo espera ni cambia por él. El reingreso con una ficha reciente no verifica el token y no guarda. Tampoco guarda una campaña
  * cuyas bases firmadas dicen que Tinkazo no guarda el correo: lo dice la sala en su comprobación previa (`antes.perfil`).
+ *
+ * Quién no entra. El token de una cuenta de servicio de Google se rechaza en la verificación, con los interruptores como estén:
+ * la persona lee lo de siempre, entrar de nuevo (`identidad-google.ts`). El campo `azp` del token no rechaza a nadie: el alta
+ * que termina bien deja en el registro cómo vino (`google-azp`), sin ningún dato de la persona.
  */
 async function altaDePersona(
   env: Env,
@@ -1991,14 +1996,26 @@ async function altaDePersona(
   const anterior = await sala.yaEsta(quien.usuario, llave, ip, google, vence, d);
   if (!anterior.ok) return falla(anterior, h);
   if (anterior.cuenta !== null) {
+    medirAzp(quien.azp);
     // Ya estaba anotada y su token se acaba de verificar: el perfil se pone al día.
     dejarPerfil(env, cuerpo.perfil, antes.perfil === true, quien, enSegundoPlano);
     return json({ anotada: true, ya: true }, 200, h);
   }
   const r = await sala.anotarPersonaDeGoogle({ usuario: quien.usuario, d, llave, ip, p, exigirPase, token: google, vence });
   if (!r.ok) return falla(r, h);
+  medirAzp(quien.azp);
   dejarPerfil(env, cuerpo.perfil, antes.perfil === true, quien, enSegundoPlano);
   return r.ya ? json({ anotada: true, ya: true }, 200, h) : json({ anotada: true }, 201, h);
+}
+
+/**
+ * Deja medido cómo vino el campo `azp` del token de un alta que terminó bien: igual al identificador de cliente, distinto o sin
+ * el campo. Es una línea por pedido con el token verificado, con uno de esos tres textos fijos y nada más: ni el valor que
+ * traía el campo, ni el correo, ni el usuario, ni el token. El campo no decide quién entra. Con estas líneas se cuenta después
+ * cuántas personas de verdad lo traen de cada forma.
+ */
+function medirAzp(azp: AzpDelToken): void {
+  registrar("google-azp", { azp });
 }
 
 /** Los códigos de `perfil-error`: lo verificado no deja un perfil que guardar, el guardado falló, o algo que no se esperaba. */

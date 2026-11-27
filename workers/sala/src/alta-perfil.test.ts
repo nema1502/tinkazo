@@ -551,6 +551,112 @@ describe("el alta de una persona con Google y su perfil", () => {
   });
 });
 
+describe("el alta de una persona deja medido cómo vino el campo azp de su token", () => {
+  let mundo: MundoDeSala;
+  let sala: SalaDeCampana;
+  let consola: { mock: { calls: unknown[][] }; mockClear(): unknown };
+
+  const AZP = (valor: string): string => `{"evento":"google-azp","datos":{"azp":"${valor}"}}`;
+  const delAzp = (lineas: string[]): string[] => lineas.filter((l) => l.includes("azp"));
+  const OTRO_CLIENTE = "cliente-ajeno-secreto.apps.example.org";
+
+  async function montar(extra: Record<string, string> = {}): Promise<void> {
+    mundo = await montarPersonas(extra);
+    sala = await campanaAbierta(mundo, AHORA, { identidad: "persona" });
+  }
+
+  beforeEach(async () => {
+    consola = vi.spyOn(console, "log").mockImplementation(() => {});
+    await montar();
+  });
+
+  it("cada alta que termina bien deja una línea con uno de tres valores fijos: sin, igual o distinto", async () => {
+    expect((await altaGoogle(mundo, sala, await tokenDeGoogle(1))).status).toBe(201);
+    expect((await altaGoogle(mundo, sala, await tokenDeGoogle(2, { azp: CLIENTE }), { llave: llaveDe(2) })).status).toBe(201);
+    expect((await altaGoogle(mundo, sala, await tokenDeGoogle(3, { azp: OTRO_CLIENTE }), { llave: llaveDe(3) })).status).toBe(201);
+    expect((await altaGoogle(mundo, sala, await tokenDeGoogle(4, { azp: 7 }), { llave: llaveDe(4) })).status).toBe(201);
+    await mundo.esperarSegundoPlano();
+    expect(delAzp(registrado(consola))).toEqual([AZP("sin"), AZP("igual"), AZP("distinto"), AZP("distinto")]);
+    // Con cualquier valor entraron las cuatro: el campo se mide y no decide nada.
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM equipos")).toEqual([{ c: 4 }]);
+  });
+
+  it("es la misma línea con los perfiles apagados o prendidos y con el permiso del pedido o sin él", async () => {
+    for (const extra of [{}, { PERFILES: "1" }] as Record<string, string>[]) {
+      for (const cuerpo of [{}, { perfil: true }]) {
+        consola.mockClear();
+        await montar(extra);
+        expect((await altaGoogle(mundo, sala, await tokenDeGoogle(1, { azp: CLIENTE }), { cuerpo })).status).toBe(201);
+        await mundo.esperarSegundoPlano();
+        expect(delAzp(registrado(consola)), JSON.stringify([extra, cuerpo])).toEqual([AZP("igual")]);
+      }
+    }
+  });
+
+  it("es una por pedido con el token verificado: volver con la ficha reciente no suma y volver con otro token sí", async () => {
+    const t = await tokenDeGoogle(1);
+    expect((await altaGoogle(mundo, sala, t)).status).toBe(201);
+    vi.setSystemTime(AHORA + 5_000);
+    // La ficha reciente contesta sin verificar el token: no hay nada que medir.
+    expect((await altaGoogle(mundo, sala, t)).status).toBe(200);
+    expect(delAzp(registrado(consola))).toEqual([AZP("sin")]);
+    vi.setSystemTime(AHORA + 120_000);
+    const otro = await tokenDeGoogle(1, { iat: AHORA / 1000 + 100, azp: OTRO_CLIENTE });
+    const r = await altaGoogle(mundo, sala, otro, { llave: llaveDe(1, 2) });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ anotada: true, ya: true });
+    expect(delAzp(registrado(consola))).toEqual([AZP("sin"), AZP("distinto")]);
+  });
+
+  it("un alta que no termina bien no deja la línea: token que no sirve, cuenta de servicio y lista cerrada", async () => {
+    expect((await altaGoogle(mundo, sala, await tokenDeGoogle(1, { email_verified: false, azp: CLIENTE }))).status).toBe(401);
+    expect((await altaGoogle(mundo, sala, await tokenDeGoogle(2, { aud: "otro", azp: "otro" }), { llave: llaveDe(2) })).status).not.toBe(201);
+    const deServicio = await altaGoogle(mundo, sala, await tokenDeGoogle(3, { email: "name@proyecto.iam.gserviceaccount.com", azp: CLIENTE }), { llave: llaveDe(3) });
+    expect(deServicio.status).toBe(401);
+    expect(await deServicio.json()).toEqual({ error: "sesion" });
+    expect((await mundo.pedir(ruta(sala, "/campana/fase"), { metodo: "PUT", cuerpo: { fase: "cerrada" }, cabeceras: auth(sala) })).status).toBe(204);
+    expect((await altaGoogle(mundo, sala, await tokenDeGoogle(4, { azp: CLIENTE }), { llave: llaveDe(4) })).status).toBe(409);
+    await mundo.esperarSegundoPlano();
+    expect(delAzp(registrado(consola))).toEqual([]);
+    expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM equipos")).toEqual([{ c: 0 }]);
+  });
+
+  it("la línea no lleva el correo, el nombre, la foto, el usuario, el token ni lo que traía el campo", async () => {
+    const tokens = [await tokenDeGoogle(1, { azp: OTRO_CLIENTE }), await tokenDeGoogle(2, { azp: CLIENTE }), await tokenDeGoogle(3)];
+    let n = 0;
+    for (const t of tokens) expect((await altaGoogle(mundo, sala, t, { llave: llaveDe(++n), ...CON_PERMISO })).status).toBe(201);
+    await mundo.esperarSegundoPlano();
+    const lineas = registrado(consola);
+    expect(delAzp(lineas)).toEqual([AZP("distinto"), AZP("igual"), AZP("sin")]);
+    const todo = [...lineas, JSON.stringify(consola.mock.calls)].join("\n");
+    for (const secreto of [OTRO_CLIENTE, "cliente-ajeno", CLIENTE, "example.org", "Vecina", "Deprueba", "retrato", "google:", sub(1), sub(2), sub(3)]) {
+      expect(todo, secreto).not.toContain(secreto);
+    }
+    for (const t of tokens) for (const parte of t.split(".")) expect(todo).not.toContain(parte);
+  });
+
+  it("una cuenta de servicio no entra a la campaña ni deja un perfil, con los interruptores como estén", async () => {
+    for (const extra of [{}, { PERFILES: "1" }] as Record<string, string>[]) {
+      await montar(extra);
+      const testigo = testigoDePerfiles(mundo);
+      for (const email of ["name@proyecto.iam.gserviceaccount.com", "123-compute@developer.gserviceaccount.com", " NAME@PROYECTO.IAM.GSERVICEACCOUNT.COM "]) {
+        for (const azp of [{}, { azp: CLIENTE }, { azp: OTRO_CLIENTE }]) {
+          const r = await altaGoogle(mundo, sala, await tokenDeGoogle(1, { email, ...azp }), CON_PERMISO);
+          expect(r.status, JSON.stringify([extra, email, azp])).toBe(401);
+          // La persona lee lo de siempre, entrar de nuevo: nunca el mensaje de configuración.
+          expect(await r.json()).toEqual({ error: "sesion" });
+        }
+      }
+      await mundo.esperarSegundoPlano();
+      expect(testigo.llamadas).toEqual([]);
+      expect(perfiles(mundo)).toEqual([]);
+      expect(mundo.ejecutar(`sala:${sala.id}`, "SELECT COUNT(*) AS c FROM equipos")).toEqual([{ c: 0 }]);
+      // La misma cuenta con su correo de persona entra como siempre.
+      expect((await altaGoogle(mundo, sala, await tokenDeGoogle(1), CON_PERMISO)).status).toBe(201);
+    }
+  });
+});
+
 describe("el estado público de la campaña dice si la sala guarda perfiles", () => {
   /** El estado público de la campaña tal como lo ve cualquiera, con su cuerpo en bruto. */
   async function estadoDe(mundo: MundoDeSala, sala: SalaDeCampana, cabeceras: Record<string, string> = {}): Promise<Record<string, unknown>> {
