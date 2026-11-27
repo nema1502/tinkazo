@@ -41,6 +41,7 @@ import {
   type Vista,
   activarPermitido,
   comoEntrada,
+  esperaDelPaso,
   portadaDe,
   vistaDe,
 } from "./cuenta-lista-estado";
@@ -96,6 +97,8 @@ export interface SalidasDelPaso {
   entrarDeNuevo(): void | Promise<void>;
   /** «Sortear en Prueba»: pasa a Prueba y entra solo con la cuenta de prueba. Sin esto, como «Pasar a Prueba». */
   practicarEnPrueba?(): void;
+  /** Volver a cargar, con una espera pasada de tiempo: recarga la página. Sin esto, la recarga del navegador. */
+  recargar?(): void;
 }
 
 export interface OpcionesDelPaso {
@@ -287,6 +290,11 @@ const LENTO_MS = 8_000;
 const CADA_LECTURA_MS = 4_000;
 const SONDEO_SIN_PEDIDO_MS = 20_000;
 const ESPERA_ACTIVACION_MS = 60_000;
+/**
+ * Lo más que gira una espera del paso sin una salida, con la hora de verdad. Pasado esto, la caja que gira ofrece Volver a
+ * cargar (o Probar de nuevo, esperando el pedido de crear la cuenta). Lo que corre sigue: si termina bien, sigue sola.
+ */
+export const ESPERA_SIN_SALIDA_MS = 45_000;
 /**
  * Una lectura de Pollar (`estadoOficial`): la que se repite al esperar el pedido de crear la cuenta y la activación.
  * También la de lo que se vende, que no lleva sesión, y la del saldo.
@@ -552,6 +560,11 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   /** El sondeo sin pedido ya terminó sin encontrarlo: no vuelve a empezar solo, sino con «Probar de nuevo». */
   let sondeoAgotado = false;
   let esperaHasta = 0;
+  /** Desde cuándo gira una espera con salida (hora de verdad), o 0. Lo lleva `seguirLaEspera`. */
+  let giraDesde = 0;
+  let relojDeLaEspera: ReturnType<typeof setTimeout> | null = null;
+  /** Mientras corre `esperarPedido`: vuelve a contar sus vueltas desde la primera. Si no, `null`. */
+  let pedidoDeNuevo: (() => void) | null = null;
 
   /* ------------------------------------------------ el armado */
 
@@ -650,6 +663,23 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   let vistaActual: Vista | null = null;
   let codigoAMano = false;
 
+  /**
+   * La salida de una espera larga, con la hora de verdad. Esperando el pedido de crear la cuenta, Probar de nuevo. En lo
+   * demás, Volver a cargar, salvo sin conexión: recargar llevaría a la página de error del navegador.
+   */
+  function demoraDeAhora(): "recargar" | "pedido" | null {
+    if (giraDesde === 0 || Date.now() - giraDesde < ESPERA_SIN_SALIDA_MS) return null;
+    if (pedidoDeNuevo) return "pedido";
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
+    return "recargar";
+  }
+
+  /** Lo que la entrada dice de la espera: la salida de ahora, o nada (sin decirlo, no hay salida). */
+  const demoraEnLaEntrada = (): { demora?: "recargar" | "pedido" } => {
+    const d = demoraDeAhora();
+    return d ? { demora: d } : {};
+  };
+
   const entrada = (): EntradaVista => ({
     ...st.est,
     corre: st.corre,
@@ -690,6 +720,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       ...(acc.sorteosDelRegalo ? { sorteosDelRegalo: sorteosParaLaVista(acc.sorteosDelRegalo) } : {}),
       ...(acc.cupo ? { cupo: sorteosParaLaVista(acc.cupo) } : {}),
     },
+    ...demoraEnLaEntrada(),
   });
 
   /** Los sorteos del regalo como los dice la línea del final: la fecha, ya en el idioma de la persona. */
@@ -785,6 +816,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     const enfocadoAccion = enfocado ? (enfocado.dataset.accion ?? enfocado.dataset.salida ?? null) : null;
     const deAhora = entrada();
     const v = vistaDe(deAhora);
+    seguirLaEspera(esperaDelPaso(deAhora, v));
     segundosPintados = deAhora.codigo?.segundos ?? null;
     const portada = portadaDe(v);
     vistaActual = v;
@@ -1134,6 +1166,29 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     st.lento = false;
     if (relojLento) clearTimeout(relojLento);
     relojLento = despues(() => ((st.lento = true), pintar()), LENTO_MS);
+  }
+
+  /**
+   * El reloj de la salida: empieza cuando aparece algo que gira y se borra cuando se va. Mide con la hora de verdad, y su
+   * temporizador da la espera por cumplida aunque la hora de pared vaya atrasada. Nunca corta, nunca lee y nunca vota.
+   */
+  function seguirLaEspera(gira: boolean): void {
+    if (!gira) {
+      giraDesde = 0;
+      if (relojDeLaEspera) {
+        clearTimeout(relojDeLaEspera);
+        relojes.delete(relojDeLaEspera);
+        relojDeLaEspera = null;
+      }
+      return;
+    }
+    if (giraDesde !== 0) return;
+    giraDesde = Date.now();
+    relojDeLaEspera = despues(() => {
+      relojDeLaEspera = null;
+      if (giraDesde !== 0) giraDesde = Math.min(giraDesde, Date.now() - ESPERA_SIN_SALIDA_MS);
+      pintar();
+    }, ESPERA_SIN_SALIDA_MS);
   }
 
   function pararLento(): void {
@@ -1625,23 +1680,34 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
 
   /** Después del canje, con la cuenta que se abre en el momento: el pedido de crearla, cada 2 segundos y hasta 20 veces. */
   async function esperarPedido(): Promise<"hay" | "lista" | "no"> {
-    for (let i = 0; i < PEDIDO_VECES; i++) {
-      if (i > 0) await pausa(PEDIDO_CADA_MS);
-      let e: EstadoOficial | null = null;
-      try {
-        // Sin pedirle a Pollar que relea la billetera: el kit ya la mira solo, y acá alcanza con los pedidos pendientes.
-        e = await conTopeSimple(cuenta.estadoOficial(false), TOPE_LECTURA_MS);
-      } catch {
-        e = null;
+    let quedan = PEDIDO_VECES;
+    // Probar de nuevo con la espera pasada de tiempo: las vueltas vuelven a empezar, sin cortar la lectura en curso.
+    pedidoDeNuevo = () => {
+      quedan = PEDIDO_VECES;
+    };
+    // Si la espera ya venía pasada de tiempo (el regalo que ya estaba y una lectura lenta antes), la salida dice la de acá.
+    if (demoraDeAhora() !== null) pintar();
+    try {
+      for (let i = 0; quedan > 0; i++, quedan--) {
+        if (i > 0) await pausa(PEDIDO_CADA_MS);
+        let e: EstadoOficial | null = null;
+        try {
+          // Sin pedirle a Pollar que relea la billetera: el kit ya la mira solo, y acá alcanza con los pedidos pendientes.
+          e = await conTopeSimple(cuenta.estadoOficial(false), TOPE_LECTURA_MS);
+        } catch {
+          e = null;
+        }
+        if (cerrado) return "no";
+        if (e) {
+          st.est = e;
+          if (e.activacion === "lista") return "lista";
+          if (e.activacion === "falta") return "hay";
+        }
       }
-      if (cerrado) return "no";
-      if (e) {
-        st.est = e;
-        if (e.activacion === "lista") return "lista";
-        if (e.activacion === "falta") return "hay";
-      }
+      return "no";
+    } finally {
+      pedidoDeNuevo = null;
     }
-    return "no";
   }
 
   /** El voto salió y la cuenta todavía no aparece: se mira cada 4 segundos, hasta un minuto, sin votar otra vez. */
@@ -2228,6 +2294,19 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         recordarMedio("qr");
         opciones.alQr?.();
         return;
+      case "recargar":
+        // Sin conexión, recargar lleva a la página de error del navegador: la salida se va y vuelve con la conexión.
+        if (typeof navigator !== "undefined" && navigator.onLine === false) return pintar();
+        if (salidas.recargar) salidas.recargar();
+        else location.reload();
+        return;
+      case "pedido-de-nuevo":
+        if (!pedidoDeNuevo) return;
+        pedidoDeNuevo();
+        // La espera vuelve a contar desde ahora: la salida se va y vuelve a los 45 segundos si el pedido sigue sin aparecer.
+        seguirLaEspera(false);
+        armarLento();
+        return pintar();
     }
   }
 
@@ -2453,10 +2532,20 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   if (typeof window !== "undefined") {
     const alVolverLaRed = (): void => alAviso();
     window.addEventListener("online", alVolverLaRed);
+    // Volver a la pestaña, o que cambie la conexión: la espera se mira en el acto. Sin una espera en curso, nada.
+    const mirarLaEspera = (): void => {
+      if (giraDesde !== 0 && document.visibilityState !== "hidden") pintar();
+    };
+    document.addEventListener("visibilitychange", mirarLaEspera);
+    window.addEventListener("online", mirarLaEspera);
+    window.addEventListener("offline", mirarLaEspera);
     const antes = soltarAvisos;
     soltarAvisos = () => {
       antes();
       window.removeEventListener("online", alVolverLaRed);
+      document.removeEventListener("visibilitychange", mirarLaEspera);
+      window.removeEventListener("online", mirarLaEspera);
+      window.removeEventListener("offline", mirarLaEspera);
     };
   }
   st.codigoRecargado = st.est.proteccion !== "lista" && leerMarca();

@@ -102,7 +102,7 @@ const secundarios = (v: Vista): Boton[] => v.cajas.flatMap((c) => c.secundarios)
 const cajaConSalida = (v: Vista, accion: string): CajaVista | undefined => v.cajas.find((c) => c.secundarios.some((s) => s.accion === accion));
 
 describe("la salida de una espera larga", () => {
-  it("V1: toda espera del paso termina en una caja con su salida prendida, y el pie dice que tarda", () => {
+  it("toda espera del paso termina en una caja con su salida prendida, y el pie dice que tarda", () => {
     let vistas = 0;
     for (const e of MUESTRA) {
       const sin = vistaDe(e);
@@ -131,7 +131,7 @@ describe("la salida de una espera larga", () => {
     expect(vistas).toBeGreaterThan(100);
   });
 
-  it("V2: la principal sigue igual, nada se quita y cerrar sesión no aparece", () => {
+  it("la principal sigue igual, nada se quita y cerrar sesión no aparece", () => {
     for (const e of MUESTRA) {
       const sin = vistaDe(e);
       if (!esperaDelPaso(e, sin)) continue;
@@ -165,7 +165,7 @@ describe("la salida de una espera larga", () => {
     }
   });
 
-  it("V3: sin nada que gire con salida, la vista no cambia", () => {
+  it("sin nada que gire con salida, la vista no cambia", () => {
     let sinEspera = 0;
     for (const e of MUESTRA) {
       const sin = vistaDe(e);
@@ -176,7 +176,7 @@ describe("la salida de una espera larga", () => {
     expect(sinEspera).toBeGreaterThan(1000);
   });
 
-  it("V4: las excepciones no tienen salida", () => {
+  it("las excepciones no tienen salida", () => {
     const sinSalida = (o: Partial<EntradaVista>, acceso?: AccesoEnLaVista): void => {
       const e: EntradaVista = { ...base, ...o, ...(acceso ? { acceso } : {}) };
       const v = vistaDe(e);
@@ -198,13 +198,13 @@ describe("la salida de una espera larga", () => {
     sinSalida({ activacion: "falta" }, conAcceso({ pago: { ...pagoInicial("es", ALTA), fase: "pagando", orden: ORDEN, buscando: true } }));
   });
 
-  it("V4: las dos listas de acciones no se juntan: mandar el código no depende de la cuenta activada", () => {
+  it("las dos listas de acciones no se juntan: mandar el código no depende de la cuenta activada", () => {
     // Con la cuenta ya activada, mandar el código sí tiene salida: es lo único que gira en el paso.
     const e: EntradaVista = { ...base, activacion: "lista", corre: "mandando" };
     expect(esperaDelPaso(e, vistaDe(e))).toBe(true);
   });
 
-  it("V5: cerrando la sesión no recibe la salida", () => {
+  it("cerrando la sesión no recibe la salida", () => {
     const acceso = conAcceso({ estado: "con", por: "cupon", canjeado: 3, cadena: true });
     for (const o of [{ corre: "cerrando" as const }, { corre: "cerrando" as const, activacion: "preparando" as const }]) {
       const e: EntradaVista = { ...base, ...o, acceso };
@@ -213,7 +213,7 @@ describe("la salida de una espera larga", () => {
     }
   });
 
-  it("V6: mandar el código recibe la salida en la caja de proteger, venga lo que gire de la principal o del secundario", () => {
+  it("mandar el código recibe la salida en la caja de proteger, venga lo que gire de la principal o del secundario", () => {
     const proteger = { activacion: "lista" as const, corre: "mandando" as const };
     const casos: Partial<EntradaVista>[] = [
       // El correo de la sesión, en la compu y en el celular sin desbloqueo.
@@ -240,7 +240,7 @@ describe("la salida de una espera larga", () => {
     expect(esperaDelPaso(otroCodigo, vistaDe(otroCodigo))).toBe(false);
   });
 
-  it("V6: el camino directo, el del regalo y el del cupón la reciben mientras la cuenta no existe", () => {
+  it("el camino directo, el del regalo y el del cupón la reciben mientras la cuenta no existe", () => {
     const casos: [Partial<EntradaVista>, AccesoEnLaVista | undefined][] = [
       [{ corre: "revisando" }, undefined],
       [{ corre: "activando" }, undefined],
