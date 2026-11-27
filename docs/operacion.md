@@ -541,7 +541,7 @@ El archivo trae `identidad` en `persona`, el `premio_en_mano` en español y en i
 **Si alguien no puede mostrar su código.** Pasa si se quedó sin batería, sin datos o cerró la página.
 
 1. **Que vuelva a abrir la página de la campaña en el mismo celular.** El código no se perdió: la sala lo calcula de nuevo en cada consulta y la página se lo vuelve a mostrar, mientras la sala viva (24 horas desde que se creó) y el navegador conserve lo suyo.
-2. **Desde otro celular no sirve.** La lista ya cerró y la sala no vuelve a anotar a nadie, así que entrar con su cuenta de Google en otro aparato no le muestra el código.
+2. **Desde otro celular o desde otro navegador no sirve.** La lista ya cerró y la sala no vuelve a anotar a nadie, así que entrar con su cuenta de Google en otro aparato no le muestra el código. Pasa también con el navegador que abre una aplicación de mensajes, que guarda sus cosas aparte: quien abre el enlace ahí después del sorteo ve que el sorteo ya se hizo y que pregunte en el stand. Es un límite aceptado, y decide quien organiza.
 3. **Si no hay forma, decide quien organiza.** Entrega o no el premio según lo que vea en el evento, y deja anotado a quién se lo dio y por qué. Tinkazo no guarda nada para comprobar quién es una persona a partir de su línea.
 
 La misma regla vale si quien ganó no está en el evento: las bases dicen que decide quien organiza qué hacer con el premio.

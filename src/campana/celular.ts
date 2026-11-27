@@ -173,6 +173,11 @@ export interface DepsDelCelular {
   /** Lo que la sala sabe de este celular. */
   yo: (conMarcaDeCorreo?: boolean) => Promise<EstadoPropio | "red" | "terminada">;
   /**
+   * Solo en una campaña de personas: si este navegador guarda la llave del celular para esta campaña, sin crearla. Con la llave,
+   * quien ya se anotó se reconoce aunque no recuerde nada y no tenga sesión.
+   */
+  llaveGuardada?: () => boolean;
+  /**
    * Si la sala acepta la marca de correo confirmado. Con esto en true, la consulta propia lleva `conMarcaDeCorreo` una vez por
    * carga, cuando la lectura de la cuenta dice que el correo de la sesión está confirmado, y enseguida después de confirmar. Sin
    * esto (apagado) la página no manda nada nuevo ni hace ninguna consulta de más.
@@ -1013,7 +1018,16 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       avisoPublico(deps.tx("cpCerro"), null, true);
       return;
     }
-    if (estado.pantalla === "sorteada") avisoPublico(deps.tx("cpSorteado"), estado.comprobante);
+    if (estado.pantalla === "sorteada") {
+      avisoPublico(deps.tx("cpSorteado"), estado.comprobante);
+      // Quien se anotó y abre el enlace en otro navegador después del sorteo no recupera su código: se le dice con quién hablar.
+      if (deps.persona) {
+        const apoyo = document.createElement("p");
+        apoyo.className = "cmp-apoyo";
+        apoyo.textContent = deps.tx("cpPreguntaEnStand");
+        raiz.querySelector("#cmp-estado .cmp-hero")?.append(apoyo);
+      }
+    }
   };
 
   /**
@@ -1231,7 +1245,10 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       return;
     }
     estado.publico = publico;
-    if (publico.pase === "vencido" && !memoria) {
+    // En una campaña de personas, después del cierre la llave de este celular reconoce a quien se anotó aunque el recuerdo venciera
+    // o el enlace se abriera en otro lugar de este celular: el pase es para anotarse, y quien ya está anotada no lo necesita.
+    const conLlave = deps.persona !== undefined && deps.llaveGuardada?.() === true && publico.fase !== "lista" && publico.fase !== "abierta";
+    if (publico.pase === "vencido" && !memoria && !conLlave) {
       ir("pase");
       return;
     }
@@ -1275,6 +1292,19 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       if (publico.fase === "abierta") ir("hola");
       else await mostrarFasePublica(publico.fase);
       return;
+    }
+    if (conLlave) {
+      const propio = await pedirPropio();
+      if (desmontado) return;
+      if (propio === "terminada") {
+        ir("termino");
+        return;
+      }
+      if (propio !== "red" && (propio.anotada || propio.quitada !== undefined)) {
+        estado.ya = true;
+        await aplicarPropio(propio);
+        return;
+      }
     }
     await mostrarFasePublica(publico.fase);
   }
