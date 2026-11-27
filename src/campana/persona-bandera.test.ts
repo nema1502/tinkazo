@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { anotarseSinBilleteraActivo, clienteDeGoogleDelSitio } from "./persona-bandera";
+import { anotarseSinBilleteraActivo, clienteDeGoogleDelSitio, guardarPerfilActivo } from "./persona-bandera";
 
 describe("las banderas de anotarse sin billetera", () => {
   afterEach(() => {
@@ -37,5 +37,51 @@ describe("las banderas de anotarse sin billetera", () => {
     expect(clienteDeGoogleDelSitio({ VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GOOGLE_CLIENT_ID: 7 })).toBeNull();
     expect(clienteDeGoogleDelSitio({ VITE_ANOTARSE_SIN_BILLETERA: "0", VITE_GOOGLE_CLIENT_ID: cliente })).toBeNull();
     expect(clienteDeGoogleDelSitio({ VITE_GOOGLE_CLIENT_ID: cliente })).toBeNull();
+  });
+});
+
+describe("la bandera de guardar el perfil de quien se anota", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("nace apagada", () => {
+    expect(guardarPerfilActivo({})).toBe(false);
+    expect(guardarPerfilActivo()).toBe(false);
+  });
+
+  it("pide los dos interruptores: anotarse sin billetera y el suyo", () => {
+    expect(guardarPerfilActivo({ VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "1" })).toBe(true);
+    // Sin anotarse sin billetera no hay a quién guardarle nada, aunque el suyo esté en 1.
+    expect(guardarPerfilActivo({ VITE_GUARDAR_PERFIL: "1" })).toBe(false);
+    expect(guardarPerfilActivo({ VITE_ANOTARSE_SIN_BILLETERA: "0", VITE_GUARDAR_PERFIL: "1" })).toBe(false);
+    expect(guardarPerfilActivo({ VITE_ANOTARSE_SIN_BILLETERA: "true", VITE_GUARDAR_PERFIL: "1" })).toBe(false);
+    // Con anotarse sin billetera y sin el suyo, la página queda como hasta hoy.
+    expect(guardarPerfilActivo({ VITE_ANOTARSE_SIN_BILLETERA: "1" })).toBe(false);
+  });
+
+  it("solo el 1 exacto la prende", () => {
+    for (const valor of ["", "0", "true", "si", " 1", "1 ", "01", 1, true, null, undefined]) {
+      expect(guardarPerfilActivo({ VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: valor }), String(valor)).toBe(false);
+    }
+  });
+
+  it("sin pasarle nada lee su variable de construcción por su nombre", () => {
+    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
+    expect(guardarPerfilActivo()).toBe(false);
+    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
+    expect(guardarPerfilActivo()).toBe(true);
+    vi.stubEnv("VITE_GUARDAR_PERFIL", "0");
+    expect(guardarPerfilActivo()).toBe(false);
+  });
+
+  it("no cambia lo que dicen las otras dos banderas", () => {
+    const cliente = "cliente.apps.example.org";
+    const con = { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GOOGLE_CLIENT_ID: cliente, VITE_GUARDAR_PERFIL: "1" };
+    const sin = { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GOOGLE_CLIENT_ID: cliente };
+    expect(anotarseSinBilleteraActivo(con)).toBe(anotarseSinBilleteraActivo(sin));
+    expect(clienteDeGoogleDelSitio(con)).toBe(clienteDeGoogleDelSitio(sin));
+    // No hace falta el identificador de cliente para decir si se guarda: sin él la página de personas ni abre.
+    expect(guardarPerfilActivo({ VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "1" })).toBe(true);
   });
 });
