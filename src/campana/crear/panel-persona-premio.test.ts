@@ -202,6 +202,29 @@ describe("el resumen y el archivo de una campaña de personas", () => {
     expect(document.body.textContent).not.toMatch(/dólares|Total a poner|Servicio de Tinkazo/u);
   });
 
+  it("el resumen dice en un renglón que la gente se anota sin cuenta y el premio se entrega en mano", () => {
+    crear({ identidad: "persona" });
+    llenarEnMano();
+    const renglones = [...document.querySelectorAll(".ccp-resumen")].map((r) => r.textContent ?? "");
+    expect(renglones).toHaveLength(5);
+    expect(renglones[4]).toBe("La gente se anota sin cuenta y el premio se entrega en mano.");
+  });
+
+  it("en inglés lo dice en inglés", () => {
+    crear({ identidad: "persona" }, "en");
+    llenarEnMano();
+    const renglones = [...document.querySelectorAll(".ccp-resumen")].map((r) => r.textContent ?? "");
+    expect(renglones[4]).toBe("People sign up without an account and the prize is handed over in person.");
+  });
+
+  it("sin el modo el resumen es el de siempre, de cuatro renglones", () => {
+    crear();
+    llenarDeCuentas();
+    const renglones = [...document.querySelectorAll(".ccp-resumen")].map((r) => r.textContent ?? "");
+    expect(renglones).toHaveLength(4);
+    expect(document.body.textContent).not.toContain("sin cuenta");
+  });
+
   it("con una sola persona el resumen dice solo el premio", () => {
     crear({ identidad: "persona" });
     llenarEnMano("Una bici", 0);
