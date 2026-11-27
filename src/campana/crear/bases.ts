@@ -20,6 +20,11 @@ export interface DatosDeLasBases {
   conRedes: boolean;
   /** El costo de retirar escrito en cada idioma, o null si el sitio no cobra retiros. */
   costo: { es: string | null; en: string | null };
+  /**
+   * Solo en una campaña de personas: lo que se lleva cada persona, escrito. Con él las bases dicen que el premio se entrega en
+   * mano y no hablan de dólares, de cuenta de Tinkazo ni de retiros. Sin él (o en null), las de siempre.
+   */
+  premioEnMano?: string | null;
 }
 
 /** Busca el texto de una clave en un idioma: la página pasa el de su diccionario. */
@@ -38,6 +43,10 @@ export const CLAVES_DE_LAS_BASES = [
   "ccBase6",
   "ccBase7",
   "ccBase8",
+  "ccBase3ManoUno",
+  "ccBase3ManoVarios",
+  "ccBase4Mano",
+  "ccBase6Mano",
 ] as const;
 
 function renglones(d: DatosDeLasBases, dic: Diccionario, idioma: Lang): string {
@@ -46,8 +55,21 @@ function renglones(d: DatosDeLasBases, dic: Diccionario, idioma: Lang): string {
     n: String(d.ganan),
     monto: montoTexto(BigInt(d.monto) * UNIDADES_POR_DOLAR, idioma),
     hora: horaTexto(d.sorteoMs, d.zona, idioma),
+    premio: d.premioEnMano ?? "",
   };
   const dicho = (clave: string, extra: Record<string, string> = {}): string => sustituir(dic(idioma, clave), { ...valores, ...extra });
+  if (d.premioEnMano !== undefined && d.premioEnMano !== null) {
+    return [
+      dicho("ccBase1"),
+      d.conRedes ? dicho("ccBase2Redes") : dicho("ccBase2Sin"),
+      d.ganan === 1 ? dicho("ccBase3ManoUno") : dicho("ccBase3ManoVarios"),
+      dicho("ccBase4Mano"),
+      dicho("ccBase5"),
+      dicho("ccBase6Mano"),
+      dicho("ccBase7"),
+      dicho("ccBase8"),
+    ].join("\n");
+  }
   const costo = idioma === "es" ? d.costo.es : d.costo.en;
   const quinto = costo === null ? dicho("ccBase5") : `${dicho("ccBase5")} ${dicho("ccBase5Costo", { costo })}`;
   return [
