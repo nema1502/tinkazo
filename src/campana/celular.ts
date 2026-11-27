@@ -11,7 +11,6 @@ import {
   actualizarElContador,
   latirAlDia,
   pintarAdentro,
-  pintarEntrega,
   pintarGano,
   pintarHola,
   pintarOtra,
@@ -174,6 +173,11 @@ export interface DepsDelCelular {
   /** Lo que la sala sabe de este celular. */
   yo: (conMarcaDeCorreo?: boolean) => Promise<EstadoPropio | "red" | "terminada">;
   /**
+   * Solo en una campaña de personas: si este navegador guarda la llave del celular para esta campaña, sin crearla. Con la llave,
+   * quien ya se anotó se reconoce aunque no recuerde nada y no tenga sesión.
+   */
+  llaveGuardada?: () => boolean;
+  /**
    * Si la sala acepta la marca de correo confirmado. Con esto en true, la consulta propia lleva `conMarcaDeCorreo` una vez por
    * carga, cuando la lectura de la cuenta dice que el correo de la sesión está confirmado, y enseguida después de confirmar. Sin
    * esto (apagado) la página no manda nada nuevo ni hace ninguna consulta de más.
@@ -239,8 +243,8 @@ type Pantalla =
   | "sin-red"
   | "pase"
   | "llena"
-  /** Solo en una campaña de personas: el premio se entrega con quien organiza (`pintarEntrega`, en `adentro.ts`). */
-  | "entrega";
+  /** Solo en una campaña de personas: la sala todavía no tiene el modo prendido y repetir el pedido no lo arregla. */
+  | "apagada";
 
 interface EstadoInterno {
   pantalla: Pantalla;
@@ -867,9 +871,14 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     pintarAviso(seccion, texto, accion, false, rotulos);
   };
 
+  /** Solo en una campaña de personas: No soy yo sale de la sesión y olvida lo que este celular recordaba de la persona. */
+  const olvidar = deps.persona ? () => void salir() : undefined;
+
   const intervaloDe = (pantalla: Pantalla): number | null => {
     if (pantalla === "previa" || pantalla === "hola" || pantalla === "adentro") return 15_000;
-    if (pantalla === "gano" || pantalla === "otra") return 60_000;
+    // Ganaste, en una campaña de personas, sigue pidiendo el código mientras no llega: quien recargó no queda sin él.
+    if (pantalla === "gano") return deps.persona && estado.codigo === null ? 15_000 : 60_000;
+    if (pantalla === "otra") return 60_000;
     return null;
   };
 
@@ -943,6 +952,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
             conTarjeta: linea === "con-tarjeta",
             salta: saltarLaFase,
             respuestaDesde,
+            // Solo con la lista abierta: después del cierre la sala no deja volver a entrar y el código no se recuperaría.
+            alOlvidar: datos.fase === "abierta" ? olvidar : undefined,
           });
         }
         pintadoAdentro = pintado;
@@ -992,12 +1003,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       if (seccion) pintarEstadoDeCarga(seccion, deps.tx, "pase-vencido", () => undefined);
       return;
     }
-    if (estado.pantalla === "llena") {
-      avisoPublico(deps.tx("cpErrLlena"), null, true);
-      return;
-    }
-    if (estado.pantalla === "entrega") {
-      pintarEntrega(raiz, deps, estado.codigo);
+    if (estado.pantalla === "llena" || estado.pantalla === "apagada") {
+      avisoPublico(deps.tx(estado.pantalla === "llena" ? "cpErrLlena" : "cpPersonaNoAbre"), null, true);
       return;
     }
     if (estado.pantalla === "lista") {
@@ -1011,7 +1018,16 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       avisoPublico(deps.tx("cpCerro"), null, true);
       return;
     }
-    if (estado.pantalla === "sorteada") avisoPublico(deps.tx("cpSorteado"), estado.comprobante);
+    if (estado.pantalla === "sorteada") {
+      avisoPublico(deps.tx("cpSorteado"), estado.comprobante);
+      // Quien se anotó y abre el enlace en otro navegador después del sorteo no recupera su código: se le dice con quién hablar.
+      if (deps.persona) {
+        const apoyo = document.createElement("p");
+        apoyo.className = "cmp-apoyo";
+        apoyo.textContent = deps.tx("cpPreguntaEnStand");
+        raiz.querySelector("#cmp-estado .cmp-hero")?.append(apoyo);
+      }
+    }
   };
 
   /**
@@ -1229,7 +1245,10 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       return;
     }
     estado.publico = publico;
-    if (publico.pase === "vencido" && !memoria) {
+    // En una campaña de personas, después del cierre la llave de este celular reconoce a quien se anotó aunque el recuerdo venciera
+    // o el enlace se abriera en otro lugar de este celular: el pase es para anotarse, y quien ya está anotada no lo necesita.
+    const conLlave = deps.persona !== undefined && deps.llaveGuardada?.() === true && publico.fase !== "lista" && publico.fase !== "abierta";
+    if (publico.pase === "vencido" && !memoria && !conLlave) {
       ir("pase");
       return;
     }
@@ -1273,6 +1292,19 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       if (publico.fase === "abierta") ir("hola");
       else await mostrarFasePublica(publico.fase);
       return;
+    }
+    if (conLlave) {
+      const propio = await pedirPropio();
+      if (desmontado) return;
+      if (propio === "terminada") {
+        ir("termino");
+        return;
+      }
+      if (propio !== "red" && (propio.anotada || propio.quitada !== undefined)) {
+        estado.ya = true;
+        await aplicarPropio(propio);
+        return;
+      }
     }
     await mostrarFasePublica(publico.fase);
   }
@@ -1393,8 +1425,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       ir("cerrada");
       return;
     }
-    if (resultado.motivo === "llena") {
-      ir("llena");
+    // En una campaña de personas, repetir el pedido a una sala sin el modo prendido (apagada) no lo arregla: pantalla final, sin Acepto.
+    if (resultado.motivo === "llena" || resultado.motivo === "apagada") {
+      ir(resultado.motivo);
       return;
     }
     estado.errorAlta = resultado.motivo;
@@ -1450,11 +1483,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
    */
   async function recibirElPremio(toque?: Event): Promise<void> {
     if (comparandoLaSesion) return;
-    // En una campaña de personas el premio se entrega por ahora con quien organiza: reclamarlo desde el celular es de otra etapa.
-    if (deps.persona) {
-      ir("entrega");
-      return;
-    }
+    // En una campaña de personas el premio se entrega en mano: no hay nada que recibir desde el celular.
+    if (deps.persona) return;
     const cuenta = estado.memoria?.cuenta;
     if (estado.sesion === null && cuenta !== undefined && deps.cuenta?.laSesionEs) {
       comparandoLaSesion = true;

@@ -202,6 +202,29 @@ describe("el resumen y el archivo de una campaña de personas", () => {
     expect(document.body.textContent).not.toMatch(/dólares|Total a poner|Servicio de Tinkazo/u);
   });
 
+  it("el resumen dice en un renglón que la gente se anota sin cuenta y el premio se entrega en mano", () => {
+    crear({ identidad: "persona" });
+    llenarEnMano();
+    const renglones = [...document.querySelectorAll(".ccp-resumen")].map((r) => r.textContent ?? "");
+    expect(renglones).toHaveLength(5);
+    expect(renglones[4]).toBe("La gente se anota sin cuenta y el premio se entrega en mano.");
+  });
+
+  it("en inglés lo dice en inglés", () => {
+    crear({ identidad: "persona" }, "en");
+    llenarEnMano();
+    const renglones = [...document.querySelectorAll(".ccp-resumen")].map((r) => r.textContent ?? "");
+    expect(renglones[4]).toBe("People sign up without an account and the prize is handed over in person.");
+  });
+
+  it("sin el modo el resumen es el de siempre, de cuatro renglones", () => {
+    crear();
+    llenarDeCuentas();
+    const renglones = [...document.querySelectorAll(".ccp-resumen")].map((r) => r.textContent ?? "");
+    expect(renglones).toHaveLength(4);
+    expect(document.body.textContent).not.toContain("sin cuenta");
+  });
+
   it("con una sola persona el resumen dice solo el premio", () => {
     crear({ identidad: "persona" });
     llenarEnMano("Una bici", 0);
@@ -299,6 +322,42 @@ describe("el armador de siempre", () => {
     const archivo = JSON.parse(bajadas[0] ?? "{}") as Record<string, unknown>;
     expect("identidad" in archivo).toBe(false);
     expect("premio_en_mano" in archivo).toBe(false);
+  });
+
+  it("un archivo de personas de la etapa anterior, con montos y sin premio escrito, pide el texto y se descarga firmable", async () => {
+    // Un archivo de la etapa anterior: la campaña de cuentas de siempre, con la identidad de personas y los montos en dólares.
+    crear();
+    llenarDeCuentas();
+    clic("ccp-descargar");
+    await asentar();
+    const viejo = JSON.parse(bajadas[0] ?? "{}") as Record<string, unknown>;
+    viejo.identidad = "persona";
+    expect(viejo.premios).toEqual(["400000000", "400000000", "400000000"]);
+    expect(validarCampanaParaElFirmador(JSON.stringify(viejo), AHORA)).toMatchObject({ ok: false, campo: "premio_en_mano" });
+    localStorage.clear();
+    for (const c of montados) c.desmontar();
+    montados = [];
+    bajadas = [];
+    crear();
+    elegirArchivo(JSON.stringify(viejo));
+    await asentar();
+    clic("ccp-ir-2");
+    expect(existe("#ccp-monto-40")).toBe(false);
+    expect(q<HTMLInputElement>("#ccp-premio-mano").value).toBe("");
+    clic("ccp-ir-6");
+    clic("ccp-descargar");
+    await asentar();
+    expect(bajadas).toHaveLength(0);
+    clic("ccp-ir-2");
+    escribir("ccp-premio-mano", "Auriculares");
+    clic("ccp-ir-6");
+    clic("ccp-descargar");
+    await asentar();
+    expect(bajadas).toHaveLength(1);
+    const archivo = JSON.parse(bajadas[0] ?? "{}") as Record<string, unknown>;
+    expect(archivo.premio_en_mano).toEqual({ es: "Auriculares", en: "Auriculares" });
+    expect(archivo.premios).toEqual(["0", "0", "0"]);
+    expect(validarCampanaParaElFirmador(JSON.stringify(archivo), AHORA)).toEqual({ ok: true });
   });
 
   it("un archivo de personas abierto con su premio lo muestra escrito, se pida o no en la dirección", async () => {

@@ -72,6 +72,16 @@ export function llaveDelCelular(sala: string, almacen: Pick<Storage, "getItem" |
   return llave;
 }
 
+/** Si este celular ya tiene su llave para la sala. A diferencia de `llaveDelCelular`, no crea ninguna. */
+export function hayLlaveDelCelular(sala: string, almacen: Pick<Storage, "getItem">): boolean {
+  try {
+    const x = JSON.parse(almacen.getItem(CLAVE_LLAVES) ?? "[]") as unknown;
+    return Array.isArray(x) && x.some((e) => Array.isArray(e) && e[0] === sala && typeof e[1] === "string" && e[1] !== "");
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Suelta la llave de este celular para una sala: la próxima vez que se pida, sale una nueva. Es lo que hace quien dice que
  * este celular no es suyo en una campaña sin cuenta, donde la llave es lo único que une al celular con una anotación.

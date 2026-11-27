@@ -1,5 +1,6 @@
 import { $, esc } from "../dom";
 import { campanaDeLaLista, esSorteoDeCampana } from "../campana/en-curso";
+import { esLineaDePersona } from "../campana/forma-persona";
 import { T, getLang, onLangChange, t } from "../i18n";
 import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, currentPace, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
 import { enEnsayo, enPractica, enStand, faroDeStand, sinGrabar } from "../ensayo-modo";
@@ -1837,6 +1838,13 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
     ? drawn.winners.flatMap((i, p) => (elNombre(frozen.names[i] ?? "") === ausente ? [p + 1] : []))
     : [];
   const premio = frozen.prize;
+  // Cómo se dice quien salió, con la lista sellada y antes de reponer el cuadro: una línea de persona sin nombre dice su lugar
+  // en esa lista, y cuando la nota se arma el cuadro ya no la tiene.
+  const dichas = paraMostrar(frozen.names);
+  const lugares = new Map(frozen.names.flatMap((n, i): [string, string][] => (esLineaDePersona(n) ? [[n, dichas[i] ?? n]] : [])));
+  const dicha = (n: string): string => lugares.get(n) ?? etiquetaDe(n);
+  const salieronDichos = salieron.map(dicha);
+  const ausenteDicho = ausente ? dicha(ausente) : "";
   // La lista sellada se guarda: "Usar otra lista" vacía el cuadro, y un clic
   // equivocado frente a la sala no puede costar la lista de Luma filtrada. Sin
   // quienes ya ganaron: recuperarla no puede devolverle la chance a nadie.
@@ -1872,9 +1880,9 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // Con equipos, en la lista van las cuentas: la nota dice el nombre del equipo, nunca las 56 letras de la cuenta.
   nota.textContent =
     modo === "sinGanadores"
-      ? L.againQuitados(salieron.map(etiquetaDe), mostrar, selladaEsDeEquipos())
+      ? L.againQuitados(salieronDichos, mostrar, selladaEsDeEquipos())
       : modo === "ausente"
-        ? L.ausenteNota(etiquetaDe(ausente), mostrar, salieron.length > 1, premiosDelAusente, selladaEsDeEquipos())
+        ? L.ausenteNota(ausenteDicho, mostrar, salieron.length > 1, premiosDelAusente, selladaEsDeEquipos())
         : "";
   nota.style.display = conLista ? "block" : "none";
   $("btn-recuperar").style.display = modo === "otraLista" ? "" : "none";

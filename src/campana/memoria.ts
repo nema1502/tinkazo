@@ -17,6 +17,8 @@ export interface MemoriaDeCampana {
 }
 
 export const VIDA_MEMORIA_MS = 7 * 24 * 3_600_000;
+/** En una campaña de personas el celular recuerda lo que vive la sala, que se borra a las 24 horas, y no más. */
+export const VIDA_MEMORIA_PERSONA_MS = 24 * 3_600_000;
 export const claveDeMemoria = (sala: string): string => `tinkazo.campana.${sala}`;
 
 const FASES: readonly Fase[] = ["lista", "abierta", "cerrada", "sellada", "sorteada"];
@@ -47,7 +49,7 @@ export function leerMemoria(almacen: Storage | null, sala: string, ahora: number
       return null;
     }
     if (!esMemoria(valor)) return null;
-    if (ahora - valor.guardado > VIDA_MEMORIA_MS) {
+    if (ahora - valor.guardado > (valor.cuenta === SIN_CUENTA ? VIDA_MEMORIA_PERSONA_MS : VIDA_MEMORIA_MS)) {
       almacen.removeItem(claveDeMemoria(sala));
       return null;
     }

@@ -352,13 +352,14 @@ el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
   persona. Quien gana se entera al abrir la página de la campaña en su celular: la consulta propia le dice que ganó y le da su
   código de entrega. Quien organiza nombra a quien ganó y le entrega el premio en mano, en el evento, pidiéndole ese código. Quien
   gana y cierra la página no recibe ningún aviso y tiene que volver a abrirla en el mismo celular: desde otro no sirve, porque la
-  sala no anota a nadie con la lista cerrada. La línea sale de la sal de la sala, y esa sal se borra con ella a las 24 horas de
-  crearla: pasado ese plazo nada permite volver de una línea ganadora a una persona ni calcular su código. Con `PERFILES` apagado
-  tampoco se puede antes, porque no queda guardado nada que la identifique. Con `PERFILES` prendido el identificador de su cuenta
-  de Google queda en el perfil, y mientras la sala viva quien tuviera a la vez la tabla de perfiles y la sal de esa sala podría
-  recalcular la línea de cada perfil. Ningún código lo hace y ninguna respuesta lo deja ver. Avisar a quien ya cerró la página y
-  reclamar el premio piden además que la sala siga viva mientras dure el reclamo: esta etapa no hace ninguna de las dos cosas a
-  propósito. Si quien ganó no puede mostrar su código o no está, decide quien organiza.
+  sala no anota a nadie con la lista cerrada, y quien abre el enlace en otro navegador después del sorteo no ve su código. La
+  línea sale de la sal de la sala, y esa sal se borra con ella a las 24 horas de crearla. Mientras la sala vive, quien tiene
+  acceso a su almacenamiento puede comprobar si una cuenta de Google conocida se anotó, porque tiene la sal y las huellas. Pasado
+  ese plazo nada permite volver de una línea ganadora a una persona ni calcular su código. Con `PERFILES` prendido el
+  identificador de su cuenta de Google queda además en el perfil, y mientras la sala viva quien tuviera a la vez la tabla de
+  perfiles y la sal de esa sala podría recalcular la línea de cada perfil. Ningún código lo hace y ninguna respuesta lo deja ver.
+  Avisar a quien ya cerró la página y reclamar el premio piden además que la sala siga viva mientras dure el reclamo: esta etapa
+  no hace ninguna de las dos cosas a propósito. Si quien ganó no puede mostrar su código o no está, decide quien organiza.
 - **El interruptor apagado en medio de un evento** no toca lo que ya está anotado: la sala sigue mostrando el estado, la consulta
   propia de cada celular y el panel de quien organiza sigue quitando, cerrando, sellando, guardando el resultado y avisando.
   Solo dejan de andar crear campañas de personas y el alta de gente nueva.

@@ -214,7 +214,8 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   const alModo = (g: FormularioDeCampana): FormularioDeCampana => {
     if (deps.demo) return g;
     const personas = g.conservado ? g.conservado.identidad === "persona" : deps.identidad === "persona";
-    if (personas) return g.premioEnMano !== undefined || g.conservado ? g : { ...g, premioEnMano: "" };
+    // Un archivo de personas que no trae premio escrito (de la etapa anterior, con montos) también lo pide: el firmador no lo firma sin él.
+    if (personas) return g.premioEnMano !== undefined ? g : { ...g, premioEnMano: "" };
     if (g.premioEnMano === undefined) return g;
     const { premioEnMano: _quitado, ...resto } = g;
     return resto;
@@ -244,9 +245,12 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
 
   /**
    * Una campaña de personas no lleva cobro ni comisión, y la activación sola nunca la firma: la firma Tinkazo. Por eso el armador
-   * no calcula el servicio, no muestra el total a poner y no ofrece activar, esté como esté el sitio.
+   * no calcula el servicio, no muestra el total a poner y no ofrece activar, esté como esté el sitio. Lo decide la campaña que se
+   * arma o se abre, no la dirección: un archivo de personas abierto sin pedirlas no cobra, y uno de cuentas abierto pidiendo
+   * personas sigue cobrando como siempre. La dirección solo manda cuando no hay archivo abierto (y en la demostración).
    */
-  const sinCobro = (): boolean => deps.identidad === "persona";
+  const sinCobro = (): boolean =>
+    f.premioEnMano !== undefined || f.conservado?.identidad === "persona" || (f.conservado === undefined && deps.identidad === "persona");
   /** Se puede activar desde esta página: hay con qué guardar el borrador, no es la demostración (no guarda nada) y hay cobro. */
   const puedeActivar = (): boolean => deps.activar !== undefined && !deps.demo && !sinCobro();
   const clavePaso = (n: NumeroDePaso): string => (n === 6 && puedeActivar() ? CLAVE_DEL_ULTIMO_PASO_CON_ACTIVAR : (CLAVE_DE_PASO[n - 1] ?? "ccPaso1"));
@@ -929,7 +933,10 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     const pedidos = f.pasos.length;
     const clavePedidos = pedidos === 0 ? "ccResumenPedidos0" : pedidos === 1 ? "ccResumenPedidos1" : "ccResumenPedidosN";
     const lugar = el("div", "ccp-resumen", fmt(clavePedidos, { lugar: f.lugar.trim(), n: String(pedidos) }));
-    b.append(nombre, premio, cuando, lugar, botonVerVista());
+    b.append(nombre, premio, cuando, lugar);
+    // En el modo de personas, un renglón dice cómo se anota la gente y cómo se entrega el premio. Sin el modo no hay renglón.
+    if (f.premioEnMano !== undefined) b.append(el("div", "ccp-resumen ccp-resumen-modo", tx("ccResumenEnMano")));
+    b.append(botonVerVista());
     return b;
   }
 

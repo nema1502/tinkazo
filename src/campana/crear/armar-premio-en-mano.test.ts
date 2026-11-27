@@ -207,7 +207,7 @@ describe("las bases con premio en mano", () => {
         "Hay 3 premios, uno para cada persona que gana: Auriculares. El sorteo es a las 18:30 y cualquiera puede comprobar el resultado.",
         "El premio se entrega en mano en el evento, a la persona que ganó. Si no está, Alcancía Andina decide qué hacer con él.",
         "Recibir el premio es gratis.",
-        "Si escribís un nombre al anotarte, puede verse en la pantalla del evento. Lo que guarda Tinkazo está en sus Términos.",
+        "Tu nombre de Google puede verse en la pantalla del evento. Lo que guarda Tinkazo está en sus Términos.",
         "Alcancía Andina pone los premios y responde por ellos. Tinkazo es la herramienta que hace el sorteo.",
         "La lista la sella la cuenta que organiza esta campaña, y solo vale el sello de la lista de personas anotadas que se ve en la pantalla. Un sello de otra cuenta o de otra lista no cuenta para esta campaña.",
       ].join("\n"),
@@ -221,7 +221,7 @@ describe("las bases con premio en mano", () => {
       "There is one prize for one of the people signed up: Headphones. The draw is at 18:30 and anyone can check the result.",
     );
     expect(en[3]).toBe("The prize is handed over in person at the event, to the person who won. If they aren't there, Alcancía Andina decides what to do with it.");
-    expect(en[5]).toBe("If you type a name when you sign up, it may show on the event screen. What Tinkazo keeps is in its Terms.");
+    expect(en[5]).toBe("Your Google name may show on the event screen. What Tinkazo keeps is in its Terms.");
   });
 
   it("no prometen qué guarda Tinkazo y mandan a sus Términos, con el interruptor del perfil apagado o prendido", () => {
