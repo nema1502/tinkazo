@@ -66,7 +66,9 @@ function escribir(id: string, valor: string): void {
 function llenarHastaElFinal(): void {
   escribir("ccp-nombre", "Alcancía Andina");
   clic("ccp-seguir");
-  clic("ccp-monto-40");
+  // Una campaña de personas escribe el premio y una de cuentas elige el monto.
+  if (document.querySelector("#ccp-premio-mano")) escribir("ccp-premio-mano", "Auriculares");
+  else clic("ccp-monto-40");
   clic("ccp-ganan-mas");
   clic("ccp-ganan-mas");
   clic("ccp-seguir");

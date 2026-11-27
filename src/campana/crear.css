@@ -130,6 +130,7 @@ a.ccp-enlace { display: inline-flex; align-items: center; }
 .ccp-campo { display: grid; gap: 6px; min-width: 0; }
 .ccp-rotulo { margin: 0; font-size: var(--letra-sec); font-weight: 700; color: var(--ink2); }
 .ccp-linea { margin: 0; font-size: var(--letra-sec); color: var(--ink2); }
+.ccp-mano-marca { margin: 0; font-size: var(--letra-sec); font-weight: 700; color: var(--ink2); }
 .ccp-error { margin: 0; font-size: var(--letra-sec); font-weight: 700; color: var(--magenta-ink); }
 .ccp-entrada {
   width: 100%;

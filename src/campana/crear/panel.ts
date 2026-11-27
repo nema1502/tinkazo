@@ -7,7 +7,7 @@
 import type { Lang } from "../../idioma";
 import { network } from "../../stellar/config";
 import type { ValidacionDeCampana } from "../../sala/validar-campana";
-import { fechaTexto, horaTexto, premiosTexto } from "../formato";
+import { fechaTexto, horaTexto, premiosTexto, textoDelPremio } from "../formato";
 import type { ColorDeCampana, TipoDePaso } from "../modelo";
 import { direccionDelPanel } from "../direccion-del-panel";
 import { sustituir } from "../sustituir";
@@ -36,6 +36,7 @@ import {
   MAXIMO_DEL_LUGAR,
   MAXIMO_DEL_NOMBRE,
   MAXIMO_DEL_PEDIDO,
+  MAXIMO_DEL_PREMIO_EN_MANO,
   MONTOS,
   OTRO_MONTO,
   formularioDeDemostracion,
@@ -205,9 +206,22 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   const { tx } = deps;
   const fmt = (clave: string, valores: Record<string, string> = {}): string => sustituir(tx(clave), valores);
   const manana = (): string => sumarDias(hoyEn(deps.ahora(), deps.zona), 1);
-  let f: FormularioDeCampana = deps.demo
-    ? formularioDeDemostracion(manana(), deps.zona)
-    : leerDelAlmacen(deps.almacen) ?? formularioInicial(deps.zona, deps.sufijo());
+  /**
+   * El modo de la campaña que se arma. Con la dirección de personas, una campaña nueva escribe lo que se lleva cada persona en lugar
+   * de montos. Un archivo abierto manda: uno de cuentas sigue siendo de cuentas aunque la dirección pida personas, y un borrador de
+   * personas abierto sin pedirlas deja de serlo. La demostración queda como está.
+   */
+  const alModo = (g: FormularioDeCampana): FormularioDeCampana => {
+    if (deps.demo) return g;
+    const personas = g.conservado ? g.conservado.identidad === "persona" : deps.identidad === "persona";
+    if (personas) return g.premioEnMano !== undefined || g.conservado ? g : { ...g, premioEnMano: "" };
+    if (g.premioEnMano === undefined) return g;
+    const { premioEnMano: _quitado, ...resto } = g;
+    return resto;
+  };
+  let f: FormularioDeCampana = alModo(
+    deps.demo ? formularioDeDemostracion(manana(), deps.zona) : leerDelAlmacen(deps.almacen) ?? formularioInicial(deps.zona, deps.sufijo()),
+  );
   let pestanaManual: PantallaDeVista | null = null;
   let festejar = false;
   let faltaVisible: Falta | null = null;
@@ -247,6 +261,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     zona: g.zona,
     conRedes: g.pasos.length > 0,
     costo: { es: deps.costo("es"), en: deps.costo("en") },
+    ...(g.premioEnMano !== undefined ? { premioEnMano: g.premioEnMano.trim() || tx("ccMuestraPremio") } : {}),
   });
   const automaticasDe = (g: FormularioDeCampana): { es: string; en: string } => basesAutomaticas(datosDeLasBases(g), deps.dic);
   const faltasDe = (): Falta[] => faltas(f, deps.ahora(), automaticasDe(f));
@@ -296,6 +311,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
       ahora: deps.ahora(),
       muestraMarca: tx("ccMuestraMarca"),
       muestraLugar: { es: deps.dic("es", "ccMuestraLugar"), en: deps.dic("en", "ccMuestraLugar") },
+      muestraPremio: { es: deps.dic("es", "ccMuestraPremio"), en: deps.dic("en", "ccMuestraPremio") },
       bases,
     });
     const reglasAbiertas = pestanaManual === null && pestanaDelPaso(f.paso).reglasAbiertas;
@@ -607,7 +623,40 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     return b;
   }
 
+  /** El número de personas que ganan: el mismo contador en los dos modos. */
+  function cuantosGanan(): HTMLElement {
+    const cuantos = el("div", "ccp-campo");
+    cuantos.append(
+      el("p", "ccp-rotulo", tx("ccCuantos")),
+      contador(
+        f.ganan,
+        () => cambiar({ t: "ganan-menos" }),
+        () => cambiar({ t: "ganan-mas" }),
+        { menos: "ccp-ganan-menos", mas: "ccp-ganan-mas", numero: "ccp-ganan-numero" },
+        { minimo: 1, maximo: MAXIMO_DE_GANAN },
+      ),
+    );
+    return cuantos;
+  }
+
+  /** El paso del premio de una campaña de personas: se escribe qué se lleva cada persona, sin montos ni costos. */
+  function paso2EnMano(premio: string): HTMLElement {
+    const b = el("div", "ccp-cuerpo");
+    b.append(el("p", "ccp-mano-marca", tx("ccManoMarca")));
+    b.append(
+      campo(
+        tx("ccCadaUno"),
+        "ccp-premio-mano",
+        entrada("ccp-premio-mano", premio, MAXIMO_DEL_PREMIO_EN_MANO, (v) => cambiar({ t: "premio-mano", valor: v }, false)),
+      ),
+    );
+    b.append(el("p", "ccp-linea ccp-mano-linea", tx("ccManoLinea")));
+    b.append(cuantosGanan());
+    return b;
+  }
+
   function paso2(): HTMLElement {
+    if (f.premioEnMano !== undefined) return paso2EnMano(f.premioEnMano);
     const b = el("div", "ccp-cuerpo");
     b.append(el("p", "ccp-rotulo", tx("ccCadaUno")));
     const montos = el("div", "ccp-montos");
@@ -634,18 +683,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
       );
       b.append(filaOtro);
     }
-    const cuantos = el("div", "ccp-campo");
-    cuantos.append(
-      el("p", "ccp-rotulo", tx("ccCuantos")),
-      contador(
-        f.ganan,
-        () => cambiar({ t: "ganan-menos" }),
-        () => cambiar({ t: "ganan-mas" }),
-        { menos: "ccp-ganan-menos", mas: "ccp-ganan-mas", numero: "ccp-ganan-numero" },
-        { minimo: 1, maximo: MAXIMO_DE_GANAN },
-      ),
-    );
-    b.append(cuantos);
+    b.append(cuantosGanan());
     // Sin monto elegido no se muestra un monto inventado: el renglón queda vacío hasta que se elija.
     const resumen = el("p", f.monto === null ? "ccp-premio ccp-muestra" : "ccp-premio", f.monto === null ? "" : premiosTexto(premios(), deps.idioma()));
     resumen.id = "ccp-premio";
@@ -858,8 +896,13 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     }
     nombre.append(el("strong", "", f.nombre.trim()));
     const premio = el("div", "ccp-resumen");
-    premio.append(el("strong", "", premiosTexto(premios(), idioma)));
-    if (f.monto !== null) {
+    if (f.premioEnMano !== undefined) {
+      // Sin montos ni costos: el premio escrito y para cuántas personas.
+      const escrito = f.premioEnMano.trim();
+      const premiosEnCero = Array.from({ length: f.ganan }, () => 0n);
+      premio.append(el("strong", "", textoDelPremio({ premios: premiosEnCero, premioEnMano: { es: escrito, en: escrito } }, idioma)));
+    } else premio.append(el("strong", "", premiosTexto(premios(), idioma)));
+    if (f.monto !== null && f.premioEnMano === undefined) {
       const premiosElegidos = { monto: f.monto, ganan: f.ganan };
       const costo = costoDeLaCampana({ premios: premiosElegidos, comision: sinCobro() ? null : (deps.comision?.(premiosElegidos) ?? null) });
       premio.append(el("span", "ccp-total", fmt("ccTotal", { total: String(costo.premios), n: String(f.ganan), monto: String(f.monto) })));
@@ -1248,6 +1291,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   function cambiar(a: Accion, repintar = true): void {
     const antes = f;
     f = reducir(f, a);
+    if (a.t === "abrir") f = alModo(f);
     if (a.t !== "seguir" && a.t !== "ir") descargada = null;
     if (f.paso !== antes.paso || a.t === "abrir") pestanaManual = null;
     faltaVisible = null;

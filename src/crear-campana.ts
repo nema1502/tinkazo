@@ -91,7 +91,7 @@ function depsReales(): DepsDelCreador {
       return archivo.text();
     },
     // El validador arrastra los dos lectores de la campaña: se baja recién cuando hay algo que bajar.
-    validar: (campana, ahora) => import("./sala/validar-campana").then((m) => m.validarCampanaParaFirmar(campana, ahora)),
+    validar: (campana, ahora) => import("./sala/validar-campana").then((m) => m.validarCampanaParaElFirmador(campana, ahora)),
     descargar: bajarTexto,
     compartir: compartirConElSistema(),
     costo: costoDelRetiroTexto,
