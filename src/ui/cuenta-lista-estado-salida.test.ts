@@ -122,7 +122,12 @@ describe("la salida de una espera larga", () => {
         expect(caja?.sola, ctx).toBe(true);
         expect(portadaDe(v).filas, ctx).toContain(caja);
         expect(portadaDe(v).forma, ctx).toBe("uno");
-        expect(v.estado?.clave, ctx).toBe("clErrTarda");
+        // Con Probar de nuevo el pie dice que pruebe de nuevo. Con Volver a cargar no pide nada: lo que corre sigue.
+        if (demora === "pedido") expect(v.estado?.clave, ctx).toBe("clErrTarda");
+        else {
+          expect(v.estado, ctx).not.toBeNull();
+          expect(v.estado?.clave, ctx).not.toBe("clErrTarda");
+        }
         // Una sola salida en toda la vista.
         expect(secundarios(v).filter((s) => s.accion === accion), ctx).toHaveLength(1);
       }

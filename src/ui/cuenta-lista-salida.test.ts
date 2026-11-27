@@ -271,7 +271,8 @@ describe("el camino directo: la salida a los 45 segundos y nada se corta", () =>
         // La salida es una oferta desde los 45 s: antes, nada.
         expect(recargarDelPaso() !== null, `${s} s`).toBe(s >= 45);
         expect(principal().getAttribute("aria-busy")).toBe("true");
-        if (s >= 45) expect(pie()).toBe(t("clErrTarda"));
+        // El pie sigue diciendo que puede tardar: ni un error ni una instrucción de probar de nuevo.
+        if (s >= 45) expect(pie()).toBe(t("clActivarLento"));
       });
       await vi.advanceTimersByTimeAsync(2_000);
       expect(parteActual()).toBe("proteger");
@@ -296,7 +297,7 @@ describe("el camino directo: la salida a los 45 segundos y nada se corta", () =>
     expect(salida?.disabled).toBe(false);
     expect(principal().getAttribute("aria-busy")).toBe("true");
     expect(principal().disabled).toBe(true);
-    expect(pie()).toBe(t("clErrTarda"));
+    expect(pie()).toBe(t("clActivarLento"));
     await vi.advanceTimersByTimeAsync(6_000);
     expect(parteActual()).toBe("proteger");
     expect(hayAlgunaSalida()).toBe(false);
@@ -332,7 +333,7 @@ describe("el camino directo: la salida a los 45 segundos y nada se corta", () =>
     const estado = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
     document.dispatchEvent(new Event("visibilitychange"));
     expect(recargarDelPaso()).not.toBeNull();
-    expect(pie()).toBe(t("clErrTarda"));
+    expect(pie()).toBe(t("clActivarLento"));
     estado.mockRestore();
   });
 
@@ -627,7 +628,7 @@ describe("el regalo y el cupón: la salida y la espera del pedido", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(recargarDelPaso()).not.toBeNull();
     expect(dejarElPedido()).toBeNull();
-    expect(pie()).toBe(t("clErrTarda"));
+    expect(pie()).toBe(t("clActivarLento"));
     recargarDelPaso()?.click();
     await vi.advanceTimersByTimeAsync(10);
     expect(salidas.recargar).toHaveBeenCalledTimes(1);
@@ -819,7 +820,7 @@ describe("proteger: Mandando el código tiene salida y confirmar, no", () => {
     expect(salida?.textContent).toBe(t("loginRecargar"));
     expect(salida?.closest(".cl-paso")?.getAttribute("data-parte")).toBe("proteger");
     expect(principal().dataset.accion).toBe("mandar-codigo");
-    expect(pie()).toBe(t("clErrTarda"));
+    expect(pie()).toBe(t("clActivarLento"));
     salida?.click();
     await vi.advanceTimersByTimeAsync(10);
     expect(salidas.recargar).toHaveBeenCalledTimes(1);

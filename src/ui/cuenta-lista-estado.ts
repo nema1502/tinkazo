@@ -1178,7 +1178,8 @@ export function vistaDe(entrada: EntradaVista): Vista {
   // Cerrando sesión, la principal espera: la salida ya está en marcha.
   const p = principal as Boton | null;
   const principalFinal = p && e.corre === "cerrando" ? { ...p, apagado: true } : p;
-  // Una espera pasada de tiempo: la principal sigue girando, la caja que gira ofrece la salida y el pie dice que tarda.
+  // Una espera pasada de tiempo: la principal sigue girando y la caja que gira ofrece la salida. El pie pide probar de nuevo solo
+  // si el botón es Probar de nuevo. Con Volver a cargar sigue diciendo que puede tardar, porque lo que corre todavía puede terminar.
   const demora = e.demora;
   const conDemora = demora !== undefined && giraConSalida(e, [principalFinal, ...cajas.flatMap((c) => c.secundarios)]);
   const notas: string[] = e.puedePasarAPrueba || premio || pago ? [] : ["modeSwitchBlocked"];
@@ -1190,7 +1191,7 @@ export function vistaDe(entrada: EntradaVista): Vista {
     principal: principalFinal,
     volver: puedeVolverDelCupon(e) ? boton("volver", "clVolver") : null,
     primerOficial: false,
-    estado: conDemora ? { clave: "clErrTarda" } : lineaDeEstado(e),
+    estado: conDemora ? (demora === "pedido" ? { clave: "clErrTarda" } : (lineaDeEstado(e) ?? { clave: "clActivarLento" })) : lineaDeEstado(e),
     notas,
     salidas: {
       prueba: premio || pago || principalFinal?.accion === "pasar-a-prueba" ? null : { apagado: !e.puedePasarAPrueba },
