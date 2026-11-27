@@ -132,6 +132,68 @@ const ES = {
   fallaCodigo: "Código de la falla",
   enlaceCopiado: "Enlace copiado.",
   nombreDeLaLlave: "Llave de prueba de Tinkazo",
+
+  premioInicioTitulo: "Probá recibir un premio de prueba",
+  premioInicioLineaCel: "Creá tu billetera con tu huella, tu cara o tu clave. Te llegan {monto} monedas de prueba, sin sorteo.",
+  premioInicioLineaCompu: "Creá tu billetera con tu huella, tu cara o tu PIN. Te llegan {monto} monedas de prueba, sin sorteo.",
+  premioInicioPrincipal: "Crear mi billetera",
+  premioInicioSecundario: "Ya tengo mi billetera",
+
+  recibiendoTitulo: "Te está llegando el premio",
+  recibiendoLinea: "Son monedas de prueba. Tarda unos segundos.",
+
+  premioListoTituloRecibido: "Te llegaron {monto} monedas de prueba",
+  premioListoTituloSaldo: "Tenés {monto} monedas de prueba",
+  premioListoLinea: "Mandalas a una cuenta de prueba que pide nota. La arma esta página y tu llave aprueba el envío.",
+  premioListoLineaEnlace: "Mandalas a la cuenta de prueba {direccion}. Tu llave aprueba el envío.",
+  premioListoLineaEnlaceNota: "Mandalas a la cuenta de prueba {direccion}, con la nota {nota}. Tu llave aprueba el envío.",
+  premioListoPrincipal: "Mandar mis monedas",
+
+  miraMandarLinea: "Tu llave aprueba mandar {monto} monedas de prueba.",
+  miraMandarLineaEnlace: "Tu llave aprueba mandar {monto} monedas de prueba a {direccion}.",
+
+  enviandoTitulo: "Mandando tus monedas",
+  enviandoLinea: "Tarda unos segundos.",
+
+  enviadoTitulo: "Listo, las mandaste",
+  enviadoLineaNota: "Llegaron {monto} monedas de prueba a la cuenta que termina en {fin}, con la nota {nota}.",
+  enviadoLineaSinNota: "Llegaron {monto} monedas de prueba a la cuenta que termina en {fin}.",
+  enviadoLineaNotaSinDato: "Llegaron {monto} monedas de prueba a la cuenta que termina en {fin}. No pudimos confirmar la nota.",
+  enviadoLineaNotaDistinta: "Llegaron {monto} monedas de prueba a la cuenta que termina en {fin}, pero no con la nota pedida.",
+  enviadoPrincipal: "Ver lo que costó",
+  enviadoSecundario: "Probar con otra billetera",
+
+  pideNotaTitulo: "Esa cuenta pide una nota",
+  pideNotaLinea: "Sin la nota no se puede mandar. No se mandó nada.",
+  pideNotaPrincipal: "Mandar a la cuenta de prueba",
+
+  noRecibeTitulo: "No se pudo mandar a esa cuenta",
+  noRecibeLinea: "No se mandó nada.",
+  noRecibePrincipal: "Mandar a la cuenta de prueba",
+
+  noSeEnvioTitulo: "No se pudieron mandar",
+  noSeEnvioLinea: "No se mandó nada. Probá de nuevo.",
+  noSeEnvioPrincipal: "Probar de nuevo",
+
+  noLlegoPremioTitulo: "El premio no llegó",
+  noLlegoPremioLinea: "No se gastó nada tuyo. Probá de nuevo.",
+  noLlegoPremioPrincipal: "Probar de nuevo",
+
+  sinMonedasTitulo: "No vemos monedas en tu billetera",
+  sinMonedasLineaEnviadas: "Ya las mandaste. Para probar de nuevo, creá otra billetera.",
+  sinMonedasLinea: "Esta prueba paga una sola vez por billetera. Para probar, creá otra.",
+  sinMonedasPrincipal: "Crear otra billetera",
+
+  saldoSinLeerTitulo: "No pudimos ver tus monedas",
+  saldoSinLeerLinea: "Probá de nuevo en un momento.",
+  saldoSinLeerPrincipal: "Probar de nuevo",
+
+  enlaceMalTitulo: "Este enlace trae un error",
+  enlaceMalLinea: "La cuenta o la nota no están bien escritas. No se pidió nada.",
+  enlaceMalPrincipal: "Abrir la prueba",
+
+  costosRecibir: "Recibir el premio",
+  costosMandar: "Mandar las monedas",
 } as const;
 
 export type ClaveDePrueba = keyof typeof ES;
@@ -263,6 +325,68 @@ const EN: Record<ClaveDePrueba, string> = {
   fallaCodigo: "Failure code",
   enlaceCopiado: "Link copied.",
   nombreDeLaLlave: "Tinkazo test key",
+
+  premioInicioTitulo: "Try receiving a test prize",
+  premioInicioLineaCel: "Create your wallet with your fingerprint, face or screen lock. {monto} test coins arrive, no draw involved.",
+  premioInicioLineaCompu: "Create your wallet with your fingerprint, face or PIN. {monto} test coins arrive, no draw involved.",
+  premioInicioPrincipal: "Create my wallet",
+  premioInicioSecundario: "I already have my wallet",
+
+  recibiendoTitulo: "Your prize is on its way",
+  recibiendoLinea: "They are test coins. It takes a few seconds.",
+
+  premioListoTituloRecibido: "{monto} test coins arrived",
+  premioListoTituloSaldo: "You have {monto} test coins",
+  premioListoLinea: "Send them to a test account that needs a note. This page sets it up and your key approves the send.",
+  premioListoLineaEnlace: "Send them to the test account {direccion}. Your key approves the send.",
+  premioListoLineaEnlaceNota: "Send them to the test account {direccion}, with the note {nota}. Your key approves the send.",
+  premioListoPrincipal: "Send my coins",
+
+  miraMandarLinea: "Your key approves sending {monto} test coins.",
+  miraMandarLineaEnlace: "Your key approves sending {monto} test coins to {direccion}.",
+
+  enviandoTitulo: "Sending your coins",
+  enviandoLinea: "It takes a few seconds.",
+
+  enviadoTitulo: "Done, you sent them",
+  enviadoLineaNota: "{monto} test coins reached the account ending in {fin}, with the note {nota}.",
+  enviadoLineaSinNota: "{monto} test coins reached the account ending in {fin}.",
+  enviadoLineaNotaSinDato: "{monto} test coins reached the account ending in {fin}. We couldn't confirm the note.",
+  enviadoLineaNotaDistinta: "{monto} test coins reached the account ending in {fin}, but not with the requested note.",
+  enviadoPrincipal: "See what it cost",
+  enviadoSecundario: "Try with another wallet",
+
+  pideNotaTitulo: "That account needs a note",
+  pideNotaLinea: "It can't be sent without the note. Nothing was sent.",
+  pideNotaPrincipal: "Send to the test account",
+
+  noRecibeTitulo: "It couldn't be sent to that account",
+  noRecibeLinea: "Nothing was sent.",
+  noRecibePrincipal: "Send to the test account",
+
+  noSeEnvioTitulo: "They couldn't be sent",
+  noSeEnvioLinea: "Nothing was sent. Try again.",
+  noSeEnvioPrincipal: "Try again",
+
+  noLlegoPremioTitulo: "The prize didn't arrive",
+  noLlegoPremioLinea: "Nothing of yours was spent. Try again.",
+  noLlegoPremioPrincipal: "Try again",
+
+  sinMonedasTitulo: "We don't see coins in your wallet",
+  sinMonedasLineaEnviadas: "You already sent them. To try again, create another wallet.",
+  sinMonedasLinea: "This test pays once per wallet. To try, create another one.",
+  sinMonedasPrincipal: "Create another wallet",
+
+  saldoSinLeerTitulo: "We couldn't see your coins",
+  saldoSinLeerLinea: "Try again in a moment.",
+  saldoSinLeerPrincipal: "Try again",
+
+  enlaceMalTitulo: "This link has a mistake",
+  enlaceMalLinea: "The account or the note is not written correctly. Nothing was asked.",
+  enlaceMalPrincipal: "Open the test",
+
+  costosRecibir: "Receive the prize",
+  costosMandar: "Send the coins",
 };
 
 export const TEXTOS: Record<Lang, Record<ClaveDePrueba, string>> = { es: ES, en: EN };

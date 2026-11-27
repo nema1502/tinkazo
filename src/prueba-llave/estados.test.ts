@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Lang } from "../idioma";
-import { ESTADOS, estadoInicial, pantallaDe, type Aparato, type EntornoInicial, type Estado } from "./estados";
+import { escaparHtml, ESTADOS, estadoInicial, pantallaDe, type Aparato, type DatosDeLaPantalla, type EntornoInicial, type Estado } from "./estados";
 import { TEXTOS, type ClaveDePrueba } from "./textos";
 
 // Comillas angulares, punto y coma, rayas largas, punto medio y flechas, por su código para no escribirlos.
@@ -137,6 +137,102 @@ describe("las pantallas", () => {
   });
 });
 
+describe("las pantallas de recibir y mandar monedas de prueba", () => {
+  const P = (estado: Estado, datos: Partial<DatosDeLaPantalla> = {}, lang: Lang = "es"): ReturnType<typeof pantallaDe> => pantallaDe(estado, { aparato: "cel", ...datos }, lang);
+  const DIRECCION = "GAAH4OT36RRCCAGKARGPN2HLHT2NOBVFHO4GUHA6CF7UKQ4MMV24WQ4N";
+
+  it("ningún texto deja un hueco sin llenar, con o sin datos, en las dos lenguas y los dos aparatos", () => {
+    const conDatos: Partial<DatosDeLaPantalla> = { monto: "100000000", fin: "WQ4N", direccion: DIRECCION, nota: "1234567890", recibido: true, destinoDelEnlace: true, notaEnvio: "confirmada" };
+    for (const estado of ESTADOS) {
+      for (const lang of LENGUAS) {
+        for (const aparato of APARATOS) {
+          for (const datos of [{}, conDatos]) {
+            const p = pantallaDe(estado, { aparato, ...datos }, lang);
+            const visible = [p.titulo, p.linea, p.principal?.texto ?? "", p.secundario?.texto ?? ""].join(" | ");
+            expect(visible, `${estado} ${lang} ${aparato}`).not.toMatch(/[{}]/);
+          }
+        }
+      }
+    }
+  });
+
+  it("el inicio del modo premio dice cuántas monedas llegan y que no hay sorteo, y cambia con el aparato", () => {
+    expect(P("premio-inicio").linea).toContain("10 monedas de prueba, sin sorteo");
+    expect(P("premio-inicio").linea).toContain("tu clave");
+    expect(pantallaDe("premio-inicio", { aparato: "compu" }, "es").linea).toContain("PIN");
+    expect(P("premio-inicio", {}, "en").linea).toContain("10 test coins arrive, no draw involved");
+    expect(P("premio-inicio").principal?.accion).toBe("crear");
+    expect(P("premio-inicio").secundario?.accion).toBe("ya-tengo");
+    expect(P("premio-inicio", { cancelada: true }).linea).toBe(TEXTOS.es.canceladaLinea);
+  });
+
+  it("recibir y mandar esperan como mucho 90 s, y esperar el desbloqueo de mandar 65 s", () => {
+    expect(P("recibiendo").topeMs).toBe(90_000);
+    expect(P("enviando").topeMs).toBe(90_000);
+    expect(P("mira-mandar").topeMs).toBe(65_000);
+    expect(P("mira-mandar").titulo).toBe("Mirá tu teléfono");
+    expect(pantallaDe("mira-mandar", { aparato: "compu" }, "en").titulo).toBe("Check your screen");
+    expect(P("mira-mandar", { monto: "25000000" }).linea).toBe("Tu llave aprueba mandar 2,5 monedas de prueba.");
+    expect(P("mira-mandar", { monto: "100000000", destinoDelEnlace: true, direccion: "GABCDEFGH" }).linea).toBe("Tu llave aprueba mandar 10 monedas de prueba a GABC DEFG H.");
+  });
+
+  it("la pantalla con las monedas dice si llegaron recién o si se leyeron, con el monto", () => {
+    expect(P("premio-listo", { monto: "100000000", recibido: true }).titulo).toBe("Te llegaron 10 monedas de prueba");
+    expect(P("premio-listo", { monto: "100000000", recibido: false }).titulo).toBe("Tenés 10 monedas de prueba");
+    expect(P("premio-listo", { monto: "100000000", recibido: true }, "en").titulo).toBe("10 test coins arrived");
+    expect(P("premio-listo", { monto: "30000000" }, "en").titulo).toBe("You have 3 test coins");
+    expect(P("premio-listo", { monto: "100000000", recibido: true }).principal?.accion).toBe("mandar");
+    expect(P("premio-listo", { recibido: true, cancelada: true }).linea).toBe(TEXTOS.es.canceladaLinea);
+  });
+
+  it("la línea de la pantalla con las monedas nombra el destino: el de la página, el del enlace, y el del enlace con nota", () => {
+    expect(P("premio-listo", { recibido: true }).linea).toContain("La arma esta página");
+    const enlace = P("premio-listo", { recibido: true, destinoDelEnlace: true, direccion: DIRECCION });
+    expect(enlace.linea).toContain("GAAH 4OT3 6RRC");
+    expect(enlace.linea).not.toContain("con la nota");
+    const conNota = P("premio-listo", { recibido: true, destinoDelEnlace: true, direccion: DIRECCION, nota: "99" });
+    expect(conNota.linea).toContain("con la nota 99");
+  });
+
+  it("al mandar, la línea final cuenta lo que se leyó de la nota y solo eso", () => {
+    const base = { monto: "100000000", fin: "WQ4N", nota: "1234567890" };
+    expect(P("enviado", { ...base, notaEnvio: "confirmada" }).linea).toBe("Llegaron 10 monedas de prueba a la cuenta que termina en WQ4N, con la nota 1234567890.");
+    expect(P("enviado", { ...base, notaEnvio: "no-pedida" }).linea).toBe("Llegaron 10 monedas de prueba a la cuenta que termina en WQ4N.");
+    expect(P("enviado", { ...base, notaEnvio: "sin-dato" }).linea).toContain("No pudimos confirmar la nota");
+    expect(P("enviado", { ...base, notaEnvio: "distinta" }).linea).toContain("no con la nota pedida");
+    expect(P("enviado", { ...base, notaEnvio: "confirmada" }, "en").linea).toBe("10 test coins reached the account ending in WQ4N, with the note 1234567890.");
+    expect(P("enviado", base).principal?.accion).toBe("costos");
+    expect(P("enviado", base).secundario?.accion).toBe("crear-otra");
+  });
+
+  it("sin monedas tiene dos líneas, según el registro del aparato, y siempre una salida", () => {
+    expect(P("sin-monedas").linea).toBe(TEXTOS.es.sinMonedasLinea);
+    expect(P("sin-monedas", { yaEnviadas: true }).linea).toBe(TEXTOS.es.sinMonedasLineaEnviadas);
+    expect(P("sin-monedas").principal?.accion).toBe("crear-otra");
+  });
+
+  it("las pantallas de salida llevan al botón correcto", () => {
+    for (const e of ["pide-nota", "no-recibe", "enlace-mal"] as const) expect(P(e).principal?.accion, e).toBe("sin-destino");
+    for (const e of ["no-se-envio", "no-llego-premio", "saldo-sin-leer"] as const) expect(P(e).principal?.accion, e).toBe("reintentar");
+  });
+
+  it("los textos nunca prometen un ganador ni hablan de exchanges", () => {
+    for (const l of LENGUAS) {
+      for (const [k, v] of Object.entries(TEXTOS[l])) {
+        if (!/^(premio|recibiendo|enviando|enviado|pideNota|noRecibe|noSeEnvio|noLlegoPremio|sinMonedas|saldoSinLeer|enlaceMal|costosRecibir|costosMandar|miraMandar)/.test(k)) continue;
+        expect(v, `${l}.${k}`).not.toMatch(/ganaste|you won|exchange|binance/i);
+      }
+    }
+  });
+
+  it("un dato de afuera entra escapado en las líneas", () => {
+    const p = P("premio-listo", { recibido: true, destinoDelEnlace: true, direccion: "<b>x</b>&" });
+    expect(p.linea).not.toContain("<b>");
+    expect(p.linea).toContain("&lt;b&gt;");
+    expect(escaparHtml(`<a href="x">'&'</a>`)).toBe("&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;");
+  });
+});
+
 describe("con qué pantalla abre la página", () => {
   const base: EntornoInicial = { host: "localhost", hayPasskeys: true, enApp: false, conBloqueo: true, punteroGrueso: false, hayLlaveLocal: false, selloPendiente: false };
   const con = (c: Partial<EntornoInicial>): Estado => estadoInicial({ ...base, ...c });
@@ -164,5 +260,25 @@ describe("con qué pantalla abre la página", () => {
 
   it("con una llave en este aparato ofrece usarla", () => {
     expect(con({ hayLlaveLocal: true })).toBe("ya-hay-llave");
+  });
+
+  it("el modo premio abre en su propio inicio, y sin él todo sigue igual", () => {
+    expect(con({ modoPremio: true })).toBe("premio-inicio");
+    expect(con({ modoPremio: true, hayLlaveLocal: true })).toBe("ya-hay-llave");
+    expect(con({ modoPremio: true, hayPasskeys: false })).toBe("sin-llaves");
+    expect(con({ modoPremio: true, host: "tinkazo.app" })).toBe("no-es-aca");
+    expect(con({ modoPremio: false })).toBe("inicio");
+  });
+
+  it("con dinero mandado y sin confirmar, el modo premio abre en el aviso de que tarda", () => {
+    expect(con({ modoPremio: true, pendienteDeDinero: true })).toBe("lento");
+    expect(con({ modoPremio: true, pendienteDeDinero: true, hayLlaveLocal: true })).toBe("lento");
+    expect(con({ modoPremio: false, pendienteDeDinero: true })).toBe("inicio");
+    expect(con({ modoPremio: true, pendienteDeDinero: true, host: "tinkazo.vercel.app" })).toBe("no-es-aca");
+  });
+
+  it("un sello pendiente da esperando solo fuera del modo premio", () => {
+    expect(con({ selloPendiente: true })).toBe("esperando");
+    expect(con({ selloPendiente: true, modoPremio: true })).toBe("premio-inicio");
   });
 });
