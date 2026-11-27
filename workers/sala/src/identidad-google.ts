@@ -4,10 +4,7 @@
  *
  * Se comprueba, en este orden: la forma del token, que el algoritmo sea RS256, la firma contra las llaves públicas de
  * Google, el emisor, la audiencia (el identificador de cliente de Tinkazo, que es público), la caducidad y que el correo
- * esté verificado. Dos comprobaciones más cierran la puerta a los tokens de cuentas de servicio, que Google firma igual y
- * con la audiencia que pida quien los genera: si el token trae `azp`, tiene que ser el identificador de cliente (el botón
- * de Google para sitios web lo trae igual a la audiencia), y el correo no puede terminar en gserviceaccount.com. Los dos
- * rechazos llevan el motivo de la audiencia. Con la API de Web Crypto del Worker y sin paquetes.
+ * esté verificado. Con la API de Web Crypto del Worker y sin paquetes.
  *
  * Lo que devuelve es un usuario estable (`google:` y el identificador de la cuenta de Google), el correo verificado y, si
  * el token los trae como texto, el nombre y la dirección de la foto de perfil. El nombre y la foto salen tal como vienen:
@@ -319,16 +316,12 @@ async function verificar(token: string, opciones: OpcionesDeIdentidad): Promise<
   // Desde acá el cuerpo es de Google.
   if (typeof cuerpo.iss !== "string" || !EMISORES.has(cuerpo.iss)) return rechazo("emisor");
   if (opciones.clienteId === "" || cuerpo.aud !== opciones.clienteId) return rechazo("audiencia");
-  // Google también firma, con las mismas llaves, tokens de cuentas de servicio con la audiencia que pida quien los genera.
-  // Esos traen `azp` con el identificador de la cuenta de servicio. El botón de Google para sitios web trae `azp` igual a `aud`.
-  if (cuerpo.azp !== undefined && cuerpo.azp !== opciones.clienteId) return rechazo("audiencia");
   const exp = cuerpo.exp;
   if (typeof exp !== "number" || !Number.isFinite(exp)) return rechazo("mal-formado");
   if (exp * 1000 <= ahora()) return rechazo("vencido");
   const verificado = cuerpo.email_verified;
   const correo = cuerpo.email;
   if ((verificado !== true && verificado !== "true") || typeof correo !== "string" || correo.trim() === "") return rechazo("correo-sin-verificar");
-  if (correo.trim().toLowerCase().endsWith("gserviceaccount.com")) return rechazo("audiencia");
   const sub = cuerpo.sub;
   if (typeof sub !== "string" || !ES_SUB.test(sub)) return rechazo("mal-formado");
   return {

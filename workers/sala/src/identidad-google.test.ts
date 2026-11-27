@@ -171,6 +171,31 @@ describe("un token de Google bueno", () => {
   });
 });
 
+describe("entra lo mismo que entraba antes de guardar perfiles", () => {
+  // Guardar el perfil no cambia quién puede anotarse: la verificación mira lo mismo que miraba, con los interruptores como estén.
+  const BUENO = { ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "" };
+
+  it("el campo azp no se mira: con cualquier valor el token entra igual que sin él", async () => {
+    const b = banco();
+    expect(await verificarIdentidadDeGoogle(await firmar(), b.opciones)).toEqual(BUENO);
+    for (const azp of [CLIENTE, "otro-cliente.apps.example.org", "112233445566778899001", "", 123, null, true, [CLIENTE], { a: CLIENTE }]) {
+      const t = await firmar({ payload: { azp } });
+      expect(await verificarIdentidadDeGoogle(t, b.opciones), JSON.stringify(azp)).toEqual(BUENO);
+    }
+  });
+
+  it("el dominio del correo no se mira: un correo verificado entra termine como termine", async () => {
+    const b = banco();
+    const dominio = ["gserviceaccount", "com"].join(".");
+    for (const email of [`robot@proyecto.iam.${dominio}`, `Robot@Proyecto.IAM.${dominio.toUpperCase()}`, `robot@developer.${dominio}`, "ana@escuela.example.org"]) {
+      for (const payload of [{ email }, { email, azp: CLIENTE }, { email, azp: "112233445566778899001" }]) {
+        const r = await verificarIdentidadDeGoogle(await firmar({ payload }), b.opciones);
+        expect(r, JSON.stringify(payload)).toEqual({ ...BUENO, correo: email });
+      }
+    }
+  });
+});
+
 describe("lo que se rechaza", () => {
   it("un token de otro cliente: audiencia", async () => {
     const b = banco();
@@ -188,48 +213,6 @@ describe("lo que se rechaza", () => {
     const b = banco();
     const t = await firmar({ payload: { aud: "" } });
     expect(await verificarIdentidadDeGoogle(t, { ...b.opciones, clienteId: "" })).toEqual({ ok: false, motivo: "audiencia" });
-  });
-
-  it("azp igual a la audiencia entra: es el token del botón de Google para sitios web", async () => {
-    const b = banco();
-    const t = await firmar({ payload: { azp: CLIENTE } });
-    expect((await verificarIdentidadDeGoogle(t, b.opciones)).ok).toBe(true);
-  });
-
-  it("sin azp entra", async () => {
-    const b = banco();
-    const t = await firmar();
-    expect((await verificarIdentidadDeGoogle(t, b.opciones)).ok).toBe(true);
-  });
-
-  it("azp distinto de la audiencia: audiencia (token de una cuenta de servicio con la audiencia de Tinkazo)", async () => {
-    const b = banco();
-    const t = await firmar({ payload: { azp: "112233445566778899001" } });
-    expect(await verificarIdentidadDeGoogle(t, b.opciones)).toEqual({ ok: false, motivo: "audiencia" });
-  });
-
-  it("azp que no es texto: audiencia", async () => {
-    const b = banco();
-    for (const azp of [123, null, [CLIENTE], { a: CLIENTE }, true, ""]) {
-      const t = await firmar({ payload: { azp } });
-      expect(await verificarIdentidadDeGoogle(t, b.opciones), JSON.stringify(azp)).toEqual({ ok: false, motivo: "audiencia" });
-    }
-  });
-
-  it("un correo de cuenta de servicio no entra aunque todo lo demás esté bien: audiencia", async () => {
-    const b = banco();
-    for (const email of ["robot@proyecto.iam.gserviceaccount.com", "Robot@Proyecto.IAM.GServiceAccount.COM", "robot@developer.gserviceaccount.com"]) {
-      const t = await firmar({ payload: { email, azp: CLIENTE } });
-      expect(await verificarIdentidadDeGoogle(t, b.opciones), email).toEqual({ ok: false, motivo: "audiencia" });
-      const sinAzp = await firmar({ payload: { email } });
-      expect(await verificarIdentidadDeGoogle(sinAzp, b.opciones), email).toEqual({ ok: false, motivo: "audiencia" });
-    }
-  });
-
-  it("un correo que solo se parece al de una cuenta de servicio entra", async () => {
-    const b = banco();
-    const t = await firmar({ payload: { email: "ana@gserviceaccount.com.example.org" } });
-    expect((await verificarIdentidadDeGoogle(t, b.opciones)).ok).toBe(true);
   });
 
   it("otro emisor: emisor", async () => {
