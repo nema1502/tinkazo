@@ -118,3 +118,68 @@ describe("el armador con una campaña de personas y el cobro prendido", () => {
     expect([...q(".ccp-botones").children].map((b) => b.id)).toEqual(["ccp-activar", "ccp-descargar"]);
   });
 });
+
+/**
+ * El cobro y Activar salen de la campaña que se abre, no del parámetro de la dirección: un archivo de personas abierto sin pedirlas
+ * no ofrece cobrar ni activar, y uno de cuentas abierto pidiendo personas conserva el servicio, el total y Activar.
+ */
+describe("el cobro sigue a la campaña abierta y no a la dirección", () => {
+  const bajadas: string[] = [];
+
+  function elegirArchivo(contenido: string): void {
+    const campo = q<HTMLInputElement>("#ccp-abrir-archivo");
+    const archivo = Object.assign(new File([contenido], "campana.json", { type: "application/json" }), { contenido });
+    Object.defineProperty(campo, "files", { value: [archivo], configurable: true });
+    campo.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  const asentar = async (): Promise<void> => {
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  };
+  const cambiosDeArchivo: Partial<DepsDelCreador> = {
+    leerArchivo: async (archivo) => (archivo as File & { contenido: string }).contenido,
+    descargar: (_nombre, texto) => {
+      bajadas.push(texto);
+    },
+  };
+
+  /** Arma y baja una campaña con los pasos del panel, y deja la página limpia para abrirla. */
+  async function bajarUna(cambios: Partial<DepsDelCreador>): Promise<string> {
+    bajadas.length = 0;
+    crear({ ...cambiosDeArchivo, ...cambios });
+    llenarHastaElFinal();
+    clic("ccp-descargar");
+    await asentar();
+    const texto = bajadas[0] ?? "";
+    for (const c of montados) c.desmontar();
+    montados = [];
+    localStorage.clear();
+    return texto;
+  }
+
+  it("un archivo de personas abierto sin pedirlas en la dirección no ofrece Activar ni calcula el servicio", async () => {
+    const dePersonas = await bajarUna({ identidad: "persona" });
+    expect(dePersonas).toContain('"identidad"');
+    crear(cambiosDeArchivo);
+    elegirArchivo(dePersonas);
+    await asentar();
+    clic("ccp-ir-6");
+    expect(document.querySelector("#ccp-activar")).toBeNull();
+    expect([...q(".ccp-botones").children].map((b) => b.id)).toEqual(["ccp-descargar"]);
+    expect(q("#ccp-titulo").textContent).toBe("Mandala a Tinkazo");
+    expect(document.body.textContent).not.toContain("Servicio de Tinkazo");
+    expect(document.body.textContent).not.toContain("Total a poner");
+    expect(activadas).toEqual([]);
+  });
+
+  it("un archivo de cuentas abierto pidiendo personas en la dirección conserva el servicio, el total y Activar", async () => {
+    const deCuentas = await bajarUna({});
+    expect(deCuentas).not.toContain('"identidad"');
+    crear({ ...cambiosDeArchivo, identidad: "persona" });
+    elegirArchivo(deCuentas);
+    await asentar();
+    clic("ccp-ir-6");
+    expect([...q(".ccp-botones").children].map((b) => b.id)).toEqual(["ccp-activar", "ccp-descargar"]);
+    expect(document.body.textContent).toContain("Servicio de Tinkazo: 2,40 dólares digitales");
+    expect(document.body.textContent).toContain("Total a poner: 122,40 dólares digitales");
+  });
+});

@@ -244,9 +244,12 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
 
   /**
    * Una campaña de personas no lleva cobro ni comisión, y la activación sola nunca la firma: la firma Tinkazo. Por eso el armador
-   * no calcula el servicio, no muestra el total a poner y no ofrece activar, esté como esté el sitio.
+   * no calcula el servicio, no muestra el total a poner y no ofrece activar, esté como esté el sitio. Lo decide la campaña que se
+   * arma o se abre, no la dirección: un archivo de personas abierto sin pedirlas no cobra, y uno de cuentas abierto pidiendo
+   * personas sigue cobrando como siempre. La dirección solo manda cuando no hay archivo abierto (y en la demostración).
    */
-  const sinCobro = (): boolean => deps.identidad === "persona";
+  const sinCobro = (): boolean =>
+    f.premioEnMano !== undefined || f.conservado?.identidad === "persona" || (f.conservado === undefined && deps.identidad === "persona");
   /** Se puede activar desde esta página: hay con qué guardar el borrador, no es la demostración (no guarda nada) y hay cobro. */
   const puedeActivar = (): boolean => deps.activar !== undefined && !deps.demo && !sinCobro();
   const clavePaso = (n: NumeroDePaso): string => (n === 6 && puedeActivar() ? CLAVE_DEL_ULTIMO_PASO_CON_ACTIVAR : (CLAVE_DE_PASO[n - 1] ?? "ccPaso1"));
