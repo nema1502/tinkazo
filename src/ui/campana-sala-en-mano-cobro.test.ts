@@ -98,6 +98,24 @@ describe("el premio en mano con el cobro prendido", () => {
     expect(c.llamadas).toEqual([]);
   });
 
+  it("la vista previa dice el premio escrito y no un monto", async () => {
+    const m = mundo();
+    m.cuenta = cuentaDePrueba(5);
+    const p = nuevoPanel(m);
+    await elegirArchivo(m, p, archivoDe({ ...EN_MANO, premios: ["0", "0", "0"] }));
+    await suelta(6);
+    expect(texto(p, "#cpo-premio")).toBe("Auriculares, para 3 personas");
+  });
+
+  it("la vista previa de una sola persona dice solo el premio", async () => {
+    const m = mundo();
+    m.cuenta = cuentaDePrueba(5);
+    const p = nuevoPanel(m);
+    await elegirArchivo(m, p, archivoDe(EN_MANO));
+    await suelta(6);
+    expect(texto(p, "#cpo-premio")).toBe("Auriculares");
+  });
+
   it("una campaña de cuentas con el mismo cobro sigue pidiendo cargar", async () => {
     const m = mundo();
     m.cuenta = cuentaDePrueba(5);

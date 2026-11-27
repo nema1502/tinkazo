@@ -14,7 +14,7 @@ import {
 } from "../campana/puente";
 import { anotarDuenaDelBorrador, borradorEsDeOtra, borrarBorrador, leerBorrador } from "../campana/borrador";
 import { DOLAR, dolaresEnTexto, esDeCentavosJustos } from "../campana/comision";
-import { fechaTexto, horaTexto, premiosTexto } from "../campana/formato";
+import { fechaTexto, horaTexto, textoDelPremio } from "../campana/formato";
 import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
 import { reglaQueFalla } from "../campana/reglas-de-activar";
 import { ESPERA_TOKEN_MS } from "../campana/sesion";
@@ -3100,7 +3100,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     previaEl.hidden = vista !== "previa" || !campana;
     if (campana && vista === "previa") {
       // Con el cobro prendido todos los montos del panel llevan dos decimales: el premio también (120,00 y no 120).
-      premioEl.textContent = premiosTexto(campana.premios, deps.idioma(), cm?.activo() === true);
+      premioEl.textContent = textoDelPremio(campana, deps.idioma(), cm?.activo() === true);
       const logo = campana.empresa.logo;
       logoEl.hidden = logo === null;
       if (logo) logoEl.src = `data:${logo.tipo};base64,${logo.datos}`;
