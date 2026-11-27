@@ -69,6 +69,8 @@ export interface EstadoPropio extends DatosDeLaRonda {
   quitada?: MotivoDeSalida;
   gano?: boolean;
   avisado?: boolean;
+  /** Solo en una campaña de personas y solo a quien ganó: cuatro cifras que se le muestran a quien organiza para recibir el premio. */
+  codigo?: string;
 }
 export type MotivoDeAlta =
   | "llena"
@@ -255,6 +257,8 @@ interface EstadoInterno {
   comprobante: string | null;
   avisado: boolean;
   motivoSalida: MotivoDeSalida;
+  /** El último código de entrega que dio la sala: se conserva si una consulta siguiente no lo trae. */
+  codigo: string | null;
   festejoGrandeHecho: boolean;
 }
 
@@ -330,6 +334,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     comprobante: null,
     avisado: false,
     motivoSalida: "otro",
+    codigo: null,
     festejoGrandeHecho: false,
   };
   let desmontado = false;
@@ -950,6 +955,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
         avisado: estado.avisado,
         comprobante: estado.comprobante,
         variante: premio?.varianteDeGanaste(deps, cuentaParaGanar()) ?? null,
+        codigo: estado.codigo,
       });
       if (!estado.festejoGrandeHecho) {
         estado.festejoGrandeHecho = true;
@@ -991,7 +997,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       return;
     }
     if (estado.pantalla === "entrega") {
-      pintarEntrega(raiz, deps);
+      pintarEntrega(raiz, deps, estado.codigo);
       return;
     }
     if (estado.pantalla === "lista") {
@@ -1116,6 +1122,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     if (desmontado) return;
     const avisadoAntes = estado.avisado;
     estado.propio = propio;
+    if (propio.codigo !== undefined) estado.codigo = propio.codigo;
     estado.publico = {
       fase: propio.fase,
       total: propio.total,
@@ -1404,6 +1411,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     estado.sesion = null;
     estado.memoria = null;
     estado.propio = null;
+    estado.codigo = null;
     estado.errorAlta = null;
     estado.festejoGrandeHecho = false;
     entrada.desde = null;

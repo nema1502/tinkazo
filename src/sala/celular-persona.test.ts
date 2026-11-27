@@ -146,6 +146,16 @@ describe("miEstadoDePersona", () => {
     expect(r).toMatchObject({ fase: "sorteada", total: 40, anotada: true, gano: true, ronda: 12, sorteo: "5" });
   });
 
+  it("lee el código de entrega de quien ganó, y solo si son cuatro cifras", async () => {
+    const base = { fase: "sorteada", total: 40, cierraMs: INICIO, anotada: true, gano: true, puesto: 1 };
+    const con = async (codigo: unknown, resto: Record<string, unknown> = {}) =>
+      miEstadoDePersona(SERVICIO, SALA, CUERPO.llave, { fetch: fetchFalso([{ estado: 200, cuerpo: { ...base, ...resto, codigo } }]).f });
+    expect(await con("0421")).toMatchObject({ gano: true, codigo: "0421" });
+    for (const malo of ["042", "04211", "12a4", " 421", 4211, null, ["0421"]]) expect(await con(malo)).not.toHaveProperty("codigo");
+    // A quien no ganó no se le toma ningún código, aunque la respuesta lo traiga.
+    expect(await con("0421", { gano: false })).not.toHaveProperty("codigo");
+  });
+
   it("lee que quitaron a la persona y que no está anotada", async () => {
     const quitada = fetchFalso([{ estado: 200, cuerpo: { fase: "abierta", total: 3, cierraMs: INICIO, anotada: false, quitada: "pidio" } }]);
     expect(await miEstadoDePersona(SERVICIO, SALA, CUERPO.llave, { fetch: quitada.f })).toMatchObject({ anotada: false, quitada: "pidio" });
