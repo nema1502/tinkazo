@@ -17,6 +17,9 @@ import { comisionDelBuild } from "./stellar/comision-config";
 import { comisionDelArmado } from "./campana/crear/costo";
 import { entornoDelBuild } from "./stellar/venta-piloto";
 import { anotarseSinBilleteraActivo } from "./campana/persona-bandera";
+import { campanasConGoogleActivo } from "./campana/con-google-bandera";
+import { UNIDADES_POR_DOLAR } from "./campana/crear/constantes";
+import { pedidoDeModo } from "./campana/crear/modo";
 
 const raiz = document.querySelector<HTMLElement>("#ccp");
 const aviso = document.querySelector<HTMLElement>("#ccp-aviso");
@@ -74,9 +77,12 @@ function activarEnElPanel(texto: string): boolean {
 function depsReales(): DepsDelCreador {
   // Lo que cobra Tinkazo, el mismo cobro que después pide el panel de la portada.
   const cobro = comisionDelBuild(entornoDelBuild());
-  // Una campaña de personas no lleva cobro, comisión ni activación: la firma Tinkazo y se baja como archivo. Lo decide el panel
-  // según la campaña que arma o abre, así que acá el cobro va siempre y no depende de la dirección.
+  // Una campaña de personas con el premio en mano no lleva cobro, comisión ni activación: la firma Tinkazo y se baja como archivo.
+  // Una de personas con el premio en dólares cobra y se activa como una de cuentas. Lo decide el panel según la campaña que arma o
+  // abre, así que acá el cobro va siempre y no depende de la dirección.
   const persona = anotarseSinBilleteraActivo() && parametros.get("identidad") === "persona";
+  // Las campañas con Google: con los dos interruptores del sitio, una campaña nueva con premio en dólares se arma de personas.
+  const conGoogle = campanasConGoogleActivo();
   return {
     tx: texto,
     dic: (idioma, clave) => String(textos(idioma)[clave] ?? clave),
@@ -109,6 +115,15 @@ function depsReales(): DepsDelCreador {
     tema: parametros.get("theme"),
     // Anotarse sin billetera: solo con el interruptor del sitio y el parámetro en la dirección. Sin los dos, la campaña de siempre.
     ...(persona ? { identidad: "persona" as const } : {}),
+    // Con las campañas con Google el panel recibe qué pide la dirección (nada, `identidad=persona` para el premio en mano o
+    // `identidad=cuenta` para una campaña de cuentas) y lo que cuesta mandar cada premio, que es el costo del retiro del sitio:
+    // el mismo número que exige la sala al activar. Sin los dos interruptores estas dos claves no van y el panel es el de siempre.
+    ...(conGoogle
+      ? {
+          modo: pedidoDeModo({ sinBilletera: anotarseSinBilleteraActivo(), conGoogle, identidad: parametros.get("identidad") }),
+          envio: cobro === null ? null : Number(cobro.costo) / Number(UNIDADES_POR_DOLAR),
+        }
+      : {}),
     cuadro: (f) => {
       if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => f());
       else window.setTimeout(f, 16);
