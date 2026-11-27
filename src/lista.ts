@@ -9,6 +9,7 @@ import { decodePreview } from "./protocol/proof";
 import { buscar, repetidos, vecesExacto } from "./buscar";
 import { contar, seCuentaPorPersona } from "./participaciones";
 import { modesFlagOn, requestedMode } from "./modos/bandera";
+import { esLineaDePersona } from "./campana/forma-persona";
 
 /**
  * La lista para revisar antes de sellar, en el celular de cada participante.
@@ -33,6 +34,26 @@ function cabinaDe(i: number): string {
   return t("listaCabina").replace("{g}", GRUPOS[g]?.nombre ?? "").replace("{l}", t(LINEAS[g] ?? "teleLinea0"));
 }
 
+/**
+ * Una línea de persona no nombra a nadie y nunca se muestra tal cual: se ve su lugar en la lista («Lugar 3»). Es la regla
+ * de `filaVisible` (`ui/ganadores-de-la-verificacion.ts`), copiada acá para que esta página no cargue el resto de ese archivo.
+ */
+function filaDeLaLista(fila: string, i: number): string {
+  return esLineaDePersona(fila) ? t("vLugar").replace("{n}", String(i + 1)) : fila;
+}
+
+/**
+ * Con alguna línea de persona no hay nombres que buscar: el buscador no se muestra. Con una lista sin líneas la página no
+ * toca nada y queda como siempre. Va con `display` además de `hidden` porque la hoja de estilos le da `display: block` a
+ * la etiqueta (`.portada-sec > .kicker`).
+ */
+function sinBuscador(): void {
+  for (const el of document.querySelectorAll<HTMLElement>('#l-buscar, #l-buscar-out, label[for="l-buscar"]')) {
+    el.hidden = true;
+    el.style.display = "none";
+  }
+}
+
 function pintar(): void {
   const conCabina = new URLSearchParams(location.search).get("juego") === "teleferico";
   const rep = repetidos(names);
@@ -48,7 +69,7 @@ function pintar(): void {
       : t("salaPart").replace("{n}", String(personas)).replace("{k}", String(participaciones));
   $("l-huella").textContent = hash.slice(0, 12) + "…";
   $("l-lista").innerHTML = names
-    .map((n, i) => `<li data-p="${i + 1}"${rep.has(i) ? ' class="rep"' : ""}>${esc(n)}${rep.has(i) ? ` <em>${esc(t("salaRep"))}</em>` : ""}${conCabina ? `<small class="cabina" style="display:block;opacity:.75">${esc(cabinaDe(i))}</small>` : ""}</li>`)
+    .map((n, i) => `<li data-p="${i + 1}"${rep.has(i) ? ' class="rep"' : ""}>${esc(filaDeLaLista(n, i))}${rep.has(i) ? ` <em>${esc(t("salaRep"))}</em>` : ""}${conCabina ? `<small class="cabina" style="display:block;opacity:.75">${esc(cabinaDe(i))}</small>` : ""}</li>`)
     .join("");
   buscarAhora();
 }
@@ -109,6 +130,7 @@ async function main(): Promise<void> {
       $("l-premio-row").style.display = "block";
     }
     $("l-ok").style.display = "block";
+    if (names.some((n) => esLineaDePersona(n))) sinBuscador();
     pintar();
     $<HTMLInputElement>("l-buscar").addEventListener("input", buscarAhora);
     onLangChange(pintar);

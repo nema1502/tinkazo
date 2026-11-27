@@ -1302,8 +1302,9 @@ function cabeceraDeEvento(g: Entry[], gi: number): string {
  *
  * Con comillas dobles en todos los campos y las comillas internas duplicadas,
  * que es lo que manda el RFC 4180. Un nombre con una coma adentro rompe un CSV
- * hecho a la ligera, y acá los nombres son de personas de verdad. Y un nombre
- * que empieza como una fórmula no se ejecuta en la planilla de quien lo abre.
+ * hecho a la ligera, y acá los nombres son de personas de verdad. Y en un
+ * sorteo con líneas de persona, un nombre que empieza como una fórmula no se
+ * ejecuta en la planilla de quien lo abre.
  */
 export function toCsv(organizer: string): string {
   const head = [
@@ -1311,13 +1312,17 @@ export function toCsv(organizer: string): string {
     "ronda", "premio", "tx_sello", "tx_sorteo", "comprobante", "origen", "contrato",
   ];
   // Una planilla toma por fórmula lo que empieza con =, +, -, @, una tabulación o un retorno de carro, y la ejecuta al abrir
-  // el archivo. Esos valores llevan un apóstrofo adelante, en todas las columnas, y la planilla los lee como texto.
-  const q = (v: string | number | undefined): string => {
+  // el archivo. En un sorteo cuya lista sellada tiene alguna línea de persona, el nombre de quien ganó lo eligió cada
+  // persona en su cuenta: ahí esos valores llevan un apóstrofo adelante, en todas las columnas, y la planilla los lee como
+  // texto. Un sorteo sin líneas da el archivo de siempre, letra por letra.
+  const qBase = (v: string | number | undefined, conLineas: boolean): string => {
     const s = String(v ?? "");
-    return `"${(/^[=+\-@\t\r]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
+    return `"${(conLineas && /^[=+\-@\t\r]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
   };
-  const rows = historyOf(organizer).map((e) =>
-    [
+  const rows = historyOf(organizer).map((e) => {
+    const conLineas = (e.names ?? []).some((n) => esLineaDePersona(n));
+    const q = (v: string | number | undefined): string => qBase(v, conLineas);
+    return [
       q(e.id ?? ""),
       q(new Date(e.sealedAt * 1000).toISOString()),
       q(e.organizer),
@@ -1336,9 +1341,9 @@ export function toCsv(organizer: string): string {
       q(e.fromChain ? "cadena" : "equipo"),
       // El id solo no dice de qué contrato es: arrancan en 1 en cada uno.
       q(e.contract ?? ""),
-    ].join(","),
-  );
-  return [head.map(q).join(","), ...rows].join("\n");
+    ].join(",");
+  });
+  return [head.map((v) => qBase(v, false)).join(","), ...rows].join("\n");
 }
 
 /** Baja el historial como archivo. */

@@ -133,7 +133,8 @@ describe("Mis sorteos con una lista de personas", () => {
 /**
  * El archivo que se baja se abre en una planilla, y una planilla ejecuta como fórmula lo que empieza con =, +, -, @, una
  * tabulación o un retorno de carro. En una campaña de personas el nombre de quien ganó lo eligió cada persona en su cuenta,
- * así que esos valores llevan un apóstrofo adelante, en todas las columnas. Lo demás del archivo no cambia.
+ * así que esos valores llevan un apóstrofo adelante, en todas las columnas. Solo en un sorteo cuya lista sellada tiene
+ * alguna línea de persona: un sorteo sin líneas da el archivo de siempre, letra por letra. Lo demás del archivo no cambia.
  */
 describe("el archivo de Mis sorteos y las fórmulas de una planilla", () => {
   const CABECERA = '"id","fecha","cuenta","list_hash","participantes","ganadores","ronda","premio","tx_sello","tx_sorteo","comprobante","origen","contrato"';
@@ -154,7 +155,7 @@ describe("el archivo de Mis sorteos y las fórmulas de una planilla", () => {
     const hist = await import("./history");
     const casos = ["=1+1", "+1+1", "-1+1", "@SUMA(A1)", "\tcmd", "\rcmd"];
     casos.forEach((valor, i) => {
-      hist.remember(sorteoDePersonas({ names: [valor, "Beto", "Carla", "Diego"], winners: [valor, "Beto"], prize: valor, id: valor, round: 100 + i }) as never);
+      hist.remember(sorteoDePersonas({ names: [valor, "Beto", LINEAS[0], LINEAS[1]], winners: [valor, "Beto"], prize: valor, id: valor, round: 100 + i }) as never);
     });
     // El retorno de carro va adentro de una celda entre comillas: las filas se separan solo por el salto de línea.
     const filas = hist.toCsv(WHO).split("\n").slice(1);
@@ -183,5 +184,33 @@ describe("el archivo de Mis sorteos y las fórmulas de una planilla", () => {
         `"9","${new Date((AHORA - 120) * 1000).toISOString()}","${WHO}","${"ab".repeat(32)}","4","Carla | Ana ""la","77","Auriculares, x2","","","https://tinkazo.app/verificar.html#rPRUEBA","equipo",""`,
       ].join("\n"),
     );
+  });
+
+  it("un sorteo de nombres con un nombre que empieza con = sale como siempre, sin apóstrofo", async () => {
+    const hist = await pintar(
+      sorteoDePersonas({ names: ["=Ana", "Beto", "Carla", "Diego"], winners: ["=Ana", "-Beto"], prize: "+1 premio", id: "@9" }),
+    );
+    expect(hist.toCsv(WHO)).toBe(
+      [
+        CABECERA,
+        `"@9","${new Date((AHORA - 120) * 1000).toISOString()}","${WHO}","${"ab".repeat(32)}","4","=Ana | -Beto","77","+1 premio","","","https://tinkazo.app/verificar.html#rPRUEBA","equipo",""`,
+      ].join("\n"),
+    );
+  });
+
+  it("un sorteo sin lista guardada sale como siempre, sin apóstrofo", async () => {
+    const hist = await pintar(sorteoDePersonas({ names: undefined, winners: ["=Ana"], prize: "=premio" }));
+    const celda = fila(hist.toCsv(WHO));
+    expect(celda[5]).toBe("=Ana");
+    expect(celda[7]).toBe("=premio");
+  });
+
+  it("en un mismo archivo, el apóstrofo va solo en las filas de sorteos con líneas de persona", async () => {
+    const hist = await import("./history");
+    hist.remember(sorteoDePersonas({ names: ["=Ana", "Beto"], winners: ["=Ana"], prize: "=uno", round: 201 }) as never);
+    hist.remember(sorteoDePersonas({ names: ["=Ana", LINEAS[0]], winners: ["=Ana"], prize: "=dos", round: 202 }) as never);
+    const filas = hist.toCsv(WHO).split("\n").slice(1).map(celdas);
+    expect(filas.find((c) => c[6] === "201")?.[7]).toBe("=uno");
+    expect(filas.find((c) => c[6] === "202")?.[7]).toBe("'=dos");
   });
 });
