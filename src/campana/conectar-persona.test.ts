@@ -319,7 +319,8 @@ describe("depsDePersona: el permiso para guardar el perfil", () => {
     const { deps, llamadas, entrar } = montar({ alta: guion }, { congelado });
     const token = tokenDe("Ana Pérez");
     const sesion = entrar(token);
-    await (congelado ? correrDeAPoco : correr)(deps.anotar(sesion?.nombre ?? null, () => undefined));
+    const alta = deps.anotar(sesion?.nombre ?? null, () => undefined);
+    await (congelado ? correrDeAPoco(alta) : correr(alta));
     return { crudos: llamadas.filter((l) => l.ruta === "alta").map((l) => String(l.init.body)), token };
   }
 
@@ -345,12 +346,14 @@ describe("depsDePersona: el permiso para guardar el perfil", () => {
     expect((JSON.parse(crudos[0] ?? "{}") as { perfil?: unknown }).perfil).toBe(true);
   });
 
-  it.each([
+  const SIN_PERMISO: [string, Record<string, string>][] = [
     ["sin anotarse sin billetera", { VITE_ANOTARSE_SIN_BILLETERA: "", VITE_GUARDAR_PERFIL: "1" }],
     ["con la bandera en 0", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "0" }],
     ["con la bandera en true", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "true" }],
     ["con la bandera vacía", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "" }],
-  ])("%s no lo manda: el cuerpo es el de siempre", async (_caso, entorno) => {
+  ];
+
+  it.each(SIN_PERMISO)("%s no lo manda: el cuerpo es el de siempre", async (_caso, entorno) => {
     for (const [nombre, valor] of Object.entries(entorno)) vi.stubEnv(nombre, valor);
     const { crudos, token } = await cuerposDelAlta();
     expect(crudos[0]).toBe(deSiempre(crudos[0] ?? "", token));

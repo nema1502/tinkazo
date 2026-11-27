@@ -289,11 +289,13 @@ describe("una campaña de personas: lo que la pantalla dice que se guarda", () =
     expect(prendida.replace(NOTA_CON_PERFIL, NOTA_DE_SIEMPRE).replace(REGLA_CON_PERFIL, TEXTOS_CAMPANA.es.cpQueGuardamosPersona ?? "")).toBe(apagada);
   });
 
-  it.each([
+  const APAGADA: [string, Record<string, string>][] = [
     ["sin anotarse sin billetera", { VITE_ANOTARSE_SIN_BILLETERA: "", VITE_GUARDAR_PERFIL: "1" }],
     ["con la bandera en 0", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "0" }],
     ["con la bandera en true", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "true" }],
-  ])("%s la pantalla es idéntica a la de hoy", (_caso, entorno) => {
+  ];
+
+  it.each(APAGADA)("%s la pantalla es idéntica a la de hoy", (_caso, entorno) => {
     const deHoy = previa(true).marcado;
     for (const [nombre, valor] of Object.entries(entorno)) vi.stubEnv(nombre, valor);
     expect(previa(true).marcado).toBe(deHoy);
