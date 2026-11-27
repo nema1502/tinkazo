@@ -327,18 +327,61 @@ describe("depsDePersona: los textos que dicen qué se guarda", () => {
     vi.unstubAllEnvs();
   });
 
-  it("sin la bandera pide los textos de siempre, tal cual", () => {
-    const { deps } = montar({});
-    for (const clave of ["cpEntrarNotaPersona", "cpQueGuardamosPersona", "cpQueGuardamos", "cpTitulo"]) expect(deps.tx(clave), clave).toBe(clave);
-  });
-
-  it("con la bandera prendida cambia solo esos dos por los del perfil", () => {
+  const CLAVES_DEL_PERFIL = ["cpEntrarNotaPersona", "cpQueGuardamosPersona"];
+  const OTRAS = ["cpEntrarNota", "cpQueGuardamos", "cpTitulo"];
+  const prenderElSitio = (): void => {
     vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
     vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
-    const { deps } = montar({});
+  };
+  const CON_PERFIL = { estado: 200, cuerpo: { ...ESTADO_BUENO, perfil: true } };
+  const SIN_PERFIL = { estado: 200, cuerpo: ESTADO_BUENO };
+
+  it("sin la bandera pide los textos de siempre, tal cual, también si la sala dice que guarda", async () => {
+    const { deps } = montar({ estado: [CON_PERFIL] });
+    for (const clave of [...CLAVES_DEL_PERFIL, ...OTRAS]) expect(deps.tx(clave), clave).toBe(clave);
+    await deps.publico();
+    for (const clave of [...CLAVES_DEL_PERFIL, ...OTRAS]) expect(deps.tx(clave), clave).toBe(clave);
+  });
+
+  it("con la bandera prendida y la sala sin confirmar, pide los de siempre: la pantalla no promete lo que no sabe", async () => {
+    prenderElSitio();
+    const { deps } = montar({ estado: [CON_PERFIL] });
+    for (const clave of CLAVES_DEL_PERFIL) expect(deps.tx(clave), clave).toBe(clave);
+  });
+
+  it("con la bandera prendida y la sala que dice que guarda, cambia solo esos dos por los del perfil", async () => {
+    prenderElSitio();
+    const { deps } = montar({ estado: [CON_PERFIL] });
+    await deps.publico();
     expect(deps.tx("cpEntrarNotaPersona")).toBe("cpEntrarNotaPerfil");
     expect(deps.tx("cpQueGuardamosPersona")).toBe("cpQueGuardamosPerfil");
-    for (const clave of ["cpEntrarNota", "cpQueGuardamos", "cpTitulo"]) expect(deps.tx(clave), clave).toBe(clave);
+    for (const clave of OTRAS) expect(deps.tx(clave), clave).toBe(clave);
+  });
+
+  it("con la bandera prendida y la sala apagada, que no trae el campo, o lo trae en otra cosa que true, pide los de siempre", async () => {
+    prenderElSitio();
+    for (const paso of [SIN_PERFIL, { estado: 200, cuerpo: { ...ESTADO_BUENO, perfil: false } }, { estado: 200, cuerpo: { ...ESTADO_BUENO, perfil: "true" } }, { estado: 200, cuerpo: { ...ESTADO_BUENO, perfil: 1 } }]) {
+      const { deps } = montar({ estado: [paso] });
+      await deps.publico();
+      for (const clave of CLAVES_DEL_PERFIL) expect(deps.tx(clave), JSON.stringify(paso.cuerpo)).toBe(clave);
+    }
+  });
+
+  it("sigue a la sala: si en la consulta siguiente ya no guarda, los textos vuelven a los de siempre", async () => {
+    prenderElSitio();
+    const { deps } = montar({ estado: [CON_PERFIL, SIN_PERFIL] });
+    await deps.publico();
+    expect(deps.tx("cpEntrarNotaPersona")).toBe("cpEntrarNotaPerfil");
+    await deps.publico();
+    expect(deps.tx("cpEntrarNotaPersona")).toBe("cpEntrarNotaPersona");
+  });
+
+  it("una consulta que falla no cambia lo que la sala había dicho", async () => {
+    prenderElSitio();
+    const { deps } = montar({ estado: [CON_PERFIL, "corte"] });
+    await deps.publico();
+    expect(await deps.publico()).toBe("red");
+    expect(deps.tx("cpEntrarNotaPersona")).toBe("cpEntrarNotaPerfil");
   });
 });
 
@@ -347,9 +390,29 @@ describe("depsDePersona: el permiso para guardar el perfil", () => {
     vi.unstubAllEnvs();
   });
 
-  /** Anota a una persona y devuelve los cuerpos de los pedidos del alta, tal como salieron, y su token. */
-  async function cuerposDelAlta(guion: Paso[] = [ALTA_OK], congelado = false): Promise<{ crudos: string[]; token: string }> {
-    const { deps, llamadas, entrar } = montar({ alta: guion }, { congelado });
+  const CON_PERFIL = { estado: 200, cuerpo: { ...ESTADO_BUENO, perfil: true } };
+  const SIN_PERFIL = { estado: 200, cuerpo: ESTADO_BUENO };
+  const prenderElSitio = (): void => {
+    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
+    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
+  };
+
+  /**
+   * Anota a una persona y devuelve los cuerpos de los pedidos del alta, tal como salieron, y su token. `pantalla` es lo que la
+   * persona vio: las consultas de la sala que la página hizo, una por una, y después de cada una la previa pidiendo los dos textos.
+   * Sin consultas, la previa nunca se pintó.
+   */
+  async function cuerposDelAlta(
+    guion: Paso[] = [ALTA_OK],
+    congelado = false,
+    pantalla: Paso[] = [],
+  ): Promise<{ crudos: string[]; token: string }> {
+    const { deps, llamadas, entrar } = montar({ alta: guion, ...(pantalla.length > 0 ? { estado: pantalla } : {}) }, { congelado });
+    for (let i = 0; i < pantalla.length; i += 1) {
+      await deps.publico();
+      deps.tx("cpEntrarNotaPersona");
+      deps.tx("cpQueGuardamosPersona");
+    }
     const token = tokenDe("Ana Pérez");
     const sesion = entrar(token);
     const alta = deps.anotar(sesion?.nombre ?? null, () => undefined);
@@ -363,20 +426,46 @@ describe("depsDePersona: el permiso para guardar el perfil", () => {
     return JSON.stringify({ google: token, d: leido.d, llave: leido.llave, p: PASE });
   };
 
-  it("sin la bandera, el cuerpo del alta es byte a byte el de siempre", async () => {
-    const { crudos, token } = await cuerposDelAlta();
+  it("sin la bandera, el cuerpo del alta es byte a byte el de siempre, aunque la sala diga que guarda", async () => {
+    for (const pantalla of [[], [CON_PERFIL]]) {
+      const { crudos, token } = await cuerposDelAlta([ALTA_OK], false, pantalla);
+      expect(crudos).toHaveLength(1);
+      expect(crudos[0]).toBe(deSiempre(crudos[0] ?? "", token));
+      expect(crudos[0]).not.toContain("perfil");
+    }
+  });
+
+  it("con la bandera y la sala que dice que guarda, suma perfil: true al final, y es lo único que cambia", async () => {
+    prenderElSitio();
+    const { crudos, token } = await cuerposDelAlta([ALTA_OK], false, [CON_PERFIL]);
     expect(crudos).toHaveLength(1);
+    expect(crudos[0]).toBe(`${deSiempre(crudos[0] ?? "", token).slice(0, -1)},"perfil":true}`);
+    expect((JSON.parse(crudos[0] ?? "{}") as { perfil?: unknown }).perfil).toBe(true);
+  });
+
+  it("con la bandera y la sala apagada, la pantalla no dijo que se guarda y el cuerpo es el de siempre", async () => {
+    prenderElSitio();
+    const { crudos, token } = await cuerposDelAlta([ALTA_OK], false, [SIN_PERFIL]);
     expect(crudos[0]).toBe(deSiempre(crudos[0] ?? "", token));
     expect(crudos[0]).not.toContain("perfil");
   });
 
-  it("con la bandera prendida suma perfil: true al final, y es lo único que cambia", async () => {
-    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
-    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
+  it("con la bandera y sin que la pantalla haya mostrado nada, no manda el permiso", async () => {
+    prenderElSitio();
     const { crudos, token } = await cuerposDelAlta();
-    expect(crudos).toHaveLength(1);
-    expect(crudos[0]).toBe(`${deSiempre(crudos[0] ?? "", token).slice(0, -1)},"perfil":true}`);
-    expect((JSON.parse(crudos[0] ?? "{}") as { perfil?: unknown }).perfil).toBe(true);
+    expect(crudos[0]).toBe(deSiempre(crudos[0] ?? "", token));
+  });
+
+  it("si la sala dejó de guardar y la pantalla se pintó de nuevo con los textos de siempre, no manda el permiso", async () => {
+    prenderElSitio();
+    const { crudos, token } = await cuerposDelAlta([ALTA_OK], false, [CON_PERFIL, SIN_PERFIL]);
+    expect(crudos[0]).toBe(deSiempre(crudos[0] ?? "", token));
+  });
+
+  it("si la sala vuelve a guardar y la pantalla se pintó de nuevo con los textos del perfil, lo manda", async () => {
+    prenderElSitio();
+    const { crudos } = await cuerposDelAlta([ALTA_OK], false, [SIN_PERFIL, CON_PERFIL]);
+    expect(crudos[0]).toContain('"perfil":true');
   });
 
   const SIN_PERMISO: [string, Record<string, string>][] = [
@@ -386,16 +475,15 @@ describe("depsDePersona: el permiso para guardar el perfil", () => {
     ["con la bandera vacía", { VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "" }],
   ];
 
-  it.each(SIN_PERMISO)("%s no lo manda: el cuerpo es el de siempre", async (_caso, entorno) => {
+  it.each(SIN_PERMISO)("%s no lo manda: el cuerpo es el de siempre, aunque la sala diga que guarda", async (_caso, entorno) => {
     for (const [nombre, valor] of Object.entries(entorno)) vi.stubEnv(nombre, valor);
-    const { crudos, token } = await cuerposDelAlta();
+    const { crudos, token } = await cuerposDelAlta([ALTA_OK], false, [CON_PERFIL]);
     expect(crudos[0]).toBe(deSiempre(crudos[0] ?? "", token));
   });
 
   it("el alta que se repite porque la respuesta se perdió lleva el mismo cuerpo, con su permiso", async () => {
-    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
-    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
-    const { crudos } = await cuerposDelAlta(["corte", "corte", { estado: 200, cuerpo: { anotada: true, ya: true } }], true);
+    prenderElSitio();
+    const { crudos } = await cuerposDelAlta(["corte", "corte", { estado: 200, cuerpo: { anotada: true, ya: true } }], true, [CON_PERFIL]);
     expect(crudos).toHaveLength(3);
     expect(new Set(crudos).size).toBe(1);
     expect(crudos[2]).toContain('"perfil":true');

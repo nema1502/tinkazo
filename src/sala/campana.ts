@@ -175,6 +175,8 @@ export async function estadoPublico(
     cierraMs: c.cierraMs,
     pase: vigencia as EstadoPublico["pase"],
     correo: c.correo === true,
+    // Solo el true exacto: sin el campo, o con otra cosa, la sala no guarda perfiles y el estado queda como siempre.
+    ...(c.perfil === true ? { perfil: true } : {}),
     ...datosDeLaRonda(c, c.fase, r.horaSala),
   };
 }
