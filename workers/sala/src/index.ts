@@ -250,11 +250,16 @@ import { verificarIdentidadDeGoogle } from "./identidad-google";
 import { codigosDeEntrega, esLineaDePersona, lineaDePersona } from "./linea-persona";
 import { clavePorConexion, clienteDeGoogle, personasPrendido, venceDelToken } from "./personas";
 import type { VariablesDePersonas } from "./personas";
+import { crearTablaDePerfiles, guardarPerfil as guardarPerfilEnTabla } from "./perfiles";
+import type { PerfilLimpio, VariablesDePerfiles } from "./perfiles";
 import deployments from "../../../src/stellar/deployments.json";
 
-export interface Env extends VariablesDeActivar, VariablesDeLlaveAuto, VariablesDePersonas {
+export interface Env extends VariablesDeActivar, VariablesDeLlaveAuto, VariablesDePersonas, VariablesDePerfiles {
   SALA: DurableObjectNamespace<Sala>;
-  /** Un solo objeto, "cupos": cuenta las salas nuevas por dirección y por día. */
+  /**
+   * Un solo objeto, "cupos": cuenta las salas nuevas por dirección y por día. Como no se borra con las salas, también lleva la
+   * tabla de perfiles (`perfiles.ts`).
+   */
   CUPOS: DurableObjectNamespace<Cupos>;
   /** Solo para probar la alarma en local: `wrangler dev --var VIDA_PRUEBA_MS:3000`. En producción no existe. */
   VIDA_PRUEBA_MS?: string;
@@ -390,6 +395,9 @@ export class Cupos extends DurableObject<Env> {
     // La tabla de eventos (con sus columnas nuevas) y las de Tus campañas nacen con el objeto, no la primera vez que alguien las usa.
     crearTablaDeEventos(this.sql);
     crearTablasDeActivar(this.sql);
+    // Los perfiles de quienes se anotan con Google en una campaña de personas (`perfiles.ts`). La tabla nace vacía y así queda
+    // mientras el interruptor PERFILES esté apagado.
+    crearTablaDePerfiles(this.sql);
   }
 
   /** La sal de esta hora: se inventa la primera vez que se pide. */
@@ -615,6 +623,15 @@ export class Cupos extends DurableObject<Env> {
   /** Deshace la reserva si la sala no llegó a crearse. */
   async soltarCampana(evento: string, reserva: string): Promise<void> {
     soltarEventoSql(this.sql, evento, reserva);
+  }
+
+  /**
+   * Guarda el perfil, ya limpio, de quien se anotó con Google en una campaña de personas (ver `perfiles.ts`). Vive en este
+   * objeto, que es uno solo y no se borra con las salas: por eso el perfil dura más que la sala donde la persona se anotó. Dice
+   * si la persona es nueva. Este objeto no tiene ningún método que lea, liste ni borre perfiles.
+   */
+  async guardarPerfil(perfil: PerfilLimpio): Promise<{ nueva: boolean }> {
+    return guardarPerfilEnTabla(this.sql, perfil, Date.now());
   }
 }
 
