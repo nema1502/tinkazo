@@ -1302,14 +1302,20 @@ function cabeceraDeEvento(g: Entry[], gi: number): string {
  *
  * Con comillas dobles en todos los campos y las comillas internas duplicadas,
  * que es lo que manda el RFC 4180. Un nombre con una coma adentro rompe un CSV
- * hecho a la ligera, y acá los nombres son de personas de verdad.
+ * hecho a la ligera, y acá los nombres son de personas de verdad. Y un nombre
+ * que empieza como una fórmula no se ejecuta en la planilla de quien lo abre.
  */
 export function toCsv(organizer: string): string {
   const head = [
     "id", "fecha", "cuenta", "list_hash", "participantes", "ganadores",
     "ronda", "premio", "tx_sello", "tx_sorteo", "comprobante", "origen", "contrato",
   ];
-  const q = (v: string | number | undefined): string => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  // Una planilla toma por fórmula lo que empieza con =, +, -, @, una tabulación o un retorno de carro, y la ejecuta al abrir
+  // el archivo. Esos valores llevan un apóstrofo adelante, en todas las columnas, y la planilla los lee como texto.
+  const q = (v: string | number | undefined): string => {
+    const s = String(v ?? "");
+    return `"${(/^[=+\-@\t\r]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
+  };
   const rows = historyOf(organizer).map((e) =>
     [
       q(e.id ?? ""),
