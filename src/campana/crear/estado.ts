@@ -77,8 +77,10 @@ export interface FormularioDeCampana {
   /** Dólares digitales enteros que se lleva cada persona. */
   monto: number | null;
   /**
-   * Solo en una campaña de personas: lo que se lleva cada persona, escrito, y que se entrega en mano. Con el campo presente (aunque
-   * esté vacío) no hay montos. Falta en las campañas de cuentas. Un archivo de personas que traía dólares se abre con el campo vacío.
+   * Solo en una campaña de personas con el premio en mano: lo que se lleva cada persona, escrito, y que se entrega en el evento. Con
+   * el campo presente (aunque esté vacío) no hay montos. Falta en las campañas de cuentas y en las de personas con el premio en
+   * dólares, que llevan sus montos. Un archivo de personas que traía dólares se abre con el campo vacío solo donde el armador no
+   * arma campañas de personas con dólares (`modo.ts`): donde sí las arma, se abre con sus montos.
    */
   premioEnMano?: string;
   /** Si se ve el contador de otro monto. */
