@@ -48,12 +48,20 @@ const KB = 1024;
  * terminada para quien recuerda que ganó y el aviso de demasiados intentos. Es código y textos de la página, sin nada de la
  * herramienta. La entrada sigue en 14,9 de 15 KB.
  *
+ * Pasó de 29 a 29,2 KB al sumar lo que la pantalla dice cuando se guarda el perfil de quien se anota con Google: dos textos, en
+ * español y en inglés, la bandera que los prende y las dos líneas de la previa que eligen entre ellos y los de siempre. Son unos
+ * 160 bytes comprimidos (104 en el trozo de textos, 33 en el de la bandera y 25 en la entrada), contados sobre el código y sin
+ * construir el sitio. Con los 28,8 KB medidos antes, la suma queda a la altura del tope de 29 y no se puede saber de qué lado
+ * cae: por eso sube lo mínimo. La entrada suma esos 25 bytes y su tope no se mueve. El HTML con sus textos suma unos 100 bytes
+ * y queda cerca de 7 KB de 8.
+ *
  * El de la entrada pasó de 15 a 15,5 KB y el del código del celular de 29 a 30 KB al corregir tres defectos de la página en una
  * campaña de personas, que suman unos 0,3 KB y no se pueden bajar a pedido porque deciden qué pantalla se pinta: cada pedido a
  * la sala lleva la generación de la pantalla desde la que salió, para que una respuesta vieja no pise la pantalla nueva. La
  * consulta por la llave del celular que queda sin respuesta se repite con tope antes de pintar una pantalla final, y agotada
  * deja Probar de nuevo. Y quien miraba Ganaste conserva su código cuando la sala termina. Son los topes más altos que se
  * aceptaron para esta página: lo que se sume después se baja a pedido o reemplaza a algo que salga.
+ * Los textos del perfil caben dentro de estos topes, que ya los suman.
  */
 export const TOPES = {
   entrada: 15.5 * KB,
@@ -153,6 +161,6 @@ export function informe(medida, topes = TOPES) {
     "Trozos del celular:",
     ...medida.detalle.map((d) => `  ${d.ruta}  ${enKb(d.comprimido)}  (${enKb(d.crudo)} sin comprimir)`),
   ];
-  for (const e of excesos(medida, topes)) renglones.push("", `PASA EL TOPE: ${e.nombre} pesa ${enKb(e.medida)} y el tope es ${enKb(e.tope)}.`);
+  for (const e of excesos(medida, topes)) renglones.push("", `PASA EL TOPE: ${e.nombre} pesa ${enKb(e.medida)} y el tope es ${enKb(e.tope)} (${e.medida} bytes contra ${Math.round(e.tope)}).`);
   return renglones.join("\n");
 }

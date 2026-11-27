@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   URL_DE_LLAVES_DE_GOOGLE,
@@ -16,6 +18,7 @@ const CLIENTE = "cliente-de-prueba.apps.example.org";
 const AHORA = 1_800_000_000_000;
 const SUB = "100000000000000000001";
 const CORREO = "ana@example.org";
+const FOTO = "https://fotos.example.org/a/ana=s96-c";
 
 interface Par {
   kid: string;
@@ -108,7 +111,36 @@ describe("un token de Google bueno", () => {
   it("da el usuario estable y el correo verificado", async () => {
     const b = banco();
     const r = await verificarIdentidadDeGoogle(await firmar(), b.opciones);
-    expect(r).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO });
+    expect(r).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "", azp: "sin" });
+  });
+
+  it("da también el nombre y la dirección de la foto, tal como vienen en el token y sin limpiarlos", async () => {
+    const b = banco();
+    const t = await firmar({ payload: { name: "  Ana   de Prueba \n", picture: "http://fotos.example.org/ana.jpg " } });
+    expect(await verificarIdentidadDeGoogle(t, b.opciones)).toEqual({
+      ok: true,
+      usuario: `google:${SUB}`,
+      correo: CORREO,
+      nombre: "  Ana   de Prueba \n",
+      foto: "http://fotos.example.org/ana.jpg ",
+      azp: "sin",
+    });
+  });
+
+  it("un token sin nombre o sin foto entra igual, con ese dato vacío", async () => {
+    const b = banco();
+    const sinNombre = await verificarIdentidadDeGoogle(await firmar({ payload: { picture: FOTO } }), b.opciones);
+    expect(sinNombre).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: FOTO, azp: "sin" });
+    const sinFoto = await verificarIdentidadDeGoogle(await firmar({ payload: { name: "Ana" } }), b.opciones);
+    expect(sinFoto).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "Ana", foto: "", azp: "sin" });
+  });
+
+  it("un nombre o una foto que no son un texto quedan vacíos y no frenan a nadie", async () => {
+    const b = banco();
+    for (const raro of [7, 0, null, true, false, { a: 1 }, ["Ana"], []]) {
+      const r = await verificarIdentidadDeGoogle(await firmar({ payload: { name: raro, picture: raro } }), b.opciones);
+      expect(r, JSON.stringify(raro)).toEqual({ ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "", azp: "sin" });
+    }
   });
 
   it("pide las llaves a la dirección pública de Google", async () => {
@@ -139,6 +171,94 @@ describe("un token de Google bueno", () => {
     const otra = await verificarIdentidadDeGoogle(await firmar({ payload: { sub: "100000000000000000002" } }), b.opciones);
     expect(a1).toEqual(a2);
     expect(otra.ok && a1.ok && otra.usuario !== a1.usuario).toBe(true);
+  });
+});
+
+describe("las cuentas de servicio no entran y el campo azp solo se mide", () => {
+  // Google firma con las mismas llaves y el mismo emisor los tokens de las cuentas de servicio, con la audiencia que pida quien
+  // los genera. Su correo siempre termina igual, y ninguna persona tiene uno así.
+  const BUENO = { ok: true, usuario: `google:${SUB}`, correo: CORREO, nombre: "", foto: "" };
+  const NO_ENTRA = { ok: false, motivo: "correo-sin-verificar" };
+  const AZPS: Record<string, unknown>[] = [{}, { azp: CLIENTE }, { azp: "112233445566778899001" }];
+
+  it("un correo de cuenta de servicio no entra, con o sin azp: es el rechazo del correo sin verificar", async () => {
+    const b = banco();
+    const correos = [
+      "name@proyecto.iam.gserviceaccount.com",
+      "123-compute@developer.gserviceaccount.com",
+      "proyecto@appspot.gserviceaccount.com",
+      "NAME@PROYECTO.IAM.GSERVICEACCOUNT.COM",
+      "Name@Proyecto.Iam.GServiceAccount.Com",
+      "  name@proyecto.iam.gserviceaccount.com  ",
+      "\tNAME@PROYECTO.IAM.GSERVICEACCOUNT.COM\n",
+      "name@gserviceaccount.com",
+      " NAME@GSERVICEACCOUNT.COM ",
+      "ana@example.org@proyecto.iam.gserviceaccount.com",
+    ];
+    for (const email of correos) {
+      for (const azp of AZPS) {
+        for (const email_verified of [true, "true"]) {
+          const r = await verificarIdentidadDeGoogle(await firmar({ payload: { email, email_verified, ...azp } }), b.opciones);
+          expect(r, JSON.stringify([email, azp, email_verified])).toEqual(NO_ENTRA);
+        }
+      }
+    }
+  });
+
+  it("el rechazo no repite nada del token y no depende del nombre ni de la foto", async () => {
+    const b = banco();
+    const t = await firmar({ payload: { email: "name@proyecto.iam.gserviceaccount.com", name: "Ana de Prueba", picture: FOTO, azp: CLIENTE } });
+    expect(JSON.stringify(await verificarIdentidadDeGoogle(t, b.opciones))).toBe('{"ok":false,"motivo":"correo-sin-verificar"}');
+  });
+
+  it("un correo común entra con cualquier azp y sin azp, y el resultado dice cómo vino: igual, distinto o sin", async () => {
+    const b = banco();
+    expect(await verificarIdentidadDeGoogle(await firmar(), b.opciones)).toEqual({ ...BUENO, azp: "sin" });
+    expect(await verificarIdentidadDeGoogle(await firmar({ payload: { azp: CLIENTE } }), b.opciones)).toEqual({ ...BUENO, azp: "igual" });
+    for (const azp of ["otro-cliente.apps.example.org", "112233445566778899001", ` ${CLIENTE}`, CLIENTE.toUpperCase(), "", 123, 0, null, true, false, [CLIENTE], { a: CLIENTE }]) {
+      const r = await verificarIdentidadDeGoogle(await firmar({ payload: { azp } }), b.opciones);
+      expect(r, JSON.stringify(azp)).toEqual({ ...BUENO, azp: "distinto" });
+    }
+  });
+
+  it("el valor de azp es uno de tres textos fijos: nunca repite lo que trajo el token", async () => {
+    const b = banco();
+    const r = await verificarIdentidadDeGoogle(await firmar({ payload: { azp: "cliente-ajeno-secreto" } }), b.opciones);
+    expect(r.ok && r.azp).toBe("distinto");
+    expect(JSON.stringify(r)).not.toContain("cliente-ajeno-secreto");
+  });
+
+  it("un correo que solo se parece al de una cuenta de servicio entra, con cualquier azp", async () => {
+    const b = banco();
+    const correos = [
+      // La palabra está antes de la arroba.
+      "gserviceaccount.com@example.org",
+      "ana.gserviceaccount.com@example.org",
+      "name.iam.gserviceaccount.com@escuela.example.org",
+      // El dominio termina en otra cosa.
+      "ana@migserviceaccount.com",
+      "ana@iam.migserviceaccount.com",
+      "ana@gserviceaccount.com.example.org",
+      "ana@gserviceaccount.community",
+      "ana@gserviceaccount.co",
+      "ana@gserviceaccount-com.example.org",
+      "ana@escuela.example.org",
+    ];
+    for (const email of correos) {
+      for (const [azp, valor] of [[{}, "sin"], [{ azp: CLIENTE }, "igual"], [{ azp: "112233445566778899001" }, "distinto"]] as const) {
+        const r = await verificarIdentidadDeGoogle(await firmar({ payload: { email, ...azp } }), b.opciones);
+        expect(r, JSON.stringify([email, azp])).toEqual({ ...BUENO, correo: email, azp: valor });
+      }
+    }
+  });
+
+  it("los demás rechazos siguen dando su motivo aunque el correo sea de una cuenta de servicio", async () => {
+    const b = banco();
+    const email = "name@proyecto.iam.gserviceaccount.com";
+    expect(await verificarIdentidadDeGoogle(await firmar({ payload: { email, aud: "otro-cliente.apps.example.org" } }), b.opciones)).toEqual({ ok: false, motivo: "audiencia" });
+    expect(await verificarIdentidadDeGoogle(await firmar({ payload: { email, exp: AHORA / 1000 - 1 } }), b.opciones)).toEqual({ ok: false, motivo: "vencido" });
+    expect(await verificarIdentidadDeGoogle(await firmar({ payload: { email, iss: "https://accounts.example.org" } }), b.opciones)).toEqual({ ok: false, motivo: "emisor" });
+    expect(await verificarIdentidadDeGoogle(await firmar({ payload: { email }, par: intruso }), b.opciones)).toEqual({ ok: false, motivo: "firma" });
   });
 });
 
@@ -569,10 +689,10 @@ describe("cuando las llaves no están disponibles", () => {
 });
 
 describe("lo que nunca se escribe", () => {
-  it("ni el token ni el correo ni el identificador pasan por un registro", async () => {
+  it("ni el token, ni el correo, ni el nombre, ni la foto, ni el identificador pasan por un registro", async () => {
     const espias = (["log", "info", "warn", "error", "debug"] as const).map((n) => vi.spyOn(console, n).mockImplementation(() => {}));
     const b = banco();
-    const buenos = await firmar();
+    const buenos = await firmar({ payload: { name: "Ana de Prueba", picture: FOTO } });
     const malos = [await firmar({ payload: { aud: "otro" } }), await firmar({ par: intruso }), "a.b.c", buenos.slice(0, -5)];
     await verificarIdentidadDeGoogle(buenos, b.opciones);
     for (const m of malos) await verificarIdentidadDeGoogle(m, b.opciones);
@@ -586,5 +706,40 @@ describe("lo que nunca se escribe", () => {
     const t = await firmar({ payload: { aud: "otro-cliente-secreto", email: "beto@example.org" } });
     const r = await verificarIdentidadDeGoogle(t, b.opciones);
     expect(JSON.stringify(r)).toBe('{"ok":false,"motivo":"audiencia"}');
+  });
+});
+
+describe("lo que dicen la cabecera del archivo y los documentos de la sala", () => {
+  const leer = (ruta: string): string => readFileSync(fileURLToPath(new URL(`../../../${ruta}`, import.meta.url)), "utf8");
+  /** El texto en un solo renglón: una frase puede caer en dos, y en la cabecera cada renglón empieza con su asterisco. */
+  const plano = (texto: string): string => texto.replace(/\r?\n \* ?/g, " ").replace(/\s+/g, " ");
+  const cabecera = plano(leer("workers/sala/src/identidad-google.ts").split("\nimport ")[0] ?? "");
+  const hoja = plano(leer("docs/operacion.md"));
+  const readme = plano(leer("workers/sala/README.md"));
+  const dice = (texto: string, frase: string | RegExp): boolean => (typeof frase === "string" ? texto.includes(frase) : frase.test(texto));
+
+  it("los tres dicen que una cuenta de servicio no entra, por qué, y que el campo azp solo se mide", () => {
+    const frases: (string | RegExp)[] = [
+      /cuentas? de servicio/,
+      "gserviceaccount.com",
+      /una vez por persona/,
+      /[Nn]inguna persona tiene un correo así/,
+      /con los interruptores como estén/,
+      /`azp`(?: del token)? no rechaza a nadie/,
+      /solo se mide/,
+    ];
+    for (const [nombre, texto] of [["cabecera", cabecera], ["hoja de operación", hoja], ["README de la sala", readme]] as const) {
+      for (const frase of frases) expect(dice(texto, frase), `${nombre}: ${String(frase)}`).toBe(true);
+    }
+  });
+
+  it("la hoja y el README nombran la línea del registro con sus tres valores, y la hoja dice cómo mirarla", () => {
+    for (const [nombre, texto] of [["hoja de operación", hoja], ["README de la sala", readme]] as const) {
+      for (const frase of ["`google-azp`", "`igual`", "`distinto`", "`sin`", "`correo-sin-verificar`"]) {
+        expect(dice(texto, frase), `${nombre}: ${frase}`).toBe(true);
+      }
+    }
+    expect(dice(hoja, '{"evento":"google-azp","datos":{"azp":"igual"}}'), "la hoja trae la línea tal como sale").toBe(true);
+    expect(dice(hoja, "--search google-azp"), "la hoja dice cómo mirarla").toBe(true);
   });
 });

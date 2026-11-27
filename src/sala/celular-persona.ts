@@ -17,7 +17,9 @@ import type { Dependencias } from "./cliente";
  * del proveedor de cuentas, la consulta propia va solo con la llave de este celular y el resultado nombra a quienes ganaron por
  * su línea de persona. Lo que contesta el servicio está en `workers/sala/src/index.ts` (ruta `campana/alta`).
  *
- * El token de Google viaja solo en el cuerpo del alta. Nada de acá lo guarda ni lo escribe en la consola.
+ * El token de Google viaja solo en el cuerpo del alta. Nada de acá lo guarda ni lo escribe en la consola. Si la página se
+ * construyó para guardar el perfil de quien se anota, el alta lleva además el permiso (`perfil: true`): la sala guarda el
+ * correo, el nombre y la foto solo con ese permiso y con su propio interruptor prendido.
  */
 
 /** Una línea de persona, con su única escritura posible: 26 letras y la última con los dos bits de sobra en cero. */
@@ -31,6 +33,12 @@ export interface CuerpoDeAltaDePersona {
   d: string;
   llave: string;
   p: string | null;
+  /**
+   * El permiso para guardar el perfil de la persona (su correo, su nombre y su foto de Google). Va solo cuando la página se
+   * construyó para guardarlo (`guardarPerfilActivo`), que es cuando mostró los textos que lo dicen. Sin él, el pedido es el de
+   * siempre, letra por letra, y la sala no guarda nada del token.
+   */
+  perfil?: true;
 }
 
 const esObjeto = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
@@ -65,7 +73,14 @@ export async function anotarPersonaEnCampana(
   alReintentar: (aviso: "mucha" | "creando") => void = () => undefined,
   opciones: OpcionesDeAlta = {},
 ): Promise<AltaEnCampana> {
-  const cuerpoJson = JSON.stringify({ google: cuerpo.google, d: cuerpo.d, llave: cuerpo.llave, p: cuerpo.p });
+  const cuerpoJson = JSON.stringify({
+    google: cuerpo.google,
+    d: cuerpo.d,
+    llave: cuerpo.llave,
+    p: cuerpo.p,
+    // Solo el true exacto viaja, y va al final: sin el permiso queda sin definir, el JSON lo deja afuera y el cuerpo no cambia ni en una letra.
+    perfil: cuerpo.perfil === true || undefined,
+  });
   return anotarConLector(servicio, sala, cuerpoJson, leerAltaDePersona, dep, alReintentar, opciones);
 }
 

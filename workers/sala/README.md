@@ -6,6 +6,7 @@ Es un script aparte (`tinkazo-sala`) del de los enlaces (`tinkazo-enlaces`, en `
 
 - **Lo que guarda son bytes cifrados.** El navegador de la pantalla genera una clave (AES-GCM, 16 bytes) y la pone en el QR, después del `#`: `s.tinkazo.app/<id>#<clave>`. El fragmento no llega a ningún servidor. El celular cifra el nombre con esa clave antes de mandarlo, así que el servicio no puede leerlo.
 - **No guarda** nombres en claro, la clave del QR, la llave del celular, direcciones IP, navegador ni hora por persona. En las salas nuevas guarda una huella HMAC de cada nombre normalizado, calculada con una llave derivada de la clave del QR para rechazar repetidos sin poder probar candidatos, y solo la huella SHA-256 de la llave al azar del celular para reconocer sus correcciones. El celular sí recuerda localmente su llave y el nombre con que quedó, por sala y durante 12 horas como máximo. El token de la pantalla se guarda solo como huella SHA-256. Para contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella de la dirección con una sal de esa hora (no se puede devolver a la dirección). Para el tope de altas de equipos por conexión, cada sala guarda una huella del grupo de dirección con una sal suya: queda hasta que se borra la sala, y las ventanas de 10 minutos que ya pasaron se limpian con cada envío.
+- **La excepción es el perfil de quien se anota con Google** en una campaña de personas. Nace apagado. Con el interruptor `PERFILES` prendido, y solo si el pedido del celular trae el permiso, el servicio guarda en claro el correo, el nombre y la dirección de la foto de esa persona, con la primera y la última hora en que se anotó, en un objeto que no se borra con las salas. Está en [El perfil de quien se anota con Google](#el-perfil-de-quien-se-anota-con-google).
 - **Se borra solo:** una alarma a las 10 horas de creada hace `deleteAll()`; antes, «Cerrar la sala» hace lo mismo. Los nombres cifrados quedan en el objeto hasta entonces (no 5 minutos): una compu que se cuelga en una feria no puede perder la lista, y el servicio sigue sin poder leerlos.
 - **Quitar un nombre** con un toque lo saca también del objeto.
 - **El filtro de palabras corre en la pantalla** (`src/sala/filtro.ts`), no acá: ningún servidor lee los nombres. Lo que coincide queda en «Para revisar».
@@ -101,7 +102,7 @@ con los bits sobrantes del final distintos de cero no es canónica y no verifica
 | --- | --- | --- |
 | `POST /v1/campana` | Crea la sala: `201 {"id","token","vence"}` | Una sala viva por evento y 20 creadas por día UTC, fuera del cupo general |
 | `GET /v1/sala/<id>/campana` | Devuelve `{"texto","firma"}`, exactamente como llegaron | Sin token |
-| `GET /v1/sala/<id>/campana/estado?p=P` | Devuelve `{"fase","total","cierraMs","pase","quitadas","correo"}`. Con la lista sellada o sorteada suma `"sorteo"` (el número) y `"ronda"` (la del sello, si la sala la guardó). Con un token suma `"tuya"`: verdadero si es el vigente, falso si otra compu ya tomó la campaña | Sin token. Sin pase y sin token se recuerda 2 segundos en el borde |
+| `GET /v1/sala/<id>/campana/estado?p=P` | Devuelve `{"fase","total","cierraMs","pase","quitadas","correo"}`. Con la lista sellada o sorteada suma `"sorteo"` (el número) y `"ronda"` (la del sello, si la sala la guardó). Con un token suma `"tuya"`: verdadero si es el vigente, falso si otra compu ya tomó la campaña. En una campaña de personas con `PERFILES` prendida suma `"perfil": true` (apagada, el campo no existe) | Sin token. Sin pase y sin token se recuerda 2 segundos en el borde |
 | `GET /v1/sala/<id>/campana/pase` | Devuelve `{"p","hasta"}` para la pantalla | Con el token |
 | `PUT /v1/sala/<id>/campana/fase` | JSON `{"fase","cierraMs"?}`. Cambia la fase y avisa por el socket | Con el token. Hasta 200 bytes. `204` |
 | `PUT /v1/sala/<id>/campana/resultado` | Comprueba el resultado en la red y guarda las ganadoras. `204` | Con el token |
@@ -292,9 +293,14 @@ el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
   el campo `premios`. La sala no guarda ni usa el texto: solo lo deja pasar. Una campaña de personas con montos y sin
   `premio_en_mano` se sigue aceptando al leerla. La activación al pagar tampoco acepta `premio_en_mano`.
 
-- **El alta** es `POST /v1/sala/<id>/campana/alta` con `{"google","d","llave","p"?}`. `google` es el token de identidad que
+- **El alta** es `POST /v1/sala/<id>/campana/alta` con `{"google","d","llave","p"?,"perfil"?}`. `google` es el token de identidad que
   entrega el botón de Google, y la sala lo verifica sola con `identidad-google.ts`: firma contra las llaves públicas de Google,
-  emisor, audiencia igual al `GOOGLE_CLIENT_ID`, caducidad y correo verificado. No le pregunta nada al proveedor de cuentas y
+  emisor, audiencia igual al `GOOGLE_CLIENT_ID`, caducidad y correo verificado. Las cuentas de servicio de Google no entran,
+  con los interruptores como estén: Google les firma tokens con las mismas llaves y con la audiencia que pida quien los genera,
+  y sin este rechazo alguien se anotaría una vez por cada cuenta de servicio que cree, cuando el sorteo es una vez por persona.
+  Se rechaza el token cuyo correo tiene después de la última arroba el dominio `gserviceaccount.com` o uno que termina en
+  `.gserviceaccount.com`, con el motivo `correo-sin-verificar`. Ninguna persona tiene un correo así. El campo `azp` no rechaza
+  a nadie: solo se mide. No le pregunta nada al proveedor de cuentas y
   nunca contesta `sin-billetera`. Valen los mismos topes, el mismo pase del QR, el mismo cupo, la misma fase y el mismo cierre por
   hora que en una campaña de cuentas. Un token rechazado da `401 sesion` y suma a los rechazos de su ficha y a un contador propio de
   la conexión, de mil por ventana de diez minutos, muy por encima de las 150 personas de un salón. Nunca suma al tope de la
@@ -309,7 +315,9 @@ el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
   dice que el sorteo no abre desde ahí. Google sin
   contestar da `502 google` y no suma. Si Google no contesta, las llaves ya recordadas siguen sirviendo hasta seis horas después
   de su vencimiento. La respuesta es `201 {"anotada":true}` o, si la misma cuenta de Google ya
-  estaba, `200 {"anotada":true,"ya":true}`: no lleva la línea de la persona ni nada que la identifique.
+  estaba, `200 {"anotada":true,"ya":true}`: no lleva la línea de la persona ni nada que la identifique. `perfil` es el permiso
+  del celular para guardar el perfil de la persona (más abajo): solo cuenta el booleano `true`, cualquier otro valor se ignora sin
+  dar error y la respuesta es la misma con él o sin él.
 - **Una entrada por persona.** La misma cuenta de Google no se anota dos veces en la misma campaña, tampoco desde otro celular:
   la sala la reconoce por su línea, el celular nuevo pasa a ser el suyo y recibe `ya`.
 - **Lo que se sella.** En la fila de la lista va la línea de la persona (`linea-persona.ts`, ver `docs/premios.md`) en la misma
@@ -335,27 +343,104 @@ el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
 - **Comprobación antes de un evento.** `GET /v1/personas/estado` contesta `{"prendido","cliente"}`: si las dos variables están
   puestas y cuál es el `GOOGLE_CLIENT_ID` de la sala. Tiene que ser el mismo que `VITE_GOOGLE_CLIENT_ID` del sitio: si no, nadie
   entra. El identificador es público.
-- **Lo que no se guarda.** Ni el correo, ni el identificador de Google, ni el token quedan en una tabla, en una respuesta pública
-  o en el registro: del token solo sale la línea, que viene de un HMAC con la sal de la sala. El registro lleva el motivo de un
-  rechazo (`google-rechazado`), nunca el token.
+- **Lo que se guarda del token.** Depende del interruptor `PERFILES`, que nace apagado. Apagado, no se guarda nada del token: ni
+  el correo, ni el identificador de Google, ni el nombre, ni la foto, ni el token mismo quedan en una tabla. Del token solo sale la
+  línea, que viene de un HMAC con la sal de la sala. Prendido, y solo si el pedido trae `"perfil": true`, el objeto de cupos guarda
+  además el identificador de la cuenta de Google, el correo, el nombre y la dirección de la foto (ver El perfil de quien se anota
+  con Google, más abajo). Con el interruptor como esté, nada de eso sale en una respuesta ni en el registro, y la sala de la
+  campaña no lo guarda. El registro lleva el motivo de un rechazo (`google-rechazado`), nunca el token. Lleva también, por cada
+  pedido con el token verificado que termina con la persona anotada, una línea `google-azp` con cómo vino el campo `azp` del
+  token: `{"evento":"google-azp","datos":{"azp"}}`, con `igual` si es el identificador de cliente, `distinto` si trae otra cosa y `sin`
+  si no vino. No lleva el valor del campo ni ningún dato de la persona.
 - **El correo a quien gana no se manda** en estas campañas, y el estado público lo dice con `"correo": false`. La línea no dice a
-  quién escribir y la sala no guarda ningún dato que lo diga. Avisar por correo, y el reclamo del premio, son de otra etapa.
-- **Cómo se entera quien gana.** En estas campañas no se manda correo ni se guarda nada que lleve de una línea a una persona. Quien
-  gana se entera al abrir la página de la campaña en su celular: la consulta propia le dice que ganó y le da su código de entrega.
-  Quien organiza nombra a quien ganó y le entrega el premio en mano, en el evento, pidiéndole ese código. Quien gana y cierra la
-  página no recibe ningún aviso y tiene que volver a abrirla en el mismo celular: desde otro no sirve, porque la sala no anota a
-  nadie con la lista cerrada, y quien abre el enlace en otro navegador después del sorteo no ve su código. La línea sale de la sal de la sala, y esa sal se borra con ella a las 24 horas de crearla. Mientras la sala vive, quien tiene
+  quién escribir y la sala de la campaña no guarda ningún dato que lo diga. Con `PERFILES` prendido el correo de quien se anotó
+  está en su perfil, pero ningún código busca el perfil de una línea ganadora ni le escribe. Avisar por correo, y el reclamo del
+  premio, son de otra etapa.
+- **Cómo se entera quien gana.** En estas campañas no se manda correo, y ninguna ruta ni herramienta lleva de una línea a una
+  persona. Quien gana se entera al abrir la página de la campaña en su celular: la consulta propia le dice que ganó y le da su
+  código de entrega. Quien organiza nombra a quien ganó y le entrega el premio en mano, en el evento, pidiéndole ese código. Quien
+  gana y cierra la página no recibe ningún aviso y tiene que volver a abrirla en el mismo celular: desde otro no sirve, porque la
+  sala no anota a nadie con la lista cerrada, y quien abre el enlace en otro navegador después del sorteo no ve su código. La
+  línea sale de la sal de la sala, y esa sal se borra con ella a las 24 horas de crearla. Mientras la sala vive, quien tiene
   acceso a su almacenamiento puede comprobar si una cuenta de Google conocida se anotó, porque tiene la sal y las huellas. Pasado
-  ese plazo nada permite volver de una línea ganadora a una persona ni calcular su código. Avisar a quien ya cerró la página y
-  reclamar el premio exigirían guardar un dato que lleve de vuelta a la persona, aunque sea cifrado y hasta el fin del reclamo, y
-  que la sala siga viva mientras dure, y eso choca con la regla de no guardar nada que la identifique: esta etapa no hace
-  ninguna de las dos cosas a propósito. Si quien ganó no puede mostrar su código o no está, decide quien organiza.
+  ese plazo nada permite volver de una línea ganadora a una persona ni calcular su código. Con `PERFILES` prendido el
+  identificador de su cuenta de Google queda además en el perfil, y mientras la sala viva quien tuviera a la vez la tabla de
+  perfiles y la sal de esa sala podría recalcular la línea de cada perfil. Ningún código lo hace y ninguna respuesta lo deja ver.
+  Avisar a quien ya cerró la página y reclamar el premio piden además que la sala siga viva mientras dure el reclamo: esta etapa
+  no hace ninguna de las dos cosas a propósito. Si quien ganó no puede mostrar su código o no está, decide quien organiza.
 - **El interruptor apagado en medio de un evento** no toca lo que ya está anotado: la sala sigue mostrando el estado, la consulta
   propia de cada celular y el panel de quien organiza sigue quitando, cerrando, sellando, guardando el resultado y avisando.
   Solo dejan de andar crear campañas de personas y el alta de gente nueva.
 
 La prueba `src/sala/campana-paridad-cuenta.test.ts` compara cada ruta de una campaña de cuentas, con sus cabeceras y su cuerpo,
 contra un archivo grabado con la sala de antes de este modo. `src/sala/campana-persona.test.ts` prueba el modo nuevo.
+
+#### El perfil de quien se anota con Google
+
+Al anotarse con Google en una campaña de personas, la sala puede guardar el perfil de esa persona, que es su cuenta de Tinkazo.
+Nace apagado, y con todo apagado no pasa nada de lo que sigue: ninguna respuesta, ninguna tabla con datos y ningún registro cambian.
+
+- **Qué se guarda.** Una fila por cuenta de Google en la tabla `perfiles`: `id` (`google:` y el identificador de la cuenta, el
+  mismo usuario que da la verificación), `correo` (el verificado), `nombre` y `foto` (los campos `name` y `picture` del token, ya
+  limpios), `primera_ms` y `ultima_ms` (la primera y la última vez que se guardó) y `veces`. No se guarda el token, ni la campaña,
+  ni la sala, ni la línea, ni la dirección de red, ni el nombre que la persona escribió para la pantalla, que sigue cifrado en la
+  sala.
+- **Dónde.** En el SQLite del objeto `Cupos`, que es uno solo para todo el servicio y no se borra con las salas. Por eso el perfil
+  dura más que la sala: ni la alarma de las 24 horas ni Cerrar la sala lo tocan. Nada lo borra solo.
+- **La limpieza** (`perfiles.ts`). Sin un correo con forma de correo (de 3 a 254 caracteres, una sola arroba que no esté en una
+  punta, sin espacios ni caracteres de control o invisibles) no se guarda nada. El nombre queda sin caracteres de control ni
+  invisibles, con un solo espacio entre palabras y de hasta 120 puntos de código, y puede quedar vacío. La foto se guarda solo si
+  es una dirección `https://` bien formada de hasta 600 caracteres, y si no queda vacía.
+- **Los dos interruptores.** En la sala, la variable `PERFILES` de `wrangler.toml`: solo el valor exacto `"1"` prende, y además
+  hacen falta `DIFERIDA` en `"1"` y el `GOOGLE_CLIENT_ID`. En el sitio, la variable de construcción `VITE_GUARDAR_PERFIL`: solo
+  `1` prende, y además hace falta `VITE_ANOTARSE_SIN_BILLETERA`. Los dos nacen apagados.
+- **El permiso viaja con el pedido.** El celular manda `"perfil": true` en el cuerpo del alta solo si su página se construyó con
+  `VITE_GUARDAR_PERFIL` en `1`, que es cuando mostró los textos que dicen que se guarda. La sala guarda solo si el cuerpo trae ese
+  booleano exacto y `PERFILES` está prendida. Cualquier otro valor del campo se ignora y nunca hace fallar un alta. Así una página
+  vieja en la memoria de un celular, que mostró el texto de antes, no hace guardar nada.
+- **La pantalla dice que se guarda solo si la sala lo confirma.** El estado público de una campaña de personas trae
+  `"perfil": true` únicamente con `PERFILES` prendida y las campañas de personas prendidas. El celular cambia los dos textos y
+  manda el permiso solo si su página se construyó con `VITE_GUARDAR_PERFIL` y la sala lo confirmó en su última consulta. Con el
+  sitio prendido y la sala apagada el campo no existe y la pantalla dice lo de siempre. Apagada, el estado es el de siempre, letra
+  por letra.
+- **Las bases firmadas mandan.** Una campaña de personas cuyas bases firmadas dicen, en español o en inglés, que Tinkazo no
+  guarda el correo (las armadas antes de este cambio) no guarda perfiles y su estado público no trae `"perfil"`, con los
+  interruptores como estén. Lo decide la sala de esa campaña en un solo lugar (`basesDicenQueNoSeGuarda`, en `perfiles.ts`), para
+  el estado y para el alta: la pantalla y el guardado no pueden decir cosas distintas.
+- **Cuándo se guarda.** Después de que el token de Google se verificó y el alta terminó bien: un alta nueva (`201`) o una persona
+  que ya estaba y volvió con un token que la sala verificó (`200` con `ya`). En ese segundo caso la fila se pone al día con el
+  correo, el nombre y la foto del token nuevo, `veces` suma una y `primera_ms` no cambia. El reingreso con una ficha de hace menos
+  de un minuto no verifica el token y no guarda. Un alta rechazada no guarda.
+- **Sin frenar el alta.** El guardado sale aparte de la respuesta, que no lo espera, es la misma con él o sin él y nunca falla por
+  él. Si el guardado falla, la persona queda anotada igual y su perfil no se guarda esa vez.
+- **Lo que queda en el registro.** `{"evento":"perfil-guardado","datos":{"nueva","nombre","foto"}}`, los tres en verdadero o
+  falso: si la persona es nueva y si quedó con nombre y con foto. Si no se guardó, `{"evento":"perfil-error","datos":{"codigo"}}`
+  con `forma` (lo verificado no deja un perfil que guardar, por ejemplo un correo sin forma de correo), `guardar` (falló la
+  escritura) o `inesperado`. Nunca el correo, el nombre, la foto, el identificador ni el token. Se mira con
+  `npx wrangler@4.160.0 tail --config wrangler.toml --search perfil-`.
+- **Las campañas de cuentas no cambian** con ninguna combinación de interruptores y nunca guardan un perfil.
+- **Nada los lee desde el código.** Ninguna ruta ni función de la sala devuelve, lista, cuenta ni borra perfiles, y `perfiles.ts`
+  no tiene ninguna. Quien tiene acceso de edición al Worker en la cuenta de Cloudflare los cuenta, los ve y borra a quien lo pide
+  desde el panel (Durable Objects, el espacio de la clase `Cupos` de `tinkazo-sala`, Data Studio, el nombre `cupos`), y cada
+  consulta queda en el registro de auditoría de la cuenta. Las consultas están escritas en `docs/operacion.md`, en Leer, contar
+  y borrar un perfil.
+- **La línea y el perfil.** La línea de una persona sale del identificador de su cuenta de Google con la sal de la sala. Con el
+  perfil guardado ese identificador queda en la tabla, así que mientras la sala viva (24 horas como máximo) quien tuviera a la vez
+  la tabla y la sal podría recalcular la línea de cada perfil. Ningún código lo hace. Borrada la sala, la sal ya no existe y no se
+  puede.
+
+**Para prender**, en este orden: primero la sala (`PERFILES = "1"` y desplegar), después el sitio (`VITE_GUARDAR_PERFIL=1` y una
+publicación nueva), y las campañas se arman después. La sala prendida sola no guarda nada: ningún celular manda el permiso hasta
+que el sitio lo muestra. El sitio prendido con la sala apagada tampoco guarda nada ni lo promete: la pantalla espera la
+confirmación de la sala. Las campañas se arman después porque sus bases quedan firmadas adentro cuando se arman: una campaña de
+personas armada antes de este cambio dice en sus bases que Tinkazo no guarda el correo, y la sala no le guarda perfiles aunque
+todo esté prendido. Para que guarde, se arma y se firma otra.
+
+**Para apagar**, primero el sitio: se quita `VITE_GUARDAR_PERFIL`, se publica, y la pantalla deja de decir que se guarda y de mandar
+el permiso. Después la sala, con `PERFILES = "0"`. Apagar no borra los perfiles ya guardados.
+
+Las pruebas: `workers/sala/src/perfiles.test.ts` (el interruptor, la limpieza y el guardado, con un SQLite de verdad) y
+`workers/sala/src/alta-perfil.test.ts` (el alta entera, con cada combinación de interruptor y permiso).
 
 ### Activar una campaña al pagar (`POST /v1/activar`)
 

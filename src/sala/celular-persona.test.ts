@@ -29,10 +29,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-async function alta(pasos: Paso[]): Promise<{ resultado: AltaEnCampana; llamadas: Llamada[]; avisos: string[] }> {
+async function alta(
+  pasos: Paso[],
+  cuerpo: CuerpoDeAltaDePersona = CUERPO,
+): Promise<{ resultado: AltaEnCampana; llamadas: Llamada[]; avisos: string[] }> {
   const { f, llamadas } = fetchFalso(pasos);
   const avisos: string[] = [];
-  const promesa = anotarPersonaEnCampana(SERVICIO, SALA, CUERPO, { fetch: f, azar: () => 0.5 }, (aviso) => avisos.push(aviso));
+  const promesa = anotarPersonaEnCampana(SERVICIO, SALA, cuerpo, { fetch: f, azar: () => 0.5 }, (aviso) => avisos.push(aviso));
   await vi.advanceTimersByTimeAsync(300_000);
   return { resultado: await promesa, llamadas, avisos };
 }
@@ -132,6 +135,39 @@ describe("anotarPersonaEnCampana", () => {
     const { resultado, llamadas } = await alta(["corte", { estado: 200, cuerpo: { anotada: true, ya: true } }]);
     expect(llamadas).toHaveLength(2);
     expect(resultado).toEqual({ ok: true, cuenta: "", ya: false });
+  });
+});
+
+describe("anotarPersonaEnCampana: el permiso para guardar el perfil", () => {
+  const DE_SIEMPRE = `{"google":"${GOOGLE}","d":"${CUERPO.d}","llave":"${CUERPO.llave}","p":"${CUERPO.p}"}`;
+  const LISTO: Paso = { estado: 201, cuerpo: { anotada: true } };
+
+  it("sin el permiso, el cuerpo es byte a byte el de siempre", async () => {
+    const { llamadas } = await alta([LISTO]);
+    expect(String(llamadas[0]?.init.body)).toBe(DE_SIEMPRE);
+  });
+
+  it("con el permiso suma perfil: true al final, y es lo único que cambia", async () => {
+    const { resultado, llamadas } = await alta([LISTO], { ...CUERPO, perfil: true });
+    expect(resultado).toEqual({ ok: true, cuenta: "", ya: false });
+    expect(String(llamadas[0]?.init.body)).toBe(`${DE_SIEMPRE.slice(0, -1)},"perfil":true}`);
+    expect(llamadas[0]?.url).toBe(`${SERVICIO}/v1/sala/${SALA}/campana/alta`);
+    expect(new Headers(llamadas[0]?.init.headers).has("content-type")).toBe(false);
+  });
+
+  it("un permiso que no es el true exacto no viaja: el cuerpo es el de siempre", async () => {
+    for (const valor of [false, "true", 1, null, undefined, {}]) {
+      const cuerpo = { ...CUERPO, perfil: valor } as unknown as CuerpoDeAltaDePersona;
+      const { llamadas } = await alta([LISTO], cuerpo);
+      expect(String(llamadas[0]?.init.body), String(valor)).toBe(DE_SIEMPRE);
+    }
+  });
+
+  it("el pedido que se repite lleva el mismo cuerpo, con su permiso", async () => {
+    const { llamadas } = await alta([error(502, "google"), LISTO], { ...CUERPO, perfil: true });
+    expect(llamadas).toHaveLength(2);
+    expect(llamadas[1]?.init.body).toBe(llamadas[0]?.init.body);
+    expect(String(llamadas[1]?.init.body)).toContain('"perfil":true');
   });
 });
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { validarCampanaParaElFirmador, validarCampanaParaFirmar } from "../../sala/validar-campana";
 import { network } from "../../stellar/config";
 import { leerCampana } from "../modelo";
@@ -207,7 +207,7 @@ describe("las bases con premio en mano", () => {
         "Hay 3 premios, uno para cada persona que gana: Auriculares. El sorteo es a las 18:30 y cualquiera puede comprobar el resultado.",
         "El premio se entrega en mano en el evento, a la persona que ganó. Si no está, Alcancía Andina decide qué hacer con él.",
         "Recibir el premio es gratis.",
-        "Tu nombre de Google puede verse en la pantalla del evento. Tinkazo no guarda tu correo.",
+        "Tu nombre de Google puede verse en la pantalla del evento. Lo que guarda Tinkazo está en sus Términos.",
         "Alcancía Andina pone los premios y responde por ellos. Tinkazo es la herramienta que hace el sorteo.",
         "La lista la sella la cuenta que organiza esta campaña, y solo vale el sello de la lista de personas anotadas que se ve en la pantalla. Un sello de otra cuenta o de otra lista no cuenta para esta campaña.",
       ].join("\n"),
@@ -221,7 +221,23 @@ describe("las bases con premio en mano", () => {
       "There is one prize for one of the people signed up: Headphones. The draw is at 18:30 and anyone can check the result.",
     );
     expect(en[3]).toBe("The prize is handed over in person at the event, to the person who won. If they aren't there, Alcancía Andina decides what to do with it.");
-    expect(en[5]).toBe("Your Google name may show on the event screen. Tinkazo doesn't store your email.");
+    expect(en[5]).toBe("Your Google name may show on the event screen. What Tinkazo keeps is in its Terms.");
+  });
+
+  it("no prometen qué guarda Tinkazo y mandan a sus Términos, con el interruptor del perfil apagado o prendido", () => {
+    // Las bases quedan firmadas dentro de la campaña cuando se arma: no pueden depender de un interruptor que se prende después.
+    const apagado = basesAutomaticas(datos(), dic);
+    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
+    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
+    const prendido = basesAutomaticas(datos(), dic);
+    vi.unstubAllEnvs();
+    expect(prendido).toEqual(apagado);
+    expect(apagado.es).toContain("Lo que guarda Tinkazo está en sus Términos.");
+    expect(apagado.en).toContain("What Tinkazo keeps is in its Terms.");
+    for (const idioma of ["es", "en"] as const) {
+      expect(apagado[idioma], idioma).not.toMatch(/no guarda|doesn't store|does not store|don't keep|no guardamos/iu);
+      expect(apagado[idioma], idioma).not.toMatch(/correo|email/iu);
+    }
   });
 
   it("no nombra dólares, cuenta de Tinkazo, plazo de 7 días ni costo de retirar", () => {

@@ -73,6 +73,8 @@ describe("la prueba de peso de la página del celular", () => {
     expect(medida.entrada).toBeGreaterThan(TOPES.entrada);
     expect(excesos(medida).map((e) => e.nombre)).toContain("entrada");
     expect(informe(medida)).toContain("PASA EL TOPE: entrada");
+    // Con los bytes exactos: en un tope de 15 KB, el décimo de KB no dice cuánto falta recortar.
+    expect(informe(medida)).toContain(`(${medida.entrada} bytes contra ${TOPES.entrada})`);
   });
 
   it("pasa cuando todo entra", () => {
@@ -80,6 +82,15 @@ describe("la prueba de peso de la página del celular", () => {
     const medida = medir(dist);
     expect(excesos(medida)).toEqual([]);
     expect(informe(medida)).not.toContain("PASA EL TOPE");
+  });
+
+  it("los topes son los más altos aceptados para esta página, y en ellos caben los textos del perfil", () => {
+    const KB = 1024;
+    // La entrada es lo que baja un celular antes de mostrar nada: ese tope es el que manda.
+    expect(TOPES.entrada).toBe(15.5 * KB);
+    expect(TOPES.celular).toBe(30 * KB);
+    expect(TOPES.html).toBe(8 * KB);
+    expect(TOPES.hoja).toBe(5 * KB);
   });
 
   it("avisa claro si no hay sitio construido o si falta un trozo", () => {

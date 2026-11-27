@@ -59,6 +59,8 @@ export interface EstadoPublico extends DatosDeLaRonda {
   pase: "vale" | "vencido" | "sin";
   /** Si la sala le avisa por correo a quien gana. Una sala que no lo dice cuenta como que no. */
   correo?: boolean;
+  /** Si la sala guarda el perfil de quien se anota con Google. Una sala que no lo dice cuenta como que no. */
+  perfil?: boolean;
 }
 export interface EstadoPropio extends DatosDeLaRonda {
   fase: Fase;
