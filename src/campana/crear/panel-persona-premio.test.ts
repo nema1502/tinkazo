@@ -237,7 +237,8 @@ describe("el resumen y el archivo de una campaña de personas", () => {
     const bases = q<HTMLTextAreaElement>("#ccp-bases").value;
     expect(bases).toContain("Hay 2 premios, uno para cada persona que gana: Auriculares.");
     expect(bases).toContain("El premio se entrega en mano en el evento, a la persona que ganó. Si no está, Alcancía Andina decide qué hacer con él.");
-    expect(bases).toContain("Tinkazo no guarda tu correo.");
+    expect(bases).toContain("Lo que guarda Tinkazo está en sus Términos.");
+    expect(bases).not.toContain("no guarda tu correo");
     expect(bases).not.toMatch(/dólares|7 días|retir/u);
     clic("ccp-bases-en");
     expect(q<HTMLTextAreaElement>("#ccp-bases").value).toContain("The prize is handed over in person at the event");
