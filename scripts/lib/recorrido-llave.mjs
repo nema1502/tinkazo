@@ -2,6 +2,7 @@
  * Las piezas del recorrido automático de la prueba de la llave (`scripts/recorrido-llave.mjs`) que se pueden probar sin
  * navegador: el toque con un evento de confianza, la espera de una pantalla, el código de salida y el archivo de medidas.
  */
+import { CHECKS_DE_PREMIO } from "./premio-llave.mjs";
 
 /**
  * Toca el centro de un elemento con eventos del ratón de confianza (con `button`, `buttons` y `clickCount`), que dan
@@ -38,6 +39,11 @@ export const ESTADOS_DE_FALLA = [
   "sin-llaves",
   "en-app",
   "sin-bloqueo",
+  "no-recibe",
+  "no-se-envio",
+  "no-llego-premio",
+  "saldo-sin-leer",
+  "enlace-mal",
 ];
 
 /**
@@ -55,14 +61,20 @@ export async function esperarEstado(cdp, pedidos, ms, { fallas = ESTADOS_DE_FALL
 /** Lo que tiene que haber dado bien para que la prueba cuente como buena. Si un check no se emitió, es que no se llegó. */
 export const CHECKS_PRINCIPALES = ["previo", "carga", "crear", "sellar", "sortear", "coincide", "verificacion-ok"];
 
-/**
- * Los pasos de entrar desde otro aparato. Durante las primeras corridas buenas solo se registran y se muestran: no cambian el
- * código de salida. Después de tres corridas buenas pasan a `CHECKS_PRINCIPALES`.
- */
-export const CHECKS_INFORMATIVOS = ["otro-aparato", "misma-cuenta", "un-desbloqueo-al-entrar", "segundo-sello", "dos-fuentes", "sin-cuenta", "sin-indice"];
+/** Los pasos de entrar desde otro aparato. */
+export const CHECKS_DE_OTRO_APARATO = ["otro-aparato", "misma-cuenta", "un-desbloqueo-al-entrar", "segundo-sello", "dos-fuentes", "sin-cuenta", "sin-indice"];
 
-/** Las fallas que no son de la prueba: el grifo o el servicio de azar público no contestaron, o la red no se pudo leer al entrar. */
-const FALLA_AJENA = /^(grifo|ronda)/;
+/**
+ * Los pasos de entrar desde otro aparato y de recibir y mandar monedas de prueba. Durante las primeras corridas buenas solo se
+ * registran y se muestran: no cambian el código de salida. Después de tres corridas buenas pasan a `CHECKS_PRINCIPALES`.
+ */
+export const CHECKS_INFORMATIVOS = [...CHECKS_DE_OTRO_APARATO, ...CHECKS_DE_PREMIO];
+
+/**
+ * Las fallas que no son de la prueba: el grifo o el servicio de azar público no contestaron, la red no se pudo leer al entrar,
+ * o una lectura propia del recorrido (un saldo, la cuenta de destino) falló por la red.
+ */
+const FALLA_AJENA = /^(grifo|ronda|rpc-ajeno)/;
 const esFallaAjena = (f) => FALLA_AJENA.test(f.motivo) || (f.paso === "entrar" && f.motivo === "red");
 
 /**
@@ -118,9 +130,9 @@ export function checksDeOtroAparato(d) {
 }
 
 /** El archivo de medidas, con la forma de la sección de la prueba. */
-export function armarDatos({ medidas, previo, navegador, virtual, segundos, otroAparato, segundoSello, verificacion }) {
+export function armarDatos({ medidas, previo, navegador, virtual, segundos, otroAparato, segundoSello, verificacion, premio }) {
   return {
-    version: 1,
+    version: 2,
     red: "testnet",
     contrato: medidas?.contrato ?? null,
     kit: medidas?.kit ?? null,
@@ -139,6 +151,7 @@ export function armarDatos({ medidas, previo, navegador, virtual, segundos, otro
     sorteo: medidas?.sorteo ?? null,
     verificacion: verificacion ?? null,
     otroAparato: otroAparato ? { ...otroAparato, segundoSello: segundoSello ?? null } : null,
+    premio: premio ?? null,
     fallas: medidas?.fallas ?? [],
   };
 }

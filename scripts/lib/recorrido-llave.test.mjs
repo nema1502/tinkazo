@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armarDatos, CHECKS_INFORMATIVOS, CHECKS_PRINCIPALES, checksDeOtroAparato, codigoDeSalida, ESTADOS_DE_FALLA, esperarEstado, tocar } from "./recorrido-llave.mjs";
+import { armarDatos, CHECKS_DE_OTRO_APARATO, CHECKS_INFORMATIVOS, CHECKS_PRINCIPALES, checksDeOtroAparato, codigoDeSalida, ESTADOS_DE_FALLA, esperarEstado, tocar } from "./recorrido-llave.mjs";
 
 /** Un CDP de mentira que anota lo que se le manda. */
 function cdpFalso({ rect = { x: 50, y: 30, foco: true }, estados = [] } = {}) {
@@ -118,7 +118,7 @@ describe("el código de salida", () => {
 describe("el archivo de medidas", () => {
   it("lleva el aviso de que las cifras son de la red de prueba y las secciones aunque falten", () => {
     const d = armarDatos({ medidas: null, previo: null, navegador: "Chrome", virtual: true, segundos: 12.4, otroAparato: null });
-    expect(d.version).toBe(1);
+    expect(d.version).toBe(2);
     expect(d.red).toBe("testnet");
     expect(d.aviso).toContain("red de prueba");
     expect(d.segundos).toBe(12);
@@ -150,7 +150,7 @@ describe("los checks de entrar desde otro aparato", () => {
 
   it("con todo bien dan los siete, y son los informativos", () => {
     const r = checksDeOtroAparato(bien());
-    expect(r.map((c) => c.nombre)).toEqual(CHECKS_INFORMATIVOS);
+    expect(r.map((c) => c.nombre)).toEqual(CHECKS_DE_OTRO_APARATO);
     expect(r.every((c) => c.ok)).toBe(true);
   });
 
@@ -206,6 +206,11 @@ describe("los checks de entrar desde otro aparato", () => {
   it("las pantallas nuevas cuentan como cortes de la espera", () => {
     for (const e of ["sin-cuenta", "vencida", "no-se-comprobo"]) expect(ESTADOS_DE_FALLA).toContain(e);
   });
+
+  it("las pantallas de falla de recibir y mandar cuentan como cortes, y las que el recorrido pide a propósito no", () => {
+    for (const e of ["no-recibe", "no-se-envio", "no-llego-premio", "saldo-sin-leer", "enlace-mal"]) expect(ESTADOS_DE_FALLA).toContain(e);
+    for (const e of ["pide-nota", "sin-monedas", "premio-listo", "enviado"]) expect(ESTADOS_DE_FALLA).not.toContain(e);
+  });
 });
 
 describe("el código de salida con la entrada desde otro aparato", () => {
@@ -220,5 +225,28 @@ describe("el código de salida con la entrada desde otro aparato", () => {
   it("los pasos informativos que fallan no cambian el código", () => {
     const informativos = CHECKS_INFORMATIVOS.map((nombre) => ({ nombre, ok: false }));
     expect(codigoDeSalida({ checks: [...bien, ...informativos], fallas: [{ paso: "entrar", motivo: "sin-cuenta" }] })).toBe(0);
+  });
+});
+
+describe("recibir y mandar monedas de prueba en el código de salida", () => {
+  const bien = ["previo", "carga", "crear", "sellar", "sortear", "coincide", "verificacion-ok"].map((nombre) => ({ nombre, ok: true }));
+
+  it("los checks de recibir y mandar son informativos: aunque fallen todos, el código no cambia", () => {
+    const premio = CHECKS_INFORMATIVOS.filter((n) => n.startsWith("premio-")).map((nombre) => ({ nombre, ok: false }));
+    expect(premio).toHaveLength(10);
+    for (const c of premio) expect(CHECKS_PRINCIPALES).not.toContain(c.nombre);
+    expect(codigoDeSalida({ checks: [...bien, ...premio], fallas: [{ paso: "mandar", motivo: "simulacion" }] })).toBe(0);
+  });
+
+  it("una lectura propia que falla por la red cuenta como falla ajena: da 2 y no 1", () => {
+    const checks = bien.map((c) => (c.nombre === "sortear" ? { ...c, ok: false } : c));
+    expect(codigoDeSalida({ checks, fallas: [{ paso: "premio", motivo: "rpc-ajeno" }] })).toBe(2);
+    expect(codigoDeSalida({ checks, fallas: [{ paso: "premio", motivo: "rpc-ajeno" }, { paso: "sortear", motivo: "simulacion" }] })).toBe(1);
+  });
+
+  it("el archivo de medidas es de la versión 2 y lleva lo de recibir y mandar, o nada", () => {
+    expect(armarDatos({ medidas: null, previo: null, navegador: "Chrome", virtual: true, segundos: 1, otroAparato: null }).premio).toBeNull();
+    const premio = { ajena: null, cargas: {}, saldos: {} };
+    expect(armarDatos({ medidas: null, previo: null, navegador: "Chrome", virtual: true, segundos: 1, otroAparato: null, premio }).premio).toEqual(premio);
   });
 });

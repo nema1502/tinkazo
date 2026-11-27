@@ -15,6 +15,7 @@ on:
       - "scripts/resumen-llave.mjs"
       - "scripts/lib/sin-prueba-de-llave.mjs"
       - "scripts/lib/previo-llave.mjs"
+      - "scripts/lib/premio-llave.mjs"
       - "scripts/lib/recorrido-llave.mjs"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -34,7 +35,7 @@ jobs:
   recorrido:
     name: Recorrido de la prueba de la llave
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     continue-on-error: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -58,7 +59,7 @@ jobs:
         id: recorrido
         run: |
           set +e
-          timeout 1800 node scripts/recorrido-llave.mjs --base http://localhost:4173 --salida medidas-llave.json
+          timeout 2400 node scripts/recorrido-llave.mjs --base http://localhost:4173 --salida medidas-llave.json
           codigo=$?
           echo "codigo=$codigo" >> "$GITHUB_OUTPUT"
           exit $codigo

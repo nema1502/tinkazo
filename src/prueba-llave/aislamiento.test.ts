@@ -155,8 +155,8 @@ describe("la revisión automática", () => {
   it("el recorrido corre aparte y no frena nada", () => {
     const flujo = leer(".github", "workflows", "prueba-llave.yml");
     expect(flujo).toContain("continue-on-error: true");
-    expect(flujo).toContain("timeout-minutes: 35");
-    expect(flujo).toContain("timeout 1800");
+    expect(flujo).toContain("timeout-minutes: 45");
+    expect(flujo).toContain("timeout 2400");
     expect(flujo).toContain("retention-days: 14");
     expect(ci).not.toContain("recorrido-llave");
   });

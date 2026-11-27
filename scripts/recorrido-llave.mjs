@@ -5,7 +5,7 @@
  * paso. Las cifras son de la red de prueba y no se proyectan a otra.
  *
  *   node scripts/recorrido-llave.mjs --base http://localhost:4173 --salida medidas-llave.json
- *   opciones: --sin-otro-aparato, --tope-min 20, --tope-otro-min 6
+ *   opciones: --sin-otro-aparato, --sin-premio, --tope-min 20, --tope-otro-min 6, --tope-premio-min 6
  *
  * Después del recorrido principal prueba entrar desde otro aparato, sin ningún índice ajeno. Corre varios navegadores, uno
  * después del otro y nunca dos a la vez, cada uno con su perfil nuevo:
@@ -13,6 +13,9 @@
  *   B  otro aparato: sin nada guardado de la página y con la misma credencial, como cuando el teléfono y la computadora
  *      comparten las llaves. Entra con la búsqueda en el historial, sella, y vuelve a entrar con la búsqueda en el RPC.
  *   C  una llave que no tiene cuenta: tiene que llegar a la pantalla de que no hay cuenta.
+ *   D  recibir y mandar monedas de prueba (`?modo=premio`), con tres cargas de la página: crea la billetera y recibe, prueba
+ *      que una cuenta que pide nota no recibe sin la nota, vuelve a entrar sin cobrar otro premio, manda con un
+ *      desbloqueo y recarga sin cobrar otro. Los saldos y la nota se leen en la red, sin usar nada del código de la página.
  *
  * La página de prueba se arma con `VITE_PRUEBA_LLAVE=1 pnpm build` y se sirve con `pnpm preview`. Sale con 0 si la prueba
  * dio bien, con 1 si falló y con 2 si no se pudo medir (la red de prueba cambió o el grifo, la red o el servicio de azar
@@ -21,6 +24,7 @@
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { launch, sleep } from "./lib/browser.mjs";
+import { checksDePremio, notaEnLaRed, prepararDestino, saldosEnLaRed } from "./lib/premio-llave.mjs";
 import { controlPrevio } from "./lib/previo-llave.mjs";
 import { armarDatos, checksDeOtroAparato, codigoDeSalida, esperarEstado, tocar } from "./lib/recorrido-llave.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
@@ -33,8 +37,10 @@ const opt = (n, d) => {
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const salida = opt("--salida", "medidas-llave.json");
 const sinOtroAparato = args.includes("--sin-otro-aparato");
+const sinPremio = args.includes("--sin-premio");
 const topeMs = Number(opt("--tope-min", "20")) * 60_000;
 const topeOtroMs = Number(opt("--tope-otro-min", "6")) * 60_000;
+const topePremioMs = Number(opt("--tope-premio-min", "6")) * 60_000;
 const puertoBase = Number(process.env.CDP_PORT || 9222);
 
 const checks = [];
@@ -93,6 +99,16 @@ function credencialAjena(rpId) {
 }
 
 const inicio = Date.now();
+// Si la revisión automática corta por tiempo, el archivo queda con lo que se alcanzó a medir y se sale con 1.
+process.on("SIGTERM", () => {
+  check("tope", false, "el tiempo de la revisión se acabó");
+  try {
+    escribirMedidas();
+  } catch (e) {
+    console.log(`no se pudo escribir ${salida}: ${e.message}`);
+  }
+  process.exit(1);
+});
 const previo = await controlPrevio();
 check("previo", previo.salida === 0, previo.salida === 0 ? "" : `${previo.motivo}: ${previo.fallas.join(" / ")}`);
 
@@ -100,9 +116,11 @@ let medidas = null;
 let verificacion = null;
 let otroAparato = null;
 let segundoSello = null;
+let premioDatos = null;
 let navegador = "";
 let codigo = 0;
 let fallasDeOtro = [];
+let fallasDePremio = [];
 // Lo que se lleva del primer navegador a los otros.
 const deA = { credenciales: [], contractId: "", selloId: "", ledger: null };
 
@@ -272,11 +290,127 @@ if (previo.salida !== 0) {
     };
   }
 
-  codigo = codigoDeSalida({ checks, fallas: [...(medidas?.fallas ?? []), ...fallasDeOtro], previo });
+  // Recibir y mandar monedas de prueba: otro navegador, con su propia llave, y tres cargas de la página.
+  if (!sinPremio && !vencido) {
+    const t0 = Date.now();
+    const restantePremio = () => topePremioMs - (Date.now() - t0);
+    const hastaPremio = (ms) => {
+      if (restantePremio() <= 0) throw new Error("tope-premio");
+      return Math.min(ms, restantePremio());
+    };
+    const R = { ajena: null, destino: null, cargas: {}, saldos: {}, notaEnLaRed: null, segundos: 0 };
+    const ajena = (motivo, detalle = "") => {
+      R.ajena = R.ajena ?? motivo;
+      fallasDePremio.push({ paso: "premio", motivo: "rpc-ajeno", conFoco: true, detalle: `${motivo} ${detalle}`.trim() });
+      console.log(`premio: ${motivo} ${detalle}`.trim());
+    };
+    /** Una lectura propia de la red: si falla por la red, no es culpa de la página. */
+    const leer = async (nombre, pedido) => {
+      try {
+        const r = await saldosEnLaRed(pedido);
+        R.saldos[nombre] = r;
+        return r;
+      } catch (e) {
+        ajena("lectura", `${nombre}: ${e.message}`);
+        return null;
+      }
+    };
+
+    const gd = await prepararDestino();
+    if (gd.ajena) {
+      ajena(gd.motivo, "preparando el destino");
+    } else {
+      R.destino = gd.publica;
+      const d = { c1: null, s1: null, destinoAntes: null, pideNota: null, sPide: null, c2: null, s2: null, enviado: null, s3: null, nota: null, c3: null, s4: null };
+      try {
+        const antes = await leer("destino-antes", { cuenta: gd.publica });
+        d.destinoAntes = antes?.cuenta ?? null;
+        await conNavegador(puertoBase + 3, async ({ cdp }) => {
+          // Carga 1: crea la billetera con el destino del enlace (una cuenta que pide nota) y recibe el premio.
+          await abrir(cdp, `&modo=premio&destino=${gd.publica}`);
+          const r0 = await esperarEstado(cdp, ["premio-inicio"], hastaPremio(30_000));
+          if (!r0.ok) {
+            d.c1 = { estado: r0.estado, medidas: await leerMedidas(cdp).catch(() => null) };
+            return;
+          }
+          await tocar(cdp, "#principal");
+          const e1 = await esperarEstado(cdp, ["premio-listo"], hastaPremio(150_000));
+          const m1 = await leerMedidas(cdp).catch(() => null);
+          d.c1 = { estado: e1.estado, medidas: m1 };
+          const contrato = String(await cdp.eval("window.__pruebaLlave?.contractId ?? ''").catch(() => ""));
+          if (!e1.ok || !contrato) return;
+          R.contractId = contrato;
+          d.s1 = await leer("tras-recibir", { contrato, desdeLedger: m1?.premio?.ledger ?? 0 });
+
+          // Mandar a una cuenta que pide nota, sin nota: no se manda nada.
+          await tocar(cdp, "#principal");
+          const ep = await esperarEstado(cdp, ["pide-nota"], hastaPremio(60_000));
+          d.pideNota = { estado: ep.estado, medidas: await leerMedidas(cdp).catch(() => null) };
+          d.sPide = await leer("tras-pide-nota", { contrato, cuenta: gd.publica });
+          if (!ep.ok) return;
+
+          // Carga 2: la misma página sin destino. Vuelve a entrar y no cobra otro premio.
+          await tocar(cdp, "#principal");
+          const ya = await esperarEstado(cdp, ["ya-hay-llave"], hastaPremio(120_000));
+          if (!ya.ok) {
+            d.c2 = { estado: ya.estado, medidas: await leerMedidas(cdp).catch(() => null) };
+            return;
+          }
+          await tocar(cdp, "#principal");
+          const e2 = await esperarEstado(cdp, ["premio-listo"], hastaPremio(60_000));
+          d.c2 = { estado: e2.estado, medidas: await leerMedidas(cdp).catch(() => null) };
+          d.s2 = await leer("antes-de-mandar", { contrato });
+          if (!e2.ok) return;
+
+          // Manda: una cuenta de prueba que pide nota, la nota dentro de la dirección, y un solo desbloqueo.
+          await tocar(cdp, "#principal");
+          const ee = await esperarEstado(cdp, ["enviado"], hastaPremio(180_000));
+          const m3 = await leerMedidas(cdp).catch(() => null);
+          d.enviado = { estado: ee.estado, medidas: m3 };
+          const envio = m3?.envios?.[0];
+          if (!ee.ok || !envio) return;
+          d.s3 = await leer("tras-mandar", { contrato, cuenta: envio.destino.direccion, desdeLedger: envio.ledger });
+          try {
+            d.nota = await notaEnLaRed({ hash: envio.hash });
+            R.notaEnLaRed = d.nota;
+          } catch (e) {
+            ajena("nota", e.message);
+          }
+
+          // Carga 3: recarga. No hay monedas ni se cobra otro premio.
+          await cdp.send("Page.reload");
+          const y3 = await esperarEstado(cdp, ["ya-hay-llave"], hastaPremio(120_000));
+          if (!y3.ok) {
+            d.c3 = { estado: y3.estado, medidas: await leerMedidas(cdp).catch(() => null) };
+            return;
+          }
+          await tocar(cdp, "#principal");
+          const e3 = await esperarEstado(cdp, ["sin-monedas"], hastaPremio(60_000));
+          d.c3 = { estado: e3.estado, medidas: await leerMedidas(cdp).catch(() => null) };
+          d.s4 = await leer("al-final", { contrato });
+        });
+      } catch (e) {
+        console.log(`premio: ${e.message}`);
+        R.error = e.message;
+      }
+      R.cargas = { crear: d.c1, pideNota: d.pideNota, volver: d.c2, enviado: d.enviado, recargar: d.c3 };
+      const flat = (x) => (x ? { contrato: x.contrato, cuenta: x.cuenta } : null);
+      for (const c of checksDePremio({ ...d, s1: flat(d.s1), sPide: flat(d.sPide), s2: flat(d.s2), s3: flat(d.s3), s4: flat(d.s4) })) check(c.nombre, c.ok, c.detalle);
+    }
+    R.segundos = Math.round((Date.now() - t0) / 1000);
+    premioDatos = R;
+  }
+
+  codigo = codigoDeSalida({ checks, fallas: [...(medidas?.fallas ?? []), ...fallasDeOtro, ...fallasDePremio], previo });
 }
 
-const datos = armarDatos({ medidas, previo: previo.datos, navegador, virtual: true, segundos: (Date.now() - inicio) / 1000, otroAparato, segundoSello, verificacion });
-writeFileSync(salida, `${JSON.stringify(datos, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 2)}\n`);
+/** El archivo de medidas con lo que haya hasta ahora. También lo escribe el manejador del corte por tiempo. */
+function escribirMedidas() {
+  const datos = armarDatos({ medidas, previo: previo.datos, navegador, virtual: true, segundos: (Date.now() - inicio) / 1000, otroAparato, segundoSello, verificacion, premio: premioDatos });
+  writeFileSync(salida, `${JSON.stringify(datos, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 2)}\n`);
+}
+
+escribirMedidas();
 console.log(`medidas en ${salida}`);
 emitirJson({ auditor: "recorrido-llave", objetivo: "prueba/llave", checks, datos: { codigo, previo: previo.motivo } });
 process.exit(codigo);

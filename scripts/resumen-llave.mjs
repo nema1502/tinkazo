@@ -36,6 +36,22 @@ if (d.otroAparato) {
   }
   salida.push(`- Llave sin cuenta: ${d.otroAparato.sinCuenta?.estado ?? "sin estado"}.`);
 }
+if (d.premio) {
+  const p = d.premio;
+  const envio = p.cargas?.enviado?.medidas?.envios?.[0];
+  salida.push("", "Recibir y mandar monedas de prueba:");
+  if (p.ajena) salida.push(`- No se pudo medir del todo: ${p.ajena}.`);
+  for (const [nombre, paso] of [["Recibir el premio", p.cargas?.crear?.medidas?.premio], ["Cuenta de destino de la página", p.cargas?.enviado?.medidas?.destinoDePrueba], ["Mandar las monedas", envio]]) {
+    const c = paso?.cobro;
+    salida.push(c ? `- ${nombre}: ${xlm(c.totalStroops)} en total, ${xlm(c.alquiler)} de alquiler, ${texto(paso.segundos)} s.` : `- ${nombre}: sin dato.`);
+  }
+  if (envio) salida.push(`- Desbloqueos al mandar: ${envio.desbloqueos ?? "sin dato"}. Raíz de la entrada: ${envio.raiz ?? "sin dato"}. Nota pedida ${envio.notaPedida ?? "ninguna"}, nota en la red ${envio.notaVista ?? "ninguna"} (${envio.notaEnvio}).`);
+  const vida = p.cargas?.crear?.medidas?.premio?.vidaDelSaldo;
+  if (vida !== undefined) salida.push(`- La entrada de saldo de la billetera nueva vive hasta el ledger ${vida ?? "sin dato"}.`);
+  salida.push(`- Segundos de esta parte: ${texto(p.segundos)}.`);
+} else {
+  salida.push("", "Recibir y mandar monedas de prueba: no se probó.");
+}
 salida.push(`Segundos del recorrido: ${texto(d.segundos)}.`);
 if (Array.isArray(d.fallas) && d.fallas.length) {
   salida.push("", "Fallas:");
