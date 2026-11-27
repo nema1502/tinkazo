@@ -837,3 +837,39 @@ describe("antes de cobrar un borrador de personas", () => {
     expect(texto(p, "#cpo-h")).toBe("Cargá 408,00 dólares digitales");
   });
 });
+
+/* ------------------------------------------------------------ la línea del premio en la cuenta */
+
+describe("la línea del premio en la cuenta, con el envío", () => {
+  const linea = (p: Panel): string => p.raiz.querySelector("#cpo-deposito")?.textContent ?? "";
+
+  /** La vista previa de un archivo firmado, en el modo oficial, con el servicio ya pagado y un saldo que se lee. */
+  async function previaPagada(cambios: Record<string, unknown>, saldo: string): Promise<Panel> {
+    h.red = "mainnet";
+    const m = mundo();
+    m.red = "mainnet";
+    conCobro(m, { red: { tipo: "pagada", suma: d(1.9) } });
+    m.deps.deposito = { leer: async (): Promise<SaldoDeDolares> => ({ tipo: "saldo", saldo }) };
+    const p = nuevoPanel(m);
+    await suelta(4);
+    await elegirArchivo(m, p, archivoDe({ red: "mainnet", ...cambios }));
+    await suelta(8);
+    expect(vistaDe(p)).toBe("previa");
+    return p;
+  }
+
+  it("con los premios justos en la cuenta dice que falta el envío de cada uno", async () => {
+    const p = await previaPagada(CON_DOLARES, "120.0000000");
+    expect(linea(p)).toBe("Faltan 1,50 dólares digitales en tu cuenta.");
+  });
+
+  it("con los premios y el envío dice que el premio está", async () => {
+    const p = await previaPagada(CON_DOLARES, "121.5000000");
+    expect(linea(p)).toBe("Los dólares del premio ya están en tu cuenta.");
+  });
+
+  it("una campaña de cuentas con los premios justos dice que el premio está, como siempre", async () => {
+    const p = await previaPagada(DE_CUENTAS, "120.0000000");
+    expect(linea(p)).toBe("Los dólares del premio ya están en tu cuenta.");
+  });
+});

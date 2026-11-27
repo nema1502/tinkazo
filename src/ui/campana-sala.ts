@@ -18,6 +18,7 @@ import { fechaTexto, horaTexto, montoConCentavos, premiosTexto, textoDelPremio }
 import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
 import {
   PREMIOS_CON_ENVIO_MAXIMOS,
+  enviosDe,
   esDePersonasConDolares,
   esResultadoEnDolares,
   lineaDelResultadoEnDolares,
@@ -3294,7 +3295,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   }
 
   /**
-   * Lo que la línea del premio necesita para existir ahora: la cuenta que entró, el total de premios y la clave que junta esos dos
+   * Lo que la línea del premio necesita para existir ahora: la cuenta que entró, el total de premios (con el envío de cada uno en
+   * una campaña de personas con premios en dólares, que es lo que la sala exige al activar) y la clave que junta esos dos
    * con el estado del cobro. Es `null` cuando no hay línea: sin la dependencia, fuera de la vista previa, en otra red, con el cobro
    * sin pagar, sin cuenta entrada o con una campaña que pide sellar con otra cuenta (la línea nunca habla de una cuenta que no es la
    * de quien mira). Puede lanzar si el premio está mal formado: quien la llama la protege.
@@ -3303,7 +3305,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (!deps.deposito || vista !== "previa" || campana === null || campana.premioEnMano !== undefined || campana.red !== "mainnet" || cm?.bloqueaElAbrir()) return null;
     const cuenta = deps.cuenta();
     if (cuenta === null || (pide !== null && pide !== cuenta)) return null;
-    const total = totalDePremios(campana.premios);
+    const total = totalDePremios(campana.premios) + enviosDe(campana, deps.comision?.comision()?.costo ?? 0n);
     return { cuenta, total, clave: [cuenta, total.toString(), cm?.estado().tipo ?? ""].join("|") };
   }
 
