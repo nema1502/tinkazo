@@ -83,6 +83,20 @@ describe("el interruptor de la sala", () => {
   });
 });
 
+describe("el archivo de la sala", () => {
+  it("trae el interruptor apagado, justo debajo del identificador de Google", () => {
+    const toml = readFileSync(fileURLToPath(new URL("../wrangler.toml", import.meta.url)), "utf8");
+    const lineas = toml.split(/\r?\n/);
+    expect(lineas.filter((l) => /^\s*PERFILES\s*=/.test(l))).toEqual(['PERFILES = "0"']);
+    const variables = lineas.filter((l) => /^[A-Z_]+\s*=/.test(l));
+    expect(variables[variables.indexOf('PERFILES = "0"') - 1]).toBe('GOOGLE_CLIENT_ID = ""');
+    // Tal como está escrito, el archivo no prende nada: ni las campañas de personas ni los perfiles.
+    const vars = Object.fromEntries(variables.map((l) => /^([A-Z_]+)\s*=\s*"([^"]*)"/.exec(l)?.slice(1, 3) ?? []));
+    expect(perfilesPrendido(vars)).toBe(false);
+    expect(perfilesPrendido({ ...vars, DIFERIDA: "1", GOOGLE_CLIENT_ID: CLIENTE })).toBe(false);
+  });
+});
+
 describe("la tabla de perfiles", () => {
   it("tiene siete columnas, con el identificador como clave y todo lo demás obligatorio", () => {
     const { sql } = banco();
