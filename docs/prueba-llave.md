@@ -188,6 +188,7 @@ Las corridas buenas del recorrido entero contra la red de prueba, con el paso de
 1. 25 de noviembre de 2026. Salió con 0. La otra llave entró por el historial y por el RPC, las dos al ledger de la creación de la cuenta, con un solo desbloqueo cada una. Desde el otro aparato se selló una lista y una llave sin cuenta llegó a la pantalla de que no hay cuenta. Ningún pedido fue a un índice ajeno.
 
 2. 27 de noviembre de 2026. Los diez pasos de recibir y mandar dieron bien en la primera corrida. La corrida entera salió con 1 porque la verificación del comprobante marcó que esa misma lista de ejemplo ya estaba sellada por otra cuenta del contrato a esa hora. No viene de recibir ni de mandar.
+3. 27 de noviembre de 2026, minutos después. Salió con 0: lo de siempre, lo de otro aparato y los diez pasos de recibir y mandar dieron bien. La verificación del comprobante dio verde, así que el aviso de la corrida anterior fue de una coincidencia con otro uso del contrato.
 
 ## Lo que no entra
 
