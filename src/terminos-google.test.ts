@@ -21,13 +21,13 @@ const texto = (idioma: (typeof IDIOMAS)[number], clave: string): string => Strin
 const leer = (ruta: string): string => readFileSync(new URL(`../${ruta}`, import.meta.url), "utf8");
 
 const INICIO_ES =
-  "No hay publicidad ni rastreadores que te sigan de un sitio a otro. Las listas y los nombres de un sorteo no quedan en ninguna base " +
-  "que podamos leer. Si te anotás con tu cuenta de Google y la pantalla lo dice, guardamos tu correo, tu nombre y tu foto, como cuenta " +
-  "el recuadro Si te anotás con tu cuenta de Google, más arriba.";
+  "No hay publicidad ni rastreadores que te sigan de un sitio a otro. La lista de un sorteo, y los nombres que viajan cifrados con la " +
+  "clave del enlace, no quedan en ninguna base que podamos leer. Si te anotás con tu cuenta de Google y la pantalla lo dice, guardamos " +
+  "tu correo, tu nombre y tu foto, como cuenta el recuadro Si te anotás con tu cuenta de Google, más arriba.";
 const INICIO_EN =
-  "No ads and no trackers that follow you from site to site. The lists and names of a draw are not kept in any database we can read. " +
-  "If you sign up with your Google account and the screen says so, we keep your email, name and photo, as the box If you sign up with " +
-  "your Google account above explains.";
+  "No ads and no trackers that follow you from site to site. A draw's list, and the names that travel encrypted with the link's key, " +
+  "are not kept in any database we can read. If you sign up with your Google account and the screen says so, we keep your email, name " +
+  "and photo, as the box If you sign up with your Google account above explains.";
 
 describe("los Términos: el recuadro de quien se anota con su cuenta de Google", () => {
   it("tiene su título y su texto en los dos idiomas", () => {
@@ -238,6 +238,16 @@ describe("los Términos: la nota de los servicios remite al recuadro de quienes 
     expect(texto("es", "tmMore1")).toContain("y la pantalla lo dice, guardamos");
     expect(texto("en", "tmMore1")).toContain("and the screen says so, we keep");
     for (const idioma of IDIOMAS) expect(texto(idioma, "tmMore1"), idioma).not.toMatch(/única|único|the only/iu);
+  });
+
+  it("no afirma que ningún nombre queda en una base que podamos leer: con el perfil prendido, el de la cuenta de Google queda", () => {
+    for (const archivo of ["src/i18n.ts", "src/i18n-modo-oficial.ts", "terminos.html"]) {
+      const contenido = leer(archivo);
+      expect(contenido.includes("Las listas y los nombres de un sorteo no quedan en ninguna base"), archivo).toBe(false);
+      expect(contenido.includes("The lists and names of a draw are not kept in any database"), archivo).toBe(false);
+    }
+    expect(texto("es", "tmMore1")).toContain("La lista de un sorteo, y los nombres que viajan cifrados con la clave del enlace, no quedan en ninguna base que podamos leer.");
+    expect(texto("en", "tmMore1")).toContain("A draw's list, and the names that travel encrypted with the link's key, are not kept in any database we can read.");
   });
 
   it("terminos.html trae la nota con el mismo texto en español que el diccionario", () => {
