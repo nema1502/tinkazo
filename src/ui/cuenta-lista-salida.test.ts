@@ -429,6 +429,33 @@ describe("el camino directo: la salida a los 45 segundos y nada se corta", () =>
     expect(recargarDelPaso()).not.toBeNull();
   });
 
+  it("una lectura de fondo que no contesta, con el voto en vuelo, no tapa la espera ni reinicia el reloj", async () => {
+    const reg: Registro = [];
+    const cf = cuentaFalsa(reg);
+    activarColgada(cf, reg);
+    await abrir(servidorFalso(reg, { acceso: "cupon" }), cf);
+    await tocar();
+    // Desde acá, cada lectura de la cuenta se queda sin contestar (el proveedor lento) y vence a los 10 s.
+    cf.cuenta.estadoOficial.mockImplementation(() => new Promise<Est>(() => undefined));
+    await vi.advanceTimersByTimeAsync(5_000);
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(12_000);
+    // La lectura venció a los 15 s: el voto sigue en vuelo, y no se dice que algo no salió.
+    expect(errores()).toBe(0);
+    expect(principal().getAttribute("aria-busy")).toBe("true");
+    expect(principal().textContent).toBe(t("clActivarHaciendo"));
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(errores()).toBe(0);
+    expect(recargarDelPaso()).toBeNull();
+    // El reloj es el del toque: a los 45 s de él, la salida, aunque las lecturas hayan vencido en el medio.
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(recargarDelPaso()?.textContent).toBe(t("loginRecargar"));
+    expect(principal().getAttribute("aria-busy")).toBe("true");
+    expect(pie()).toBe(t("clActivarLento"));
+    expect(cf.cuenta.activarCuenta).toHaveBeenCalledTimes(1);
+  });
+
   it("con la hora de pared atrasada, el temporizador da la espera por cumplida igual", async () => {
     const reg: Registro = [];
     const cf = cuentaFalsa(reg);

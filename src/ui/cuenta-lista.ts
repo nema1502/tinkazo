@@ -1123,6 +1123,9 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     if (cerrado || n !== lecturas) return;
     if (!e && acc.cadena) return;
     if (!e) {
+      // Con el voto en vuelo o esperando el pedido, una lectura de fondo que no contestó no dice que algo no salió: lo que
+      // corre sigue girando, con su reloj de la salida, y termina solo (la activación, o su aviso a los 60 s).
+      if (cuentaSesionViva() && (st.corre === "activando" || st.corre === "esperando")) return pintar();
       if (st.corre === "revisando") st.corre = null;
       st.falla = cuentaSesionViva() ? "red" : "sesion";
       pintar();
