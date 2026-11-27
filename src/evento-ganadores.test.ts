@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import "./i18n";
-import { quienEnLaTarjeta } from "./evento-tarjeta";
+import { lineaDePrueba } from "./campana/cuentas-de-prueba";
+import { ganadoresDelEnlaceCoinciden, ganadoresRehechos, quienEnLaTarjeta } from "./evento-tarjeta";
 
 /**
  * Quién salió y entre cuántos en la tarjeta de cada sorteo del evento (`quienEnLaTarjeta`): la cuenta y los nombres
@@ -34,5 +35,42 @@ describe("la tarjeta del evento y la marca de la línea sellada", () => {
   it("la página del evento la llama con los modos que valen ahí", () => {
     const codigo = readFileSync("src/evento.ts", "utf8");
     expect(codigo).toContain('quienEnLaTarjeta(getLang(), s, requestedMode() === "varias" || modesFlagOn(), turnos)');
+  });
+});
+
+describe("el evento con una lista de personas", () => {
+  const lineas = [1, 2, 3, 4].map((n) => lineaDePrueba(n));
+
+  it("los ganadores del enlace llevan el nombre o el lugar, no la línea: igual coinciden con los que salen del sorteo", () => {
+    expect(ganadoresDelEnlaceCoinciden(lineas, [3, 1], ["Lugar 4 de la lista", "Nora"])).toBe(true);
+    expect(ganadoresDelEnlaceCoinciden(lineas, [3, 1], ["Nora", "Beto"])).toBe(true);
+  });
+
+  it("sigue exigiendo la misma cantidad y que no falte ninguno", () => {
+    expect(ganadoresDelEnlaceCoinciden(lineas, [3, 1], ["Nora"])).toBe(false);
+    expect(ganadoresDelEnlaceCoinciden(lineas, [3, 1], ["Nora", ""])).toBe(false);
+    expect(ganadoresDelEnlaceCoinciden(lineas, [], [])).toBe(false);
+  });
+
+  it("una línea cruda en el enlace no cuenta como el nombre de nadie", () => {
+    expect(ganadoresDelEnlaceCoinciden(lineas, [3], [lineas[3] as string])).toBe(false);
+  });
+
+  it("con una lista de nombres exige el nombre exacto, como siempre", () => {
+    const nombres = ["Ana", "Beto", "Nora"];
+    expect(ganadoresDelEnlaceCoinciden(nombres, [2, 0], ["Nora", "Ana"])).toBe(true);
+    expect(ganadoresDelEnlaceCoinciden(nombres, [2, 0], ["Beto", "Ana"])).toBe(false);
+    expect(ganadoresDelEnlaceCoinciden(nombres, [2, 0], ["Nora", "ana"])).toBe(false);
+  });
+
+  it("lo que se muestra de quien salió es el lugar, nunca la línea", () => {
+    expect(ganadoresRehechos(lineas, [3, 1])).toEqual(["Lugar 4", "Lugar 2"]);
+    expect(ganadoresRehechos(["Ana", "Beto"], [1])).toEqual(["Beto"]);
+  });
+
+  it("la página del evento compara y muestra con esas dos", () => {
+    const codigo = readFileSync("src/evento.ts", "utf8");
+    expect(codigo).toContain("ganadoresDelEnlaceCoinciden(r.nombres, r.ganadores, ganadoresDelEnlace)");
+    expect(codigo).toContain("ganadoresRehechos(r.nombres, r.ganadores)");
   });
 });
