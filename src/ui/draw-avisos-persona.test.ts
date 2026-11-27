@@ -115,6 +115,13 @@ describe("el resultado de una lista de personas", () => {
     }
   });
 
+  it("la hoja de estilos los saca de la pantalla: el atributo solo no alcanza contra el estilo del botón", () => {
+    const css = readFileSync(join(process.cwd(), "src/styles.css"), "utf8");
+    // Los dos son `a.ghost`, que fija su `display`: sin esta regla quedarían a la vista, apagados y sin enlace.
+    expect(css).toMatch(/\ba\.ghost \{ display: inline-block;/u);
+    expect(css).toMatch(/#btn-whatsapp\[hidden\], #btn-email\[hidden\] \{ display: none; \}/u);
+  });
+
   it("lo demás del resultado queda: el QR para comprobar y copiar el mensaje", async () => {
     await resultado(LINEAS, [1]);
     await vi.waitFor(() => expect(document.getElementById("qr-box")?.style.display).toBe("block"));
