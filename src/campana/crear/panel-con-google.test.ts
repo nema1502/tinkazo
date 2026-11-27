@@ -294,7 +294,7 @@ describe("cuántas personas ganan cuando cada premio se manda", () => {
   });
 
   it("un archivo de personas con 10 premios en dólares se abre con sus 10: no se le baja nada y no se puede sumar", async () => {
-    const deDiez = { ...(await bajarUna({}, 10)), identidad: "persona" };
+    const deDiez: Record<string, unknown> = { ...(await bajarUna({}, 10)), identidad: "persona" };
     expect(deDiez.premios).toHaveLength(10);
     const creador = crear({ modo: CON_DOLARES });
     elegirArchivo(JSON.stringify(deDiez));
