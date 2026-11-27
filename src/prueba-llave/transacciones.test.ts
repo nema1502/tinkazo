@@ -1,9 +1,27 @@
-import { Keypair, Networks, TransactionBuilder, scValToNative } from "@stellar/stellar-sdk";
+import { Account, Address, Keypair, MuxedAccount, Networks, SorobanDataBuilder, TransactionBuilder, scValToNative } from "@stellar/stellar-sdk";
 import type { Transaction } from "@stellar/stellar-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { entradaDe, hex } from "./ayuda-de-pruebas";
+import { entradaDe, entradaDeTransferencia, hex } from "./ayuda-de-pruebas";
 import { RED_DE_PRUEBA } from "./red";
-import { aOperacion, armarConOperacion, armarCreacion, armarLectura, armarSorteo, conEntradasFirmadas, entradasPorFirmar, hashDeTransaccion, maxTimeDe, mismaAutorizacion, operacionDeSello, VIDA_DEL_SOBRE_S } from "./transacciones";
+import {
+  aOperacion,
+  armarConOperacion,
+  armarCreacion,
+  armarLectura,
+  armarSorteo,
+  conEntradasFirmadas,
+  credencialDe,
+  entradasPorFirmar,
+  hashDeTransaccion,
+  maxTimeDe,
+  mismaAutorizacion,
+  mismaOperacion,
+  operacionDeSello,
+  operacionDeTransferencia,
+  raizDeLaEntrada,
+  recursoDeclarado,
+  VIDA_DEL_SOBRE_S,
+} from "./transacciones";
 
 const origen = Keypair.random().publicKey();
 const organizador = RED_DE_PRUEBA.contrato;
@@ -127,5 +145,79 @@ describe("lo que se sabe de una transacción antes de mandarla", () => {
     vi.setSystemTime(new Date("2026-11-25T12:00:00Z"));
     const tx = armarLectura({ origen, secuencia: "5", id: 3n });
     expect(maxTimeDe(tx)).toBe(Math.floor(new Date("2026-11-25T12:00:00Z").getTime() / 1000) + VIDA_DEL_SOBRE_S);
+  });
+});
+
+describe("la transferencia de monedas de prueba", () => {
+  const cuenta = RED_DE_PRUEBA.verificador;
+  const g = Keypair.random().publicKey();
+  const m = new MuxedAccount(new Account(g, "0"), "1234567890").accountId();
+  const monto = 100_000_000n;
+  const pedida = operacionDeTransferencia({ desde: cuenta, hacia: m, monto });
+
+  it("llama a transfer del contrato de las monedas con origen, destino y monto en ese orden, y el destino puede ser G, M o C", () => {
+    for (const hacia of [g, m, RED_DE_PRUEBA.contrato]) {
+      const o = operacionDeTransferencia({ desde: cuenta, hacia, monto });
+      expect(o.contract).toBe(RED_DE_PRUEBA.activo);
+      expect(o.function).toBe("transfer");
+      expect(o.args).toHaveLength(3);
+      expect(Address.fromScVal(o.args[0]!).toString()).toBe(cuenta);
+      expect(Address.fromScVal(o.args[1]!).toString()).toBe(hacia);
+      expect(scValToNative(o.args[2]!)).toBe(monto);
+    }
+  });
+
+  it("la credencial de una entrada es de origen, de una dirección, o otra si no se entiende", () => {
+    expect(credencialDe(entradaDeTransferencia(cuenta, pedida, "origen"))).toEqual({ tipo: "origen" });
+    expect(credencialDe(entradaDeTransferencia(cuenta, pedida, "direccion"))).toEqual({ tipo: "direccion", direccion: cuenta });
+    expect(credencialDe("esto no es un xdr")).toEqual({ tipo: "otra" });
+  });
+
+  it("la raíz es exacta cuando la entrada trae la misma llamada, argumento por argumento", () => {
+    expect(raizDeLaEntrada(entradaDeTransferencia(cuenta, pedida, "direccion"), pedida)).toBe("exacta");
+  });
+
+  it("la raíz es normalizada cuando el destino pedido era una M y la entrada trae la G de abajo", () => {
+    const sinNota = operacionDeTransferencia({ desde: cuenta, hacia: g, monto });
+    expect(raizDeLaEntrada(entradaDeTransferencia(cuenta, sinNota, "direccion"), pedida)).toBe("normalizada");
+  });
+
+  it("la raíz es otra con otro destino, otro monto, otro contrato, otra función, una subllamada o algo ilegible", () => {
+    const otraG = Keypair.random().publicKey();
+    const casos: Array<ReturnType<typeof operacionDeTransferencia>> = [
+      operacionDeTransferencia({ desde: cuenta, hacia: otraG, monto }),
+      operacionDeTransferencia({ desde: cuenta, hacia: m, monto: monto + 1n }),
+      operacionDeTransferencia({ desde: RED_DE_PRUEBA.contrato, hacia: m, monto }),
+      { ...pedida, contract: RED_DE_PRUEBA.contrato },
+      { ...pedida, function: "transfer_from" },
+      { ...pedida, args: pedida.args.slice(0, 2) },
+    ];
+    for (const c of casos) expect(raizDeLaEntrada(entradaDeTransferencia(cuenta, c, "direccion"), pedida)).toBe("otra");
+    expect(raizDeLaEntrada(entradaDeTransferencia(cuenta, pedida, "direccion", 1), pedida)).toBe("otra");
+    expect(raizDeLaEntrada("esto no es un xdr", pedida)).toBe("otra");
+    // Una M de otra cuenta no es la G de abajo del destino pedido.
+    const deOtra = operacionDeTransferencia({ desde: cuenta, hacia: otraG, monto });
+    expect(raizDeLaEntrada(entradaDeTransferencia(cuenta, deOtra, "direccion"), pedida)).toBe("otra");
+  });
+
+  it("la transacción armada es la operación pedida y no otra", () => {
+    const tx = armarConOperacion({ origen, secuencia: "100", operacion: pedida });
+    expect(mismaOperacion(tx, pedida)).toBe(true);
+    expect(mismaOperacion(tx, { ...pedida, function: "balance" })).toBe(false);
+    expect(mismaOperacion(tx, operacionDeTransferencia({ desde: cuenta, hacia: g, monto }))).toBe(false);
+    expect(mismaOperacion("esto no es un xdr", pedida)).toBe(false);
+  });
+
+  it("la comisión por recursos declarada sale de los datos de Soroban, y sin ellos es cero", () => {
+    const sin = armarConOperacion({ origen, secuencia: "100", operacion: pedida });
+    expect(recursoDeclarado(sin)).toBe(0);
+    expect(recursoDeclarado("esto no es un xdr")).toBe(0);
+    const con = new TransactionBuilder(new Account(origen, "100"), { fee: "100", networkPassphrase: RED_DE_PRUEBA.passphrase })
+      .addOperation(aOperacion(pedida))
+      .setTimeout(30)
+      .setSorobanData(new SorobanDataBuilder().setResourceFee(1234).build())
+      .build()
+      .toXDR();
+    expect(recursoDeclarado(con)).toBe(1234);
   });
 });

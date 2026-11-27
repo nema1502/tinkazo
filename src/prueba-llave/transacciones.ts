@@ -1,5 +1,6 @@
-import { Account, Address, Operation, TransactionBuilder, nativeToScVal, xdr } from "@stellar/stellar-sdk";
+import { Account, Address, MuxedAccount, Operation, StrKey, TransactionBuilder, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import type { Transaction } from "@stellar/stellar-sdk";
+import { declaradoDeSobre } from "./cobro";
 import { INCLUSION_BASE, RED_DE_PRUEBA } from "./red";
 
 /**
@@ -146,4 +147,107 @@ export function hashDeTransaccion(txXdr: string): string {
 export function maxTimeDe(txXdr: string): number {
   const tx = TransactionBuilder.fromXDR(txXdr, RED_DE_PRUEBA.passphrase) as Transaction;
   return Number(tx.timeBounds?.maxTime ?? 0);
+}
+
+/**
+ * La transferencia de monedas de prueba por su contrato de activo: `transfer(from, to, amount)`. Es el mismo mecanismo del
+ * dólar digital de otras redes. `hacia` puede ser una G, una M (con su número de nota adentro) o una C. Sin entradas todavía.
+ */
+export function operacionDeTransferencia(o: { desde: string; hacia: string; monto: bigint }): OperacionDeContrato {
+  return {
+    contract: RED_DE_PRUEBA.activo,
+    function: "transfer",
+    args: [new Address(o.desde).toScVal(), new Address(o.hacia).toScVal(), nativeToScVal(o.monto, { type: "i128" })],
+  };
+}
+
+/** De quién es una entrada de autorización: de la cuenta que manda la transacción, de una dirección, o de algo que no se entiende. */
+export type Credencial = { tipo: "origen" } | { tipo: "direccion"; direccion: string } | { tipo: "otra" };
+
+/** La credencial de una entrada de autorización. Nunca lanza. */
+export function credencialDe(entradaB64: string): Credencial {
+  try {
+    const entrada = xdr.SorobanAuthorizationEntry.fromXDR(entradaB64, "base64");
+    const tipo = (entrada.credentials as unknown as { type: string }).type;
+    if (tipo === "sorobanCredentialsSourceAccount") return { tipo: "origen" };
+    const dueno = duenoDeLaEntrada(entrada);
+    return dueno === null ? { tipo: "otra" } : { tipo: "direccion", direccion: dueno };
+  } catch {
+    return { tipo: "otra" };
+  }
+}
+
+/**
+ * Cómo trae la entrada de autorización la llamada que autoriza. `exacta`: es la operación pedida, argumento por argumento.
+ * `normalizada`: igual, salvo que el destino pedido era una dirección M y la entrada trae la G de abajo, sin el número.
+ * `otra`: cualquier otra cosa, una subllamada o algo que no se entiende.
+ */
+export type Raiz = "exacta" | "normalizada" | "otra";
+
+/** ¿El destino de la entrada es la G de abajo de la M que se pidió? */
+function esLaGDeAbajo(pedido: xdr.ScVal, entrada: xdr.ScVal): boolean {
+  try {
+    const m = Address.fromScVal(pedido).toString();
+    const g = Address.fromScVal(entrada).toString();
+    if (!StrKey.isValidMed25519PublicKey(m) || !StrKey.isValidEd25519PublicKey(g)) return false;
+    return MuxedAccount.fromAddress(m, "0").baseAccount().accountId() === g;
+  } catch {
+    return false;
+  }
+}
+
+/** La forma de la raíz de la entrada frente a la operación que se quiere firmar. Nunca lanza. */
+export function raizDeLaEntrada(entradaB64: string, operacion: OperacionDeContrato): Raiz {
+  try {
+    const entrada = xdr.SorobanAuthorizationEntry.fromXDR(entradaB64, "base64");
+    const raiz = entrada.rootInvocation;
+    if (raiz.subInvocations.length !== 0) return "otra";
+    const f = raiz.function as unknown as { type: string; contractFn?: xdr.InvokeContractArgs; value?: xdr.InvokeContractArgs };
+    if (f.type !== "sorobanAuthorizedFunctionTypeContractFn") return "otra";
+    const llamada = f.contractFn ?? f.value;
+    if (!llamada) return "otra";
+    if (Address.fromScAddress(llamada.contractAddress).toString() !== operacion.contract) return "otra";
+    if (llamada.functionName.toString() !== operacion.function) return "otra";
+    if (llamada.args.length !== operacion.args.length) return "otra";
+    let normalizada = false;
+    for (let i = 0; i < operacion.args.length; i++) {
+      const pedido = operacion.args[i];
+      const traido = llamada.args[i];
+      if (!pedido || !traido) return "otra";
+      if (pedido.toXDR("base64") === traido.toXDR("base64")) continue;
+      if (i === 1 && esLaGDeAbajo(pedido, traido)) {
+        normalizada = true;
+        continue;
+      }
+      return "otra";
+    }
+    return normalizada ? "normalizada" : "exacta";
+  } catch {
+    return "otra";
+  }
+}
+
+/** La transacción tiene una sola operación y es esta invocación, con el mismo contrato, la misma función y los mismos argumentos. */
+export function mismaOperacion(txXdr: string, operacion: OperacionDeContrato): boolean {
+  try {
+    const tx = TransactionBuilder.fromXDR(txXdr, RED_DE_PRUEBA.passphrase) as Transaction;
+    if (tx.operations.length !== 1) return false;
+    const op = tx.operations[0];
+    if (!op || op.type !== "invokeHostFunction") return false;
+    const esperada = xdr.HostFunction.hostFunctionTypeInvokeContract(
+      new xdr.InvokeContractArgs({ contractAddress: new Address(operacion.contract).toScAddress(), functionName: operacion.function, args: operacion.args }),
+    );
+    return op.func.toXDR("base64") === esperada.toXDR("base64");
+  } catch {
+    return false;
+  }
+}
+
+/** La comisión por recursos que declara una transacción ya ensamblada, en stroops, o cero si no trae datos de Soroban. */
+export function recursoDeclarado(txXdr: string): number {
+  try {
+    return declaradoDeSobre(xdr.TransactionEnvelope.fromXDR(txXdr, "base64")).recursoDeclarado;
+  } catch {
+    return 0;
+  }
 }
