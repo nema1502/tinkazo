@@ -63,3 +63,11 @@ export function claveDeNotaDeEntrar(entorno?: EntornoDePersonas): string {
 export function claveDeQueGuardamos(entorno?: EntornoDePersonas): string {
   return guardarPerfilActivo(entorno) ? "cpQueGuardamosPerfil" : "cpQueGuardamosPersona";
 }
+
+/**
+ * El permiso que el alta lleva para guardar el perfil: `true` si la página se construyó para guardarlo y sin definir si no, que
+ * es lo que el cuerpo del pedido deja afuera. Así el pedido de una página sin la bandera no cambia ni en una letra.
+ */
+export function permisoDePerfil(entorno?: EntornoDePersonas): true | undefined {
+  return guardarPerfilActivo(entorno) || undefined;
+}

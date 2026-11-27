@@ -11,7 +11,7 @@
  *    vuelve a abrir el enlace ve que está adentro por esa llave, sin entrar de nuevo.
  *  - Con 150 celulares a la vez, las consultas se desparraman en el tiempo y los reintentos del alta tienen tope.
  *  - El permiso para guardar el perfil (`perfil: true`) viaja en el alta solo si esta página se construyó para guardarlo
- *    (`guardarPerfilActivo`), que es cuando la pantalla le dijo a la persona qué se guarda. Sin eso el cuerpo del alta es el de
+ *    (`permisoDePerfil`), que es cuando la pantalla le dijo a la persona qué se guarda. Sin eso el cuerpo del alta es el de
  *    siempre, letra por letra: una página vieja en la memoria de un celular nunca hace guardar nada.
  */
 
@@ -35,7 +35,7 @@ import {
   type BaseDelCelular,
 } from "./conectar";
 import { SIN_CUENTA } from "./memoria";
-import { guardarPerfilActivo } from "./persona-bandera";
+import { permisoDePerfil } from "./persona-bandera";
 
 export interface PiezasDeLaPersona {
   base: BaseDelCelular;
@@ -108,7 +108,7 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
       llave: llave(),
       p: p.pase,
       // El permiso va con el pedido, y solo desde una página que dijo qué se guarda. Sin él queda sin definir y no viaja.
-      perfil: guardarPerfilActivo() || undefined,
+      perfil: permisoDePerfil(),
     };
     const opciones = { inicio, sosiego };
     let r = await anotarPersonaEnCampana(p.servicio, p.sala, cuerpo, dep, alReintentar, opciones);

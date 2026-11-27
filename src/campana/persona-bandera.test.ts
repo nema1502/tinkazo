@@ -5,6 +5,7 @@ import {
   claveDeQueGuardamos,
   clienteDeGoogleDelSitio,
   guardarPerfilActivo,
+  permisoDePerfil,
 } from "./persona-bandera";
 
 describe("las banderas de anotarse sin billetera", () => {
@@ -79,6 +80,16 @@ describe("la bandera de guardar el perfil de quien se anota", () => {
     expect(guardarPerfilActivo()).toBe(true);
     vi.stubEnv("VITE_GUARDAR_PERFIL", "0");
     expect(guardarPerfilActivo()).toBe(false);
+  });
+
+  it("el permiso del alta es true con la bandera prendida y queda sin definir apagada, para que no viaje", () => {
+    expect(permisoDePerfil({})).toBeUndefined();
+    expect(permisoDePerfil({ VITE_GUARDAR_PERFIL: "1" })).toBeUndefined();
+    expect(permisoDePerfil({ VITE_ANOTARSE_SIN_BILLETERA: "1", VITE_GUARDAR_PERFIL: "1" })).toBe(true);
+    expect(permisoDePerfil()).toBeUndefined();
+    vi.stubEnv("VITE_ANOTARSE_SIN_BILLETERA", "1");
+    vi.stubEnv("VITE_GUARDAR_PERFIL", "1");
+    expect(permisoDePerfil()).toBe(true);
   });
 
   it("elige las claves de los textos de la pantalla: las de siempre apagada y las del perfil con las dos prendidas", () => {
