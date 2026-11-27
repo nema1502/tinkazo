@@ -323,6 +323,41 @@ describe("el armador de siempre", () => {
     expect("premio_en_mano" in archivo).toBe(false);
   });
 
+  it("un archivo de personas de la etapa anterior, con montos y sin premio escrito, pide el texto y se descarga firmable", async () => {
+    crear({ identidad: "persona" });
+    llenarEnMano();
+    clic("ccp-descargar");
+    await asentar();
+    const viejo = JSON.parse(bajadas[0] ?? "{}") as Record<string, unknown>;
+    delete viejo.premio_en_mano;
+    viejo.premios = ["400000000", "400000000", "400000000"];
+    expect(validarCampanaParaElFirmador(JSON.stringify(viejo), AHORA)).toMatchObject({ ok: false, campo: "premio_en_mano" });
+    localStorage.clear();
+    for (const c of montados) c.desmontar();
+    montados = [];
+    bajadas = [];
+    crear();
+    elegirArchivo(JSON.stringify(viejo));
+    await asentar();
+    clic("ccp-ir-2");
+    expect(existe("#ccp-monto-40")).toBe(false);
+    expect(q<HTMLInputElement>("#ccp-premio-mano").value).toBe("");
+    clic("ccp-ir-6");
+    clic("ccp-descargar");
+    await asentar();
+    expect(bajadas).toHaveLength(0);
+    clic("ccp-ir-2");
+    escribir("ccp-premio-mano", "Auriculares");
+    clic("ccp-ir-6");
+    clic("ccp-descargar");
+    await asentar();
+    expect(bajadas).toHaveLength(1);
+    const archivo = JSON.parse(bajadas[0] ?? "{}") as Record<string, unknown>;
+    expect(archivo.premio_en_mano).toEqual({ es: "Auriculares", en: "Auriculares" });
+    expect(archivo.premios).toEqual(["0", "0", "0"]);
+    expect(validarCampanaParaElFirmador(JSON.stringify(archivo), AHORA)).toEqual({ ok: true });
+  });
+
   it("un archivo de personas abierto con su premio lo muestra escrito, se pida o no en la dirección", async () => {
     crear({ identidad: "persona" });
     llenarEnMano();

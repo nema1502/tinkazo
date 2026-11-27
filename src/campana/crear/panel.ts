@@ -214,7 +214,8 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   const alModo = (g: FormularioDeCampana): FormularioDeCampana => {
     if (deps.demo) return g;
     const personas = g.conservado ? g.conservado.identidad === "persona" : deps.identidad === "persona";
-    if (personas) return g.premioEnMano !== undefined || g.conservado ? g : { ...g, premioEnMano: "" };
+    // Un archivo de personas que no trae premio escrito (de la etapa anterior, con montos) también lo pide: el firmador no lo firma sin él.
+    if (personas) return g.premioEnMano !== undefined ? g : { ...g, premioEnMano: "" };
     if (g.premioEnMano === undefined) return g;
     const { premioEnMano: _quitado, ...resto } = g;
     return resto;
