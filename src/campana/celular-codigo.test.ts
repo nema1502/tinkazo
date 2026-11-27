@@ -141,6 +141,51 @@ describe("el código de quien ganó", () => {
   });
 });
 
+describe("quien llega a la entrega antes de que llegue su código", () => {
+  /** Quien recarga ya habiendo ganado ve Ganaste desde su memoria, y la sala contesta recién después. */
+  async function conLaSalaCaida(): Promise<{ mundo: Awaited<ReturnType<typeof prepararCelular>>; dar: (codigo: string) => void; preguntas: () => number }> {
+    let respuesta: EstadoPropio | "red" = "red";
+    let preguntas = 0;
+    const mundo = await prepararCelular({
+      ...sorteada({}),
+      yo: async () => {
+        preguntas += 1;
+        return respuesta;
+      },
+      memoria: memoriaDeAnotada("gano"),
+    });
+    return { mundo, dar: (codigo) => { respuesta = { ...propio("sorteada"), gano: true, codigo }; }, preguntas: () => preguntas };
+  }
+
+  it("lo pide al llegar y lo muestra sin sacarla de la entrega", async () => {
+    const { mundo, dar } = await conLaSalaCaida();
+    expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Ganaste");
+    expect(mundo.raiz.querySelector(".cmp-codigo-linea")).toBeNull();
+    dar(CODIGO);
+    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
+    await asentar();
+    expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
+    expect(texto(mundo.raiz, "#cmp-estado .cmp-codigo")).toBe(CODIGO);
+  });
+
+  it("si la sala no contestó, sigue preguntando cada pocos segundos hasta tenerlo y después deja de preguntar", async () => {
+    const { mundo, dar, preguntas } = await conLaSalaCaida();
+    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
+    await asentar();
+    expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
+    expect(mundo.raiz.querySelector(".cmp-codigo-linea")).toBeNull();
+    await mundo.disparar(15_000);
+    expect(mundo.raiz.querySelector(".cmp-codigo-linea")).toBeNull();
+    dar(CODIGO);
+    await mundo.disparar(15_000);
+    expect(texto(mundo.raiz, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
+    expect(texto(mundo.raiz, "#cmp-estado .cmp-codigo")).toBe(CODIGO);
+    const hasta = preguntas();
+    await mundo.disparar(15_000);
+    expect(preguntas()).toBe(hasta);
+  });
+});
+
 describe("quien salió de la lista en una campaña de personas", () => {
   it("por repetida ve su motivo sin hablar de una cuenta", async () => {
     const mundo = await prepararCelular({
