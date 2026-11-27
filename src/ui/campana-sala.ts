@@ -16,6 +16,7 @@ import { anotarDuenaDelBorrador, borradorEsDeOtra, borrarBorrador, leerBorrador 
 import { DOLAR, dolaresEnTexto, esDeCentavosJustos, totalDePremios } from "../campana/comision";
 import { fechaTexto, horaTexto, textoDelPremio } from "../campana/formato";
 import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
+import { clienteDeGoogleDelSitio } from "../campana/persona-bandera";
 import { reglaQueFalla } from "../campana/reglas-de-activar";
 import { ESPERA_TOKEN_MS } from "../campana/sesion";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
@@ -57,6 +58,7 @@ import {
   leerOrganizadora,
   olvidarIntentoDeArchivo,
   pedirPase,
+  personasSePuedenAbrir,
   ponerFase,
   quitarConMotivo,
   salaPuedeActivar,
@@ -231,6 +233,12 @@ export interface DepsDelPanelDeCampana {
   /** Tus campañas desde cualquier navegador y Usar en esta compu. Sin esto, el panel no cambia en nada. */
   tus?: DepsDeTus;
   /**
+   * Si una campaña de personas se puede abrir ahora: el sitio las sabe abrir y la sala las tiene prendidas con el mismo
+   * identificador. `true` o `false` cuando se sabe y `null` si no hubo respuesta. Se pregunta solo con una campaña de personas en
+   * la vista previa, antes de ofrecer Abrir la inscripción, y nunca con una de cuentas. Sin esto no se pregunta nada.
+   */
+  personasListas?: () => Promise<boolean | null>;
+  /**
    * Cuántos dólares digitales puede usar la cuenta que paga el premio (`campana-deposito.ts`). Con esto, en la vista previa de
    * una campaña de la red principal el panel suma una línea que dice si el premio está o cuánto falta. Sin esto no mira nada.
    */
@@ -306,6 +314,8 @@ export function depsReales(): DepsDelPanelDeCampana {
     },
     ir: (direccion) => location.assign(direccion),
     tus: depsDeTusReales(),
+    // La bandera del sitio y la sala, las dos: si el sitio no trae la entrada de personas, a la sala no se le pregunta nada.
+    personasListas: () => personasSePuedenAbrir(clienteDeGoogleDelSitio()),
     // El saldo se lee en la red principal: en la de prueba no hay premio de verdad que mirar.
     ...(network.name === "mainnet" ? { deposito: depsDeDepositoReales() } : {}),
   };
@@ -2103,6 +2113,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // lo dice el título de la pantalla, y no se repite.
     mensaje = pide !== null && deps.cuenta() !== pide && !cm?.activo() ? fmt("cpoEntraCon", { fin: pide.slice(-4) }) : "";
     vista = "previa";
+    mirarPersonas();
     // Sin sala todavía, al volver la compu de dormir o la red se vuelve a mirar el cobro.
     if (cm?.activo()) armarDespertar();
     pintar();
@@ -2171,9 +2182,27 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     return p.estado;
   }
 
-  /** Vuelve a mirar si la campaña de personas se puede abrir. Lo que se sabía se olvida: si nadie dice que no, se ofrece abrir. */
+  /**
+   * Mira si la campaña de personas que está a la vista se puede abrir, antes de ofrecerlo: con el sitio construido sin esa
+   * entrada, o con la sala sin prenderla, quien organiza abriría un QR que ningún celular puede usar. Lo que se sabía se
+   * olvida. Mientras pregunta el botón no está, con un no la pantalla lo dice, y sin respuesta se ofrece abrir como siempre
+   * (la sala rechaza sola lo que no puede). No pinta: pinta quien llama. Una campaña de cuentas no pregunta nada.
+   */
   function mirarPersonas(): void {
     personas = null;
+    const c = campana;
+    if (c === null || c.identidad !== "persona" || !deps.personasListas) return;
+    const mia = { de: c, estado: "mirando" as const };
+    personas = mia;
+    void deps
+      .personasListas()
+      .catch(() => null)
+      .then((r) => {
+        // Otra pregunta, u otra campaña, tomó el lugar de esta: su respuesta ya no dice nada.
+        if (personas !== mia) return;
+        personas = r === false ? { de: c, estado: "no" } : null;
+        pintar();
+      });
   }
 
   async function abrirInscripcion(): Promise<void> {
@@ -2259,6 +2288,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     mensaje = "";
     if (fase === "lista") {
       vista = "previa";
+      mirarPersonas();
       // Una sala retomada en lista también pide el cobro antes de abrirse.
       void cm?.mirar();
     } else if (fase === "abierta") {
