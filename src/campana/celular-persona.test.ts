@@ -199,7 +199,8 @@ describe("una campaña de personas: la previa", () => {
       .mockResolvedValueOnce({ ok: true, ya: false } satisfies ResultadoDelAlta);
     const { mundo, g } = await montarPersona({ anotar });
     await entrarYAceptar(mundo, g);
-    expect(texto(mundo, "#cmp-hola .cmp-error")).toContain("wifi");
+    // El tope de quien vuelve a entrar es de la persona y no de la wifi: no se la manda a cambiar de red.
+    expect(texto(mundo, "#cmp-hola .cmp-error")).toBe("Hubo demasiados intentos desde acá. Probá de nuevo en un rato.");
     mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .cmp-accion .primary")?.click();
     await asentar();
     expect(anotar).toHaveBeenCalledTimes(2);

@@ -156,7 +156,11 @@ const CLAVE_DE_HORA = {
 /** Lo que falta en un paso. `automaticas` son las bases de ahora, para saber si las escritas quedaron desfasadas. */
 export function faltasDelPaso(f: FormularioDeCampana, paso: NumeroDePaso, ahora: number, automaticas: Bilingue): Falta[] {
   if (paso === 1) return f.nombre.trim() === "" ? [{ paso, clave: "ccFaltaNombre", donde: "ccp-nombre" }] : [];
-  if (paso === 2) return f.monto === null ? [{ paso, clave: "ccFaltaMonto", donde: "ccp-monto" }] : [];
+  if (paso === 2) {
+    // Una campaña de personas no lleva montos: se escribe qué se lleva cada persona.
+    if (f.premioEnMano !== undefined) return f.premioEnMano.trim() === "" ? [{ paso, clave: "ccFaltaPremioMano", donde: "ccp-premio-mano" }] : [];
+    return f.monto === null ? [{ paso, clave: "ccFaltaMonto", donde: "ccp-monto" }] : [];
+  }
   if (paso === 3) {
     const faltas: Falta[] = [];
     const hora = revisarHoras(f, ahora);
@@ -231,7 +235,17 @@ export function armarCampana(f: FormularioDeCampana, o: { bases: Bilingue; ident
   if (guardado?.organizadora) archivo.organizadora = guardado.organizadora;
   // Anotarse sin billetera: el campo solo va si se pidió en un formulario nuevo o si el archivo que se abrió ya lo traía. Con un
   // archivo abierto manda lo que el archivo decía: una campaña de cuentas no cambia por abrirla con la dirección de personas.
-  if ((guardado ? guardado.identidad : o.identidad) === "persona") archivo.identidad = "persona";
+  if ((guardado ? guardado.identidad : o.identidad) === "persona") {
+    archivo.identidad = "persona";
+    // El premio en mano va escrito y los montos en cero, uno por persona. El inglés propio de un archivo abierto se repite mientras el
+    // español no cambie, y si no el inglés repite el español.
+    if (f.premioEnMano !== undefined) {
+      const premio = f.premioEnMano.trim();
+      const abierto = guardado?.premioEnMano;
+      archivo.premio_en_mano = { es: premio, en: abierto && abierto.es.trim() === premio ? abierto.en : premio };
+      archivo.premios = Array.from({ length: f.ganan }, () => "0");
+    }
+  }
   return archivo;
 }
 
@@ -249,7 +263,7 @@ export interface MuestrasDeLaVista {
  */
 export function campanaParaLaVista(
   f: FormularioDeCampana,
-  o: { ahora: number; muestraMarca: string; muestraLugar: Bilingue; bases: Bilingue },
+  o: { ahora: number; muestraMarca: string; muestraLugar: Bilingue; muestraPremio?: Bilingue; bases: Bilingue },
 ): { campana: Record<string, unknown>; muestras: MuestrasDeLaVista } {
   const nombre = f.nombre.trim();
   const lugar = f.lugar.trim();
@@ -261,6 +275,10 @@ export function campanaParaLaVista(
     .filter((p) => (p.tipo === "texto" ? textoDelPedido(p).es !== "" : lecturaDelPedido(f, p.tipo, p.url).ok))
     .map((p) => pedidoDelArchivo(f, p));
   const conBases = (texto: string, otro: string): string => (texto.trim() || otro.trim() || o.muestraMarca).slice(0, 6000);
+  // Con el premio escrito la vista es la de una campaña de personas: sin premio todavía muestra uno de muestra.
+  const enMano = f.premioEnMano !== undefined;
+  const premioEscrito = f.premioEnMano?.trim() ?? "";
+  const premioDeMuestra = o.muestraPremio ?? { es: "Premio", en: "Prize" };
   const campana: Record<string, unknown> = {
     v: 1,
     evento: nombre === "" || f.fecha === "" ? EVENTO_DE_LA_VISTA : eventoDelFormulario(f),
@@ -269,7 +287,7 @@ export function campanaParaLaVista(
     empresa: { nombre: nombre || o.muestraMarca, logo: f.logo, color: f.color },
     lugar: lugar ? { es: lugar, en: lugar } : { es: o.muestraLugar.es, en: o.muestraLugar.en },
     zona: f.zona,
-    premios: premiosDe(f.monto ?? 40, f.ganan),
+    premios: enMano ? Array.from({ length: f.ganan }, () => "0") : premiosDe(f.monto ?? 40, f.ganan),
     abre_ms: abreMs,
     cierra_ms: cierraMs,
     sorteo_ms: sorteoMs,
@@ -282,13 +300,18 @@ export function campanaParaLaVista(
     promo: null,
     comprobante: null,
   };
-  return { campana, muestras: { nombre: nombre === "", premio: f.monto === null, lugar: lugar === "", horas: horasBien === null } };
+  if (enMano) {
+    campana.identidad = "persona";
+    campana.premio_en_mano = premioEscrito === "" ? { es: premioDeMuestra.es, en: premioDeMuestra.en } : { es: premioEscrito, en: premioEscrito };
+  }
+  const premioDeMuestraAhora = enMano ? premioEscrito === "" : f.monto === null;
+  return { campana, muestras: { nombre: nombre === "", premio: premioDeMuestraAhora, lugar: lugar === "", horas: horasBien === null } };
 }
 
 /** El paso al que lleva un campo que el lector rechazó. Lo que no es de ningún paso es un error del armado: se queda en el 6. */
 export function pasoDelFallo(campo: string, conLogo: boolean): NumeroDePaso {
   if (["evento", "empresa", "empresa.nombre", "empresa.logo"].includes(campo)) return 1;
-  if (campo === "premios") return 2;
+  if (campo === "premios" || campo === "premio_en_mano") return 2;
   if (["lugar", "zona", "abre_ms", "cierra_ms", "sorteo_ms", "recibir_hasta_ms", "horas"].includes(campo)) return 3;
   if (["pasos", "pasos.url", "pasos.texto"].includes(campo)) return 4;
   if (campo === "bases") return 5;
@@ -429,7 +452,8 @@ export function formularioDesdeTexto(crudo: string, o: OpcionesDeApertura): { ok
       : null,
     blanco: false,
     color,
-    monto: iguales ? Number(primero / UNIDADES_POR_DOLAR) : null,
+    monto: iguales && c.premioEnMano === undefined ? Number(primero / UNIDADES_POR_DOLAR) : null,
+    ...(c.premioEnMano !== undefined ? { premioEnMano: c.premioEnMano.es } : {}),
     otroMonto: false,
     ganan: c.premios.length,
     fecha: abre.fecha,
@@ -461,6 +485,7 @@ export function formularioDesdeTexto(crudo: string, o: OpcionesDeApertura): { ok
       red: datos.red === "testnet" ? "testnet" : "mainnet",
       anotadas: c.anotadas,
       ...(c.identidad === "persona" ? { identidad: "persona" as const } : {}),
+      ...(c.premioEnMano !== undefined ? { premioEnMano: { es: c.premioEnMano.es, en: c.premioEnMano.en } } : {}),
       lugar: { es: c.lugar.es, en: c.lugar.en },
     },
     origen: {

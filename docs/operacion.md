@@ -298,6 +298,8 @@ Las funciones del sitio se prenden con variables `VITE_` que se leen al construi
 | `VITE_SORTEO_SERVIDOR` | apagada, solo con `1` | `sin definir` | El sorteo lo manda el servidor |
 | `VITE_REGALO` | apagada, solo con `1` | `1` | Los primeros 3 sorteos oficiales gratis |
 | `VITE_CAMPANAS` | apagada, con `1` o `true` | `1` | La campaña de una empresa: panel, página del celular y entrada de quien ganó |
+| `VITE_ANOTARSE_SIN_BILLETERA` | apagada, solo con `1` | `sin definir` | Las campañas de personas: la página del celular las abre y el armador las ofrece con `?identidad=persona` |
+| `VITE_GOOGLE_CLIENT_ID` | sin identificador | `sin definir` | El identificador de cliente de Google con que se abre el botón de las campañas de personas. Es público |
 | `VITE_EQUIPOS` | prendida, se apaga con `0` o `false` | `1` | Los equipos con cupón |
 | `VITE_MODOS` | prendida, se apaga con `0` o `false` | `1` | El selector de modos del sorteo |
 | `VITE_FOTO_JUEGO` | prendida, se apaga con `0` o `false` | `sin definir` | La foto con el dibujo del juego al compartir |
@@ -474,6 +476,8 @@ De menos a más, y siempre sin desplegar el portero durante el evento:
 
 Las banderas del sitio se leen al construir: apagarlas pide una publicación nueva, así que no son un corte de emergencia.
 
+**Una campaña de personas en curso no se corta apagando sus interruptores.** `DIFERIDA = "0"` en la sala (o `GOOGLE_CLIENT_ID` vacío) frena crear campañas de personas y anotar a gente nueva, y nada más: quitar, cerrar la lista, sellar, sortear, avisar, dar los códigos de entrega y la consulta propia de cada celular siguen andando, y la campaña se termina desde el panel. El panel, el show, el comprobante y la pantalla grande no miran ningún interruptor. Hay una excepción, la de `VITE_ANOTARSE_SIN_BILLETERA` en el sitio: la página del celular de una campaña de personas la mira cada vez que se abre, y construida sin ella dice que esa campaña todavía no se puede abrir desde ese sitio, también a quien ya se anotó y recarga para ver si ganó. Por eso no se apaga con una campaña en curso, ni se publica un sitio construido sin ella hasta que la última sala de personas haya vencido.
+
 ### Qué no hacer
 
 - **No desplegar el portero, ni volver a una versión anterior, durante el evento.** Un despliegue reinicia el objeto.
@@ -498,6 +502,53 @@ La sala vive 24 horas desde que se crea, no desde el sorteo, y su alarma borra t
   - **Pagar lo que falte.** Lo que falte se paga desde la billetera de respaldo de `VITE_PAGOS_CUENTAS`, con la nota del premio. La pantalla del resultado ya no está. El comprobante dice Pagado, Pendiente o, pasados 7 días del sorteo, Vencido por cada premio. Vencido es solo una etiqueta: no frena el pago y no tiene que ver con `recibir_hasta_ms`, que nada hace cumplir.
 - **Si un premio no se recibe en el plazo.** Nada vence solo, y la etiqueta Vencido del comprobante no cambia eso: quien organiza decide. Si resuelve sortearlo de nuevo, hace otro sorteo con una lista nueva por el camino de siempre, y a la nueva ganadora hay que darle el alta a mano, avisarle y pagarle, porque ya no hay panel de campaña ni correo.
 - **Bajar los topes** y sumar a mano los sorteos que falten a la cuenta que organiza, como en Después del evento.
+
+### La campaña de personas, con el premio en mano
+
+Es la campaña para un evento grande donde nadie necesita una cuenta de Tinkazo. Quien se anota entra con Google y en la lista queda una línea de persona (empieza con `p1:`) que no deja saber quién es, nunca una cuenta. El premio no es dinero: se entrega en mano, en el evento, y lo escribe quien organiza. Nace apagada y la firma solo Tinkazo. El contrato de la sala está en [workers/sala/README.md](../workers/sala/README.md), en la parte de las campañas de personas, y el marco del premio en [premios.md](premios.md).
+
+**Qué tiene que estar prendido, en los dos lados.** Si falta uno, la campaña no abre.
+
+- **El sitio**, en Vercel: `VITE_ANOTARSE_SIN_BILLETERA=1` y `VITE_GOOGLE_CLIENT_ID` con el identificador de cliente de Google de Tinkazo, y una publicación nueva. Hoy el sitio publicado no trae ninguna de las dos (ver la tabla de banderas).
+- **La sala**, en `[vars]` de `workers/sala/wrangler.toml`: `DIFERIDA = "1"` y el mismo identificador en `GOOGLE_CLIENT_ID`, y desplegar la sala.
+- **Que el identificador sea el mismo.** `GET https://s.tinkazo.app/v1/personas/estado` dice `{"prendido","cliente"}`. El `cliente` tiene que ser igual a `VITE_GOOGLE_CLIENT_ID`: si no, nadie puede entrar.
+
+Prender pide publicar el sitio y desplegar la sala, así que se hace con la palabra de quien mantiene el proyecto y nunca el día de un evento. Hasta entonces `DIFERIDA` queda en `"0"` y la sala no crea ninguna campaña de personas.
+
+**Cómo se arma.** Quien arma abre `crear-campana.html?identidad=persona`. El armador no muestra ningún control del modo: lo deciden la dirección y la bandera, y sin la bandera la dirección no cambia nada. Con el modo puesto:
+
+1. En el paso del premio, la marca Premio en mano y un campo de texto, de hasta 60 caracteres, donde se escribe qué se lleva cada persona que gana. No hay botones de monto ni total, y sin el texto no se sigue.
+2. En las bases, los renglones propios del premio en mano: dicen que el premio se entrega en mano en el evento y que, si quien ganó no está, decide quien organiza.
+3. En el último paso no hay costos, ni comisión, ni Activar. El único botón es Descargar mi campaña y el título es Mandala a Tinkazo. Quien arma manda ese archivo a quien firma.
+
+El archivo trae `identidad` en `persona`, el `premio_en_mano` en español y en inglés (el inglés repite el español) y los `premios` en `"0"`, uno por persona que gana.
+
+**Cómo se firma.** Con `scripts/campana-firmar.mjs`, como dice El archivo de la campaña y su firma, más arriba. El firmador no firma una campaña de personas sin `premio_en_mano` y dice por qué (`persona-sin-premio-en-mano`): una con premios en dólares no sale, porque sin una cuenta en la lista no hay a quién pagarle. Y la activación al pagar nunca la firma: `POST /v1/activar` con `identidad` da `400 forma`, estén los interruptores como estén. Cada evento sigue pidiendo dos archivos con eventos distintos.
+
+**Sin comisión.** No se cobra nada a quien organiza ni a quien se anota, y el panel no ofrece cobrarlo ni pagarlo. Con el premio en mano, el control de la comisión queda apagado aunque el build la traiga prendida: no hay pantallas de Cargá ni de Pagá a Tinkazo, y Abrir la inscripción está disponible desde el primer momento. Tampoco aparece Pagar premio (el panel de pagos no se monta con ganadoras que son líneas de persona, aunque `VITE_PAGOS` esté en `1`), ni se pide el alta de nadie al portero: no hay 40 créditos por ganadora que sumar al margen. El sello y el sorteo pasan por el portero como en cualquier campaña, así que la cuenta que sella sigue necesitando sus sorteos (Antes del evento, punto 6).
+
+**El día.** El recorrido es el de El día de la campaña, con estas diferencias:
+
+- Cada persona de la lista sale con su número de llegada y el nombre que escribió. Sin nombre dice Persona n. El motivo de quitar que en una campaña de cuentas dice Cuenta repetida dice acá Persona repetida.
+- El show y las tarjetas del resultado dicen el nombre o, si esta pestaña no lo tiene, Lugar n de la lista. El panel dice Ganadora n cuando no tiene el nombre. Ninguna pantalla muestra una línea `p1:`, salvo la lista sellada del comprobante, que es la lista pública que cualquiera recalcula.
+- La pantalla del resultado trae una sola línea: Entregá cada premio en mano. Cuando llegan los códigos pasa a ser Entregá cada premio a quien te muestre su código, y cada fila lleva el suyo al lado (Código 0421). Las filas se pintan primero y los códigos llegan unos segundos después: el panel los pide hasta tres veces, con dos segundos entre una y otra, y si no llegaron queda el enlace Ver los códigos para pedirlos de nuevo. Mientras falte alguno la línea sigue diciendo que se entrega en mano.
+- Avisar a es solo una marca para quien organiza: no manda nada. Después la fila dice Marcada como avisada. Quien ganó se entera al abrir su página, que se actualiza sola, y ve Ganaste, el premio escrito y su código (Mostrale este código a quien organiza).
+- No aparece nunca Puede recibir, No se pudo preparar, Recibir mi premio ni Pagar premio. No se manda ningún correo (el estado público de la sala dice `"correo": false`, sin importar `CORREO_GANADORAS`) y no se guarda nada para volver de una línea a una persona.
+- Si la sala devolviera una lista que no se puede sortear (mezclada, solo con una sala rota), el panel dice que se avise a Tinkazo y no ofrece ninguna acción.
+
+**En el stand: el código antes de entregar.** Quien organiza entrega cada premio a quien le muestre su código, y solo a esa persona. Se compara con el de la fila de esa ganadora en el panel. El código son cuatro cifras, salen de la línea de la persona y no se repiten entre las ganadoras de la campaña. Una persona que dice haber ganado y no tiene el código no recibe el premio.
+
+**Si alguien no puede mostrar su código.** Pasa si se quedó sin batería, sin datos o cerró la página.
+
+1. **Que vuelva a abrir la página de la campaña en el mismo celular.** El código no se perdió: la sala lo calcula de nuevo en cada consulta y la página se lo vuelve a mostrar, mientras la sala viva (24 horas desde que se creó) y el navegador conserve lo suyo.
+2. **Desde otro celular no sirve.** La lista ya cerró y la sala no vuelve a anotar a nadie, así que entrar con su cuenta de Google en otro aparato no le muestra el código.
+3. **Si no hay forma, decide quien organiza.** Entrega o no el premio según lo que vea en el evento, y deja anotado a quién se lo dio y por qué. Tinkazo no guarda nada para comprobar quién es una persona a partir de su línea.
+
+La misma regla vale si quien ganó no está en el evento: las bases dicen que decide quien organiza qué hacer con el premio.
+
+**Cuándo se pierde el rastro.** La sala se borra a las 24 horas de crearse, no desde el sorteo, y con ella la sal de la que sale cada línea. Pasado ese plazo ni el panel ni el celular pueden decir quién ganó ni dar los códigos. El sorteo, el show y el comprobante siguen. Por eso se crea la sala el mismo día del evento y quien organiza anota el nombre de quien ganó y a quién entregó cada premio mientras la sala vive.
+
+**Cómo cortarla.** Apagar los interruptores no corta una campaña en curso y tiene una excepción que hay que conocer: está en Cómo cortar una campaña, más arriba.
 
 ## El cobro a las campañas de empresa
 

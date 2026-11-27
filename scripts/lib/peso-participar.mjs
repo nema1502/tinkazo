@@ -42,10 +42,15 @@ const KB = 1024;
  * del margen es para los arreglos de la revisión de la página: que la sesión del proveedor no se pierda por un error pasajero
  * y que la página no le vuelva a pedir nada al proveedor después de anotarse. Lo que se puede bajar a pedido se baja a pedido.
  * El tope que manda es el de la entrada, lo que baja un celular antes de mostrar nada, y ese no se mueve de 15 KB.
+ *
+ * Pasó de 28,5 a 29 KB (28,8 medidos en la revisión de la rama) al sumar lo que necesita quien gana en una campaña de personas:
+ * su código de entrega en Ganaste y en la pantalla de entrega, el motivo de persona repetida, el texto de una campaña ya
+ * terminada para quien recuerda que ganó y el aviso de demasiados intentos. Es código y textos de la página, sin nada de la
+ * herramienta. La entrada sigue en 14,9 de 15 KB.
  */
 export const TOPES = {
   entrada: 15 * KB,
-  celular: 28.5 * KB,
+  celular: 29 * KB,
   html: 8 * KB,
   hoja: 5 * KB,
 };

@@ -214,6 +214,8 @@ export async function consultarYo(
   }
   if (typeof c.gano === "boolean") propio.gano = c.gano;
   if (c.avisado === true) propio.avisado = true;
+  // El código de entrega de una campaña de personas: cuatro cifras y solo a quien ganó. Cualquier otra cosa no sirve para nada.
+  if (propio.gano === true && typeof c.codigo === "string" && /^[0-9]{4}$/u.test(c.codigo)) propio.codigo = c.codigo;
   return propio;
 }
 

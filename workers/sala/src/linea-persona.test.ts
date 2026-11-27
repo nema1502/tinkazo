@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { crearTablasDeCampana, huellaDePersona, salDeCampana } from "./campana";
-import { esLineaDePersona, lineaDePersona } from "./linea-persona";
+import { codigosDeEntrega, esLineaDePersona, lineaDePersona } from "./linea-persona";
 import type { Ejecutar, ValorSql } from "./registro";
 
 /**
@@ -14,6 +14,7 @@ interface Vectores {
   casos: { sal: string; usuario: string; linea: string }[];
   campana: { sal: string; usuarios: string[]; lineas: string[]; ordenadas: string[] };
   formas: { validas: string[]; invalidas: string[] };
+  entrega: { casos: { nombre: string; sal: string; ganadoras: string[]; codigos: string[]; vueltas: number[] }[] };
 }
 
 const vectores = JSON.parse(readFileSync(new URL("../../../docs/vectors-persona.json", import.meta.url), "utf8")) as Vectores;
@@ -92,6 +93,85 @@ describe("esLineaDePersona", () => {
 
   it("acepta cada línea de los vectores", () => {
     for (const c of vectores.casos) expect(esLineaDePersona(c.linea)).toBe(true);
+  });
+});
+
+describe("el código de entrega", () => {
+  it("da el código de cada caso de los vectores", async () => {
+    expect(vectores.entrega.casos.length).toBeGreaterThanOrEqual(5);
+    for (const c of vectores.entrega.casos) expect(await codigosDeEntrega(c.sal, c.ganadoras), c.nombre).toEqual(c.codigos);
+  });
+
+  it("son siempre cuatro cifras, con ceros a la izquierda cuando hacen falta", async () => {
+    let conCeros = 0;
+    for (const c of vectores.entrega.casos) {
+      for (const codigo of await codigosDeEntrega(c.sal, c.ganadoras)) {
+        expect(codigo).toMatch(/^[0-9]{4}$/);
+        if (codigo.startsWith("0")) conCeros++;
+      }
+    }
+    expect(conCeros).toBeGreaterThan(0);
+  });
+
+  it("nunca se repite entre ganadoras, y el caso armado choca en la primera vuelta y lo separa la siguiente", async () => {
+    for (const c of vectores.entrega.casos) expect(new Set(await codigosDeEntrega(c.sal, c.ganadoras)).size, c.nombre).toBe(c.ganadoras.length);
+    const choque = vectores.entrega.casos.filter((c) => c.vueltas.some((v) => v > 0));
+    expect(choque.length).toBeGreaterThanOrEqual(2);
+    for (const c of choque) {
+      // Sin la separación, el código de la vuelta cero de la que pasó de vuelta es el de otra ganadora.
+      const solas = await Promise.all(c.ganadoras.map(async (l) => (await codigosDeEntrega(c.sal, [l]))[0]));
+      expect(new Set(solas).size, c.nombre).toBeLessThan(c.ganadoras.length);
+    }
+  });
+
+  it("depende del orden de puesto: la que llega primero se queda con su código de la vuelta cero", async () => {
+    const delante = vectores.entrega.casos[3]!;
+    const atras = vectores.entrega.casos[4]!;
+    expect(atras.sal).toBe(delante.sal);
+    const [, a, b] = delante.ganadoras as [string, string, string];
+    expect(atras.ganadoras.slice(1)).toEqual([b, a]);
+    // Las dos se llevan el mismo código en la vuelta cero: gana quien tiene el puesto de adelante.
+    expect(delante.codigos[1]).toBe(atras.codigos[1]);
+    expect(delante.codigos[2]).not.toBe(atras.codigos[2]);
+    expect(await codigosDeEntrega(delante.sal, [a, b])).toEqual(delante.codigos.slice(1));
+    expect(await codigosDeEntrega(delante.sal, [b, a])).toEqual(atras.codigos.slice(1));
+  });
+
+  it("no guarda nada ni depende de nada más: el mismo pedido da lo mismo, y la sal cambia los códigos", async () => {
+    const c = vectores.entrega.casos[0]!;
+    expect(await codigosDeEntrega(c.sal, c.ganadoras)).toEqual(await codigosDeEntrega(c.sal, c.ganadoras));
+    const otra = vectores.entrega.casos[1]!.sal;
+    expect(await codigosDeEntrega(otra, c.ganadoras)).not.toEqual(c.codigos);
+  });
+
+  it("sin ganadoras da una lista vacía, y una sola da su código", async () => {
+    const c = vectores.entrega.casos[0]!;
+    expect(await codigosDeEntrega(c.sal, [])).toEqual([]);
+    expect(await codigosDeEntrega(c.sal, [c.ganadoras[0]!])).toEqual([c.codigos[0]]);
+  });
+
+  it("lanza con una línea mal formada, sin repetir la línea en el mensaje", async () => {
+    const c = vectores.entrega.casos[0]!;
+    for (const mala of vectores.formas.invalidas) {
+      const error = await codigosDeEntrega(c.sal, [c.ganadoras[0]!, mala]).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(error, JSON.stringify(mala)).toBeInstanceOf(RangeError);
+      if (mala.length > 3) expect((error as Error).message).not.toContain(mala);
+    }
+    await expect(codigosDeEntrega(c.sal, [7 as unknown as string])).rejects.toBeInstanceOf(RangeError);
+  });
+
+  it("lanza con una sal que no es hexadecimal", async () => {
+    const c = vectores.entrega.casos[0]!;
+    for (const sal of ["", "xyz", "abc"]) await expect(codigosDeEntrega(sal, c.ganadoras)).rejects.toBeInstanceOf(RangeError);
+  });
+
+  it("lanza si hay más ganadoras que códigos y no se queda dando vueltas", async () => {
+    const c = vectores.entrega.casos[0]!;
+    const muchas = Array.from({ length: 10_001 }, () => c.ganadoras[0]!);
+    await expect(codigosDeEntrega(c.sal, muchas)).rejects.toBeInstanceOf(RangeError);
   });
 });
 

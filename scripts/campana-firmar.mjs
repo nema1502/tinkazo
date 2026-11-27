@@ -25,7 +25,7 @@ const hexadecimal = (bytes) => Buffer.from(bytes).toString("hex");
 
 /**
  * Normaliza y firma una campaña. `ahora` se pasa aparte para que la comprobación del cierre sea reproducible, y `validar`
- * es el validador de la campaña (`validarCampanaParaFirmar`): sin él no se firma, porque firmar a ciegas es lo que esto evita.
+ * es el validador de la campaña (`validarCampanaParaElFirmador`): sin él no se firma, porque firmar a ciegas es lo que esto evita.
  * Con `conComision` (lo que cobra Tinkazo a la campaña está prendido) los premios van en centavos justos: el panel suma el total al
  * centavo y un premio con fracción de centavo se mostraría distinto de lo que se suma. Lanza con el campo que falta o no sirve,
  * nunca con material de la llave.
@@ -57,10 +57,10 @@ export function firmarCampana(secretoHex, textoCrudo, ahora, validar, { conComis
   const texto = JSON.stringify(datos);
   const lectura = validar(texto, ahora);
   if (lectura === null || typeof lectura !== "object" || lectura.ok !== true) {
-    const quien = lectura?.quien === "sala" ? "la sala" : "el sitio";
+    const quien = lectura?.quien === "sala" ? "la sala rechazaría" : lectura?.quien === "firmador" ? "Tinkazo no firma" : "el sitio rechazaría";
     const campo = lectura?.campo ?? "desconocido";
     const motivo = lectura?.motivo ?? "sin motivo";
-    throw new Error(`${quien} rechazaría esta campaña: revisá el campo ${campo} (${motivo})`);
+    throw new Error(`${quien} esta campaña: revisá el campo ${campo} (${motivo})`);
   }
   if (conComision && !(Array.isArray(datos.premios) && datos.premios.every((p) => /^\d{1,16}$/u.test(String(p)) && BigInt(p) % 100_000n === 0n))) {
     throw new Error("con el cobro de la comisión prendido los premios van en centavos justos: revisá el campo premios");
@@ -153,8 +153,8 @@ async function cargarValidador() {
   const { runnerImport } = await import("vite");
   const ruta = fileURLToPath(new URL("../src/sala/validar-campana.ts", import.meta.url));
   const { module } = await runnerImport(ruta, { configFile: false, logLevel: "silent" });
-  if (typeof module.validarCampanaParaFirmar !== "function") throw new Error("no se pudo cargar el validador de campañas");
-  return module.validarCampanaParaFirmar;
+  if (typeof module.validarCampanaParaElFirmador !== "function") throw new Error("no se pudo cargar el validador de campañas");
+  return module.validarCampanaParaElFirmador;
 }
 
 async function firmarArchivo(archivoLlave, archivoCampana) {

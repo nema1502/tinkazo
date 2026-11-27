@@ -4,6 +4,7 @@
  */
 import { listHash } from "../../../src/protocol/canonical";
 import { roundTime } from "../../../src/protocol/quicknet";
+import { stripInvisibles } from "../../../src/invisibles";
 import { diaUtc, esCuentaValida, grupoDeIp, iguales } from "./logica";
 import { crearTablasDeEquipos, siguienteVersion } from "./registro";
 import type { Ejecutar } from "./registro";
@@ -91,6 +92,27 @@ export type LecturaDelTexto =
 /** Un premio: un monto entero en unidades de siete decimales, como lo escribe el archivo que lee el sitio. */
 const ES_PREMIO = /^\d{1,16}$/u;
 
+/** Lo más largo que puede ser el texto del premio en mano, en cada idioma. */
+export const MAX_PREMIO_EN_MANO = 60;
+
+/**
+ * El premio en mano: un objeto con `es` y `en`, cada uno de 1 a 60 caracteres, de una sola línea, con algo escrito y sin nada que
+ * no se vea. Es la misma regla que aplica el lector del sitio a los textos que van en dos idiomas.
+ */
+function esPremioEnMano(x: unknown): boolean {
+  if (typeof x !== "object" || x === null || Array.isArray(x)) return false;
+  const { es, en } = x as Record<string, unknown>;
+  return [es, en].every(
+    (texto) =>
+      typeof texto === "string" &&
+      texto.length >= 1 &&
+      texto.length <= MAX_PREMIO_EN_MANO &&
+      texto.trim() !== "" &&
+      stripInvisibles(texto) === texto &&
+      !/[\u0000-\u001F\u007F-\u009F]/u.test(texto),
+  );
+}
+
 /**
  * Lee del texto de una campaña lo que la sala necesita. La sala lo corre después de comprobar la firma y el firmador de
  * Tinkazo lo corre antes de firmar: lo que este lector rechaza, Tinkazo no lo firma.
@@ -123,6 +145,12 @@ export function leerTextoDeCampana(texto: string, ahora: number): LecturaDelText
   // Solo el valor exacto `persona` es el modo sin billetera. Cualquier otra cosa (sin el campo, `cuenta`, nulo, otro valor) se lee
   // como siempre: un campo que esta lectura no conoce no la cambia, igual que antes de que existiera el modo.
   const identidad = c.identidad;
+  // El premio en mano: qué se entrega en persona, en lugar de un monto. Solo con identidad persona y con todos los premios en "0".
+  const enMano = c.premio_en_mano;
+  if (enMano !== undefined) {
+    if (!esPremioEnMano(enMano) || identidad !== "persona") return forma("premio_en_mano");
+    if (premios.some((premio) => premio !== "0")) return forma("premios");
+  }
   if (cierraMs <= ahora) return { ok: false, motivo: "vencida", campo: "cierra_ms" };
   return {
     ok: true,
@@ -1183,6 +1211,8 @@ export interface EstadoDeCelular {
   gano?: boolean;
   puesto?: number;
   avisado?: boolean;
+  /** El código de entrega de quien ganó en una campaña de personas. Lo suma la sala, que tiene la sal: no sale de `estadoDeCelular`. */
+  codigo?: string;
 }
 
 /** Lo que ve un celular de sí mismo. Sin la llave correcta, solo lo público y `anotada: false`. */
