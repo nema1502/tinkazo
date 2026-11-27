@@ -1983,6 +1983,43 @@
   body:not([data-vista="app"]) main :is(p, li) { text-wrap: pretty; }
   .sec-link { display: inline-flex; align-items: center; min-height: 44px; margin-top: 14px; font-weight: 800; color: var(--ink); }
 
+  /* Precios: dos tarjetas, o tres cuando el mismo molde de comisión se abre.
+     Las columnas implícitas evitan un hueco cuando la campaña no está configurada. */
+  .precios-hero { padding: 48px 0 8px; grid-template-columns: minmax(0, 1fr); }
+  .precios-hero h1 { font-size: clamp(32px, 4.6vw, 48px); }
+  .precios-hero .lead { max-width: 780px; }
+  .precios-tarjetas {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: stretch;
+    gap: 22px; margin: 26px 0 32px;
+  }
+  .precios-tarjeta {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 16px; min-width: 0;
+    padding: 24px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+    overflow-wrap: anywhere;
+  }
+  .precios-tarjeta > h2 { font-size: 22px; line-height: 1.25; }
+  .precios-numero { font-size: clamp(36px, 4vw, 48px); font-weight: 900; line-height: 1.1; }
+  .precios-subtitulo { font-size: 16px; font-weight: 800; color: var(--ink2); }
+  .precios-texto { max-width: 680px; color: var(--ink2); font-size: 16px; margin-top: 8px; }
+  .precios-tarjeta .precios-texto { margin-top: 0; }
+  .precios-tarjeta .sec-link { margin-top: auto; padding-top: 14px; }
+  .precios-seccion { padding: 14px 0 0; }
+  .precios-paquetes { max-width: 900px; list-style: none; padding-left: 0; margin-top: 12px; }
+  .precios-notas { font-size: 16px; }
+  .precios-nunca { max-width: 680px; color: var(--ink2); font-size: 16px; margin-top: 8px; padding-left: 0; list-style: none; display: grid; gap: 8px; }
+  .precios-nunca li { display: flex; gap: 10px; }
+  .precios-nunca [aria-hidden] { color: var(--teal-ink); font-weight: 800; }
+  .precios-detalle { padding: 14px 0 30px; }
+  .precios-volver { padding: 0 0 40px; }
+  /* El piso de lectura también alcanza los rótulos, el plegado y la navegación,
+     solo en esta página: los componentes compartidos conservan sus reglas. */
+  .precios-pagina .kicker, .precios-pagina details.tecnico summary,
+  .precios-pagina .langs button, .precios-pagina footer .bar, .precios-pagina .pies a { font-size: 16px; }
+  @media (max-width: 760px) {
+    .precios-tarjetas { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); }
+    .precios-tarjeta { padding: 20px; }
+  }
+
   /* Preguntas frecuentes. */
   .faq { margin-top: 18px; display: grid; gap: 10px; max-width: 820px; }
   .faq details { background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
