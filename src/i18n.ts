@@ -1567,7 +1567,7 @@ export const T: Record<Lang, Dict> = {
     titPrecios: "Precios de Tinkazo: participar y comprobar es gratis",
     descPrecios: "Hoy Tinkazo es gratis. Los precios para quien organiza los publicamos muy pronto y te avisamos antes de cobrar. Participar y comprobar es gratis, siempre.",
     titTerminos: "Términos y privacidad de Tinkazo, cortos y sin letra chica",
-    descTerminos: "Participar es gratis, quien organiza responde por su sorteo y los nombres de su lista no se publican: Tinkazo no los puede leer. Términos y privacidad en corto.",
+    descTerminos: "Participar es gratis, quien organiza responde por su sorteo y los nombres de su lista no se publican. Términos y privacidad en corto.",
     titRuleta: "Ruleta de nombres gratis y verificable para sortear",
     descRuleta: "Ruleta de nombres para sortear en un evento o en clase: gira en pantalla grande, elige con justicia y cualquiera comprueba el resultado. Participar es gratis.",
     titEventos: "Sorteo para eventos y stands: pantalla grande y QR",
@@ -2531,8 +2531,9 @@ export const T: Record<Lang, Dict> = {
       "Quedan guardados en Cloudflare hasta que pidas borrarlos: escribinos a hola@tinkazo.app desde ese correo. " +
       "En la lista del sorteo no va nada de eso. Va una línea que te representa en esa campaña, que no es tu correo ni tu identificador y es distinta en cada campaña, " +
       "y tu nombre cifrado, igual que en las demás campañas. En la red queda sellada solo la huella de la lista de esas líneas. " +
-      "Si ganás, lo ves al abrir la página desde tu celular, con un código para mostrarle a quien organiza, que te entrega el premio en persona. " +
-      "La sala del evento vive 24 horas como máximo: pasado ese tiempo, la página ya no puede decirte si ganaste, salvo que ya lo hayas visto en ese celular.",
+      "Si ganás, lo ves al abrir la página desde tu celular, con un código para mostrarle a quien organiza, que te entrega el premio. " +
+      "Si el premio es en dólares digitales, te los manda a la cuenta que le indiques después de ver tu código. " +
+      "La sala de la campaña vive 24 horas como máximo: pasado ese tiempo, la página ya no puede decirte si ganaste.",
     prDuraLink: "Qué queda de tu sorteo y por cuánto tiempo →",
     sealed: "Lista sellada ✓", defaultMeta: "Sorteo de comunidad",
     noAnchor: "sin registrar", onChain: "verlo en el registro público",
@@ -4724,7 +4725,7 @@ export const T: Record<Lang, Dict> = {
     titPrecios: "Tinkazo pricing: taking part and checking are free",
     descPrecios: "Tinkazo is free today. We will publish pricing for organizers very soon, and we will tell you before we charge. Taking part and checking a draw are always free.",
     titTerminos: "Tinkazo terms and privacy, short and with no fine print",
-    descTerminos: "Taking part is free, whoever runs a draw answers for it, and names on their list are not published: Tinkazo cannot read them. Terms and privacy, kept short.",
+    descTerminos: "Taking part is free, whoever runs a draw answers for it, and names on their list are not published. Terms and privacy, kept short.",
     titRuleta: "Free, verifiable name wheel to draw a winner fairly",
     descRuleta: "A name wheel for your event or class: it spins on the big screen, picks fairly and anyone can check the result. Taking part is free, with nothing to install.",
     titEventos: "Draws for events and stands: big screen and QR code",
@@ -5683,8 +5684,9 @@ export const T: Record<Lang, Dict> = {
       "It is stored on Cloudflare until you ask us to delete it: write to hola@tinkazo.app from that email address. " +
       "None of that goes into the draw list. The list holds a line that stands for you in that campaign, which is not your email or your identifier and is different in every campaign, " +
       "and your encrypted name, as in other campaigns. Only a fingerprint of the list of those lines is sealed on the network. " +
-      "If you win, you see it when you open the page on your phone, with a code to show the organizer, who hands you the prize in person. " +
-      "The event room lives 24 hours at most: after that, the page can no longer tell you whether you won, unless you had already seen it on that phone.",
+      "If you win, you see it when you open the page on your phone, with a code to show the organizer, who gives you the prize. " +
+      "If the prize is in digital dollars, they send it to the account you give them after checking your code. " +
+      "The campaign room lives 24 hours at most: after that, the page can no longer tell you whether you won.",
     prDuraLink: "What is left of your draw, and for how long →",
     sealed: "List sealed ✓", defaultMeta: "Community draw",
     noAnchor: "not recorded", onChain: "see it in the public record",

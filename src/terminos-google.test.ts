@@ -4,7 +4,7 @@ import { VIDA_CAMPANA_MS } from "../workers/sala/src/campana";
 import { codigosDeEntrega, lineaDePersona } from "../workers/sala/src/linea-persona";
 import { crearTablaDePerfiles } from "../workers/sala/src/perfiles";
 import type { Ejecutar } from "../workers/sala/src/registro";
-import { VIDA_MEMORIA_MS } from "./campana/memoria";
+import { VIDA_MEMORIA_PERSONA_MS } from "./campana/memoria";
 import { TEXTOS_CAMPANA } from "./campana/textos";
 import { T } from "./i18n";
 import { TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
@@ -117,23 +117,27 @@ describe("los Términos: el recuadro de quien se anota con su cuenta de Google",
     const ganadora = await lineaDePersona(sal, "google:108000000000000000002");
     expect((await codigosDeEntrega(sal, [ganadora]))[0]).toMatch(/^\d{4}$/u);
     expect(texto("es", "tmGoogleB")).toContain(
-      "Si ganás, lo ves al abrir la página desde tu celular, con un código para mostrarle a quien organiza, que te entrega el premio en persona.",
+      "Si ganás, lo ves al abrir la página desde tu celular, con un código para mostrarle a quien organiza, que te entrega el premio. " +
+        "Si el premio es en dólares digitales, te los manda a la cuenta que le indiques después de ver tu código.",
     );
     expect(texto("en", "tmGoogleB")).toContain(
-      "If you win, you see it when you open the page on your phone, with a code to show the organizer, who hands you the prize in person.",
+      "If you win, you see it when you open the page on your phone, with a code to show the organizer, who gives you the prize. " +
+        "If the prize is in digital dollars, they send it to the account you give them after checking your code.",
     );
+    for (const idioma of IDIOMAS) expect(texto(idioma, "tmGoogleB"), idioma).not.toMatch(/en persona|in person/iu);
   });
 
-  it("la sala vive 24 horas, y después la página solo dice lo que ese celular ya había visto", () => {
+  it("la sala vive 24 horas y el celular de una campaña de personas recuerda lo mismo: pasado ese tiempo la página ya no dice si ganaste", () => {
     expect(VIDA_CAMPANA_MS).toBe(24 * 3_600_000);
-    // El celular recuerda el resultado más tiempo que la sala: por eso quien ya lo vio lo sigue viendo.
-    expect(VIDA_MEMORIA_MS).toBeGreaterThan(VIDA_CAMPANA_MS);
+    // Lo que recuerda el celular en estas campañas dura lo que la sala: el texto no puede prometer más.
+    expect(VIDA_MEMORIA_PERSONA_MS).toBe(VIDA_CAMPANA_MS);
     expect(texto("es", "tmGoogleB")).toMatch(
-      /La sala del evento vive 24 horas como máximo: pasado ese tiempo, la página ya no puede decirte si ganaste, salvo que ya lo hayas visto en ese celular\.$/u,
+      /La sala de la campaña vive 24 horas como máximo: pasado ese tiempo, la página ya no puede decirte si ganaste\.$/u,
     );
     expect(texto("en", "tmGoogleB")).toMatch(
-      /The event room lives 24 hours at most: after that, the page can no longer tell you whether you won, unless you had already seen it on that phone\.$/u,
+      /The campaign room lives 24 hours at most: after that, the page can no longer tell you whether you won\.$/u,
     );
+    for (const idioma of IDIOMAS) expect(texto(idioma, "tmGoogleB"), idioma).not.toMatch(/salvo que|unless you had/iu);
   });
 
   it("no promete que no se guarda nada ni que no hay cuenta", () => {
@@ -223,11 +227,11 @@ describe("los documentos dicen lo mismo que los Términos, con el interruptor ap
 describe("los Términos: la descripción de la página habla de los nombres de la lista", () => {
   // Con el perfil guardado, Tinkazo tiene el nombre de quien se anota con Google. Lo que no puede leer son los nombres de la
   // lista de quien organiza, y la descripción que muestran los buscadores promete eso y nada más.
-  it("dice que Tinkazo no puede leer los nombres de la lista de quien organiza, y no los nombres en general", () => {
-    expect(texto("es", "descTerminos")).toContain("los nombres de su lista no se publican: Tinkazo no los puede leer.");
-    expect(texto("en", "descTerminos")).toContain("names on their list are not published: Tinkazo cannot read them.");
-    expect(texto("es", "descTerminos")).not.toContain("los nombres no se publican");
-    expect(texto("en", "descTerminos")).not.toContain("and names are not published");
+  it("dice solo que los nombres de la lista no se publican, sin afirmar que Tinkazo no los puede leer", () => {
+    expect(texto("es", "descTerminos")).toContain("los nombres de su lista no se publican. ");
+    expect(texto("en", "descTerminos")).toContain("names on their list are not published. ");
+    expect(texto("es", "descTerminos")).not.toMatch(/puede leer|pueden leer/u);
+    expect(texto("en", "descTerminos")).not.toMatch(/cannot read|can't read/u);
   });
 
   it("terminos.html la repite en la descripción, en los datos estructurados y en la vista previa al compartir", () => {
@@ -235,10 +239,11 @@ describe("los Términos: la descripción de la página habla de los nombres de l
     const es = texto("es", "descTerminos");
     expect(html.includes(`<meta name="description" content="${es}" />`), "la meta description").toBe(true);
     expect(html.includes(`"description":"${es}"`), "los datos estructurados").toBe(true);
+    expect(html, "terminos.html no afirma que Tinkazo no puede leer los nombres").not.toMatch(/Tinkazo no los puede leer|Tinkazo cannot read/u);
     for (const etiqueta of ['property="og:description"', 'name="twitter:description"']) {
       const contenido = new RegExp(`<meta ${etiqueta} content="([^"]*)"`, "u").exec(html)?.[1] ?? "";
-      expect(contenido, etiqueta).toContain("Tinkazo cannot read the names on their list.");
-      expect(contenido, etiqueta).not.toContain("cannot read the names.");
+      expect(contenido, etiqueta).toContain("the names on their list are not published.");
+      expect(contenido, etiqueta).not.toMatch(/cannot read|can't read/u);
     }
   });
 });
