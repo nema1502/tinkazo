@@ -54,10 +54,12 @@
  *   POST   /v1/sala/<id>/campana/quitar    Authorization: Bearer <token> JSON {"n","motivo"} → 204
  *   POST   /v1/sala/<id>/campana/avisar    Authorization: Bearer <token> JSON {"cuenta"} → 204
  *   POST   /v1/sala/<id>/campana/alta      JSON {"token","d","llave","p"?} → 201 {"cuenta"} o 200 {"cuenta","ya"}
- *   POST   /v1/sala/<id>/campana/alta      JSON {"google","d","llave","p"?}: contesta 201 {"anotada":true} o 200 {"anotada":true,"ya":true}
+ *   POST   /v1/sala/<id>/campana/alta      JSON {"google","d","llave","p"?,"perfil"?}: contesta 201 {"anotada":true} o 200 {"anotada":true,"ya":true}
  *                                           (solo en una campaña de personas, con "identidad": "persona" en su texto firmado: "google" es el
  *                                           token de identidad que entrega el botón de Google, que la sala verifica sola, sin preguntarle al
  *                                           proveedor de cuentas. La respuesta no lleva la línea de la persona ni nada que la identifique.
+ *                                           "perfil" en true es el permiso del celular para guardar el perfil, y vale solo con PERFILES
+ *                                           prendida: cualquier otro valor se ignora y la respuesta es la misma con él o sin él.
  *                                           En una campaña de cuentas, o en una sala que no existe, un pedido con "google" y sin "token" es un 400 forma, como siempre)
  *   POST   /v1/sala/<id>/campana/yo        JSON {"cuenta","llave"} → 200 {"fase","total","cierraMs","anotada"} más "sorteo" y "ronda" con la lista sellada o sorteada
  *   POST   /v1/sala/<id>/campana/yo        JSON {"llave"}: lo mismo, para una campaña de personas. El celular no tiene cuenta que mandar y la
@@ -71,7 +73,14 @@
  * mismo. Todo lo demás de una campaña en curso sigue andando, para poder terminarla: la consulta propia del celular (solo lee),
  * quitar, cerrar, sellar, guardar el resultado y avisar. La lista que se sella lleva una línea de persona por fila donde una campaña
  * de cuentas lleva una cuenta, y quitar, cerrar, sellar y el resultado andan igual. El aviso por correo a quien gana no se manda en
- * esas campañas: la línea no dice a quién escribir y la sala no guarda ningún dato que lo diga.
+ * esas campañas: la línea no dice a quién escribir y la sala de la campaña no guarda ningún dato que lo diga.
+ *
+ * El perfil de quien se anota con Google también nace apagado. Con la variable PERFILES en "1" y las campañas de personas
+ * prendidas, y solo si el pedido del alta trae "perfil" en true, el objeto de cupos guarda de esa persona el identificador de su
+ * cuenta de Google, el correo, el nombre y la dirección de la foto, con la primera y la última vez que se anotó (`perfiles.ts`).
+ * Ese objeto no se borra con las salas, así que el perfil dura más que la sala. Ninguna ruta lee, lista ni borra perfiles, y nada
+ * de un perfil va a una respuesta ni a un registro. Con PERFILES apagada no se guarda nada del token. Una campaña de cuentas
+ * nunca guarda un perfil.
  *
  * Un Durable Object por sala, con SQLite: guarda los nombres CIFRADOS (la clave
  * viaja en el fragmento del QR y nunca llega acá), sus huellas HMAC para no
@@ -86,7 +95,9 @@
  * por conexión, cada sala guarda una huella con una sal suya, que queda hasta
  * que se borra la sala (las ventanas de 10 minutos que ya pasaron se limpian con
  * cada envío), y de la llave del celular que anotó cada equipo guarda solo su
- * huella SHA-256). Los topes viven en el objeto, que es donde son exactos.
+ * huella SHA-256). Los topes viven en el objeto, que es donde son exactos. El perfil de más arriba es aparte: no vive en la
+ * sala sino en el objeto de cupos, lleva en claro el correo, el nombre y la foto con dos horas por persona, y solo se guarda con
+ * PERFILES prendida.
  *
  * El WebSocket hacia la pantalla usa la API de hibernación: un socket quieto
  * no cobra tiempo. Si se corta, la pantalla reconecta y consulta cada 3 s.
@@ -250,8 +261,8 @@ import { verificarIdentidadDeGoogle } from "./identidad-google";
 import { codigosDeEntrega, esLineaDePersona, lineaDePersona } from "./linea-persona";
 import { clavePorConexion, clienteDeGoogle, personasPrendido, venceDelToken } from "./personas";
 import type { VariablesDePersonas } from "./personas";
-import { crearTablaDePerfiles, guardarPerfil as guardarPerfilEnTabla } from "./perfiles";
-import type { PerfilLimpio, VariablesDePerfiles } from "./perfiles";
+import { crearTablaDePerfiles, guardarPerfil as guardarPerfilEnTabla, limpiarPerfil, perfilesPrendido } from "./perfiles";
+import type { DatosDePerfil, PerfilLimpio, VariablesDePerfiles } from "./perfiles";
 import deployments from "../../../src/stellar/deployments.json";
 
 export interface Env extends VariablesDeActivar, VariablesDeLlaveAuto, VariablesDePersonas, VariablesDePerfiles {
@@ -299,7 +310,7 @@ export interface Env extends VariablesDeActivar, VariablesDeLlaveAuto, Variables
 }
 
 /** Solo códigos fijos del proveedor: nunca una sesión, un id, un nombre, un correo ni una cuenta. */
-function registrar(evento: string, datos: Record<string, string | number> = {}): void {
+function registrar(evento: string, datos: Record<string, string | number | boolean> = {}): void {
   console.log(JSON.stringify({ evento, datos }));
 }
 
@@ -1881,15 +1892,22 @@ function cuerpoDeEstadoDeCelular(r: EstadoDeCelular): Record<string, unknown> {
  * pregunta nada al proveedor de cuentas y no depende de que alguien tenga billetera. La respuesta no lleva la línea ni nada que
  * identifique a la persona: solo que quedó anotada. Valen los mismos topes, el mismo pase, el mismo cupo, la misma fase y el mismo
  * cierre por hora que en una campaña de cuentas, y una misma cuenta de Google entra una sola vez, desde cualquier celular.
- * Del token no se guarda nada: ni el correo, ni el identificador de la cuenta de Google, ni el token mismo.
+ *
+ * Qué se guarda del token. La sala de la campaña no guarda nada de él: ni el correo, ni el identificador de la cuenta de Google,
+ * ni el token mismo. Con el interruptor `PERFILES` apagado, que es como nace, eso es todo. Con el interruptor prendido, y solo si
+ * el pedido trae `perfil` en verdadero (el celular lo manda cuando su página dijo que se guarda), el alta que terminó bien después
+ * de verificar el token deja en segundo plano (`enSegundoPlano`, el `waitUntil` del pedido) el guardado del perfil en el objeto de
+ * cupos: el identificador de la cuenta de Google, el correo, el nombre y la dirección de la foto (`perfiles.ts`). La respuesta no
+ * lo espera ni cambia por él. El reingreso con una ficha reciente no verifica el token y no guarda.
  */
 async function altaDePersona(
   env: Env,
   id: string,
   sala: ReturnType<Env["SALA"]["get"]>,
-  cuerpo: { google?: unknown; d?: unknown; llave?: unknown; p?: unknown },
+  cuerpo: { google?: unknown; d?: unknown; llave?: unknown; p?: unknown; perfil?: unknown },
   ip: string,
   h: Record<string, string>,
+  enSegundoPlano: (trabajo: Promise<unknown>) => void,
 ): Promise<Response> {
   const google = cuerpo.google;
   const d = cuerpo.d;
@@ -1936,10 +1954,54 @@ async function altaDePersona(
   const vence = venceDelToken(google, Date.now());
   const anterior = await sala.yaEsta(quien.usuario, llave, ip, google, vence, d);
   if (!anterior.ok) return falla(anterior, h);
-  if (anterior.cuenta !== null) return json({ anotada: true, ya: true }, 200, h);
+  if (anterior.cuenta !== null) {
+    // Ya estaba anotada y su token se acaba de verificar: el perfil se pone al día.
+    dejarPerfil(env, cuerpo.perfil, quien, enSegundoPlano);
+    return json({ anotada: true, ya: true }, 200, h);
+  }
   const r = await sala.anotarPersonaDeGoogle({ usuario: quien.usuario, d, llave, ip, p, exigirPase, token: google, vence });
   if (!r.ok) return falla(r, h);
+  dejarPerfil(env, cuerpo.perfil, quien, enSegundoPlano);
   return r.ya ? json({ anotada: true, ya: true }, 200, h) : json({ anotada: true }, 201, h);
+}
+
+/** Los códigos de `perfil-error`: lo verificado no deja un perfil que guardar, el guardado falló, o algo que no se esperaba. */
+type CodigoDePerfil = "forma" | "guardar" | "inesperado";
+
+/**
+ * Deja en segundo plano el guardado del perfil de quien se acaba de anotar, si corresponde. Hacen falta las dos cosas: que el
+ * pedido traiga `perfil` en verdadero (el booleano exacto: cualquier otro valor se ignora y nunca es un error de forma) y que la
+ * sala tenga los perfiles prendidos. Así una página vieja, que mostró el texto de antes, nunca hace guardar nada. El alta no
+ * espera el guardado y nunca falla por él: lo que salga mal deja solo un código de una lista fija. Ni el correo, ni el nombre, ni
+ * la foto, ni el usuario van a un registro.
+ */
+function dejarPerfil(env: Env, pedido: unknown, quien: DatosDePerfil, enSegundoPlano: (trabajo: Promise<unknown>) => void): void {
+  try {
+    if (pedido !== true || !perfilesPrendido(env)) return;
+    const perfil = limpiarPerfil(quien);
+    if (perfil === null) {
+      perfilSinGuardar("forma");
+      return;
+    }
+    enSegundoPlano(guardarPerfilDePersona(env, perfil));
+  } catch {
+    perfilSinGuardar("inesperado");
+  }
+}
+
+/** Guarda el perfil en el objeto de cupos y deja dicho cómo salió, sin nada de la persona. Nunca lanza. */
+async function guardarPerfilDePersona(env: Env, perfil: PerfilLimpio): Promise<void> {
+  try {
+    const r = await env.CUPOS.get(env.CUPOS.idFromName("cupos")).guardarPerfil(perfil);
+    registrar("perfil-guardado", { nueva: r.nueva, nombre: perfil.nombre !== "", foto: perfil.foto !== "" });
+  } catch {
+    perfilSinGuardar("guardar");
+  }
+}
+
+/** Deja dicho que un perfil no se guardó, solo con su código: nunca el motivo que dio el error, que podría nombrar a la persona. */
+function perfilSinGuardar(codigo: CodigoDePerfil): void {
+  registrar("perfil-error", { codigo });
 }
 
 /**
@@ -2365,12 +2427,14 @@ export default {
           d?: unknown;
           llave?: unknown;
           p?: unknown;
+          perfil?: unknown;
         } | null;
         if (!cuerpo) return json({ error: "forma" }, 400, h);
         // Con el token de Google y sin el del proveedor es el alta de una campaña de personas. Todo lo que trae el pedido de una
-        // campaña de cuentas sigue por el camino de siempre.
+        // campaña de cuentas sigue por el camino de siempre, que no mira el campo del perfil y nunca guarda uno.
         if (typeof cuerpo.google === "string" && cuerpo.token === undefined) {
-          return altaDePersona(env, id, salaDe(id), cuerpo, req.headers.get("CF-Connecting-IP") ?? "sin-ip", h);
+          const enSegundoPlano = (trabajo: Promise<unknown>): void => ctx.waitUntil(trabajo);
+          return altaDePersona(env, id, salaDe(id), cuerpo, req.headers.get("CF-Connecting-IP") ?? "sin-ip", h, enSegundoPlano);
         }
         const token = cuerpo.token;
         const d = cuerpo.d;

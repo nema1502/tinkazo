@@ -1,16 +1,20 @@
 /**
  * La identidad de quien se anota con Google directo: la sala verifica sola el token de identidad que el botón de Google
- * entrega al navegador, sin pasar por el proveedor de cuentas. Es una pieza pura: no la llama ninguna ruta todavía.
+ * entrega al navegador, sin pasar por el proveedor de cuentas. Es una pieza pura, y la usa el alta de las campañas de personas.
  *
  * Se comprueba, en este orden: la forma del token, que el algoritmo sea RS256, la firma contra las llaves públicas de
  * Google, el emisor, la audiencia (el identificador de cliente de Tinkazo, que es público), la caducidad y que el correo
  * esté verificado. Con la API de Web Crypto del Worker y sin paquetes.
  *
  * Lo que devuelve es un usuario estable (`google:` y el identificador de la cuenta de Google), el correo verificado y, si
- * el token los trae como texto, el nombre y la dirección de la foto de perfil, para que quien llama los use en memoria. El
- * nombre y la foto salen tal como vienen: acá solo se mira que sean un texto, y limpiarlos es cosa de `perfiles.ts`. Nada
- * del token, del correo, del nombre, de la foto ni del identificador va a un registro, y el motivo de un rechazo es siempre
- * uno de una lista corta y fija. Nunca lanza.
+ * el token los trae como texto, el nombre y la dirección de la foto de perfil. El nombre y la foto salen tal como vienen:
+ * acá solo se mira que sean un texto, y limpiarlos es cosa de `perfiles.ts`.
+ *
+ * Este archivo no guarda nada. Lo que hace el alta con lo que recibe depende del interruptor `PERFILES` de la sala. Apagado,
+ * que es como nace, lo usa en memoria para armar la línea de la persona y no guarda nada del token. Prendido, y solo si el
+ * pedido trae el permiso del celular, guarda además el identificador, el correo, el nombre y la foto en la tabla de perfiles
+ * del objeto de cupos. Con el interruptor como esté, nada del token, del correo, del nombre, de la foto ni del identificador
+ * va a un registro, y el motivo de un rechazo es siempre uno de una lista corta y fija. Nunca lanza.
  */
 import { aB64url, deB64url } from "./firma";
 
