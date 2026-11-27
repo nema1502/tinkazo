@@ -190,6 +190,48 @@ describe("lo que se rechaza", () => {
     expect(await verificarIdentidadDeGoogle(t, { ...b.opciones, clienteId: "" })).toEqual({ ok: false, motivo: "audiencia" });
   });
 
+  it("azp igual a la audiencia entra: es el token del botón de Google para sitios web", async () => {
+    const b = banco();
+    const t = await firmar({ payload: { azp: CLIENTE } });
+    expect((await verificarIdentidadDeGoogle(t, b.opciones)).ok).toBe(true);
+  });
+
+  it("sin azp entra", async () => {
+    const b = banco();
+    const t = await firmar();
+    expect((await verificarIdentidadDeGoogle(t, b.opciones)).ok).toBe(true);
+  });
+
+  it("azp distinto de la audiencia: audiencia (token de una cuenta de servicio con la audiencia de Tinkazo)", async () => {
+    const b = banco();
+    const t = await firmar({ payload: { azp: "112233445566778899001" } });
+    expect(await verificarIdentidadDeGoogle(t, b.opciones)).toEqual({ ok: false, motivo: "audiencia" });
+  });
+
+  it("azp que no es texto: audiencia", async () => {
+    const b = banco();
+    for (const azp of [123, null, [CLIENTE], { a: CLIENTE }, true, ""]) {
+      const t = await firmar({ payload: { azp } });
+      expect(await verificarIdentidadDeGoogle(t, b.opciones), JSON.stringify(azp)).toEqual({ ok: false, motivo: "audiencia" });
+    }
+  });
+
+  it("un correo de cuenta de servicio no entra aunque todo lo demás esté bien: audiencia", async () => {
+    const b = banco();
+    for (const email of ["robot@proyecto.iam.gserviceaccount.com", "Robot@Proyecto.IAM.GServiceAccount.COM", "robot@developer.gserviceaccount.com"]) {
+      const t = await firmar({ payload: { email, azp: CLIENTE } });
+      expect(await verificarIdentidadDeGoogle(t, b.opciones), email).toEqual({ ok: false, motivo: "audiencia" });
+      const sinAzp = await firmar({ payload: { email } });
+      expect(await verificarIdentidadDeGoogle(sinAzp, b.opciones), email).toEqual({ ok: false, motivo: "audiencia" });
+    }
+  });
+
+  it("un correo que solo se parece al de una cuenta de servicio entra", async () => {
+    const b = banco();
+    const t = await firmar({ payload: { email: "ana@gserviceaccount.com.example.org" } });
+    expect((await verificarIdentidadDeGoogle(t, b.opciones)).ok).toBe(true);
+  });
+
   it("otro emisor: emisor", async () => {
     const b = banco();
     for (const iss of ["https://accounts.example.org", "https://accounts.google.com.example.org", "", "google"]) {
