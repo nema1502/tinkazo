@@ -7,8 +7,9 @@
 import { costoDelRetiroTexto } from "../costo-del-retiro";
 import type { Lang } from "../idioma";
 import type { BaseDelCelular } from "./conectar";
-import { montarCelular, type VistaDelCelular } from "./celular";
+import { montarCelular, type BotonDeGoogle, type DepsDelCelular, type VistaDelCelular } from "./celular";
 import { depsDeDemostracion } from "./demostracion";
+import { SIN_CUENTA } from "./memoria";
 import { leerCampana } from "./modelo";
 import {
   ESTADO_DE_PANTALLA,
@@ -54,6 +55,37 @@ export function marcarMuestras(muestras: MuestrasDeVista): void {
   }
 }
 
+/** El nombre y el código de muestra de la vista de una campaña de personas: nadie entra a Google y nada se guarda. */
+const NOMBRE_DE_MUESTRA = "Ana P.";
+const CODIGO_DE_MUESTRA = "4821";
+
+/**
+ * La demostración de una campaña de personas: el botón de Google es de mentira (un botón común que entrega un nombre de muestra),
+ * quien gana ve su código de muestra y no hay cuenta ni retiro que decir. Es el mismo celular que ve la gente.
+ */
+function deLaPersona(demostracion: DepsDelCelular): DepsDelCelular {
+  const boton: BotonDeGoogle = {
+    montar: (contenedor, alEntrar) => {
+      const entrar = document.createElement("button");
+      entrar.type = "button";
+      entrar.className = "primary";
+      entrar.textContent = demostracion.tx("cpEntrar");
+      entrar.addEventListener("click", () => alEntrar({ cuenta: SIN_CUENTA, nombre: NOMBRE_DE_MUESTRA }));
+      contenedor.append(entrar);
+      return () => contenedor.replaceChildren();
+    },
+  };
+  return {
+    ...demostracion,
+    persona: { google: boton },
+    yo: async () => {
+      const propio = await demostracion.yo();
+      return propio !== "red" && propio !== "terminada" && propio.gano === true ? { ...propio, codigo: CODIGO_DE_MUESTRA } : propio;
+    },
+    costoDelRetiro: () => null,
+  };
+}
+
 /** Monta la escucha. Devuelve cómo dejar de escuchar y soltar la vista. */
 export function montarVistaPrevia(o: OpcionesDeLaVista): () => void {
   let vista: VistaDelCelular | null = null;
@@ -90,10 +122,16 @@ export function montarVistaPrevia(o: OpcionesDeLaVista): () => void {
       // Con festejar en falso el festejo grande solo pone la tilde: escribir en la pestaña Ganó no tira papel picado.
       movimientoReducido: () => !m.festejar || o.base.movimientoReducido(),
     };
-    vista = montarCelular(o.raiz, {
-      ...depsDeDemostracion(base, lectura.campana, ESTADO_DE_PANTALLA[m.pantalla]),
-      costoDelRetiro: () => (o.costoDelRetiro ?? ((l: Lang) => costoDelRetiroTexto(l)))(o.base.idioma()),
-    });
+    const demostracion = depsDeDemostracion(base, lectura.campana, ESTADO_DE_PANTALLA[m.pantalla]);
+    vista = montarCelular(
+      o.raiz,
+      lectura.campana.identidad === "persona"
+        ? deLaPersona(demostracion)
+        : {
+            ...demostracion,
+            costoDelRetiro: () => (o.costoDelRetiro ?? ((l: Lang) => costoDelRetiroTexto(l)))(o.base.idioma()),
+          },
+    );
     mostrarLaEtiqueta();
     abrirLasReglas();
     o.alMontar();
