@@ -347,7 +347,7 @@ export function pintarAdentro(
     conTarjeta?: boolean;
     salta?: boolean;
     respuestaDesde?: () => number;
-    /** Solo en una campaña de personas: el enlace chico que olvida a la persona en este celular. */
+    /** Solo en una campaña de personas: No soy yo, un enlace chico que olvida a la persona en este celular. */
     alOlvidar?: () => void;
   },
 ): () => void {
@@ -364,7 +364,7 @@ export function pintarAdentro(
   titulo(izq, deps.tx(datos.ya ? "cpYaEstabas" : "cpAdentro"));
   const contador = parrafo(izq, "", "cmp-contador");
   conDestacado(contador, deps.tx(datos.total === 1 ? "cpEnLaLista1" : "cpEnLaListaN"), "n", String(datos.total), "cmp-numero");
-  if (datos.alOlvidar) enlaceParaOlvidar(izq, deps, datos.alOlvidar);
+  if (datos.alOlvidar) boton(izq, deps.tx("cpNoSoyYo"), "cmp-otra-cuenta cmp-olvidar", datos.alOlvidar);
   const der = caja("cmp-der");
   const horas = caja("cmp-horas");
   const claveFase = datos.fase === "abierta" ? "cpCierraA" : datos.fase === "cerrada" ? "cpYaCerro" : "cpSellada";
@@ -509,13 +509,8 @@ export function pintarEntrega(raizPrincipal: HTMLElement, deps: DepsDelCelular, 
   titulo(hero, deps.tx("cpEntregaT"));
   parrafo(hero, deps.tx("cpEntregaL"), "cmp-apoyo");
   lineaDelCodigo(hero, deps, codigo);
-  if (alOlvidar) enlaceParaOlvidar(hero, deps, alOlvidar);
+  if (alOlvidar) boton(hero, deps.tx("cpNoSoyYo"), "cmp-otra-cuenta cmp-olvidar", alOlvidar);
   raiz.append(hero);
-}
-
-/** El enlace chico No soy yo de una campaña de personas: olvida a la persona en este celular. No es la acción principal. */
-function enlaceParaOlvidar(destino: HTMLElement, deps: DepsDelCelular, alHacer: () => void): void {
-  boton(destino, deps.tx("cpNoSoyYo"), "cmp-otra-cuenta cmp-olvidar", alHacer);
 }
 
 /** La salida de la lista siempre explica el motivo que informó la sala. */

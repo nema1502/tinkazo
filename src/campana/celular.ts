@@ -870,13 +870,13 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   };
 
   /** Solo en una campaña de personas: No soy yo sale de la sesión y olvida lo que este celular recordaba de la persona. */
-  const alOlvidar = (): (() => void) | undefined => (deps.persona ? () => void salir() : undefined);
+  const olvidar = deps.persona ? () => void salir() : undefined;
 
   const intervaloDe = (pantalla: Pantalla): number | null => {
     if (pantalla === "previa" || pantalla === "hola" || pantalla === "adentro") return 15_000;
     if (pantalla === "gano" || pantalla === "otra") return 60_000;
-    // La entrega de una campaña de personas sigue pidiendo el código mientras no llega: quien tocó Recibir antes de tenerlo no queda sin él.
-    if (pantalla === "entrega" && deps.persona && estado.codigo === null) return 15_000;
+    // La entrega (solo en personas) sigue pidiendo el código mientras no llega: quien tocó Recibir antes de tenerlo no queda sin él.
+    if (pantalla === "entrega" && estado.codigo === null) return 15_000;
     return null;
   };
 
@@ -950,7 +950,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
             conTarjeta: linea === "con-tarjeta",
             salta: saltarLaFase,
             respuestaDesde,
-            ...(deps.persona ? { alOlvidar: alOlvidar() } : {}),
+            alOlvidar: olvidar,
           });
         }
         pintadoAdentro = pintado;
@@ -1000,16 +1000,12 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       if (seccion) pintarEstadoDeCarga(seccion, deps.tx, "pase-vencido", () => undefined);
       return;
     }
-    if (estado.pantalla === "llena") {
-      avisoPublico(deps.tx("cpErrLlena"), null, true);
-      return;
-    }
-    if (estado.pantalla === "apagada") {
-      avisoPublico(deps.tx("cpPersonaNoAbre"));
+    if (estado.pantalla === "llena" || estado.pantalla === "apagada") {
+      avisoPublico(deps.tx(estado.pantalla === "llena" ? "cpErrLlena" : "cpPersonaNoAbre"), null, true);
       return;
     }
     if (estado.pantalla === "entrega") {
-      pintarEntrega(raiz, deps, estado.codigo, alOlvidar());
+      pintarEntrega(raiz, deps, estado.codigo, olvidar);
       return;
     }
     if (estado.pantalla === "lista") {
@@ -1123,7 +1119,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       comprobante: resultado.comprobante,
     });
     if (gano) {
-      ir("gano");
+      // Quien ya está en la entrega recibe su código ahí mismo, sin que lo devuelvan a Ganaste.
+      ir(estado.pantalla === "entrega" ? "entrega" : "gano");
       if (estado.avisado && !avisadoAntes) deps.vibrar([60, 40, 60]);
     } else {
       ir("otra");
@@ -1289,34 +1286,10 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     await mostrarFasePublica(publico.fase);
   }
 
-  /**
-   * En la entrega solo falta el código: se le pregunta a la sala y se pinta sin salir de la pantalla. Una respuesta que no lo trae
-   * no cambia nada, y una consulta completa llevaría a quien ganó otra vez a Ganaste.
-   */
-  async function pedirElCodigoDeLaEntrega(): Promise<void> {
-    if (desmontado || consultando || !deps.visible() || estado.pantalla !== "entrega") return;
-    consultando = true;
-    try {
-      const propio = await pedirPropio();
-      if (desmontado || propio === "red" || propio === "terminada") return;
-      huboRespuesta();
-      if (propio.codigo === undefined || estado.pantalla !== "entrega") return;
-      estado.codigo = propio.codigo;
-      programar();
-      pintar();
-    } finally {
-      consultando = false;
-    }
-  }
-
   async function preguntar(): Promise<void> {
-    if (estado.pantalla === "entrega") {
-      await pedirElCodigoDeLaEntrega();
-      return;
-    }
     if (desmontado || consultando || !deps.visible()) return;
     if (estado.pantalla !== "previa" && estado.pantalla !== "hola" && estado.pantalla !== "adentro"
-      && estado.pantalla !== "gano" && estado.pantalla !== "otra") return;
+      && estado.pantalla !== "gano" && estado.pantalla !== "otra" && estado.pantalla !== "entrega") return;
     // En la ventana del resultado, al volver a la pestaña se pregunta por el resultado y no por la consulta propia.
     if (sorteo?.consulta()?.cadaMs != null) {
       await preguntarResultado();
@@ -1429,13 +1402,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       ir("cerrada");
       return;
     }
-    if (resultado.motivo === "llena") {
-      ir("llena");
-      return;
-    }
-    // En una campaña de personas, repetir el pedido a una sala sin el modo prendido no lo arregla: pantalla final, sin Acepto.
-    if (resultado.motivo === "apagada") {
-      ir("apagada");
+    // En una campaña de personas, repetir el pedido a una sala sin el modo prendido (apagada) no lo arregla: pantalla final, sin Acepto.
+    if (resultado.motivo === "llena" || resultado.motivo === "apagada") {
+      ir(resultado.motivo);
       return;
     }
     estado.errorAlta = resultado.motivo;
@@ -1494,7 +1463,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     // En una campaña de personas el premio se entrega por ahora con quien organiza: reclamarlo desde el celular es de otra etapa.
     if (deps.persona) {
       ir("entrega");
-      if (estado.codigo === null) void pedirElCodigoDeLaEntrega();
+      if (estado.codigo === null) void preguntar();
       return;
     }
     const cuenta = estado.memoria?.cuenta;
