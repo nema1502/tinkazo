@@ -259,11 +259,12 @@ export interface MuestrasDeLaVista {
 /**
  * Lo mismo para la vista: lo que falta o no sirve va de muestra, y dice qué es de muestra. Siempre es una campaña que el
  * lector del sitio acepta. Las horas de muestra salen de ahora (abre una hora antes, cierra tres después y el sorteo a las
- * cuatro) para que nunca queden en el pasado.
+ * cuatro) para que nunca queden en el pasado. Con `identidad` la campaña lleva la identidad de personas con sus montos y sin
+ * premio escrito: es la vista de una campaña de personas con el premio en dólares. Con el premio escrito manda el premio en mano.
  */
 export function campanaParaLaVista(
   f: FormularioDeCampana,
-  o: { ahora: number; muestraMarca: string; muestraLugar: Bilingue; muestraPremio?: Bilingue; bases: Bilingue },
+  o: { ahora: number; muestraMarca: string; muestraLugar: Bilingue; muestraPremio?: Bilingue; bases: Bilingue; identidad?: "persona" },
 ): { campana: Record<string, unknown>; muestras: MuestrasDeLaVista } {
   const nombre = f.nombre.trim();
   const lugar = f.lugar.trim();
@@ -303,6 +304,8 @@ export function campanaParaLaVista(
   if (enMano) {
     campana.identidad = "persona";
     campana.premio_en_mano = premioEscrito === "" ? { es: premioDeMuestra.es, en: premioDeMuestra.en } : { es: premioEscrito, en: premioEscrito };
+  } else if (o.identidad === "persona") {
+    campana.identidad = "persona";
   }
   const premioDeMuestraAhora = enMano ? premioEscrito === "" : f.monto === null;
   return { campana, muestras: { nombre: nombre === "", premio: premioDeMuestraAhora, lugar: lugar === "", horas: horasBien === null } };
