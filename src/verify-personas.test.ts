@@ -6,8 +6,8 @@ import { cuentaDePrueba, lineaDePrueba } from "./campana/cuentas-de-prueba";
 
 /**
  * El comprobante con líneas de persona (`renderList`, `renderResult` y las comprobaciones de `verify.ts`): cada línea de
- * persona se muestra como su lugar en la lista, en la lista sellada, en el buscador, en las tarjetas, en la comprobación y en
- * el mensaje de compartir, y nunca como la línea. Se decide línea por línea, así que también vale con una lista mezclada. Con
+ * persona se muestra como su lugar en la lista, en la lista sellada, en las tarjetas, en la comprobación y en el mensaje de
+ * compartir, y nunca como la línea. Con líneas de persona el buscador por nombre no se muestra: no hay nombres que buscar. Se decide línea por línea, así que también vale con una lista mezclada. Con
  * una lista de cuentas o una lista libre de nombres, la página queda exactamente como siempre. Se prueba con el markup de
  * verdad de `verificar.html`.
  */
@@ -36,6 +36,12 @@ async function montar(): Promise<typeof import("./verify")> {
 
 const aviso = (): HTMLElement => document.getElementById("v-personas") as HTMLElement;
 const cuenta = (): string => document.getElementById("v-count")?.textContent ?? "";
+/** El buscador por nombre de la lista sellada: su rótulo, el cuadro y lo que contesta. */
+const buscador = (): HTMLElement[] => {
+  const partes = [document.querySelector<HTMLElement>('label[for="v-buscar"]'), document.getElementById("v-buscar"), document.getElementById("v-buscar-out")];
+  expect(partes.every((p) => p !== null)).toBe(true);
+  return partes as HTMLElement[];
+};
 const tarjetas = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>("#v-winners .winner-card")];
 const filas = (): string[] => [...document.querySelectorAll<HTMLElement>("#v-names i")].map((f) => f.textContent ?? "");
 const nombres = (): string[] => [...document.querySelectorAll<HTMLElement>("#v-winners .winner-name")].map((n) => n.textContent ?? "");
@@ -121,19 +127,59 @@ describe("el comprobante: el renglón de la lista de personas", () => {
     expect(aviso().style.display).toBe("");
   });
 
-  it("el buscador encuentra por lugar y nunca repite una línea", async () => {
+  it("con líneas de persona el buscador por nombre no se muestra: la lista dice Lugar n y no hay nombres que buscar", async () => {
+    const { renderList } = await montar();
+    for (const names of [lineas, [lineas[0] as string, "Ana", cuentaDePrueba(1), lineas[1] as string], [lineas[0] as string]]) {
+      renderList({ names } as never);
+      for (const parte of buscador()) expect(parte.style.display, JSON.stringify(names)).toBe("none");
+    }
+  });
+
+  it("quien sí está en una lista de personas nunca lee que no aparece nadie con su nombre", async () => {
+    const { renderList } = await montar();
+    // Venía de buscarse en una lista de nombres, y la página pinta después una de personas.
+    renderList({ names: ["Ana", "Beto", "Carla"] } as never);
+    const buscar = document.getElementById("v-buscar") as HTMLInputElement;
+    buscar.value = "Nora";
+    buscar.dispatchEvent(new Event("input"));
+    expect(document.getElementById("v-buscar-out")?.textContent).toBe("No aparece nadie con ese nombre.");
+    renderList({ names: lineas } as never);
+    expect(buscar.value).toBe("");
+    expect(document.getElementById("v-buscar-out")?.textContent).toBe("");
+    expect(document.querySelectorAll("#v-names i.match")).toHaveLength(0);
+    // Aunque algo escriba en el cuadro escondido, no dice nada de nadie.
+    buscar.value = "Nora";
+    buscar.dispatchEvent(new Event("input"));
+    expect(document.getElementById("v-buscar-out")?.textContent).toBe("");
+    expect(document.body.textContent).not.toContain("p1:");
+  });
+
+  it("con una lista de nombres o de cuentas el buscador queda como siempre", async () => {
+    const { renderList } = await montar();
+    renderList({ names: ["Ana", "Beto", "Carla"] } as never);
+    for (const parte of buscador()) expect(parte.style.display).toBe("");
+    const buscar = document.getElementById("v-buscar") as HTMLInputElement;
+    buscar.value = "beto";
+    buscar.dispatchEvent(new Event("input"));
+    expect([...document.querySelectorAll("#v-names i.match")].map((f) => f.textContent)).toEqual(["Beto"]);
+    expect(document.getElementById("v-buscar-out")?.textContent).toBe("Estás en el puesto 2 de 3.");
+    buscar.value = "Nora";
+    buscar.dispatchEvent(new Event("input"));
+    expect(document.getElementById("v-buscar-out")?.textContent).toBe("No aparece nadie con ese nombre.");
+    const cuentas = [cuentaDePrueba(1), cuentaDePrueba(2)];
+    renderList({ names: cuentas } as never);
+    for (const parte of buscador()) expect(parte.style.display).toBe("");
+    buscar.value = cuentaDePrueba(2);
+    buscar.dispatchEvent(new Event("input"));
+    expect(document.getElementById("v-buscar-out")?.textContent).toBe("Estás en el puesto 2 de 2.");
+  });
+
+  it("un buscador que se escondió vuelve si después se pinta una lista de nombres", async () => {
     const { renderList } = await montar();
     renderList({ names: lineas } as never);
-    const buscar = document.getElementById("v-buscar") as HTMLInputElement;
-    buscar.value = "lugar 3";
-    buscar.dispatchEvent(new Event("input"));
-    expect([...document.querySelectorAll("#v-names i.match")].map((f) => f.textContent)).toEqual(["Lugar 3"]);
-    expect(document.getElementById("v-buscar-out")?.textContent).not.toContain("p1:");
-    // Quien pega una línea entera no encuentra nada: la página no la muestra.
-    buscar.value = lineas[2] as string;
-    buscar.dispatchEvent(new Event("input"));
-    expect(document.querySelectorAll("#v-names i.match")).toHaveLength(0);
-    expect(document.getElementById("v-buscar-out")?.textContent).not.toContain("p1:");
+    for (const parte of buscador()) expect(parte.style.display).toBe("none");
+    renderList({ names: ["Ana", "Beto", "Carla"] } as never);
+    for (const parte of buscador()) expect(parte.style.display).toBe("");
   });
 
   it("en inglés dice lo mismo en inglés", async () => {

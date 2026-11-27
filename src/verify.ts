@@ -767,7 +767,7 @@ function offerToFinish(proof: Proof, r: Revision): void {
 }
 
 export function renderList(proof: Proof): void {
-  // Una línea de persona nunca se ve tal cual: la lista, la cara, la cuenta y el buscador trabajan con su lugar.
+  // Una línea de persona nunca se ve tal cual: la lista, la cara y la cuenta trabajan con su lugar.
   const sellada = Array.isArray(proof.names) ? proof.names.map(String) : [];
   const names = sellada.map((n, p) => filaVisible(n, p));
   const hayLineas = hayLineasDePersona(sellada);
@@ -806,6 +806,15 @@ export function renderList(proof: Proof): void {
   // Cada uno se busca: "estás en el puesto 37 de 120". El que está dos veces
   // o el que falta se descubre solo, que es la defensa contra inflar la lista.
   const input = $<HTMLInputElement>("v-buscar");
+  // Con líneas de persona la lista dice Lugar n y no hay nombres que buscar. El buscador no se muestra: a quien sí está y
+  // escribe su nombre le diría que no aparece nadie, y eso la página no lo sabe.
+  for (const parte of [document.querySelector<HTMLElement>('label[for="v-buscar"]'), input, $("v-buscar-out")]) {
+    if (parte) parte.style.display = hayLineas ? "none" : "";
+  }
+  if (hayLineas) {
+    input.value = "";
+    $("v-buscar-out").textContent = "";
+  }
   const buscarAhora = (): void => {
     const q = input.value;
     const out = $("v-buscar-out");
@@ -828,7 +837,8 @@ export function renderList(proof: Proof): void {
     if (exacto > 1) texto += t("buscateDos").replace("{k}", String(exacto));
     out.textContent = texto;
   };
-  input.addEventListener("input", buscarAhora);
+  // Un solo buscador a la vez, el de la lista que se está viendo: el de una lista anterior no contesta sobre esta.
+  input.oninput = hayLineas ? null : buscarAhora;
   // Lo que dice el enlace, con el modo de su comprobante: si no es de Tinkazo, lo dice el veredicto.
   if (anclaDe(proof).tipo !== "libre") pintarModo(proof, `#${String(proof.id ?? "")}`);
   else $("v-net").textContent = t("noAnchor");
