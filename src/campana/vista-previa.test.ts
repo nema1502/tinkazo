@@ -267,6 +267,70 @@ describe("la vista por dentro", () => {
     expect(sin.raiz.textContent).not.toContain("cuesta");
   });
 
+  describe("una campaña de personas con el premio en mano", () => {
+    const personas = (): Record<string, unknown> => campana({
+      identidad: "persona",
+      premio_en_mano: { es: "Auriculares", en: "Headphones" },
+      premios: ["0", "0", "0"],
+    });
+    /** Lo que nunca se ofrece en este modo: cobrar, pagar, recibir en una cuenta de Tinkazo ni pedir ni mandar un correo. */
+    const PROHIBIDO = [/cuenta de Tinkazo/u, /dólares/u, /abrir tu correo/u, /por correo/u, /Recibir mi premio/u, /Tinkazo account/u, /digital dollars/u, /open your email/u, /email you/u, /Get my prize/u];
+    const sinNada = (m: Mundo): void => {
+      const texto = m.raiz.textContent ?? "";
+      for (const palabra of PROHIBIDO) expect(texto, String(palabra)).not.toMatch(palabra);
+    };
+
+    it("la previa dice el premio escrito, ofrece el botón de Google de muestra y no habla de cuenta, dólares ni correo", async () => {
+      // Aunque el sitio cobre un costo de retiro, en este modo no hay retiro que costar.
+      const m = montar({ costoDelRetiro: () => "1,25" });
+      await m.enviar(mensaje({ campana: personas(), reglasAbiertas: true }));
+      expect(m.raiz.textContent).toContain("Auriculares");
+      expect(m.raiz.querySelector("#cmp-saber .cmp-google")).not.toBeNull();
+      expect(m.raiz.querySelector("#cmp-saber .cmp-google button")?.textContent).toBe("Entrar con Google");
+      sinNada(m);
+    });
+
+    it("el botón de muestra lleva a Hola con un nombre de muestra, sin abrir Google", async () => {
+      const m = montar();
+      await m.enviar(mensaje({ campana: personas() }));
+      m.raiz.querySelector<HTMLButtonElement>("#cmp-saber .cmp-google button")?.click();
+      await asentar();
+      expect(m.raiz.querySelector<HTMLElement>("#cmp-hola")?.hidden).toBe(false);
+      expect(m.raiz.querySelector("#cmp-hola h1")?.textContent).toContain("Ana P.");
+      sinNada(m);
+    });
+
+    it("las pestañas Hola, Adentro y Ganó tampoco hablan de cuenta, dólares ni correo, y la última no ofrece recibir", async () => {
+      for (const pantalla of ["hola", "adentro", "ganaste"] as const) {
+        const m = montar({ costoDelRetiro: () => "1,25" });
+        await m.enviar(mensaje({ campana: personas(), pantalla, reglasAbiertas: true }));
+        sinNada(m);
+        m.soltar();
+        document.body.innerHTML = "";
+      }
+      const ganó = montar();
+      await ganó.enviar(mensaje({ campana: personas(), pantalla: "ganaste" }));
+      expect(ganó.raiz.querySelector("#cmp-estado")?.textContent).toContain("Ganaste");
+      expect(ganó.raiz.querySelector("#cmp-estado .cmp-codigo")?.textContent).toMatch(/^\d{4}$/u);
+      expect(ganó.raiz.querySelector("#cmp-estado .primary")).toBeNull();
+    });
+
+    it("en inglés tampoco", async () => {
+      const m = montar({ costoDelRetiro: () => "1.25" });
+      await m.enviar(mensaje({ campana: personas(), idioma: "en", reglasAbiertas: true }));
+      expect(m.raiz.textContent).toContain("Headphones");
+      sinNada(m);
+    });
+
+    it("una campaña de cuentas sigue con su botón Entrar y su cuenta de Tinkazo", async () => {
+      const m = montar({ costoDelRetiro: () => "1,25" });
+      await m.enviar(mensaje({ reglasAbiertas: true }));
+      expect(m.raiz.querySelector("#cmp-saber .cmp-google")).toBeNull();
+      expect(m.raiz.textContent).toContain("cuenta de Tinkazo");
+      expect(m.raiz.textContent).toContain("cuesta 1,25 dólares digitales");
+    });
+  });
+
   it("dentro de un navegador de otra app la pestaña Al escanear muestra la marca y no el aviso de abrir en otro", async () => {
     const m = montar({}, true);
     await m.enviar(mensaje());
