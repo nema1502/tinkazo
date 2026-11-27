@@ -117,7 +117,7 @@ export interface Mundo {
     de: { evento: string; red: string; anterior: string | null; intento: string };
   }[];
   /** Lo que contesta `crear` la próxima vez, en orden. Sin nada, crea la sala. */
-  respuestasAlCrear: ("firma" | "ya-existe" | "vencida" | "cupo-campanas" | "forma" | "origen" | "red" | "perdida")[];
+  respuestasAlCrear: ("firma" | "ya-existe" | "vencida" | "cupo-campanas" | "forma" | "origen" | "personas-apagadas" | "red" | "perdida")[];
   fases: [string, number | null][];
   /** Lo que contesta `fase` la próxima vez: `llega` es que la sala aplicó el cambio aunque la respuesta se perdió. */
   respuestasAFase: { falla: FallaDeSala; llega: boolean }[];

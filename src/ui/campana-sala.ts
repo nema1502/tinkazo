@@ -442,6 +442,8 @@ const TEXTO_DE_FALLA_AL_CREAR: Record<FallaAlCrear, string> = {
   vencida: "cpoVencida",
   "cupo-campanas": "cpoMuchas",
   origen: "cpoSinConexion",
+  // No es una falta de conexión: repetir el pedido no lo arregla. Al abrir la inscripción lo dicen el título y la línea.
+  "personas-apagadas": "cpoPersonasNoL",
   red: "cpoSinConexion",
 };
 const TEXTO_DEL_MOTIVO: Record<MotivoDeSalida, string> = {
@@ -614,6 +616,12 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let temprana: { abreMs: number; sorteoMs: number } | null = null;
   /** Cuántas veces se programó volver a probar sola la activación pedida con abrir ya. */
   let reintentosAutomaticos = 0;
+  /**
+   * Lo que se sabe de si la campaña de personas que está a la vista se puede abrir: se está preguntando, o no se puede (el
+   * modo no está prendido). Vale solo para la campaña con que se preguntó: con otra, o con una de cuentas, es `null` y el
+   * panel es el de siempre.
+   */
+  let personas: { de: Campana; estado: "mirando" | "no" } | null = null;
   /** La fase en que la sala dijo que está: lo que se guarda para retomar. */
   let faseSala: FaseDeSala = "lista";
   /**
@@ -2131,6 +2139,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // Con la cuenta conectada, el evento que ya tiene sala no manda a pedir otro archivo: se ofrece usar la campaña acá. Si
       // mientras se creaba se dejó la campaña, no se ofrece nada.
       if (r.motivo === "ya-existe" && puedeUsarAqui() && campana?.evento === evento) ofreceUsar = evento;
+      // La sala no tiene prendidas las campañas de personas: queda dicho en la pantalla, en lugar del botón de abrir.
+      if (r.motivo === "personas-apagadas" && campana) personas = { de: campana, estado: "no" };
       return tx(TEXTO_DE_FALLA_AL_CREAR[r.motivo]);
     }
     // Si mientras se creaba se dejó la campaña, esta sala ya no es de esta pantalla: no se toma ni se sigue.
@@ -2149,9 +2159,28 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     return null;
   }
 
+  /**
+   * Si en la vista previa de una campaña de personas no corresponde ofrecer Abrir la inscripción: `mirando` es que todavía se
+   * está preguntando y `no` es que el modo no está prendido. `null` es lo de siempre: una campaña de cuentas, otra vista, o
+   * un paso del cobro o de la activación por delante, que hablan ellos.
+   */
+  function personasEn(): "mirando" | "no" | null {
+    const p = personas;
+    if (vista !== "previa" || campana === null || campana.identidad !== "persona" || p === null || p.de !== campana) return null;
+    if (pasoDeActivar() !== null || (cm?.activo() && cm.descripcion().principal)) return null;
+    return p.estado;
+  }
+
+  /** Vuelve a mirar si la campaña de personas se puede abrir. Lo que se sabía se olvida: si nadie dice que no, se ofrece abrir. */
+  function mirarPersonas(): void {
+    personas = null;
+  }
+
   async function abrirInscripcion(): Promise<void> {
     // Mientras el cobro no esté pagado no se abre nada, aunque alguien llame esto directo: no solo se esconde el botón.
     if (trabajando || !campana || cm?.bloqueaElAbrir()) return;
+    // Tampoco con el modo de personas sin prender, o mientras todavía se pregunta.
+    if (personasEn() !== null) return;
     // La línea del premio se lee de nuevo justo ahora y no afirma nada hasta que vuelve: abrir no la espera.
     mirarElDeposito("ahora");
     trabajando = true;
@@ -2166,7 +2195,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       etapa = null;
       return irASeguir(ofreceUsar, "previa");
     }
-    if (falla !== null) return terminar(falla);
+    // Que el modo no está prendido lo dicen el título y la línea: el aviso no lo repite.
+    if (falla !== null) return terminar(personasEn() === "no" ? "" : falla);
     // Si se dejó la campaña mientras se creaba la sala, no hay nada que abrir.
     if (!campana) return terminar();
     const s = sala;
@@ -2715,6 +2745,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         if (tipo === "duda") return { ...dice("cpoFvDuda"), cobro: true };
       } else if (trabajando) {
         return dice(etapa === "sala" ? "cpoFvSala" : "cpoFvAbriendo");
+      } else if (personasEn() === "mirando") {
+        return dice("cpoFvPreguntando");
       }
     }
     // Cerrar la lista: se mandan las quitas pendientes y se cambia la fase.
@@ -2766,6 +2798,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       vista === "previa" && activacion.tipo === "temprano" ? cabeAbrirYa(activacion.sorteoMs, deps.ahora()) : "",
       leyendoLaLista,
       enFila?.texto ?? "",
+      personasEn() ?? "",
       // En la vista de siempre el aviso de lo que pasó al pedir Tus campañas va arriba del botón, a la vista.
       vista === "elegir" ? mensaje : "",
       vista === "tus" || vista === "seguir"
@@ -2833,7 +2866,16 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
           const { texto: textoDelOtro, accion: accionDelOtro } = d.secundario;
           botones.push(boton(textoDelOtro, "ghost", () => hacer(accionDelOtro)));
         }
-      } else {
+      } else if (personasEn() === "no") {
+        // El modo de personas no está prendido: abrir no se ofrece. Cuando Tinkazo lo prenda, se prueba de nuevo.
+        botones.push(
+          principal(tx("cpoReintentar"), () => {
+            mirarPersonas();
+            pintar();
+          }),
+        );
+      } else if (personasEn() !== "mirando") {
+        // Mientras se pregunta si el modo de personas está prendido, la fila viva dice qué se espera y el botón todavía no está.
         if (!(trabajando && enFila !== null)) botones.push(principal(tx(trabajando ? "cpoAbriendo" : "cpoAbrir"), () => void abrirInscripcion(), trabajando));
       }
       // Mientras se paga o se duda de un pago no se deja la campaña: el pago ya salió con esta pantalla.
@@ -3027,6 +3069,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       if (deActivar) {
         titulo = deActivar.titulo;
         linea = deActivar.linea;
+      }
+      // Una campaña de personas con el modo sin prender: se dice eso, en lugar de la hora de cierre y del botón de abrir.
+      if (personasEn() === "no") {
+        titulo = tx("cpoPersonasNoT");
+        linea = tx("cpoPersonasNoL");
       }
     }
     if (campana && vista === "abierta") {
