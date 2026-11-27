@@ -47,10 +47,17 @@ const KB = 1024;
  * su código de entrega en Ganaste y en la pantalla de entrega, el motivo de persona repetida, el texto de una campaña ya
  * terminada para quien recuerda que ganó y el aviso de demasiados intentos. Es código y textos de la página, sin nada de la
  * herramienta. La entrada sigue en 14,9 de 15 KB.
+ *
+ * Pasó de 29 a 29,2 KB al sumar lo que la pantalla dice cuando se guarda el perfil de quien se anota con Google: dos textos, en
+ * español y en inglés, la bandera que los prende y las dos líneas de la previa que eligen entre ellos y los de siempre. Son unos
+ * 160 bytes comprimidos (104 en el trozo de textos, 33 en el de la bandera y 25 en la entrada), contados sobre el código y sin
+ * construir el sitio. Con los 28,8 KB medidos antes, la suma queda a la altura del tope de 29 y no se puede saber de qué lado
+ * cae: por eso sube lo mínimo. La entrada suma esos 25 bytes y su tope no se mueve. El HTML con sus textos suma unos 100 bytes
+ * y queda cerca de 7 KB de 8.
  */
 export const TOPES = {
   entrada: 15 * KB,
-  celular: 29 * KB,
+  celular: 29.2 * KB,
   html: 8 * KB,
   hoja: 5 * KB,
 };

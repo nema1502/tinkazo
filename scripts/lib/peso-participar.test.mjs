@@ -82,6 +82,15 @@ describe("la prueba de peso de la página del celular", () => {
     expect(informe(medida)).not.toContain("PASA EL TOPE");
   });
 
+  it("el tope de la entrada no se mueve de 15 KB, y el del código del celular deja lugar para decir que se guarda el perfil", () => {
+    const KB = 1024;
+    // La entrada es lo que baja un celular antes de mostrar nada: ese tope es el que manda.
+    expect(TOPES.entrada).toBe(15 * KB);
+    expect(TOPES.celular).toBeCloseTo(29.2 * KB, 5);
+    expect(TOPES.html).toBe(8 * KB);
+    expect(TOPES.hoja).toBe(5 * KB);
+  });
+
   it("avisa claro si no hay sitio construido o si falta un trozo", () => {
     expect(() => medir(join(tmpdir(), "no-existe-peso"))).toThrow(/Construí el sitio primero/u);
     const dist = armarDist([{ nombre: "participar-a.js", codigo: "x", fuentes: [] }]);
