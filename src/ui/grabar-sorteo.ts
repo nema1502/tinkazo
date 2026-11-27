@@ -111,9 +111,11 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
   let reservaPosible = false;
   if (import.meta.env.VITE_SORTEO_SERVIDOR === "1") {
     let servicio: typeof import("./sorteo-del-servicio") | null = null;
+    let modulo: typeof import("./sorteo-del-servicio") | null = null;
     try {
-      const [{ sorteoPorServidor }, modulo] = await Promise.all([import("../stellar/alta-config"), import("./sorteo-del-servicio")]);
-      if (sorteoPorServidor() && modulo.loTomaElServicio(p.raffleId, !!p.pagarConMiCuenta, p.ahora)) servicio = modulo;
+      const [{ sorteoPorServidor }, m] = await Promise.all([import("../stellar/alta-config"), import("./sorteo-del-servicio")]);
+      modulo = m;
+      if (sorteoPorServidor() && m.loTomaElServicio(p.raffleId, !!p.pagarConMiCuenta, p.ahora)) servicio = m;
     } catch {
       servicio = null;
     }
@@ -130,8 +132,11 @@ async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
       if (r.estado === "listo") return comparar(p.esperados, r.valor, r.yaEstaba);
       if (r.estado === "error") return { estado: "fallo", error: r.error };
       yaGastadoMs = Math.max(0, ahora() - desde);
-      reservaPosible = servicio.reservaDelServicioViva(p.raffleId, p.ahora);
     }
+    // La reserva se mira siempre que el módulo se pudo cargar, también si esta vez ya no se le pidió al servicio: un sorteo que
+    // quedó por el camino de siempre (marcado) y se vuelve a guardar en la misma pestaña conserva la reserva de su pedido
+    // anterior, y un tope de sorteos que aparece ahora puede ser de ella. Sin pedido anterior no hay reserva y es falso.
+    if (modulo) reservaPosible = modulo.reservaDelServicioViva(p.raffleId, p.ahora);
   }
   // Si el servicio pudo dejar reservado este sorteo en el cupo de la cuenta sin que se sepa cómo terminó (se cierra solo en
   // unos catorce minutos), un tope de sorteos del mes que aparece ahora puede ser de esa reserva: el sorteo quizás ya está o
