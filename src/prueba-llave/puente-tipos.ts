@@ -57,4 +57,6 @@ export interface PuenteKit {
   llavesGuardadas(): Promise<LlaveGuardada[]>;
   /** La llave firma una entrada de autorización. Pide el desbloqueo. */
   firmarEntrada(entradaB64: string, vence: number): Promise<string>;
+  /** Cuántas veces pidió el navegador el desbloqueo desde que se abrió el puente: la diferencia entre dos lecturas es lo que costó un paso. */
+  desbloqueosHechos(): number;
 }

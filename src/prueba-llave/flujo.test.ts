@@ -91,6 +91,7 @@ function montar(a: Ajustes = {}): Montaje {
       firmadas.push({ entrada, vence });
       return entradaDe(CUENTA, 555);
     },
+    desbloqueosHechos: () => desbloqueos,
   };
 
   const cruda = (hash: string): RespuestaCruda => ({ status: "SUCCESS", hash, ledger: 7 });
@@ -210,6 +211,19 @@ describe("sellar la lista", () => {
     expect(m.f.medidas.sello).toMatchObject({ id: "12", desbloqueos: 1 });
     expect(leerSelloPendiente(m.almacen)).toMatchObject({ id: "12", nombres: NOMBRES });
     expect(m.f.enlace).toContain("https://ejemplo.org/verificar.html#");
+  });
+
+  it("los desbloqueos del sello salen del contador del puente y no de un número fijo", async () => {
+    const m = await conCuenta({ simulaciones: [simulacionDeSello(), {}] });
+    const firmar = m.puente.firmarEntrada;
+    let contador = 0;
+    m.puente.desbloqueosHechos = () => contador;
+    m.puente.firmarEntrada = async (entrada, vence) => {
+      contador += 2;
+      return firmar(entrada, vence);
+    };
+    await m.f.sellar();
+    expect(m.f.medidas.sello?.desbloqueos).toBe(2);
   });
 
   it("un desbloqueo lento (60 s) igual sella con un solo desbloqueo", async () => {

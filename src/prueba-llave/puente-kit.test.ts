@@ -183,6 +183,18 @@ describe("entrar con una llave de otro aparato", () => {
   });
 });
 
+describe("los desbloqueos que pidió el navegador", () => {
+  it("el puente devuelve el contador del envoltorio: sube con cada vez que se pide la llave", async () => {
+    const puente = abrir(async () => PISTA_OK);
+    expect(puente.desbloqueosHechos()).toBe(0);
+    await mundo.config!.webAuthn.startAuthentication({});
+    expect(puente.desbloqueosHechos()).toBe(1);
+    await mundo.config!.webAuthn.startAuthentication({});
+    await mundo.config!.webAuthn.startAuthentication({});
+    expect(puente.desbloqueosHechos()).toBe(3);
+  });
+});
+
 describe("la revisión de reglas corre en las tres formas de conectar", () => {
   const conCuentaDeMas = (): void => {
     mundo.cuenta = 2;

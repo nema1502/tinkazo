@@ -154,5 +154,7 @@ export function abrirKit(o: OpcionesDelPuente): PuenteKit {
     async firmarEntrada(entradaB64, vence) {
       return kit.signAuthEntry(entradaB64, { contextRuleIds: [0], expiration: vence });
     },
+
+    desbloqueosHechos: () => web.autenticaciones(),
   };
 }

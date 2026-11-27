@@ -596,9 +596,10 @@ export class Flujo {
         this.conFoco = this.e.hayFoco();
         const vence = vencimientoDeLaFirma(sim.latestLedger);
         const firmadas: string[] = [];
+        const antes = this.e.puente.desbloqueosHechos();
         try {
           for (const entrada of entradas) firmadas.push(await this.e.puente.firmarEntrada(entrada, vence));
-          this.desbloqueos++;
+          this.desbloqueos += this.e.puente.desbloqueosHechos() - antes;
         } catch (e) {
           if (!this.vigente(g)) return;
           const motivo = motivoDeLaLlave(e, this.conFoco);
