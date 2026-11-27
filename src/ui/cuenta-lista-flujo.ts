@@ -53,6 +53,23 @@ function billetera(): BilleteraOficial | null {
 }
 
 /**
+ * Volver a cargar desde el paso de la cuenta: recargar suelta lo que quedó colgado (los pedidos al proveedor de cuentas y
+ * el candado entre pestañas) y la cuenta se lee como en cualquier carga. La lista se guarda sola al irse la página
+ * (`participants.ts`). En la herramienta, la dirección dice `#sortear` o `#mis-sorteos`: `/` sola abre la portada.
+ */
+export function recargarElPaso(recargar: () => void = () => location.reload()): void {
+  try {
+    const b = document.body;
+    if (b.dataset.vista === "app" && !/^#(sortear|mis-sorteos|ta)$/.test(location.hash)) {
+      history.replaceState(null, "", `${location.pathname}${location.search}#${b.dataset.tab === "historial" ? "mis-sorteos" : "sortear"}`);
+    }
+  } catch {
+    /* sin la dirección, la portada, como cualquier recarga */
+  }
+  recargar();
+}
+
+/**
  * La sesión que ve el acceso al modo Oficial: el token, si sigue abierta y la cuenta. Pagar con el saldo (`pagar`) va
  * solo si la billetera activa es la del proveedor, la de Google o de correo: con cualquier otra, no se ofrece.
  */
@@ -241,6 +258,7 @@ async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
         puedePasarAPrueba: () => modo.puedeCambiarDeModo(),
         // Con el correo, la ventana abre con el correo a la vista (detrás de Otras formas de entrar, desplegado).
         entrarDeNuevo: () => (porCorreo ? ui.openPicker({ otras: true }) : ui.entrar()),
+        recargar: () => recargarElPaso(),
       },
       {
         para,
