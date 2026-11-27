@@ -1,3 +1,5 @@
+import type { TipoDeDestino } from "./destino";
+
 /**
  * Lo que la página guarda en este aparato para poder seguir si se cierra o se recarga. Todo en `localStorage`, y todo
  * dentro de un try: sin almacenamiento la prueba anda igual, solo que no retoma.
@@ -20,6 +22,41 @@ export interface CreacionPendiente {
   hashCreacion: string;
 }
 
+/** Un pago de monedas de prueba mandado y no confirmado: se guarda antes de mandar para poder preguntar por su hash. */
+export interface PremioPendiente {
+  contractId: string;
+  hash: string;
+  /** Hasta qué segundo de la red vale la transacción. */
+  vence: number;
+  /** El monto, en la unidad mínima y como texto. */
+  monto: string;
+  desdeMs: number;
+}
+
+/** Un envío de monedas mandado y no confirmado. */
+export interface EnvioPendiente {
+  contractId: string;
+  hash: string;
+  vence: number;
+  hacia: string;
+  base: string;
+  tipo: TipoDeDestino;
+  origen: "pagina" | "enlace";
+  nota: string | null;
+  monto: string;
+  desdeMs: number;
+}
+
+/** Cómo va el premio de una billetera en este aparato. Solo avanza: por pagar, pagado, enviado. */
+export type EstadoDelPremio = "por-pagar" | "pagado" | "enviado";
+
+export interface RegistroDePremio {
+  contractId: string;
+  estado: EstadoDelPremio;
+  hashPremio: string | null;
+  hashEnvio: string | null;
+}
+
 export interface Almacen {
   getItem(clave: string): string | null;
   setItem(clave: string, valor: string): void;
@@ -28,6 +65,12 @@ export interface Almacen {
 
 export const CLAVE_DEL_SELLO = "tinkazo.prueba-llave.sello";
 export const CLAVE_DE_LA_CREACION = "tinkazo.prueba-llave.creacion";
+export const CLAVE_DEL_PREMIO = "tinkazo.prueba-llave.premio";
+export const CLAVE_DEL_ENVIO = "tinkazo.prueba-llave.envio";
+export const CLAVE_DE_LOS_PREMIOS = "tinkazo.prueba-llave.premios";
+
+/** Cuántas billeteras recuerda el registro de premios en este aparato. */
+export const TOPE_DE_REGISTROS = 10;
 
 function almacenDelNavegador(): Almacen | null {
   try {
@@ -107,4 +150,99 @@ export function leerCreacionPendiente(almacen: Almacen | null = almacenDelNavega
 }
 export function borrarCreacionPendiente(almacen: Almacen | null = almacenDelNavegador()): void {
   borrar(CLAVE_DE_LA_CREACION, almacen);
+}
+
+const esNumero = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
+const esMonto = (x: unknown): x is string => typeof x === "string" && /^\d+$/.test(x);
+
+function esPremioPendiente(x: unknown): x is PremioPendiente {
+  if (typeof x !== "object" || x === null) return false;
+  const o = x as Record<string, unknown>;
+  return esTexto(o["contractId"]) && esTexto(o["hash"]) && esNumero(o["vence"]) && esMonto(o["monto"]) && esNumero(o["desdeMs"]);
+}
+
+function esEnvioPendiente(x: unknown): x is EnvioPendiente {
+  if (typeof x !== "object" || x === null) return false;
+  const o = x as Record<string, unknown>;
+  return (
+    esTexto(o["contractId"]) &&
+    esTexto(o["hash"]) &&
+    esNumero(o["vence"]) &&
+    esTexto(o["hacia"]) &&
+    esTexto(o["base"]) &&
+    (o["tipo"] === "G" || o["tipo"] === "M" || o["tipo"] === "C") &&
+    (o["origen"] === "pagina" || o["origen"] === "enlace") &&
+    (o["nota"] === null || esMonto(o["nota"])) &&
+    esMonto(o["monto"]) &&
+    esNumero(o["desdeMs"])
+  );
+}
+
+function esRegistroDePremio(x: unknown): x is RegistroDePremio {
+  if (typeof x !== "object" || x === null) return false;
+  const o = x as Record<string, unknown>;
+  return (
+    esTexto(o["contractId"]) &&
+    (o["estado"] === "por-pagar" || o["estado"] === "pagado" || o["estado"] === "enviado") &&
+    (o["hashPremio"] === null || esTexto(o["hashPremio"])) &&
+    (o["hashEnvio"] === null || esTexto(o["hashEnvio"]))
+  );
+}
+
+/** Se guarda antes de mandar el pago: si la página se cierra, se puede preguntar por ese hash. */
+export function guardarPremioPendiente(p: PremioPendiente, almacen: Almacen | null = almacenDelNavegador()): void {
+  guardar(CLAVE_DEL_PREMIO, p, almacen);
+}
+export function leerPremioPendiente(almacen: Almacen | null = almacenDelNavegador()): PremioPendiente | null {
+  return leer(CLAVE_DEL_PREMIO, esPremioPendiente, almacen);
+}
+export function borrarPremioPendiente(almacen: Almacen | null = almacenDelNavegador()): void {
+  borrar(CLAVE_DEL_PREMIO, almacen);
+}
+
+/** Se guarda antes de mandar el envío. */
+export function guardarEnvioPendiente(e: EnvioPendiente, almacen: Almacen | null = almacenDelNavegador()): void {
+  guardar(CLAVE_DEL_ENVIO, e, almacen);
+}
+export function leerEnvioPendiente(almacen: Almacen | null = almacenDelNavegador()): EnvioPendiente | null {
+  return leer(CLAVE_DEL_ENVIO, esEnvioPendiente, almacen);
+}
+export function borrarEnvioPendiente(almacen: Almacen | null = almacenDelNavegador()): void {
+  borrar(CLAVE_DEL_ENVIO, almacen);
+}
+
+const ORDEN_DEL_PREMIO: Record<EstadoDelPremio, number> = { "por-pagar": 0, pagado: 1, enviado: 2 };
+
+/**
+ * El registro nuevo sobre el previo. El estado solo avanza: un pedido de volver atrás devuelve el previo tal cual. Los hashes
+ * ya anotados no se borran.
+ */
+export function avanzarRegistro(previo: RegistroDePremio | null, nuevo: RegistroDePremio): RegistroDePremio {
+  if (!previo || previo.contractId !== nuevo.contractId) return nuevo;
+  if (ORDEN_DEL_PREMIO[nuevo.estado] < ORDEN_DEL_PREMIO[previo.estado]) return previo;
+  return { contractId: nuevo.contractId, estado: nuevo.estado, hashPremio: nuevo.hashPremio ?? previo.hashPremio, hashEnvio: nuevo.hashEnvio ?? previo.hashEnvio };
+}
+
+function leerLista(almacen: Almacen | null): RegistroDePremio[] {
+  try {
+    const crudo = almacen?.getItem(CLAVE_DE_LOS_PREMIOS);
+    if (!crudo) return [];
+    const x: unknown = JSON.parse(crudo);
+    return Array.isArray(x) ? x.filter(esRegistroDePremio) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** El registro de una billetera en este aparato, o `null` si no hay (otro aparato, o nunca se creó acá). */
+export function leerRegistroDePremio(contractId: string, almacen: Almacen | null = almacenDelNavegador()): RegistroDePremio | null {
+  return leerLista(almacen).find((r) => r.contractId === contractId) ?? null;
+}
+
+/** Anota el registro de una billetera: la más nueva queda al final y no se guardan más de `TOPE_DE_REGISTROS`. */
+export function anotarRegistroDePremio(r: RegistroDePremio, almacen: Almacen | null = almacenDelNavegador()): void {
+  const lista = leerLista(almacen);
+  const previo = lista.find((x) => x.contractId === r.contractId) ?? null;
+  const nuevo = avanzarRegistro(previo, r);
+  guardar(CLAVE_DE_LOS_PREMIOS, [...lista.filter((x) => x.contractId !== r.contractId), nuevo].slice(-TOPE_DE_REGISTROS), almacen);
 }
