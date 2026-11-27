@@ -261,9 +261,39 @@ describe("el tope de sorteos del mes cuando el servicio pudo dejar una reserva",
     expect(h.readDraw).toHaveBeenCalledTimes(1);
   });
 
-  it("sin servicio, el tope de sorteos no se toca: un solo intento", async () => {
+  it("sin servicio y sin reserva, el tope de sorteos no se toca: un solo intento", async () => {
     h.loToma.mockReturnValue(false);
+    h.reserva.mockReturnValue(false);
+    const e = cupo();
+    h.drawOnChain.mockRejectedValue(e);
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    expect(await grabarElSorteo({ ...base, ...reloj() })).toEqual({ estado: "fallo", error: e });
+    expect(h.drawOnChain).toHaveBeenCalledTimes(1);
+  });
+
+  it("al guardar otra vez el mismo sorteo, ya marcado, la reserva del pedido anterior sigue contando y no se da la fecha falsa", async () => {
+    const { grabarElSorteo } = await import("./grabar-sorteo");
+    // Primer guardado: el servicio asegura que no lo manda pero deja una reserva en duda, y el tope de sorteos aparece.
+    h.sortearPorElServicio.mockResolvedValue({ estado: "camino-de-hoy" });
     h.reserva.mockReturnValue(true);
+    h.drawOnChain.mockRejectedValue(cupo());
+    const primero = await grabarElSorteo({ ...base, ...reloj() });
+    expect(primero).toMatchObject({ estado: "fallo", error: { motivo: "fondo", detalle: "reserva-del-servicio" } });
+    // Segundo guardado en la misma pestaña: el sorteo quedó marcado, ya no se le pregunta al servicio, pero la reserva sigue viva.
+    h.loToma.mockReturnValue(false);
+    h.sortearPorElServicio.mockClear();
+    h.drawOnChain.mockClear();
+    const segundo = await grabarElSorteo({ ...base, ...reloj() });
+    expect(h.sortearPorElServicio).not.toHaveBeenCalled();
+    expect(h.drawOnChain).toHaveBeenCalledTimes(1);
+    expect(segundo).toMatchObject({ estado: "fallo", error: { name: "ErrorPortero", motivo: "fondo", detalle: "reserva-del-servicio" } });
+    expect((segundo as { error: { que?: string; liberaEn?: number } }).error.que).toBeUndefined();
+    expect((segundo as { error: { que?: string; liberaEn?: number } }).error.liberaEn).toBeUndefined();
+  });
+
+  it("al guardar otra vez, si la reserva ya se cerró, el tope es definitivo", async () => {
+    h.loToma.mockReturnValue(false);
+    h.reserva.mockReturnValue(false);
     const e = cupo();
     h.drawOnChain.mockRejectedValue(e);
     const { grabarElSorteo } = await import("./grabar-sorteo");
