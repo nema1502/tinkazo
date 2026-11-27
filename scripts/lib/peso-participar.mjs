@@ -3,7 +3,7 @@
  *
  * La página la abren 150 celulares con datos, así que lo que se le suma tiene tope. Se mide sobre `dist/` con tres números:
  *
- *  - `entrada`: el trozo de código de la página (participar-*.js). Es lo que el diseño llama "participar" y su tope es 15 KB.
+ *  - `entrada`: el trozo de código de la página (participar-*.js). Es lo que el diseño llama "participar" y su tope es 15,5 KB.
  *  - `celular`: la suma de todos los trozos que la página carga al abrir y que son solo del celular, o sea los que no
  *    traen nada de la herramienta ni de otras páginas. El armado reparte los textos y el cliente de la sala en trozos
  *    propios, y sin esta suma lo que se agregue ahí no se vería en la entrada.
@@ -47,10 +47,17 @@ const KB = 1024;
  * su código de entrega en Ganaste y en la pantalla de entrega, el motivo de persona repetida, el texto de una campaña ya
  * terminada para quien recuerda que ganó y el aviso de demasiados intentos. Es código y textos de la página, sin nada de la
  * herramienta. La entrada sigue en 14,9 de 15 KB.
+ *
+ * El de la entrada pasó de 15 a 15,5 KB y el del código del celular de 29 a 30 KB al corregir tres defectos de la página en una
+ * campaña de personas, que suman unos 0,3 KB y no se pueden bajar a pedido porque deciden qué pantalla se pinta: cada pedido a
+ * la sala lleva la generación de la pantalla desde la que salió, para que una respuesta vieja no pise la pantalla nueva. La
+ * consulta por la llave del celular que queda sin respuesta se repite con tope antes de pintar una pantalla final, y agotada
+ * deja Probar de nuevo. Y quien miraba Ganaste conserva su código cuando la sala termina. Son los topes más altos que se
+ * aceptaron para esta página: lo que se sume después se baja a pedido o reemplaza a algo que salga.
  */
 export const TOPES = {
-  entrada: 15 * KB,
-  celular: 29 * KB,
+  entrada: 15.5 * KB,
+  celular: 30 * KB,
   html: 8 * KB,
   hoja: 5 * KB,
 };
