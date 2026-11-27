@@ -162,7 +162,7 @@ describe("al abrir el enlace solo con la llave del celular, si la consulta propi
     const sala = salaFalsa("cerrada", "red");
     const { mundo } = await montar(sala);
     const espera = mundo.raiz.querySelector<HTMLElement>("#cmp-estado") as HTMLElement;
-    espera.textContent = ES.cpCargando;
+    espera.textContent = ES.cpCargando ?? "";
     mundo.vista.pintar();
     expect(espera.hidden).toBe(false);
     expect(espera.textContent).toBe(ES.cpCargando);
