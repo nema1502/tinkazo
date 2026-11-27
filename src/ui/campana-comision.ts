@@ -3,6 +3,7 @@ import { type EstadoDeComision, type PorteroDeComision, RECHAZOS_QUE_SE_AGUANTAN
 import type { BusquedaDeComision, LecturaDeComision } from "../campana/comision-red";
 import { horaTexto, montoConCentavos } from "../campana/formato";
 import type { Campana } from "../campana/modelo";
+import { enviosDe } from "../campana/personas-dolares";
 import type { Lang } from "../idioma";
 import type { ConfigDeComision } from "../stellar/comision-config";
 import { USDC_MAINNET } from "../stellar/pagos";
@@ -261,7 +262,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
 
   /* --- lo que se cobra --- */
 
-  function numeros(cfg: ConfigDeComision, c: Campana): { premios: bigint; comision: bigint; umbral: bigint; nota: string; desde: number } {
+  function numeros(cfg: ConfigDeComision, c: Campana): { premios: bigint; comision: bigint; umbral: bigint; nota: string; desde: number; envios: bigint } {
     const comision = comisionDe(c.premios, cfg.pb, cfg.minimo);
     return {
       premios: premiosDe(c),
@@ -269,6 +270,8 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
       umbral: umbralPagado(comision, cfg.costo),
       nota: notaDeLaComision(c.evento),
       desde: Math.floor(c.abreMs / 1000) - MARGEN_DE_LA_BUSQUEDA_S,
+      // En una campaña de personas con premios en dólares quien organiza manda cada premio, y cada envío cuesta lo que un retiro.
+      envios: enviosDe(c, cfg.costo),
     };
   }
 
@@ -296,6 +299,8 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
       puedeEntrar: ctx.puedeEntrar(),
       saldo,
       premios: n.premios,
+      // Solo cuando hay envíos: una campaña de cuentas entra exactamente como siempre.
+      ...(n.envios > 0n ? { envios: n.envios } : {}),
       comision: n.comision,
       umbral: n.umbral,
       costo: cfg.costo,
@@ -612,13 +617,23 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
         const premios = montoTiene(n.premios, idioma);
         const servicio = montoSale(e.sale, idioma);
         const sinSaldo = e.saldo === 0n;
+        // Con el envío de los premios, la línea lo cuenta aparte: el premio, el envío y el servicio suman lo que dice el título.
+        const envios = n.envios > 0n ? montoSale(n.envios, idioma) : null;
+        const conEnvio =
+          envios === null
+            ? null
+            : sinSaldo
+              ? fmt("cpoCmCargarEnvioL", { premios, envios, servicio })
+              : fmt("cpoCmCargarFaltaEnvio", { saldo: montoTiene(e.saldo, idioma), premios, envios, servicio });
         return {
           titulo: sinSaldo
             ? fmt("cpoCmCargarT", { total: montoSale(e.cargar, idioma) })
             : fmt("cpoCmCargarFaltaT", { falta: montoSale(e.falta, idioma) }),
-          linea: sinSaldo
-            ? fmt("cpoCmCargarL", { premios, servicio })
-            : fmt("cpoCmCargarFalta", { saldo: montoTiene(e.saldo, idioma), premios, servicio }),
+          linea:
+            conEnvio ??
+            (sinSaldo
+              ? fmt("cpoCmCargarL", { premios, servicio })
+              : fmt("cpoCmCargarFalta", { saldo: montoTiene(e.saldo, idioma), premios, servicio })),
           principal: { texto: tx("cpoCmCargar"), accion: "cargar", apagado: false },
           secundario: null,
           plegado: borrador ? null : "cerrado",
@@ -639,13 +654,21 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
           titulo: tx("cpoCmOtraT"),
           // Si se puede entrar con Google, la línea dice lo mismo que el botón y pagar a mano queda plegado.
           // Con un borrador, antes de entrar: lo que va a poner en total, premios y servicio, como lo dijo el armado.
+          // Con el envío de los premios, el total los suma y la línea los cuenta aparte.
           linea:
             e.entrar && borrador
-              ? fmt("cpoCmBorradorEntrarL", {
-                  total: montoSale(n.premios + e.monto, idioma),
-                  premios: montoTiene(n.premios, idioma),
-                  servicio: montoSale(e.monto, idioma),
-                })
+              ? n.envios > 0n
+                ? fmt("cpoCmBorradorEntrarEnvioL", {
+                    total: montoSale(n.premios + n.envios + e.monto, idioma),
+                    premios: montoTiene(n.premios, idioma),
+                    envios: montoSale(n.envios, idioma),
+                    servicio: montoSale(e.monto, idioma),
+                  })
+                : fmt("cpoCmBorradorEntrarL", {
+                    total: montoSale(n.premios + e.monto, idioma),
+                    premios: montoTiene(n.premios, idioma),
+                    servicio: montoSale(e.monto, idioma),
+                  })
               : fmt(e.entrar ? "cpoCmOtraEntrarL" : "cpoCmOtraL", { c: montoSale(e.monto, idioma) }),
           principal: e.entrar ? { texto: tx("cpoCmEntrar"), accion: "entrar", apagado: false } : mirarBoton(),
           secundario: e.entrar ? { texto: tx("cpoCmMirar"), accion: "mirar" } : null,

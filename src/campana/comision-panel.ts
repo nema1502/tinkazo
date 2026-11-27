@@ -20,7 +20,7 @@ export type EstadoDeComision =
   /** Hay un pago en el aire que quizás salió: no se ofrece pagar de nuevo. */
   | { tipo: "duda" }
   | { tipo: "pagando" }
-  /** La cuenta no tiene todavía los premios más lo que se cobra. `cargar` es el total y `falta` lo que le falta. */
+  /** La cuenta no tiene todavía los premios más lo que se cobra (y el envío de los premios, si lo hay). `cargar` es el total y `falta` lo que le falta. */
   | { tipo: "falta-cargar"; cargar: bigint; saldo: bigint; falta: bigint; sale: bigint; monto: bigint }
   /** Todo listo: `sale` es lo que de verdad sale de la cuenta con este pago, y `saldo` lo que tiene, para decírselo. */
   | { tipo: "lista"; sale: bigint; saldo: bigint }
@@ -59,6 +59,12 @@ export interface EntradaDeComision {
   saldo: bigint | "sin-red" | null;
   /** Los premios sumados (redondeados al centavo). */
   premios: bigint;
+  /**
+   * Lo que suma mandar los premios, en una campaña de personas con premios en dólares: quien organiza le manda su premio a cada
+   * persona que gana y cada envío tiene su costo. Tiene que estar en la cuenta además de los premios y del servicio. Sin esto, o
+   * en cero, no se pide nada más que lo de siempre.
+   */
+  envios?: bigint;
   comision: bigint;
   /** Lo que tiene que llegar a la cuenta de Tinkazo para dar por pagado: la comisión menos el costo del retiro. */
   umbral: bigint;
@@ -104,7 +110,8 @@ export function estadoDeComision(e: EntradaDeComision): EstadoDeComision {
   if (e.portero === "no" || e.rechazos >= RECHAZOS_QUE_SE_AGUANTAN) return { tipo: "ahora-no", monto };
   if (e.saldo === null) return { tipo: "mirando" };
   if (e.saldo === "sin-red") return { tipo: "sin-mirar" };
-  const cargar = totalACargar([e.premios], sale);
+  // Con el envío de los premios, lo que hay que tener es más: el pago del servicio no lo toca y queda para mandar cada premio.
+  const cargar = totalACargar([e.premios], sale) + (e.envios ?? 0n);
   // Lo que falta se dice al centavo y hacia arriba: un saldo con fracción de centavo diría Cargá 0 más, y cargar lo que dice
   // tiene que alcanzar siempre.
   const falta = ((cargar - e.saldo + CENTAVO - 1n) / CENTAVO) * CENTAVO;
