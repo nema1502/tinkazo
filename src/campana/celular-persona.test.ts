@@ -7,7 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { asentar, prepararCelular, propio, publico, type Mundo } from "./celular-falso";
-import type { BotonDeGoogle, DepsDelCelular, ResultadoDelAlta, SesionDelCelular } from "./celular";
+import { INTENTOS_POR_LA_LLAVE, type BotonDeGoogle, type DepsDelCelular, type ResultadoDelAlta, type SesionDelCelular } from "./celular";
 import { guardarMemoria, leerMemoria, SIN_CUENTA } from "./memoria";
 import { TEXTOS_CAMPANA } from "./textos";
 
@@ -521,7 +521,13 @@ describe("una campaña de personas: quien abre el enlace sin recuerdo en este na
     const otra = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo: async () => ({ ...propio("sorteada"), anotada: false }) }));
     expect(dice(otra.mundo)).toContain(TEXTOS_CAMPANA.es.cpPreguntaEnStand);
     expect(dice(otra.mundo)).not.toContain("otra persona");
+    // Sin respuesta, la página repite la consulta con tope antes de pintar esa pantalla (`celular-llave.test.ts`).
     const caida = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo: async () => "red" }));
+    expect(dice(caida.mundo)).toBe("");
+    for (let intento = 1; intento < INTENTOS_POR_LA_LLAVE; intento += 1) {
+      await caida.mundo.disparar(15_000);
+      await asentar();
+    }
     expect(dice(caida.mundo)).toContain(TEXTOS_CAMPANA.es.cpPreguntaEnStand);
     expect(dice(caida.mundo)).not.toContain("otra persona");
   });

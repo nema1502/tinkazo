@@ -277,6 +277,12 @@ const ESPERA_DEL_REFRESCO_MS = 1000;
 export const ESPERAS_DE_LA_LECTURA_MS: readonly number[] = [5_000, 10_000, 20_000, 40_000, ...Array.from({ length: 8 }, () => 60_000)];
 /** Si el servicio de cuentas frenó el pedido por límite, la próxima lectura espera al menos esto. */
 export const ESPERA_TRAS_LIMITE_MS = 30_000;
+/**
+ * Solo en una campaña de personas: cuántas veces seguidas puede quedar sin respuesta la consulta propia de quien se reconoce
+ * por la llave de su celular antes de pintar la pantalla pública. Las repeticiones van con el ritmo de las consultas de siempre,
+ * nunca más seguido, y agotadas queda Probar de nuevo: con 150 celulares en la misma conexión, una consulta perdida es esperable.
+ */
+export const INTENTOS_POR_LA_LLAVE = 4;
 
 /**
  * Qué línea de apoyo lleva la espera: la de siempre (seguir en este navegador), la de quien no tiene nada que hacer con su
@@ -353,6 +359,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     const salio = generacion;
     return () => !desmontado && salio === generacion;
   };
+  /** Solo personas: cuántas veces seguidas quedó sin respuesta la consulta propia por la llave de este celular. */
+  let sinRespuesta = 0;
   /** La línea del límite del servicio de cuentas, bajada solo si hizo falta. */
   let limite: typeof import("./limite") | null = null;
   let cancelarIntervalo: (() => void) | null = null;
@@ -872,7 +880,10 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   const avisoPublico = (texto: string, comprobante: string | null = null, conHoraDelSorteo = false): void => {
     const seccion = raiz.querySelector<HTMLElement>("#cmp-estado");
     if (!seccion) return;
-    const accion = comprobante ? { texto: deps.tx("cpComoSeEligio"), enlace: comprobante } : null;
+    // Solo personas: la consulta propia por la llave de este celular quedó sin respuesta, y el botón vuelve a consultar.
+    const accion = sinRespuesta > 0 && (estado.pantalla === "cerrada" || estado.pantalla === "sorteada")
+      ? { texto: deps.tx("cpProbarDeNuevo"), alHacer: () => void preguntar() }
+      : comprobante ? { texto: deps.tx("cpComoSeEligio"), enlace: comprobante } : null;
     // Un aviso a pantalla completa dice de quién es el sorteo, y cuándo es si ayuda a quien espera.
     const rotulos = [sustituir(deps.tx("cpTitulo"), { empresa: deps.campana.empresa.nombre })];
     if (conHoraDelSorteo) {
@@ -890,11 +901,13 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     // Ganaste, en una campaña de personas, sigue pidiendo el código mientras no llega: quien recargó no queda sin él.
     if (pantalla === "gano") return deps.persona && estado.codigo === null ? 15_000 : 60_000;
     if (pantalla === "otra") return 60_000;
-    return null;
+    // Solo personas: antes de la primera pantalla, la consulta propia por la llave que quedó sin respuesta se repite a este ritmo.
+    return pantalla === "inicial" && sinRespuesta > 0 ? 15_000 : null;
   };
 
   const pintar = (): void => {
-    if (desmontado) return;
+    // Mientras se repite la consulta por la llave todavía no hay pantalla propia: queda a la vista la espera de la carga.
+    if (desmontado || (estado.pantalla === "inicial" && sinRespuesta > 0)) return;
     pintarLaPantalla();
     // Después de cada pintura: la tarjeta repinta sus textos (cambió el idioma) o aparece o se va según la pantalla.
     tarjeta?.pintar();
@@ -1113,6 +1126,45 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   }
 
   /**
+   * Solo personas: después del cierre, si este celular guarda su llave, antes de pintar lo público se le pregunta a la sala por lo
+   * propio. Así se reconoce a quien se anotó aunque el recuerdo venciera, el enlace se abriera en otro lugar de este celular o la
+   * respuesta de su alta se perdiera. El pase es para anotarse, y quien ya está anotada no lo necesita.
+   */
+  const conLlave = (fase: Fase): boolean => !!deps.persona && !!deps.llaveGuardada?.() && fase !== "lista" && fase !== "abierta";
+
+  /**
+   * La pantalla de quien no tiene recuerdo ni sesión. Con la llave, primero lo propio. Si esa consulta queda sin respuesta no
+   * se pinta una pantalla final: se repite en el turno siguiente de las consultas, con tope. Agotados los intentos queda la
+   * pantalla pública de siempre con Probar de nuevo.
+   */
+  async function mostrarFase(fase: Fase): Promise<void> {
+    if (conLlave(fase)) {
+      const vale = alSalir();
+      const propio = await pedirPropio();
+      if (!vale()) return;
+      if (propio === "terminada") {
+        ir("termino");
+        return;
+      }
+      if (propio === "red") {
+        sinRespuesta += 1;
+        if (sinRespuesta < INTENTOS_POR_LA_LLAVE) {
+          programar();
+          return;
+        }
+      } else {
+        sinRespuesta = 0;
+        if (propio.anotada || propio.quitada !== undefined) {
+          if (!estado.sesion) estado.ya = true;
+          await aplicarPropio(propio);
+          return;
+        }
+      }
+    }
+    await mostrarFasePublica(fase);
+  }
+
+  /**
    * Hay resultado: quien ganó lo ve, y quien no, también. Lo usan los dos caminos, la consulta propia (que trae si ganó y si le
    * avisaron) y la ventana del resultado (que solo trae las cuentas elegidas): gana si la sala lo dice o si su cuenta está entre
    * las elegidas.
@@ -1264,10 +1316,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       return;
     }
     estado.publico = publico;
-    // En una campaña de personas, después del cierre la llave de este celular reconoce a quien se anotó aunque el recuerdo venciera
-    // o el enlace se abriera en otro lugar de este celular: el pase es para anotarse, y quien ya está anotada no lo necesita.
-    const conLlave = deps.persona && deps.llaveGuardada?.() && publico.fase !== "lista" && publico.fase !== "abierta";
-    if (publico.pase === "vencido" && !memoria && !conLlave) {
+    if (publico.pase === "vencido" && !memoria && !conLlave(publico.fase)) {
       ir("pase");
       return;
     }
@@ -1292,9 +1341,8 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       await consultarPropio();
       return;
     }
-    // Con la llave de este celular (personas) quien ya estaba anotada se reconoce sin sesión.
-    if (sesion || conLlave) {
-      if (sesion && (publico.fase === "lista" || publico.fase === "cerrada")) {
+    if (sesion) {
+      if (publico.fase === "lista" || publico.fase === "cerrada") {
         await mostrarFasePublica(publico.fase);
         return;
       }
@@ -1306,29 +1354,33 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       }
       // Quien salió de la lista y vuelve sin recuerdo ve por qué salió, no otra vez el botón de anotarse.
       if (propio !== "red" && (propio.anotada || propio.quitada !== undefined)) {
-        if (!sesion) estado.ya = true;
         await aplicarPropio(propio);
         return;
       }
-      if (sesion && publico.fase === "abierta") ir("hola");
+      if (publico.fase === "abierta") ir("hola");
       else await mostrarFasePublica(publico.fase);
       return;
     }
-    await mostrarFasePublica(publico.fase);
+    // Con la llave de este celular (personas) quien ya estaba anotada se reconoce sin sesión.
+    await mostrarFase(publico.fase);
   }
 
   async function preguntar(): Promise<void> {
     if (desmontado || consultando || !deps.visible()) return;
-    if (estado.pantalla !== "previa" && estado.pantalla !== "hola" && estado.pantalla !== "adentro"
+    // Solo personas: la consulta propia por la llave quedó sin respuesta, antes de la primera pantalla o ya con la pantalla pública
+    // y su Probar de nuevo. Se empieza otra vez: lo público y, con la llave, lo propio.
+    const porLaLlave = sinRespuesta > 0 && (estado.pantalla === "inicial" || estado.pantalla === "cerrada" || estado.pantalla === "sorteada");
+    if (!porLaLlave && estado.pantalla !== "previa" && estado.pantalla !== "hola" && estado.pantalla !== "adentro"
       && estado.pantalla !== "gano" && estado.pantalla !== "otra") return;
     // En la ventana del resultado, al volver a la pestaña se pregunta por el resultado y no por la consulta propia.
-    if (sorteo?.consulta()?.cadaMs != null) {
+    if (!porLaLlave && sorteo?.consulta()?.cadaMs != null) {
       await preguntarResultado();
       return;
     }
     consultando = true;
     try {
-      if (estado.pantalla === "previa" || estado.pantalla === "hola") {
+      if (porLaLlave) await iniciar();
+      else if (estado.pantalla === "previa" || estado.pantalla === "hola") {
         const vale = alSalir();
         let publico: EstadoPublico | "red" | "terminada";
         try {
@@ -1349,7 +1401,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
           && anterior.cierraMs === publico.cierraMs && actualizarElContadorDeLaPrevia(raiz, deps, publico.total);
         if (publico.fase === "abierta") {
           if (!enSuLugar) pintar();
-        } else await mostrarFasePublica(publico.fase);
+        } else await mostrarFase(publico.fase);
       } else {
         await consultarPropio();
       }
@@ -1388,6 +1440,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     estado.tardando = false;
     if (resultado.ok) {
       estado.errorAlta = null;
+      sinRespuesta = 0;
       estado.ya = resultado.ya;
       // La persona que se acaba de anotar ya cuenta: la confirmación no repite el número de antes.
       estado.propio = {
@@ -1451,6 +1504,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
   function olvidarALaPersona(): void {
     // Lo que la sala conteste a un pedido que salió con la persona anterior ya no cuenta.
     generacion += 1;
+    sinRespuesta = 0;
     borrarMemoria(deps.memoria, deps.sala);
     estado.sesion = null;
     estado.memoria = null;
