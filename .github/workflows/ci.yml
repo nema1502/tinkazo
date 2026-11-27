@@ -96,6 +96,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm build
+      # La página del celular la abren 150 teléfonos con datos: su peso tiene tope (scripts/lib/peso-participar.mjs).
+      - name: Peso de la página del celular
+        run: node scripts/peso-participar.mjs
+      # Las tarjetas de historia afirman hechos con fuente primaria. Una fuente
+      # caída es un dato inventado a los seis meses, así que se comprueba acá.
+      - name: Fuentes de las tarjetas de historia
+        run: node scripts/check-lore.mjs
+      # El español del sitio se mantiene con voseo, pero sin el vocabulario que otro
+      # país lee raro: la lista es scripts/lib/glosario-neutral.json.
+      - name: Español neutral
+        run: node scripts/check-glosario.mjs
       # La prueba de la llave (issue 301) vive solo en la red de prueba y no puede llegar a producción. El armado del sitio
       # no trae nada de ella, y con la variable puesta (en la revisión automática ya vale GITHUB_ACTIONS) el armado con la
       # página tiene que salir entero: así un cambio que la rompa frena acá y no en las vistas previas de todos.
@@ -105,14 +116,6 @@ jobs:
         run: VITE_PRUEBA_LLAVE=1 pnpm exec vite build --outDir dist-llave
       - name: El armado con la prueba trae la página, el kit y sus marcas
         run: node scripts/check-sin-prueba-de-llave.mjs dist-llave --presente
-      # Las tarjetas de historia afirman hechos con fuente primaria. Una fuente
-      # caída es un dato inventado a los seis meses, así que se comprueba acá.
-      - name: Fuentes de las tarjetas de historia
-        run: node scripts/check-lore.mjs
-      # El español del sitio se mantiene con voseo, pero sin el vocabulario que otro
-      # país lee raro: la lista es scripts/lib/glosario-neutral.json.
-      - name: Español neutral
-        run: node scripts/check-glosario.mjs
       # Las páginas de lectura se rompen en silencio: una imagen que no está,
       # una clave de idioma que falta, un enlace del pie a una página borrada.
       - name: Páginas de lectura
