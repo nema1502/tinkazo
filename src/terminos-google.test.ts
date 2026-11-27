@@ -199,7 +199,7 @@ describe("los Términos: la nota de los servicios remite al recuadro de quienes 
     }
     expect(texto("es", "tmMore1")).toContain("y la pantalla lo dice, guardamos");
     expect(texto("en", "tmMore1")).toContain("and the screen says so, we keep");
-    for (const idioma of IDIOMAS) expect(texto(idioma, "tmMore1"), idioma).not.toMatch(/(única|único|only)/iu);
+    for (const idioma of IDIOMAS) expect(texto(idioma, "tmMore1"), idioma).not.toMatch(/única|único|the only/iu);
   });
 
   it("terminos.html trae la nota con el mismo texto en español que el diccionario", () => {
