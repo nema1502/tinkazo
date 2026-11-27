@@ -274,8 +274,6 @@ export function pintarLaCampana(
         // Quien abrió el enlace desde una aplicación que Google no deja entrar puede copiarlo y abrirlo en el navegador, aunque
         // esta página no haya reconocido esa aplicación.
         const aviso = parrafo(sitio, deps.tx("cpEnApp"), "cmp-en-app");
-        aviso.setAttribute("role", "status");
-        aviso.setAttribute("aria-live", "polite");
         boton(sitio, deps.tx("cpCopiar"), "cmp-de-texto", () => copiarEnlace(deps, aviso, sitio, programar));
       }, deps.tx("cpCargando"));
     };
