@@ -838,10 +838,16 @@ describe("POST /v1/sorteo: un sorteo a la vez", () => {
       if (invocacion(x).metodo === "draw") ahora += 10_000;
       return sim;
     };
+    const lecturasAntes = red.lecturas;
     expect(await p.sortear("1", FIRMA)).toEqual({ estado: 503, cuerpo: { motivo: "tarde" } });
     expect(draws()).toHaveLength(0);
     expect(cupos.exportar(true).uso?.filter((f) => f.metodo === "draw")).toHaveLength(0);
     expect(usados(org.publicKey()).sorteos).toBe(0);
+    // La mirada de la admisión corta antes de tomar la sorteadora: no se lee su secuencia ni se la firma. La de adentro, que
+    // llega después de firmar, no alcanza para estas dos afirmaciones.
+    expect(red.lecturas).toBe(lecturasAntes);
+    expect(firmasSorteadora).toBe(0);
+    await sor!.libre();
     expect(sor!.ocupada()).toBeNull();
     const tardes = registros("sorteo-tarde");
     expect(tardes).toHaveLength(1);
@@ -897,6 +903,47 @@ describe("POST /v1/sorteo: un sorteo a la vez", () => {
     expect(esOcupado || esRepetido).toBe(true);
     expect(draws()).toHaveLength(1);
     abrir();
+  });
+
+  it("dos objetos que arrancan juntos (cada uno con su sorteadora) y piden el mismo sorteo: sale uno y el otro recibe el repetido", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    const o = await otroObjeto();
+    // Cada objeto tiene su propio mapa de pedidos y su propia sorteadora: solo el libro compartido los frena. Es el repetido de
+    // adentro, el que se mira otra vez justo antes de reservar.
+    const [uno, dos] = await Promise.all([p.sortear("1", FIRMA), o.p.sortear("1", FIRMA)]);
+    const salio = [uno, dos].filter((x) => x.estado === 200 && x.cuerpo.status === "PENDING");
+    const repetido = [uno, dos].filter((x) => x.estado === 200 && x.cuerpo.status === "DUPLICATE");
+    expect(salio).toHaveLength(1);
+    expect(repetido).toHaveLength(1);
+    expect(repetido[0]?.cuerpo.hash).toBe(salio[0]?.cuerpo.hash);
+    expect(draws()).toHaveLength(1);
+    expect(usados(org.publicKey()).sorteos).toBe(1);
+  });
+
+  it("un gemelo cuya simulación tarda más que la ocupación del primero: igual recibe el repetido, nunca un segundo envío", async () => {
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    red.sorteos.set(2n, { organizador: org.publicKey(), lista: LISTA, ronda: RONDA });
+    // La simulación del gemelo es lenta: cuando termina, el primero ya mandó, entró en su espera y soltó la sorteadora. La
+    // admisión lo deja pasar (menos de 9 segundos) y solo el repetido de adentro, que mira el libro, lo frena.
+    const simular = red.simular.bind(red);
+    red.simular = async (x) => {
+      const sim = await simular(x);
+      const i = invocacion(x);
+      if (i.metodo === "draw" && i.id === 2n) {
+        await new Promise((r) => setTimeout(r, 30));
+        ahora += 5_000;
+      }
+      return sim;
+    };
+    const [uno, dos] = await Promise.all([p.sortear("1", FIRMA), p.sortear("2", FIRMA)]);
+    expect(uno).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect(dos).toEqual({ estado: 200, cuerpo: { hash: (uno.cuerpo as { hash: string }).hash, status: "DUPLICATE", estado: "enviado" } });
+    expect(draws()).toHaveLength(1);
+    expect(usados(org.publicKey()).sorteos).toBe(1);
+    expect(registros("sorteo-ocupado")).toHaveLength(0);
+    expect(registros("sorteo-tarde")).toHaveLength(0);
   });
 });
 
