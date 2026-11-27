@@ -283,14 +283,20 @@ en una ya creada da lo mismo. Todo lo demás de una campaña en curso sigue anda
 solo lectura: apagar el modo en pleno evento no deja a quien ya se anotó sin saber si ganó), quitar, cerrar, sellar, guardar el
 resultado y avisar. La sala guarda el modo en la clave `identidad` de la sala, solo en esas campañas.
 
-La activación al pagar nunca las firma, con los interruptores como estén: `POST /v1/activar` con `identidad` da `400 forma` con
-el campo `identidad`. Las campañas de personas las firma Tinkazo a mano.
+La activación al pagar firma las campañas de personas con premios en dólares, cuando las personas están prendidas: es el mismo
+`POST /v1/activar` de una campaña de cuentas, con el mismo costo del servicio. Con las personas apagadas contesta
+`503 personas-apagadas` antes de mirar la sesión o la red, así nadie gasta un tope ni paga por una campaña que la sala después no
+puede crear. El premio en mano sigue sin activarse solo: un texto con `premio_en_mano` da `400 forma` con el campo
+`premio_en_mano`, con los interruptores como estén, y esas campañas las firma Tinkazo a mano. En una campaña de personas con
+premios en dólares nadie recibe una cuenta al anotarse: después del sorteo quien organiza le manda el premio a cada persona que
+gana, desde su cuenta, a la dirección que esa persona le pasa. Por eso llevan hasta 8 premios y la activación exige en la cuenta
+el costo de mandar cada uno (los pasos 2 y 6 de Activar una campaña al pagar).
 
 - **El premio en mano.** El texto firmado puede traer `"premio_en_mano": {"es","en"}`, cada uno de 1 a 60 caracteres, de una sola
   línea, con algo escrito y sin caracteres invisibles. Solo vale con `"identidad": "persona"` y con todos los `premios` en `"0"`:
   sin la identidad de persona da `400 forma` con el campo `premio_en_mano`, y con algún monto distinto de `"0"` da `400 forma` con
   el campo `premios`. La sala no guarda ni usa el texto: solo lo deja pasar. Una campaña de personas con montos y sin
-  `premio_en_mano` se sigue aceptando al leerla. La activación al pagar tampoco acepta `premio_en_mano`.
+  `premio_en_mano` se sigue aceptando al leerla: es la de premios en dólares. La activación al pagar no acepta `premio_en_mano`.
 
 - **El alta** es `POST /v1/sala/<id>/campana/alta` con `{"google","d","llave","p"?}`. `google` es el token de identidad que
   entrega el botón de Google, y la sala lo verifica sola con `identidad-google.ts`: firma contra las llaves públicas de Google,
@@ -379,7 +385,13 @@ El orden va de lo más barato a lo más caro y nada se firma con la duda:
    10 premios del mismo monto (cada uno de 1 a 10.000 dólares digitales, en centavos justos), cierre dentro de los próximos 7
    días, sorteo entre el cierre y un día después, y un nombre de empresa sin la palabra Tinkazo (sin mayúsculas, acentos, signos,
    letras anchas o parecidas ni cifras en lugar de letras). Estas reglas viven en `src/campana/reglas-de-activar.ts`, que el panel
-   también mira antes de cobrar. Si no, `400 {"error":"forma","campo"}`.
+   también mira antes de cobrar. Si no, `400 {"error":"forma","campo"}`. Una campaña de personas (`"identidad": "persona"`) lleva
+   hasta 8 premios y no 10 (`PREMIOS_CON_ENVIO_MAXIMOS`, en `activar.ts`): con más, `400 forma` con el campo `premios`. Cada
+   premio es un envío desde la cuenta de quien organiza, y el servicio de comisiones acepta 10 por cuenta y por día contando el
+   pago del costo del servicio. Con `premio_en_mano`, `400 forma` con el campo `premio_en_mano`.
+2b. Las personas prendidas: si el texto es de una campaña de personas y la sala no tiene `DIFERIDA` en `"1"` y su
+   `GOOGLE_CLIENT_ID`, `503 {"error":"personas-apagadas"}`, antes de los topes, de la sesión y de la red. Una campaña de cuentas
+   no pasa por acá.
 3. Los topes: los de rechazos por conexión (300) y por sesión (5) de la lista de la sala, 60 pedidos por conexión cada 10 minutos
    y 5 campañas distintas por cuenta y por día (`429` con `Retry-After`: `rechazos`, `cupo-conexion`, `cupo-cuenta`). Repetir un
    evento que ya se activó hoy no gasta lugar. Viven en el objeto `Cupos`: ni la sesión ni la dirección se guardan en claro, y los
@@ -398,7 +410,9 @@ El orden va de lo más barato a lo más caro y nada se firma con la duda:
    `502 red` y no firma. Sin pagar, `402 {"error":"no-pagada","falta","nota"}`, con `falta` en stroops (lo que falta para el
    umbral).
 6. Los fondos: el saldo de USDC de Circle de la cuenta tiene que ser al menos el total de los premios, si no
-   `402 {"error":"sin-fondos","falta"}`.
+   `402 {"error":"sin-fondos","falta"}`. En una campaña de personas tiene que ser el total de los premios más el costo del retiro
+   (`COSTO_RETIRO`) por cada premio: quien organiza pone el costo de mandar cada uno, y así a quien gana le llega el premio
+   entero. Con dos premios de 50 y el costo en 0,50 son 101, y `falta` es lo que falta para llegar a eso.
 7. La nota: la primera activación pagada se queda con la nota de su evento por 31 días. Otro evento con la misma nota (dos
    nombres con la misma huella) no se activa con ese pago: `402 no-pagada`.
 8. El acceso: la sala le pide al portero (`PORTERO_URL`) `POST /v1/alta/organizadora` con la cabecera `x-sala-secreto` y
