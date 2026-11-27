@@ -18,6 +18,10 @@ export interface RespuestaCruda {
   resultXdr?: string;
   resultMetaXdr?: string;
   diagnosticEventsXdr?: unknown;
+  /** Los eventos de la transacción: uno de contrato por operación, cada uno con sus eventos en base64. */
+  events?: { transactionEventsXdr?: string[]; contractEventsXdr?: string[][] };
+  /** La hora de cierre del último ledger que conoce el RPC, en segundos. */
+  latestLedgerCloseTime?: number | string;
 }
 
 export interface EventosDeComision {

@@ -1,4 +1,4 @@
-import { StrKey, TransactionBuilder, rpc, xdr } from "@stellar/stellar-sdk";
+import { Address, StrKey, TransactionBuilder, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import type { RespuestaConsulta, RespuestaEnvio } from "../stellar/envio";
 import type { RespuestaCruda } from "./cobro";
 import { RED_DE_PRUEBA } from "./red";
@@ -35,6 +35,18 @@ export interface OpcionesDeRpc {
   /** Cuánto se espera cada pedido, en milisegundos. */
   topeMs?: number;
 }
+
+/** Lo que hay guardado de las monedas de una cuenta de contrato, y hasta cuándo vive esa entrada. */
+export interface SaldoLeido {
+  stroops: bigint;
+  /** El ledger hasta el que vive la entrada del saldo, o `null` si no hay entrada o el RPC no lo dijo. */
+  vence: number | null;
+  /** La entrada ya venció (puede traer saldo): al usarla, la red la restaura sola. */
+  archivada: boolean;
+  latestLedger: number;
+}
+
+const claveDeCuenta = (cuenta: string): xdr.LedgerKey => xdr.LedgerKey.account(new xdr.LedgerKeyAccount({ accountId: xdr.PublicKey.publicKeyTypeEd25519(new xdr.Uint256Bytes(StrKey.decodeEd25519PublicKey(cuenta))) }));
 
 /** El número de un error del contrato que viene en el texto de una simulación (`Error(Contract, #5)`), o `null`. */
 export function codigoDeContrato(error: string | undefined): number | null {
@@ -90,13 +102,47 @@ export class RpcDePrueba {
 
   /** La secuencia de una cuenta, o `null` si todavía no existe. */
   async secuencia(cuenta: string): Promise<string | null> {
-    const clave = xdr.LedgerKey.account(new xdr.LedgerKeyAccount({ accountId: xdr.PublicKey.publicKeyTypeEd25519(new xdr.Uint256Bytes(StrKey.decodeEd25519PublicKey(cuenta))) }));
+    const clave = claveDeCuenta(cuenta);
     const r = await this.llamar<{ entries?: Array<{ xdr: string }> | null }>("getLedgerEntries", { keys: [clave.toXDR("base64")] });
     const e = r.entries?.[0];
     if (!e) return null;
     const datos = xdr.LedgerEntryData.fromXDR(e.xdr, "base64");
     if (datos.type !== "account") return null;
     return String(datos.value.seqNum);
+  }
+
+  /** Las monedas de una cuenta G, en la unidad mínima, o `null` si la cuenta todavía no existe. */
+  async saldoDeCuenta(cuenta: string): Promise<bigint | null> {
+    const r = await this.llamar<{ entries?: Array<{ xdr: string }> | null }>("getLedgerEntries", { keys: [claveDeCuenta(cuenta).toXDR("base64")] });
+    const e = r.entries?.[0];
+    if (!e) return null;
+    const datos = xdr.LedgerEntryData.fromXDR(e.xdr, "base64");
+    if (datos.type !== "account") return null;
+    return BigInt(datos.value.balance);
+  }
+
+  /**
+   * Las monedas de una cuenta de contrato: el saldo vive en el almacenamiento del contrato de las monedas, con la misma
+   * clave que arma el SDK para leerlo. Sin entrada, el saldo es cero. Un corte o un error del RPC lanza: decide quien llama.
+   */
+  async saldoDeContrato(contrato: string): Promise<SaldoLeido> {
+    const clave = xdr.LedgerKey.contractData(
+      new xdr.LedgerKeyContractData({
+        contract: new Address(RED_DE_PRUEBA.activo).toScAddress(),
+        key: nativeToScVal(["Balance", contrato], { type: ["symbol", "address"] }),
+        durability: xdr.ContractDataDurability.persistent,
+      }),
+    );
+    const r = await this.llamar<{ entries?: Array<{ xdr: string; liveUntilLedgerSeq?: number }> | null; latestLedger?: number }>("getLedgerEntries", { keys: [clave.toXDR("base64")] });
+    const latestLedger = Number(r.latestLedger ?? 0);
+    const e = r.entries?.[0];
+    if (!e) return { stroops: 0n, vence: null, archivada: false, latestLedger };
+    const datos = xdr.LedgerEntryData.fromXDR(e.xdr, "base64");
+    if (datos.type !== "contractData") return { stroops: 0n, vence: null, archivada: false, latestLedger };
+    const valor = scValToNative((datos.value as unknown as { val: xdr.ScVal }).val) as { amount?: bigint | number | string } | null;
+    const stroops = BigInt(valor?.amount ?? 0);
+    const vence = typeof e.liveUntilLedgerSeq === "number" ? e.liveUntilLedgerSeq : null;
+    return { stroops, vence, archivada: vence !== null && vence < latestLedger, latestLedger };
   }
 
   /** Simula una transacción. Con entradas de autorización en la operación, el RPC las exige. */

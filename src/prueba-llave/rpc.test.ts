@@ -1,5 +1,6 @@
-import { Account, Keypair, Networks, Operation, TransactionBuilder } from "@stellar/stellar-sdk";
+import { Account, Address, Keypair, Networks, Operation, TransactionBuilder, nativeToScVal, scValToNative, xdr } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
+import { RED_DE_PRUEBA } from "./red";
 import { codigoDeContrato, codigoDelRechazo, RpcDePrueba } from "./rpc";
 
 /** Un RPC de mentira: contesta lo que se le diga por método y anota lo que le pidieron. */
@@ -101,5 +102,55 @@ describe("los códigos", () => {
   it("un rechazo ilegible no da código", () => {
     expect(codigoDelRechazo(undefined)).toBeUndefined();
     expect(codigoDelRechazo("no es xdr")).toBeUndefined();
+  });
+});
+
+describe("las monedas de una cuenta de contrato", () => {
+  const cuenta = RED_DE_PRUEBA.verificador;
+
+  /** La entrada de saldo tal como la guarda el contrato de las monedas, en base64. */
+  function entradaDeSaldo(amount: bigint): string {
+    const val = nativeToScVal({ amount, authorized: true, clawback: false }, { type: { amount: ["symbol", "i128"], authorized: ["symbol", null], clawback: ["symbol", null] } });
+    const key = nativeToScVal(["Balance", cuenta], { type: ["symbol", "address"] });
+    return xdr.LedgerEntryData.contractData(
+      new xdr.ContractDataEntry({ ext: xdr.ExtensionPoint.v0(), contract: new Address(RED_DE_PRUEBA.activo).toScAddress(), key, durability: xdr.ContractDataDurability.persistent, val }),
+    ).toXDR("base64");
+  }
+
+  it("pide la entrada persistente del contrato de las monedas con la clave Balance de esa cuenta", async () => {
+    const { fetchFn, pedidos } = rpcFalso({ getLedgerEntries: { entries: null, latestLedger: 500 } });
+    await new RpcDePrueba({ fetchFn }).saldoDeContrato(cuenta);
+    const claves = (pedidos[0]?.params as { keys: string[] }).keys;
+    expect(claves).toHaveLength(1);
+    const clave = xdr.LedgerKey.fromXDR(claves[0] as string, "base64") as unknown as { contractData: { contract: xdr.ScAddress; key: xdr.ScVal; durability: unknown } };
+    expect(Address.fromScAddress(clave.contractData.contract).toString()).toBe(RED_DE_PRUEBA.activo);
+    expect(scValToNative(clave.contractData.key)).toEqual(["Balance", cuenta]);
+    expect(clave.contractData.durability).toBe(xdr.ContractDataDurability.persistent);
+  });
+
+  it("sin entrada el saldo es cero y no está archivada", async () => {
+    const { fetchFn } = rpcFalso({ getLedgerEntries: { entries: null, latestLedger: 500 } });
+    expect(await new RpcDePrueba({ fetchFn }).saldoDeContrato(cuenta)).toEqual({ stroops: 0n, vence: null, archivada: false, latestLedger: 500 });
+  });
+
+  it("con entrada lee el saldo y hasta cuándo vive", async () => {
+    const { fetchFn } = rpcFalso({ getLedgerEntries: { entries: [{ xdr: entradaDeSaldo(100_000_000n), liveUntilLedgerSeq: 700 }], latestLedger: 500 } });
+    expect(await new RpcDePrueba({ fetchFn }).saldoDeContrato(cuenta)).toEqual({ stroops: 100_000_000n, vence: 700, archivada: false, latestLedger: 500 });
+  });
+
+  it("una entrada que ya venció se lee igual y queda marcada como archivada", async () => {
+    const { fetchFn } = rpcFalso({ getLedgerEntries: { entries: [{ xdr: entradaDeSaldo(5n), liveUntilLedgerSeq: 400 }], latestLedger: 500 } });
+    const r = await new RpcDePrueba({ fetchFn }).saldoDeContrato(cuenta);
+    expect(r).toMatchObject({ stroops: 5n, vence: 400, archivada: true });
+  });
+
+  it("un corte o un error del RPC lanza: quien lee decide, nunca se toma por cero", async () => {
+    const malo = rpcFalso({}, 503);
+    await expect(new RpcDePrueba({ fetchFn: malo.fetchFn }).saldoDeContrato(cuenta)).rejects.toThrow("503");
+  });
+
+  it("las monedas de una cuenta G que no existe dan null", async () => {
+    const { fetchFn } = rpcFalso({ getLedgerEntries: { entries: null } });
+    expect(await new RpcDePrueba({ fetchFn }).saldoDeCuenta(Keypair.random().publicKey())).toBeNull();
   });
 });
