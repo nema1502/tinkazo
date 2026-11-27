@@ -19,7 +19,7 @@ import { htmlDeLosPremios } from "./ui/premios-del-comprobante";
 import { contarAperturaDeEvento, quitarMarca, refDe, viaDe } from "./contar";
 import { tomarLogoEntrante } from "./enlace-corto";
 import { pintarFranja } from "./ui/logo-franja";
-import { ganadoresDelEnlaceCoinciden, ganadoresRehechos, quienEnLaTarjeta } from "./evento-tarjeta";
+import { ganadoresDelEnlaceCoinciden, ganadoresRehechos, ganadorasPorLugar, htmlDeQuienGano, quienEnLaTarjeta } from "./evento-tarjeta";
 import { modesFlagOn, requestedMode } from "./modos/bandera";
 import { isTurnOrder } from "./modos/turnos";
 import { eventoEsDePrueba, veredictoConModo } from "./evento-modo";
@@ -146,6 +146,7 @@ async function revisar(s: SorteoDelEvento, leer: (c: ContratoOficial, id: string
     r.firma === null && r.falta === "sin-ronda" ? "sin-red" : r.firmaOk && !tiene("ronda", "ronda-temprana", "firma-registro") ? "ok" : "bad";
   // La semilla sale de la firma: sin firma válida, la selección no prueba nada.
   // Y el ganador que dice el enlace tiene que ser el que sale, con el nombre exacto.
+  // En una lista de personas el nombre del enlace no está atado a nada sellado: no decide nada, y lo comprobado es el lugar.
   const mismosNombres = ganadoresDelEnlaceCoinciden(r.nombres, r.ganadores, ganadoresDelEnlace);
   const ganador: Estado = firma !== "ok" ? firma : !tiene("semilla", "ganadores") && mismosNombres ? "ok" : "bad";
   const cadena: EstadoCadena =
@@ -250,9 +251,6 @@ function filaCadena(c: EstadoCadena, delHistorial = false, sinHistorial = false)
   return fila(t("evChkCadena"), estado, texto);
 }
 
-/** Cada nombre aislado: uno con caracteres que invierten la escritura no da vuelta a los demás. */
-const nombresAislados = (nombres: readonly string[]): string => nombres.map((n) => `<bdi>${esc(n)}</bdi>`).join(", ");
-
 function tarjeta(s: SorteoDelEvento, i: number): string {
   const f = filas[i];
   const sello = f?.r.registro?.sello ?? null;
@@ -318,6 +316,10 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
   // Quien ganó, por persona solo cuando la cuenta también es por persona: la marca (k/m) es interna, la tarjeta nombra.
   // Quien salió más de una vez va una sola vez, con su cuenta; en un orden de turnos no se junta a nadie.
   const { personas, participaciones, ganadores } = quienEnLaTarjeta(getLang(), s, requestedMode() === "varias" || modesFlagOn(), turnos);
+  // Con una lista de personas, lo comprobado es el lugar de cada ganadora en la lista sellada, y solo con el ganador en verde.
+  // El nombre que trae el enlace va al lado, como dato de quien compartió.
+  const porLugar = ganadorasPorLugar(f?.r.nombres.length ? f.r.nombres : s.names, f?.ganador === "ok" ? f.r.ganadores : null, s.ganadores);
+  const cuantas = porLugar ? s.ganadores.length : ganadores.length;
   const cuenta =
     personas === participaciones
       ? t("evPersonas").replace("{n}", String(personas))
@@ -326,7 +328,7 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
     `<section class="block ev-sorteo">` +
     `<div class="head"><h2>${esc(premio)}</h2><span class="kicker">${esc(cuando)}</span></div>` +
     `<div class="body">` +
-    `<p class="ev-gana"><span class="kicker">${esc(t(turnos ? "turnsResultTitle" : ganadores.length > 1 ? "evGanaron" : "evGano"))}</span> <b>${nombresAislados(ganadores)}</b></p>` +
+    htmlDeQuienGano(t(turnos ? "turnsResultTitle" : cuantas > 1 ? "evGanaron" : "evGano"), ganadores, porLugar) +
     `<p class="note">${esc(cuenta)}</p>` +
     // Un sorteo que se hizo sin sello (el comprobante lo marca) lo dice con la frase, además de su estado de siempre.
     (esSinSello(s) ? `<p class="note sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +
