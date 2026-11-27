@@ -145,7 +145,7 @@ export function depsDePersona(p: PiezasDeLaPersona): DepsDelCelular {
       const r = await resultadoDeCampanaDePersona(p.servicio, p.sala, dep);
       return r === "terminada" ? "red" : r;
     },
-    // Recibir el premio lo lleva `celular.ts` a la pantalla de la entrega, que la etapa del reclamo reemplaza.
+    // En una campaña de personas el premio se entrega en mano: la página no ofrece recibir nada.
     recibir: () => undefined,
     // Quien dice que este celular no es suyo suelta también su llave: la próxima persona no hereda lo que anotó la anterior.
     salir: async () => {
