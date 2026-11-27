@@ -3,7 +3,8 @@ import { listHash } from "../protocol/canonical";
 import { huellaDeLlave, huellaDePersona, listaDeLaCampana, salDeCampana } from "../../workers/sala/src/campana";
 import { lineaDePersona } from "../../workers/sala/src/linea-persona";
 import type { Ejecutar, ValorSql } from "../../workers/sala/src/registro";
-import { codigosDeEntrega, type SalaDeCampana as SalaDelPanel } from "./campana-org";
+import { codigosDeEntrega } from "./campana-org";
+import type { Sala } from "./cliente";
 import { miEstadoDePersona } from "./celular-persona";
 import { campanaDePrueba, firmarParaLaPrueba, montarMundo, type MundoDeSala, type SalaDeCampana } from "./mundo-sala";
 
@@ -80,7 +81,7 @@ async function sorteada() {
     });
   };
   const dep = { fetch: fetchDeLaSala, azar: () => 0.5 };
-  const delPanel: SalaDelPanel = { id: sala.id, token: sala.token, clave: "C".repeat(22), vence: AHORA + 3_600_000, servicio: "http://127.0.0.1:8792" };
+  const delPanel: Sala = { id: sala.id, token: sala.token, clave: "C".repeat(22), vence: AHORA + 3_600_000, servicio: "http://127.0.0.1:8792" };
   const llaveDeLinea = (linea: string): string => llaveDe(lineas.indexOf(linea) + 1);
   return { lineas, ganadoras, dep, delPanel, llaveDeLinea, servicio: "http://127.0.0.1:8792", id: sala.id };
 }
