@@ -596,23 +596,17 @@ describe("con premio en mano todo queda como estaba", () => {
     expect(texto(p, "#cpo-linea")).toBe("Entregá cada premio en mano.");
   });
 
-  it("con todas avisadas, Elegir otro archivo deja la campaña sin preguntar, como siempre", async () => {
-    const m = mundo();
-    const p = await enSorteada(m, EN_MANO);
-    ponerPaso(resultado(TRES_CON_CODIGO().map((f) => ({ ...f, avisada: true }))));
-    await suelta(3);
-    boton(p, "Elegir otro archivo").click();
-    expect(vistaDe(p)).toBe("elegir");
-  });
-
-  it("con alguien sin avisar pregunta con la línea de los avisos, como siempre", async () => {
+  it("al dejar la campaña no dice nada de los premios por mandar ni lleva el pie de los códigos", async () => {
+    // Cuándo pregunta y con qué línea al dejar una campaña de premio en mano lo fijan las pruebas de ese modo: acá solo que
+    // lo de los dólares no se mete.
     const m = mundo();
     const p = await enSorteada(m, EN_MANO);
     ponerPaso(resultado(TRES_CON_CODIGO()));
     await suelta(3);
     boton(p, "Elegir otro archivo").click();
     expect(vistaDe(p)).toBe("olvidar");
-    expect(texto(p, "#cpo-linea")).toBe(AL_DEJAR_CON_AVISOS);
+    expect(texto(p, "#cpo-linea")).not.toBe(AL_DEJAR);
+    expect(seVe($(p, "#cpo-pie"))).toBe(false);
   });
 });
 
@@ -740,7 +734,7 @@ function conCobro(m: Mundo, cambios: Partial<Pick<Cobro, "saldo" | "red" | "sala
     x.preguntasALaSala++;
     return x.salaLista;
   };
-  m.deps.personasListas = async () => {
+  m.deps.personasParaCobrar = async () => {
     x.preguntasPorPersonas++;
     if (x.personas === "falla") throw new Error("sin red");
     return x.personas;
@@ -855,7 +849,7 @@ describe("antes de cobrar un borrador de personas", () => {
   it("sin la forma de preguntar por las personas, un borrador de personas no llega a pagarse", async () => {
     const m = mundo();
     const c = conCobro(m);
-    delete m.deps.personasListas;
+    delete m.deps.personasParaCobrar;
     const p = nuevoPanel(m);
     await eligiendo(m, p, borradorDe(CON_DOLARES));
     expect(texto(p, "#cpo-h")).toBe("Todavía no se puede activar");

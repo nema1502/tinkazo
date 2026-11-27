@@ -16,6 +16,7 @@ import { anotarDuenaDelBorrador, borradorEsDeOtra, borrarBorrador, leerBorrador 
 import { DOLAR, dolaresEnTexto, esDeCentavosJustos, totalDePremios } from "../campana/comision";
 import { fechaTexto, horaTexto, montoConCentavos, premiosTexto, textoDelPremio } from "../campana/formato";
 import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
+import { reglaQueFalla } from "../campana/reglas-de-activar";
 import {
   PREMIOS_CON_ENVIO_MAXIMOS,
   enviosDe,
@@ -24,7 +25,6 @@ import {
   lineaDelResultadoEnDolares,
   montoDelPuesto,
 } from "../campana/personas-dolares";
-import { reglaQueFalla } from "../campana/reglas-de-activar";
 import { ESPERA_TOKEN_MS } from "../campana/sesion";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
 import { descifrarEquipo, revisarEquipo } from "../equipos/datos";
@@ -266,7 +266,7 @@ export interface DepsDelPanelDeCampana {
    * (`sala/personas-estado.ts`). Se pregunta al tomar un borrador de personas, antes de ofrecer el pago: sin un sí, no se cobra.
    * Un borrador de cuentas no lo pregunta. Sin esto, un borrador de personas no llega a pagarse.
    */
-  personasListas?: () => Promise<boolean>;
+  personasParaCobrar?: () => Promise<boolean>;
   /**
    * Mandar el premio de una ganadora desde el resultado de una campaña de personas con premios en dólares. Sin esto, cada fila
    * dice el monto de su premio y no lleva botón.
@@ -346,7 +346,7 @@ export function depsReales(): DepsDelPanelDeCampana {
     // El saldo se lee en la red principal: en la de prueba no hay premio de verdad que mirar.
     ...(network.name === "mainnet" ? { deposito: depsDeDepositoReales() } : {}),
     // Lo trae recién con un borrador de personas a la vista: el resto del sitio no lo usa.
-    personasListas: () => import("../sala/personas-estado").then((m) => m.personasListas()),
+    personasParaCobrar: () => import("../sala/personas-estado").then((m) => m.personasListas()),
     // La ventana de Mandar y la billetera bajan recién con un resultado en dólares a la vista: el resto del panel no las usa.
     mandarPremio: {
       puede: () => import("./campana-mandar-real").then((m) => m.mandarPremioReal().puede()),
@@ -1872,7 +1872,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
    * preguntarlo, o si la pregunta falla, es un no: sin un sí no se cobra.
    */
   async function personasListasEnLaSala(): Promise<boolean> {
-    const preguntar = deps.personasListas;
+    const preguntar = deps.personasParaCobrar;
     if (!preguntar) return false;
     try {
       return (await preguntar()) === true;
@@ -2957,9 +2957,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // Con un aviso pendiente a los celulares no se deja de un toque: la pregunta de siempre. Con la lista sellada siempre se
       // pregunta, y con el sorteo hecho también, salvo con el resultado ya avisado a todas o con la sala borrada.
       botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (avisosPendientes(pasoDelPuente(), vista === "sorteada") ? pedirOlvidar() : olvidar())));
-      // En el resultado en dólares el panel no guarda a quién ya se le mandó: dejar la campaña pregunta siempre, aunque todas
-      // estén avisadas, porque al dejarla ya no se ve a quién le falta su premio.
-      if (enDolares) botones.splice(-1, 1, boton(tx("cpoOtroArchivo"), "enlace", () => pedirOlvidar()));
     } else if (vista === "sin-red") {
       botones.push(principal(tx("cpoReintentar"), () => reintentar?.()));
       botones.push(otroArchivo());
@@ -2995,6 +2992,10 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         botones.push(principal(tx("cpoDejar"), () => olvidar()));
       }
     }
+    // En el resultado en dólares el panel no guarda a quién ya se le mandó: dejar la campaña pregunta siempre, aunque todas
+    // estén avisadas, porque al dejarla ya no se ve a quién le falta su premio. Elegir otro archivo es el último botón de esa
+    // vista, y acá se cambia por uno que pregunta sin mirar nada más.
+    if (enDolares) botones.splice(-1, 1, boton(tx("cpoOtroArchivo"), "enlace", () => pedirOlvidar()));
     // La fila viva es parte de este bloque y no se vuelve a armar: lo que ya dijo no se repite.
     for (const hijo of [...accionesEl.children]) if (hijo !== filaEl) hijo.remove();
     accionesEl.append(...botones);
@@ -3079,8 +3080,6 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (vista === "olvidar" && (vistaAntes === "cerrada" || vistaAntes === "sellada" || vistaAntes === "sorteada")) {
       const paso = pasoDelPuente();
       if (paso.paso !== "sala-borrada" && avisosPendientes(paso, vistaAntes === "sorteada")) linea = tx("cpoOlvidarAviso");
-      // En el resultado en dólares, con todas avisadas, lo que se pierde al dejar la campaña es a quién le falta su premio.
-      else if (vistaAntes === "sorteada" && esResultadoEnDolares(paso, campana)) linea = tx("cpoOlvidarPremios");
     }
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? lineaDelPaso(pasoDelPuente()) : null;
     // Lo que la fila viva ya dice no se repite en la línea: la fila ocupa su lugar.
@@ -3089,6 +3088,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // falte un código, que se espere.
     const pasoDeAhora = pasoDelPuente();
     if (vista === "sorteada" && esResultadoEnDolares(pasoDeAhora, campana)) linea = tx(lineaDelResultadoEnDolares(pasoDeAhora));
+    // La pregunta de dejar la campaña desde ese resultado se decide acá, por encima de lo que diga la de siempre: con un aviso
+    // pendiente va la línea de los avisos y, con todas avisadas, lo que se pierde al dejarla es a quién le falta su premio.
+    if (vista === "olvidar" && vistaAntes === "sorteada" && esResultadoEnDolares(pasoDeAhora, campana)) {
+      linea = tx(avisosPendientes(pasoDeAhora, true) ? "cpoOlvidarAviso" : "cpoOlvidarPremios");
+    }
     if (campana && vista === "previa") {
       const hora = horaTexto(campana.cierraMs, zona, idioma);
       const pedidos = campana.pasos.length;

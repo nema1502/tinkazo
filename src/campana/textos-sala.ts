@@ -226,6 +226,15 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoSeguirNoL: "No pudimos abrirla aquí. Probá de nuevo.",
     cpoAntesConNumero: "Quienes se anotaron antes salen con su número. Si escanean el QR de nuevo, aparece su nombre.",
     cpoAntesCerrada: "Quienes se anotaron antes salen con su número.",
+    // Las que siguen son de las campañas de personas con premios en dólares: quien organiza le manda su premio a cada persona que gana.
+    cpoMandaSinCodigo: "Esperá a ver los códigos antes de mandar un premio.",
+    cpoMandaConCodigo: "Mirá el código en el celular de quien ganó y mandale su premio a la dirección que te pase.",
+    cpoMandarMonto: "Mandar {monto}",
+    cpoOlvidarPremios: "Si la dejás ahora, ya no ves a quién le falta su premio.",
+    cpoCodigosHasta: "Los nombres y los códigos se ven hasta el {fecha} a las {hora}.",
+    cpoCmCargarEnvioL: "{premios} de premio, {envios} de envío y {servicio} del servicio de Tinkazo.",
+    cpoCmCargarFaltaEnvio: "Tenés {saldo}. Son {premios} de premio, {envios} de envío y {servicio} del servicio.",
+    cpoCmBorradorEntrarEnvioL: "Entrá con Google y poné {total} dólares digitales: {premios} de premio, {envios} de envío y {servicio} del servicio.",
     // Las que siguen son de las campañas de personas: van juntas al final de cada idioma.
     cpoListaRara: "La lista de la sala no se puede sortear. Avisale a Tinkazo.",
     cpoEntregaEnMano: "Entregá cada premio en mano.",
@@ -236,15 +245,6 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoVerCodigos: "Ver los códigos",
     cpoMarcadaAvisada: "Marcada como avisada.",
     cpoNoSeMarco: "No se pudo marcar. Probá de nuevo o seguí con la entrega.",
-    // Las que siguen son de las campañas de personas con premios en dólares: quien organiza le manda su premio a cada persona que gana.
-    cpoMandaSinCodigo: "Esperá a ver los códigos antes de mandar un premio.",
-    cpoMandaConCodigo: "Mirá el código en el celular de quien ganó y mandale su premio a la dirección que te pase.",
-    cpoMandarMonto: "Mandar {monto}",
-    cpoOlvidarPremios: "Si la dejás ahora, ya no ves a quién le falta su premio.",
-    cpoCodigosHasta: "Los nombres y los códigos se ven hasta el {fecha} a las {hora}.",
-    cpoCmCargarEnvioL: "{premios} de premio, {envios} de envío y {servicio} del servicio de Tinkazo.",
-    cpoCmCargarFaltaEnvio: "Tenés {saldo}. Son {premios} de premio, {envios} de envío y {servicio} del servicio.",
-    cpoCmBorradorEntrarEnvioL: "Entrá con Google y poné {total} dólares digitales: {premios} de premio, {envios} de envío y {servicio} del servicio.",
   },
   en: {
     cpoTitulo: "Company campaign",
@@ -466,6 +466,15 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoSeguirNoL: "We couldn't open it here. Try again.",
     cpoAntesConNumero: "People who signed up earlier show with their number. If they scan the QR again, their name appears.",
     cpoAntesCerrada: "People who signed up earlier show with their number.",
+    // These are for people campaigns with prizes in dollars: the organizer sends each winner their prize.
+    cpoMandaSinCodigo: "Wait until you see the codes before sending a prize.",
+    cpoMandaConCodigo: "Check the code on the winner's phone and send their prize to the address they give you.",
+    cpoMandarMonto: "Send {monto}",
+    cpoOlvidarPremios: "If you leave it now, you can no longer see who is still missing their prize.",
+    cpoCodigosHasta: "Names and codes stay visible until {fecha} at {hora}.",
+    cpoCmCargarEnvioL: "{premios} for the prize, {envios} to send it and {servicio} for Tinkazo's service.",
+    cpoCmCargarFaltaEnvio: "You have {saldo}. That's {premios} for the prize, {envios} to send it and {servicio} for the service.",
+    cpoCmBorradorEntrarEnvioL: "Sign in with Google and put in {total} digital dollars: {premios} for the prize, {envios} to send it and {servicio} for the service.",
     // These are for people campaigns: they stay together at the end of each language.
     cpoListaRara: "The list on the server can't be drawn. Let Tinkazo know.",
     cpoEntregaEnMano: "Hand each prize over in person.",
@@ -476,14 +485,5 @@ export const TEXTOS_SALA_CAMPANA: { es: Record<string, string>; en: Record<strin
     cpoVerCodigos: "Show the codes",
     cpoMarcadaAvisada: "Marked as notified.",
     cpoNoSeMarco: "Couldn't mark it. Try again or go on with the handover.",
-    // These are for people campaigns with prizes in dollars: the organizer sends each winner their prize.
-    cpoMandaSinCodigo: "Wait until you see the codes before sending a prize.",
-    cpoMandaConCodigo: "Check the code on the winner's phone and send their prize to the address they give you.",
-    cpoMandarMonto: "Send {monto}",
-    cpoOlvidarPremios: "If you leave it now, you can no longer see who is still missing their prize.",
-    cpoCodigosHasta: "Names and codes stay visible until {fecha} at {hora}.",
-    cpoCmCargarEnvioL: "{premios} for the prize, {envios} to send it and {servicio} for Tinkazo's service.",
-    cpoCmCargarFaltaEnvio: "You have {saldo}. That's {premios} for the prize, {envios} to send it and {servicio} for the service.",
-    cpoCmBorradorEntrarEnvioL: "Sign in with Google and put in {total} digital dollars: {premios} for the prize, {envios} to send it and {servicio} for the service.",
   },
 };
