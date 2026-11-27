@@ -19,7 +19,7 @@ import { htmlDeLosPremios } from "./ui/premios-del-comprobante";
 import { contarAperturaDeEvento, quitarMarca, refDe, viaDe } from "./contar";
 import { tomarLogoEntrante } from "./enlace-corto";
 import { pintarFranja } from "./ui/logo-franja";
-import { quienEnLaTarjeta } from "./evento-tarjeta";
+import { ganadoresDelEnlaceCoinciden, ganadoresRehechos, quienEnLaTarjeta } from "./evento-tarjeta";
 import { modesFlagOn, requestedMode } from "./modos/bandera";
 import { isTurnOrder } from "./modos/turnos";
 import { eventoEsDePrueba, veredictoConModo } from "./evento-modo";
@@ -146,8 +146,7 @@ async function revisar(s: SorteoDelEvento, leer: (c: ContratoOficial, id: string
     r.firma === null && r.falta === "sin-ronda" ? "sin-red" : r.firmaOk && !tiene("ronda", "ronda-temprana", "firma-registro") ? "ok" : "bad";
   // La semilla sale de la firma: sin firma válida, la selección no prueba nada.
   // Y el ganador que dice el enlace tiene que ser el que sale, con el nombre exacto.
-  const rehechos = r.ganadores.map((i) => r.nombres[i] ?? "");
-  const mismosNombres = rehechos.length > 0 && JSON.stringify(rehechos) === JSON.stringify(ganadoresDelEnlace);
+  const mismosNombres = ganadoresDelEnlaceCoinciden(r.nombres, r.ganadores, ganadoresDelEnlace);
   const ganador: Estado = firma !== "ok" ? firma : !tiene("semilla", "ganadores") && mismosNombres ? "ok" : "bad";
   const cadena: EstadoCadena =
     r.ancla.tipo === "libre"
@@ -165,7 +164,7 @@ async function revisar(s: SorteoDelEvento, leer: (c: ContratoOficial, id: string
                 : r.veredicto === "verde"
                   ? "ok"
                   : "sin-red";
-  const otrosNombres = firma === "ok" && !mismosNombres && !tiene("ganadores") ? rehechos : null;
+  const otrosNombres = firma === "ok" && !mismosNombres && !tiene("ganadores") ? ganadoresRehechos(r.nombres, r.ganadores) : null;
   return {
     lista,
     firma,
