@@ -46,6 +46,8 @@ export interface ConservadoDelArchivo {
   estado: EstadoDeCampana;
   red: "mainnet" | "testnet";
   anotadas: number;
+  /** Solo si el archivo era de una campaña de personas: se repite al volver a armarlo. Falta en las demás. */
+  identidad?: "persona";
   /** El lugar en las dos lenguas tal como venía: el inglés propio se repite mientras el español no cambie. */
   lugar: { es: string; en: string } | null;
 }
@@ -360,6 +362,7 @@ function leerConservado(x: unknown): ConservadoDelArchivo | null | undefined {
     estado: ESTADOS_DEL_ARCHIVO.find((e) => e === x.estado) ?? "abierta",
     red: x.red === "testnet" ? "testnet" : "mainnet",
     anotadas: typeof x.anotadas === "number" && Number.isSafeInteger(x.anotadas) && x.anotadas >= 0 ? x.anotadas : 0,
+    ...(x.identidad === "persona" ? { identidad: "persona" as const } : {}),
     lugar,
   };
 }

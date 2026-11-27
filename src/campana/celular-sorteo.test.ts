@@ -16,6 +16,7 @@ import { AHORA, CUENTA, OTRA_CUENTA, SESION, asentar, lectura, lecturasDe, pasar
 import { horaDeLaRondaMs, MARGEN_DEL_SHOW_MS, VENTANA_LENTA_HASTA_MS, VENTANA_RAPIDA_MS } from "./empieza-ritmo";
 import { horaTexto } from "./formato";
 import { campanaDeEjemplo } from "./ejemplo";
+import { guardarMemoria, SIN_CUENTA } from "./memoria";
 import { TEXTOS_CAMPANA } from "./textos";
 import { TEXTOS_CONFIRMAR } from "./textos-confirmar";
 import { TEXTOS_EMPIEZA } from "./textos-empieza";
@@ -368,6 +369,60 @@ describe("el resultado, nunca antes que la pantalla grande", () => {
     await pasar(24_000);
     expect(resultado.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(gano(mundo.raiz)).toBe(TEXTOS_CAMPANA.es.cpGanaste);
+  });
+});
+
+describe("el resultado en una campaña de personas", () => {
+  const SALA_DE_PERSONAS = "evento-ejemplo";
+  const LINEA = "p1:aaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const google = { montar: () => () => undefined };
+
+  /** Un celular que ya estaba anotado en una campaña de personas, con la lista sellada y la ronda a la vista. */
+  async function montarPersona(yo: () => EstadoPropio, hayResultado: () => boolean): Promise<Montaje> {
+    const datos = new Map<string, string>();
+    const memoria = {
+      get length() {
+        return datos.size;
+      },
+      clear: () => datos.clear(),
+      getItem: (k: string) => datos.get(k) ?? null,
+      key: (n: number) => [...datos.keys()][n] ?? null,
+      removeItem: (k: string) => void datos.delete(k),
+      setItem: (k: string, v: string) => void datos.set(k, v),
+    } as Storage;
+    guardarMemoria(memoria, SALA_DE_PERSONAS, { cuenta: SIN_CUENTA, fase: "sellada", resultado: null, comprobante: null, guardado: Date.now() });
+    return montar({
+      estado: yo,
+      resultado: () => (hayResultado() ? { ganadoras: [LINEA], comprobante: null } : null),
+      cambios: { persona: { google }, sesion: async () => null, memoria, sala: SALA_DE_PERSONAS },
+    });
+  }
+
+  it("con el resultado ya a la vista pero sin que la sala diga si ganó, no dice que salió otra persona", async () => {
+    hasta(INICIO + 1_000);
+    const { mundo } = await montarPersona(() => sellada(), () => true);
+    await pasar(30_000);
+    expect(gano(mundo.raiz)).not.toBe(TEXTOS_CAMPANA.es.cpOtraPersona);
+    expect(gano(mundo.raiz)).not.toBe(TEXTOS_CAMPANA.es.cpGanaste);
+    expect(adentro(mundo.raiz).hidden).toBe(false);
+  });
+
+  it("quien ganó ve Ganaste apenas la sala lo dice, sin pasar antes por No ganaste", async () => {
+    hasta(INICIO + 1_000);
+    let sorteada = false;
+    const { mundo } = await montarPersona(() => (sorteada ? { ...propio("sorteada"), gano: true } : sellada()), () => true);
+    await pasar(20_000);
+    expect(gano(mundo.raiz)).not.toBe(TEXTOS_CAMPANA.es.cpOtraPersona);
+    sorteada = true;
+    await pasar(20_000);
+    expect(gano(mundo.raiz)).toBe(TEXTOS_CAMPANA.es.cpGanaste);
+  });
+
+  it("quien no ganó lo sabe cuando la sala dice que está anotada y que no ganó", async () => {
+    hasta(INICIO + 1_000);
+    const { mundo } = await montarPersona(() => ({ ...propio("sorteada"), gano: false }), () => true);
+    await pasar(20_000);
+    expect(gano(mundo.raiz)).toBe(TEXTOS_CAMPANA.es.cpOtraPersona);
   });
 });
 

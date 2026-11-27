@@ -90,6 +90,11 @@ export interface DepsDelCreador {
   /** El tema forzado por la dirección de la página, para que la vista lo repita. */
   tema: string | null;
   /**
+   * Solo con el interruptor de anotarse sin billetera y `?identidad=persona` en la dirección: la campaña se arma con
+   * `"identidad": "persona"`. Sin esto (todo lo demás) el archivo es el de siempre, sin el campo.
+   */
+  identidad?: "persona";
+  /**
    * Lo que cobra Tinkazo por activar la campaña, según sus premios (`comisionDelArmado`, la misma cuenta con que cobra el
    * panel). Sin esto, el resumen no tiene renglón del servicio ni del total.
    */
@@ -886,7 +891,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   function armadoDeAhora(): { archivo: Record<string, unknown>; texto: string } | null {
     if (faltasDe().length > 0) return null;
     const { bases } = basesFinales(f.bases, automaticasDe(f));
-    const archivo = armarCampana(f, { bases });
+    const archivo = armarCampana(f, { bases, ...(deps.identidad ? { identidad: deps.identidad } : {}) });
     return { archivo, texto: JSON.stringify(archivo) };
   }
 

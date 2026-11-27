@@ -51,6 +51,12 @@ CORREO_VERSION = "1"
 # La marca de correo confirmado que manda el celular (POST campana/yo con "c"). Nace apagada: con "0" se ignora y a cada cuenta le
 # sale la versión que dice CORREO_VERSION. Con "1", quien confirmó su correo recibe la versión 2 aunque la general sea la 1.
 CORREO_MARCA = "0"
+# Anotarse sin billetera: campañas con "identidad": "persona" en su texto firmado. La persona entra con el botón de Google, la sala
+# verifica sola su token y la lista sella una línea por persona en lugar de una cuenta. Nacen apagadas: con DIFERIDA en "0", o con
+# GOOGLE_CLIENT_ID vacío, la sala no crea ni usa esas campañas y todo sigue como siempre. GOOGLE_CLIENT_ID es el identificador de
+# cliente de Google de Tinkazo, que es público (no es un secreto).
+DIFERIDA = "0"
+GOOGLE_CLIENT_ID = ""
 
 # Tus campañas (POST /v1/mis-campanas y POST /v1/campana/recuperar, ver README.md): quien organiza ve sus campañas desde cualquier
 # navegador y usa una en esta compu. Solo con "1" atienden, y cambiarlo es publicar otra vez con el mismo corte de sockets: no es un

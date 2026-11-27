@@ -22,7 +22,7 @@ export const COLORES: Record<NonNullable<Campana["empresa"]["color"]>, string> =
 };
 
 /** Estados que puede mostrar el cargador antes de entrar a una campaña. */
-export type EstadoDeCarga = "cerrada" | "no-esta" | "sin-red" | "mal" | "pase-vencido";
+export type EstadoDeCarga = "cerrada" | "no-esta" | "sin-red" | "mal" | "pase-vencido" | "persona-apagada";
 
 const CLAVES_DE_CARGA: Record<EstadoDeCarga, string> = {
   cerrada: "cpNoAbierta",
@@ -30,6 +30,8 @@ const CLAVES_DE_CARGA: Record<EstadoDeCarga, string> = {
   "sin-red": "cpSinRed",
   mal: "cpMal",
   "pase-vencido": "cpPaseVencido",
+  // Una campaña de personas que se abre en un sitio construido sin esa entrada: se dice sin romper nada.
+  "persona-apagada": "cpPersonaNoAbre",
 };
 
 /** Desde este largo el premio se escribe más chico para que quepa en la pantalla sin cortarse. */
@@ -122,7 +124,9 @@ export function pintarReglas(raiz: HTMLElement, deps: DepsDelCelular, correo = f
   resumen.textContent = deps.tx("cpReglas");
   detalles.append(resumen);
   parrafo(detalles, sustituir(deps.tx("cpOrganiza"), { empresa: deps.campana.empresa.nombre }));
-  parrafo(detalles, sustituir(deps.tx("cpSiGanas"), { empresa: deps.campana.empresa.nombre }));
+  // En una campaña de personas no hay cuenta de Tinkazo: el premio lo entrega quien organiza.
+  const persona = deps.persona !== undefined;
+  parrafo(detalles, sustituir(deps.tx(persona ? "cpSiGanasPersona" : "cpSiGanas"), { empresa: deps.campana.empresa.nombre }));
   if (correo) parrafo(detalles, deps.tx("cpAvisoCorreo"));
   const costo = deps.costoDelRetiro();
   if (costo !== null) parrafo(detalles, sustituir(deps.tx("cpRetiro"), { costo }));
@@ -131,7 +135,7 @@ export function pintarReglas(raiz: HTMLElement, deps: DepsDelCelular, correo = f
   if (deps.campana.pasos.length > 0) parrafo(detalles, deps.tx("cpPasosNota"));
   parrafo(detalles, deps.tx("cpRevisamosMas"));
   parrafo(detalles, deps.tx("cpComoSeEligeDetalle"));
-  parrafo(detalles, deps.tx("cpQueGuardamos"));
+  parrafo(detalles, deps.tx(persona ? "cpQueGuardamosPersona" : "cpQueGuardamos"));
   parrafo(detalles, deps.campana.bases[idioma], "cmp-bases");
   raiz.append(detalles);
 }
@@ -247,6 +251,34 @@ export function pintarLaCampana(
     boton(accion, deps.tx("cpCopiar"), "primary", () => copiarEnlace(deps, aviso, accion, programar));
     return limpiarTemporizadores;
   }
+  if (deps.persona) {
+    // Una campaña de personas: el botón de Google del sitio en lugar de Entrar. Al entrar sigue Hola, como en las demás.
+    parrafo(accion, deps.tx("cpEntrarNotaPersona"), "cmp-apoyo");
+    const falla = parrafo(accion, "", "cmp-error");
+    falla.hidden = true;
+    const sitio = caja("cmp-google");
+    accion.append(sitio);
+    const persona = deps.persona;
+    let sacar: () => void = () => undefined;
+    // Si Google no baja o no entrega nada, se dice y queda un solo botón: probar de nuevo, que arma el de Google otra vez.
+    const armar = (): void => {
+      sacar = persona.google.montar(sitio, alEntrar, (motivo) => {
+        sacar();
+        falla.textContent = deps.tx(CLAVES_DE_ENTRADA[motivo]);
+        falla.hidden = false;
+        boton(sitio, deps.tx("cpProbarDeNuevo"), "primary", () => {
+          falla.hidden = true;
+          sitio.replaceChildren();
+          armar();
+        });
+      }, deps.tx("cpCargando"));
+    };
+    armar();
+    return () => {
+      limpiarTemporizadores();
+      sacar();
+    };
+  }
   parrafo(accion, deps.tx("cpEntrarNota"), "cmp-apoyo");
   const error = parrafo(accion, "", "cmp-error");
   error.hidden = true;
@@ -315,6 +347,21 @@ export function pintarLaCampana(
     error.hidden = false;
   }
   return limpiarTemporizadores;
+}
+
+/**
+ * El número de personas de la previa cambia y lo demás no: se escribe en su lugar, sin armar de nuevo la pantalla. En una
+ * campaña de personas la previa lleva el botón de Google, y armarlo de nuevo cada medio minuto lo taparía justo cuando
+ * alguien lo toca. Devuelve si había contador a la vista.
+ */
+export function actualizarElContadorDeLaPrevia(raizPrincipal: HTMLElement, deps: DepsDelCelular, total: number): boolean {
+  const contador = raizPrincipal.querySelector<HTMLElement>("#cmp-saber .cmp-contador");
+  if (!contador) return false;
+  if (contador.dataset.total === String(total)) return true;
+  const claveContador = total === 0 ? "cpContador0" : total === 1 ? "cpContador1" : "cpContadorN";
+  conDestacado(contador, deps.tx(claveContador), "n", String(total), "cmp-cifra");
+  contador.dataset.total = String(total);
+  return true;
 }
 
 /** Pinta un estado de carga antes de que exista una sesión o una respuesta de la sala. */

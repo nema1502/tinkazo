@@ -22,6 +22,8 @@ import { formaDeToken } from "../../patrocinio/src/pollar";
 import type { Pollar } from "../../patrocinio/src/pollar";
 import type { AntesDeActivar, CampanaParaGuardar, TipoDeTope } from "./activar-cupos";
 import { leerDatosDeLista, leerTextoDeCampana, viaPermitida } from "./campana";
+import { personasPrendido } from "./personas";
+import type { VariablesDePersonas } from "./personas";
 import type { LecturaDeLista } from "./campana";
 import { firmarConLlaveAuto, llavePublicaAuto } from "./firma";
 import type { VariablesDeLlaveAuto } from "./firma";
@@ -128,10 +130,12 @@ const esObjeto = (x: unknown): x is Record<string, unknown> => typeof x === "obj
  * (cada uno de 1 a 10.000 dólares digitales en centavos justos), cierre dentro de los próximos 7 días, sorteo hasta un día después
  * del cierre, la cuenta de quien organiza escrita y un nombre de empresa que no imita a Tinkazo. `campo` dice cuál no sirvió.
  */
-export function leerParaActivar(texto: string, ahora: number): LecturaParaActivar {
+export function leerParaActivar(texto: string, ahora: number, personas = false): LecturaParaActivar {
   const forma = (campo: string): LecturaParaActivar => ({ ok: false, error: "forma", campo });
   const base = leerTextoDeCampana(texto, ahora);
   if (!base.ok) return forma(base.campo);
+  // Una campaña de personas no se activa ni se cobra si la sala no la va a crear: sin los interruptores, no se firma.
+  if (base.identidad === "persona" && !personas) return forma("identidad");
   if (base.red !== "mainnet") return { ok: false, error: "red", campo: "red" };
   const c = JSON.parse(texto) as unknown;
   if (!esObjeto(c)) return forma("texto");
@@ -368,7 +372,7 @@ export interface TopesDeActivar {
 }
 
 export interface DepsDeActivar {
-  env: VariablesDeActivar & VariablesDeLlaveAuto & { SOLO_GOOGLE?: string };
+  env: VariablesDeActivar & VariablesDeLlaveAuto & VariablesDePersonas & { SOLO_GOOGLE?: string };
   ahora: number;
   ip: string;
   f: Pedir;
@@ -520,7 +524,7 @@ export async function activarCampana(cuerpo: unknown, d: DepsDeActivar): Promise
   }
   if (typeof texto !== "string") return error(400, "forma", { campo: "texto" });
   if (typeof sesion !== "string") return error(400, "forma", { campo: "sesion" });
-  const campana = leerParaActivar(texto, d.ahora);
+  const campana = leerParaActivar(texto, d.ahora, personasPrendido(d.env));
   if (!campana.ok) return error(400, campana.error, { campo: campana.campo });
 
   // La sesión de quien organiza: topes, proveedor, vía de Google y cuenta, en este orden y con las mismas respuestas de siempre.

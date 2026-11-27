@@ -11,6 +11,7 @@ import {
   actualizarElContador,
   latirAlDia,
   pintarAdentro,
+  pintarEntrega,
   pintarGano,
   pintarHola,
   pintarOtra,
@@ -31,6 +32,7 @@ import {
 } from "./memoria";
 import { pintarAviso } from "./piezas";
 import {
+  actualizarElContadorDeLaPrevia,
   COLORES,
   motivoDeEntrada,
   pintarEstadoDeCarga,
@@ -84,12 +86,29 @@ export type MotivoDeAlta =
   | "solo-google"
   | "red"
   | "quitada"
+  /** Solo en una campaña de personas: la sala todavía no la tiene prendida. Repetir no lo arregla. */
+  | "apagada"
   | "otro";
 export type ResultadoDelAlta = { ok: true; ya: boolean } | { ok: false; motivo: MotivoDeAlta; segundos?: number };
 export type FallaDeEntrada = "ventana" | "cerrada" | "google" | "cuentas" | "limite";
 export interface SesionDelCelular {
   cuenta: string;
   nombre: string | null;
+}
+
+/**
+ * El botón de entrar con Google de una campaña de personas. Se monta en el contenedor que se le da y, cada vez que la persona
+ * entra, avisa con su sesión (sin cuenta, solo el nombre). Si Google no baja o no entrega nada, avisa con la falla. Devuelve
+ * cómo sacar el botón.
+ */
+export interface BotonDeGoogle {
+  montar: (
+    contenedor: HTMLElement,
+    alEntrar: (sesion: SesionDelCelular) => void,
+    alFallar: (falla: FallaDeEntrada) => void,
+    /** La línea que se ve en el lugar del botón mientras Google no lo termina de armar. */
+    textoDeEspera?: string,
+  ) => () => void;
 }
 
 /**
@@ -123,6 +142,12 @@ export interface DepsDelCelular {
   sesion: () => Promise<SesionDelCelular | null>;
   /** Entrar con Google desde el toque. Rechaza con un Error cuyo message es una FallaDeEntrada. */
   entrar: () => Promise<SesionDelCelular>;
+  /**
+   * Solo en una campaña de personas (anotarse sin billetera): la entrada es el botón de Google del sitio. Al entrar sigue la
+   * pantalla Hola de siempre, con el nombre, los pedidos de quien organiza y No soy yo, y la persona se anota con un toque en
+   * Acepto. No hay cuenta que leer ni confirmar. Sin esto (todas las demás campañas) la página es la de siempre.
+   */
+  persona?: { google: BotonDeGoogle };
   /** El nombre de quien entró cuando el perfil llegó después de la sesión, o null. Sin esto el saludo queda como estaba. */
   nombreTardio?: () => Promise<string | null>;
   /**
@@ -211,7 +236,9 @@ type Pantalla =
   | "sorteada"
   | "sin-red"
   | "pase"
-  | "llena";
+  | "llena"
+  /** Solo en una campaña de personas: el premio se entrega con quien organiza (`pintarEntrega`, en `adentro.ts`). */
+  | "entrega";
 
 interface EstadoInterno {
   pantalla: Pantalla;
@@ -659,7 +686,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       const resultado = await pedirResultado();
       if (desmontado || resultado === "red") return;
       huboRespuesta();
-      if (resultado !== null) await aplicarResultado(resultado, null);
+      // En una campaña de personas la lista de elegidas no dice si esta persona ganó (son líneas, no cuentas): solo lo sabe la
+      // sala por la llave de este celular. Se le pregunta a ella, y no se concluye nada de la lista.
+      if (resultado !== null) await (deps.persona ? consultarPropio() : aplicarResultado(resultado, null));
     } finally {
       consultando = false;
     }
@@ -961,6 +990,10 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       avisoPublico(deps.tx("cpErrLlena"), null, true);
       return;
     }
+    if (estado.pantalla === "entrega") {
+      pintarEntrega(raiz, deps);
+      return;
+    }
     if (estado.pantalla === "lista") {
       avisoPublico(sustituir(deps.tx("cpAbre"), {
         fecha: fechaTexto(deps.campana.abreMs, deps.campana.zona, deps.idioma()),
@@ -1056,6 +1089,14 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     const avisadoAntes = estado.avisado;
     estado.comprobante = resultado.comprobante;
     if (propio) estado.avisado = propio.avisado === true;
+    // En una campaña de personas solo la sala sabe si esta persona ganó, y solo si la llave de este celular sigue siendo la de su
+    // fila (anotada desde otro celular, la fila pasó a la llave del otro). Sin esa certeza nunca se dice que no ganó: quien ya
+    // vio Ganaste lo conserva, y quien no, ve que el sorteo ya se hizo y no se recuerda ningún resultado.
+    if (deps.persona && propio?.gano !== true && !(propio?.anotada === true && propio.gano === false)) {
+      if (estado.memoria?.resultado === "gano") return;
+      ir("sorteada");
+      return;
+    }
     const cuenta = estado.sesion?.cuenta ?? estado.memoria?.cuenta;
     const gano = propio?.gano === true || (cuenta !== undefined && resultado.ganadoras.includes(cuenta));
     guardar({
@@ -1253,9 +1294,14 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
           ir("termino");
           return;
         }
+        const anterior = estado.publico;
         estado.publico = publico;
-        if (publico.fase === "abierta") pintar();
-        else await mostrarFasePublica(publico.fase);
+        // El botón de Google no se vuelve a armar mientras alguien lo mira: con la previa a la vista solo cambia el número.
+        const enSuLugar = deps.persona !== undefined && estado.pantalla === "previa" && anterior !== null
+          && anterior.cierraMs === publico.cierraMs && actualizarElContadorDeLaPrevia(raiz, deps, publico.total);
+        if (publico.fase === "abierta") {
+          if (!enSuLugar) pintar();
+        } else await mostrarFasePublica(publico.fase);
       } else {
         await consultarPropio();
       }
@@ -1396,6 +1442,11 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
    */
   async function recibirElPremio(toque?: Event): Promise<void> {
     if (comparandoLaSesion) return;
+    // En una campaña de personas el premio se entrega por ahora con quien organiza: reclamarlo desde el celular es de otra etapa.
+    if (deps.persona) {
+      ir("entrega");
+      return;
+    }
     const cuenta = estado.memoria?.cuenta;
     if (estado.sesion === null && cuenta !== undefined && deps.cuenta?.laSesionEs) {
       comparandoLaSesion = true;

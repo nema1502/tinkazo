@@ -10,7 +10,8 @@ import { leerEnlaceDeCampana } from "./campana/enlace";
 import { campanasActivo } from "./campana/bandera";
 import { montarCelular, type DepsDelCelular, type VistaDelCelular } from "./campana/celular";
 import { cargarConUnReintento, depsConectadas, type BaseDelCelular } from "./campana/conectar";
-import { leerMemoria } from "./campana/memoria";
+import { leerMemoria, SIN_CUENTA } from "./campana/memoria";
+import { clienteDeGoogleDelSitio } from "./campana/persona-bandera";
 import { destinoDeRecibir } from "./campana/recibir";
 import { pintarAviso } from "./campana/piezas";
 import { pintarEstadoDeCarga, type EstadoDeCarga } from "./campana/previa";
@@ -98,14 +99,16 @@ function mostrarCarga(tipo: EstadoDeCarga | "cargando", reintentar: () => void):
 function mostrarSalaTerminada(sala: string, recibir: () => void): boolean {
   const recuerdo = leerMemoria(leerMemoriaDeCampana(), sala, Date.now());
   if (!recuerdo) return false;
+  // Quien se anotó en una campaña de personas no tiene cuenta con que recibir: si ganó, el premio se entrega con quien organiza.
+  const entregaConQuienOrganiza = recuerdo.cuenta === SIN_CUENTA && recuerdo.resultado === "gano";
   const accion = recuerdo.resultado === "gano"
-    ? { clave: "cpRecibir", alHacer: recibir }
+    ? entregaConQuienOrganiza ? null : { clave: "cpRecibir", alHacer: recibir }
     : recuerdo.comprobante
       ? { clave: "cpComoSeEligio", enlace: recuerdo.comprobante }
       : null;
   repintarAviso = () => {
     if (!estado) return;
-    pintarAviso(estado, texto("cpTermino"), accion && { texto: texto(accion.clave), ...accion });
+    pintarAviso(estado, texto(entregaConQuienOrganiza ? "cpEntregaT" : "cpTermino"), accion && { texto: texto(accion.clave), ...accion });
   };
   pintarUltimoAviso();
   return true;
@@ -123,6 +126,11 @@ function montarVista(campana: Campana, esEjemplo: boolean, enlace: { sala: strin
     void import("./campana/demostracion").then(({ depsDeDemostracion }) => {
       if (montaje === montajes) vista = montarCelular(raiz, depsDeDemostracion(base, campana, parametros.get("estado")));
     });
+    return;
+  }
+  // Una campaña de personas se anota sin billetera: lo suyo se baja solo para ella, y las demás no cambian en nada.
+  if (campana.identidad === "persona") {
+    void montarDePersona(campana, enlace, montaje);
     return;
   }
   // Recién acá, con la campaña cargada, se arma lo que habla con la sala y con Google.
@@ -169,6 +177,66 @@ function montarVista(campana: Campana, esEjemplo: boolean, enlace: { sala: strin
       : {}),
   });
   vista = montarCelular(raiz, deps);
+}
+
+/**
+ * Monta el celular de una campaña de personas: la persona entra con el botón de Google del sitio y la sala la anota sin
+ * billetera. Hace falta que el sitio se haya construido con esa entrada (`persona-bandera.ts`): si no, la página lo dice y no
+ * abre nada. Lo de Google se baja solo acá, y el guion de Google recién cuando la pantalla necesita el botón.
+ */
+async function montarDePersona(
+  campana: Campana,
+  enlace: { sala: string; clave: string; pase: string | null },
+  montaje: number,
+): Promise<void> {
+  const clienteId = clienteDeGoogleDelSitio();
+  if (clienteId === null) {
+    mostrarCarga("persona-apagada", () => undefined);
+    return;
+  }
+  let piezas: [typeof import("./campana/conectar-persona"), typeof import("./campana/google"), typeof import("./campana/aislar")];
+  try {
+    piezas = await Promise.all([import("./campana/conectar-persona"), import("./campana/google"), import("./campana/aislar")]);
+  } catch {
+    mostrarCarga("sin-red", () => void cargar());
+    return;
+  }
+  if (!raiz || montaje !== montajes) return;
+  const [{ depsDePersona }, { botonDeGoogle, cargarElGuionDeGoogle }, { aislarDelGuion }] = piezas;
+  const deps = depsDePersona({
+    base,
+    campana,
+    servicio: servicioDeSala(),
+    sala: enlace.sala,
+    clave: enlace.clave,
+    pase: enlace.pase,
+    google: botonDeGoogle({
+      clienteId,
+      idioma: getLang,
+      oscuro: temaOscuro,
+      // Antes de que el guion de Google entre a la página: sin referencia (ver `aislar.ts`).
+      cargar: () => {
+        aislarDelGuion();
+        return cargarElGuionDeGoogle();
+      },
+    }),
+    memoria: leerMemoriaDeCampana(),
+    red: network.name,
+    enLinea: () => navigator.onLine !== false,
+    enlace: () => location.href,
+    ...(typeof navigator.locks?.request === "function"
+      ? { bloquear: <T>(nombre: string, trabajo: () => Promise<T>): Promise<T> => navigator.locks.request(nombre, trabajo) }
+      : {}),
+  });
+  vista = montarCelular(raiz, deps);
+}
+
+/** Si la página está en tema oscuro: el de la dirección, o el del sistema si la dirección no fuerza ninguno. */
+function temaOscuro(): boolean {
+  const forzado = document.documentElement.dataset.theme;
+  if (forzado === "dark") return true;
+  if (forzado === "light") return false;
+  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
 /** El almacenamiento de esta pestaña, o null si el navegador lo bloquea. */
