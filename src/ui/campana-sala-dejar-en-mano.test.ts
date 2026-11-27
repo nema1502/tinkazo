@@ -158,9 +158,8 @@ describe("cuándo se pierden códigos al dejar la campaña", () => {
     expect(seVanLosCodigos(TODAS_MARCADAS)).toBe(true);
     expect(seVanLosCodigos(enMano([fila(L1, "Ana")]))).toBe(true);
     expect(seVanLosCodigos(deCuentas([fila("GUNO", "Ana", { avisada: true })]))).toBe(false);
-    for (const paso of ["nada", "mandando", "boton-resultado", "sala-borrada", "lista-rara", "tomada"] as const) {
-      expect(seVanLosCodigos({ paso }), paso).toBe(false);
-    }
+    const otros = [{ paso: "nada" }, { paso: "mandando" }, { paso: "boton-resultado" }, { paso: "sala-borrada" }, { paso: "lista-rara" }, { paso: "tomada" }] as const;
+    for (const paso of otros) expect(seVanLosCodigos(paso), paso.paso).toBe(false);
   });
 
   it("la regla de los avisos pendientes no cambia: con todas marcadas no hay ninguno", () => {

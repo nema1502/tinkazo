@@ -153,7 +153,9 @@ function conPregunta(m: Mundo): { veces: () => number; contestar: (r: boolean | 
   const pendientes: ((r: boolean | null) => void)[] = [];
   m.deps.personasListas = () => {
     veces++;
-    return new Promise((resolver) => pendientes.push(resolver));
+    return new Promise<boolean | null>((resolver) => {
+      pendientes.push(resolver);
+    });
   };
   return {
     veces: () => veces,
