@@ -2,6 +2,8 @@ import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
 import { isTurnOrder, ordenGuardadoSinSello, turnOrderDisplayNames } from "../modos/turnos";
 import { isSecretSanta } from "../modos/amigo";
+import { esLineaDePersona } from "../campana/forma-persona";
+import { etiquetaDe, nombreOLugar } from "../equipos/etiquetas";
 import type { SorteoDelEvento } from "../protocol/evento";
 import { hayModoOficial, network, txUrl } from "../stellar/config";
 import { logoComun, logoPorHuella } from "../logo-guardado";
@@ -155,9 +157,24 @@ export function remember(entry: Entry): void {
   const same = (e: Entry): boolean =>
     e.organizer === entry.organizer && e.listHash === entry.listHash && e.round === entry.round;
   const at = list.findIndex(same);
-  if (at >= 0) list[at] = { ...list[at], ...entry } as Entry;
-  else list.push(entry);
+  if (at >= 0) list[at] = sinLineasCrudas({ ...list[at], ...entry } as Entry);
+  else list.push(sinLineasCrudas(entry));
   writeAll(list);
+}
+
+/**
+ * En una campaña de personas la lista sellada son líneas, y quienes ganaron llegan como líneas. Una línea no se guarda
+ * ni se muestra nunca: la fila lleva el nombre de esa persona si esta pestaña lo tiene, y si no su lugar en la lista.
+ * Así la tarjeta, el evento, el archivo que se baja y lo que se comparte salen limpios por el mismo camino.
+ */
+function sinLineasCrudas(e: Entry): Entry {
+  if (!e.winners?.some((w) => esLineaDePersona(w))) return e;
+  const winners = e.winners.map((w) => {
+    if (!esLineaDePersona(w)) return w;
+    const lugar = e.names?.indexOf(w) ?? -1;
+    return lugar >= 0 ? nombreOLugar(w, lugar) : etiquetaDe(w);
+  });
+  return { ...e, winners };
 }
 
 /**
@@ -1285,16 +1302,27 @@ function cabeceraDeEvento(g: Entry[], gi: number): string {
  *
  * Con comillas dobles en todos los campos y las comillas internas duplicadas,
  * que es lo que manda el RFC 4180. Un nombre con una coma adentro rompe un CSV
- * hecho a la ligera, y acá los nombres son de personas de verdad.
+ * hecho a la ligera, y acá los nombres son de personas de verdad. Y en un
+ * sorteo con líneas de persona, un nombre que empieza como una fórmula no se
+ * ejecuta en la planilla de quien lo abre.
  */
 export function toCsv(organizer: string): string {
   const head = [
     "id", "fecha", "cuenta", "list_hash", "participantes", "ganadores",
     "ronda", "premio", "tx_sello", "tx_sorteo", "comprobante", "origen", "contrato",
   ];
-  const q = (v: string | number | undefined): string => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const rows = historyOf(organizer).map((e) =>
-    [
+  // Una planilla toma por fórmula lo que empieza con =, +, -, @, una tabulación o un retorno de carro, y la ejecuta al abrir
+  // el archivo. En un sorteo cuya lista sellada tiene alguna línea de persona, el nombre de quien ganó lo eligió cada
+  // persona en su cuenta: ahí esos valores llevan un apóstrofo adelante, en todas las columnas, y la planilla los lee como
+  // texto. Un sorteo sin líneas da el archivo de siempre, letra por letra.
+  const qBase = (v: string | number | undefined, conLineas: boolean): string => {
+    const s = String(v ?? "");
+    return `"${(conLineas && /^[=+\-@\t\r]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"`;
+  };
+  const rows = historyOf(organizer).map((e) => {
+    const conLineas = (e.names ?? []).some((n) => esLineaDePersona(n));
+    const q = (v: string | number | undefined): string => qBase(v, conLineas);
+    return [
       q(e.id ?? ""),
       q(new Date(e.sealedAt * 1000).toISOString()),
       q(e.organizer),
@@ -1313,9 +1341,9 @@ export function toCsv(organizer: string): string {
       q(e.fromChain ? "cadena" : "equipo"),
       // El id solo no dice de qué contrato es: arrancan en 1 en cada uno.
       q(e.contract ?? ""),
-    ].join(","),
-  );
-  return [head.map(q).join(","), ...rows].join("\n");
+    ].join(",");
+  });
+  return [head.map((v) => qBase(v, false)).join(","), ...rows].join("\n");
 }
 
 /** Baja el historial como archivo. */

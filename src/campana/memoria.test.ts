@@ -8,6 +8,7 @@ import {
   leerMemoria,
   SIN_CUENTA,
   VIDA_MEMORIA_MS,
+  VIDA_MEMORIA_PERSONA_MS,
   type MemoriaDeCampana,
 } from "./memoria";
 
@@ -46,6 +47,21 @@ describe("la memoria de una campaña", () => {
     expect(leerMemoria(valores, SALA, AHORA + VIDA_MEMORIA_MS)).toEqual(recuerdo());
     expect(leerMemoria(valores, SALA, AHORA + VIDA_MEMORIA_MS + 1)).toBeNull();
     expect(valores.getItem(claveDeMemoria(SALA))).toBeNull();
+  });
+
+  it("en una campaña de personas vive lo que vive la sala, 24 horas, y no siete días", () => {
+    const valores = almacen();
+    guardarMemoria(valores, SALA, { ...recuerdo(), cuenta: SIN_CUENTA });
+    expect(VIDA_MEMORIA_PERSONA_MS).toBe(24 * 3_600_000);
+    expect(leerMemoria(valores, SALA, AHORA + VIDA_MEMORIA_PERSONA_MS)?.cuenta).toBe(SIN_CUENTA);
+    expect(leerMemoria(valores, SALA, AHORA + VIDA_MEMORIA_PERSONA_MS + 1)).toBeNull();
+    expect(valores.getItem(claveDeMemoria(SALA))).toBeNull();
+  });
+
+  it("una campaña de cuentas sigue recordando siete días aunque pasen 24 horas", () => {
+    const valores = almacen();
+    guardarMemoria(valores, SALA, recuerdo());
+    expect(leerMemoria(valores, SALA, AHORA + VIDA_MEMORIA_PERSONA_MS + 1)?.cuenta).toBe(CUENTA);
   });
 
   it("rechaza una cuenta con otra forma y un contenido que no sea JSON", () => {

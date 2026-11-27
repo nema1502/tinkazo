@@ -1,5 +1,6 @@
 import "../campana/campana-sala.css";
 import { campanasActivo } from "../campana/bandera";
+import { esLineaDePersona } from "../campana/forma-persona";
 import {
   accionesDelPuente,
   alCambiarElPuente,
@@ -10,11 +11,13 @@ import {
   ponerPaso,
   ponerRechazo,
   registrarAcciones,
+  seVanLosCodigos,
 } from "../campana/puente";
 import { anotarDuenaDelBorrador, borradorEsDeOtra, borrarBorrador, leerBorrador } from "../campana/borrador";
 import { DOLAR, dolaresEnTexto, esDeCentavosJustos, totalDePremios } from "../campana/comision";
-import { fechaTexto, horaTexto, premiosTexto } from "../campana/formato";
+import { fechaTexto, horaTexto, textoDelPremio } from "../campana/formato";
 import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
+import { clienteDeGoogleDelSitio } from "../campana/persona-bandera";
 import { reglaQueFalla } from "../campana/reglas-de-activar";
 import { ESPERA_TOKEN_MS } from "../campana/sesion";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
@@ -56,6 +59,7 @@ import {
   leerOrganizadora,
   olvidarIntentoDeArchivo,
   pedirPase,
+  personasSePuedenAbrir,
   ponerFase,
   quitarConMotivo,
   salaPuedeActivar,
@@ -72,8 +76,8 @@ import { cambiarDeCuentaReal, depsDeComisionReales, entrarConGoogleReal } from "
 import { type DepsDeDeposito, type EstadoDelDeposito, depsDeDepositoReales, estadoDelDeposito } from "./campana-deposito";
 import { depsDeTusReales } from "./campana-tus-real";
 import { crearFilaViva } from "./fila-viva";
-import type { ContextoDelPaso } from "./campana-pasar";
-import { alApartarReal, alCerrarReal, alOlvidarReal, alReabrirReal, listaPasadaReal, listaTrabadaReal } from "./campana-pasar-real";
+import type { ContextoDelPaso, FilaParaReponer } from "./campana-pasar";
+import { alApartarReal, alCerrarReal, alOlvidarReal, alReabrirReal, listaPasadaReal, listaTrabadaReal, reponerEtiquetasReal } from "./campana-pasar-real";
 import { claveDeSellar, entraConGoogle as entraConGoogleDeLaPagina, openPicker } from "./wallet-ui";
 import { pintarQr } from "./qr";
 
@@ -189,6 +193,11 @@ export interface DepsDelPanelDeCampana {
   alRetomar?: (fase: FaseDeSala, s: SalaDeCampana) => void;
   /** Si la lista que había en el cuadro ya es la que se pasó de esta campaña (se recargó la pestaña después de pasarla). */
   listaPasada?: (s: SalaDeCampana) => boolean;
+  /**
+   * Al retomar una campaña ya pasada, con todas las filas recibidas: repone los nombres que la pestaña perdió (solo en una lista
+   * de personas). Se llama una sola vez por retomada. Sin esto, no se repone nada.
+   */
+  reponerEtiquetas?: (s: SalaDeCampana, filas: readonly FilaParaReponer[]) => void;
   /** El nombre del botón de sellar de la herramienta, tal como se lo ve ahora. */
   botonDeSellar?: () => string;
   /** Suelta el sello de la pantalla para armar de nuevo la lista (la sala no lo aceptó). */
@@ -224,6 +233,12 @@ export interface DepsDelPanelDeCampana {
   ir?: (direccion: string) => void;
   /** Tus campañas desde cualquier navegador y Usar en esta compu. Sin esto, el panel no cambia en nada. */
   tus?: DepsDeTus;
+  /**
+   * Si una campaña de personas se puede abrir ahora: el sitio las sabe abrir y la sala las tiene prendidas con el mismo
+   * identificador. `true` o `false` cuando se sabe y `null` si no hubo respuesta. Se pregunta solo con una campaña de personas en
+   * la vista previa, antes de ofrecer Abrir la inscripción, y nunca con una de cuentas. Sin esto no se pregunta nada.
+   */
+  personasListas?: () => Promise<boolean | null>;
   /**
    * Cuántos dólares digitales puede usar la cuenta que paga el premio (`campana-deposito.ts`). Con esto, en la vista previa de
    * una campaña de la red principal el panel suma una línea que dice si el premio está o cuánto falta. Sin esto no mira nada.
@@ -278,6 +293,7 @@ export function depsReales(): DepsDelPanelDeCampana {
     alApartar: alApartarReal,
     organizadoraDeSala: (s) => leerOrganizadora(s),
     listaPasada: listaPasadaReal,
+    reponerEtiquetas: reponerEtiquetasReal,
     botonDeSellar: () => t(claveDeSellar()),
     // El sello que la sala no aceptó se suelta también con el show ya hecho (`soltarParaSellarDeNuevo`), sin cortar un juego en marcha.
     soltarElSello: () => import("./campana-resultado-real").then((m) => m.soltarParaSellarDeNuevo()),
@@ -299,6 +315,8 @@ export function depsReales(): DepsDelPanelDeCampana {
     },
     ir: (direccion) => location.assign(direccion),
     tus: depsDeTusReales(),
+    // La bandera del sitio y la sala, las dos: si el sitio no trae la entrada de personas, a la sala no se le pregunta nada.
+    personasListas: () => personasSePuedenAbrir(clienteDeGoogleDelSitio()),
     // El saldo se lee en la red principal: en la de prueba no hay premio de verdad que mirar.
     ...(network.name === "mainnet" ? { deposito: depsDeDepositoReales() } : {}),
   };
@@ -435,6 +453,8 @@ const TEXTO_DE_FALLA_AL_CREAR: Record<FallaAlCrear, string> = {
   vencida: "cpoVencida",
   "cupo-campanas": "cpoMuchas",
   origen: "cpoSinConexion",
+  // No es una falta de conexión: repetir el pedido no lo arregla. Al abrir la inscripción lo dicen el título y la línea.
+  "personas-apagadas": "cpoPersonasNoL",
   red: "cpoSinConexion",
 };
 const TEXTO_DEL_MOTIVO: Record<MotivoDeSalida, string> = {
@@ -443,6 +463,8 @@ const TEXTO_DEL_MOTIVO: Record<MotivoDeSalida, string> = {
   pidio: "cpoPidio",
   otro: "cpoOtro",
 };
+/** El texto de cada motivo: con una persona anotada (sin cuenta) quien sale repetida es una persona y no una cuenta. */
+const textoDelMotivo = (m: MotivoDeSalida, persona: boolean): string => (persona && m === "repetida" ? "cpoRepetidaPersona" : TEXTO_DEL_MOTIVO[m]);
 
 const QUINCE_MIN = 15 * 60_000;
 /** Lo más lejos que la sala acepta un cierre: doce horas desde ahora. */
@@ -605,6 +627,12 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let temprana: { abreMs: number; sorteoMs: number } | null = null;
   /** Cuántas veces se programó volver a probar sola la activación pedida con abrir ya. */
   let reintentosAutomaticos = 0;
+  /**
+   * Lo que se sabe de si la campaña de personas que está a la vista se puede abrir: se está preguntando, o no se puede (el
+   * modo no está prendido). Vale solo para la campaña con que se preguntó: con otra, o con una de cuentas, es `null` y el
+   * panel es el de siempre.
+   */
+  let personas: { de: Campana; estado: "mirando" | "no" } | null = null;
   /** La fase en que la sala dijo que está: lo que se guarda para retomar. */
   let faseSala: FaseDeSala = "lista";
   /**
@@ -858,11 +886,28 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   function alCambiarLasFilas(): void {
     pintar();
     grande.pintar();
+    reponerLasEtiquetas();
     if (sala && vista === "cerrada" && pasada) correrPaso();
+  }
+
+  /**
+   * Al retomar una campaña ya pasada, cuántas filas tiene la sala: cuando el panel las tiene todas se las da a la herramienta,
+   * una sola vez, para que reponga los nombres que la pestaña haya perdido. Sin quitas a medias: con una, la lista de la sala
+   * todavía no es la que se va a sellar.
+   */
+  let totalParaReponer: number | null = null;
+
+  function reponerLasEtiquetas(): void {
+    if (totalParaReponer === null || !sala || vista !== "cerrada" || !pasada) return;
+    const todas = visibles();
+    if (todas.length !== totalParaReponer || quitasEnCurso().length > 0) return;
+    totalParaReponer = null;
+    deps.reponerEtiquetas?.(sala, todas);
   }
 
   /** Deja la lista en blanco, con lo que se estaba por quitar: se vuelve a leer de la sala. */
   function vaciarFilas(): void {
+    totalParaReponer = null;
     filas.clear();
     llegados.clear();
     pendientes.clear();
@@ -2069,6 +2114,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // lo dice el título de la pantalla, y no se repite.
     mensaje = pide !== null && deps.cuenta() !== pide && !cm?.activo() ? fmt("cpoEntraCon", { fin: pide.slice(-4) }) : "";
     vista = "previa";
+    mirarPersonas();
     // Sin sala todavía, al volver la compu de dormir o la red se vuelve a mirar el cobro.
     if (cm?.activo()) armarDespertar();
     pintar();
@@ -2105,6 +2151,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // Con la cuenta conectada, el evento que ya tiene sala no manda a pedir otro archivo: se ofrece usar la campaña acá. Si
       // mientras se creaba se dejó la campaña, no se ofrece nada.
       if (r.motivo === "ya-existe" && puedeUsarAqui() && campana?.evento === evento) ofreceUsar = evento;
+      // La sala no tiene prendidas las campañas de personas: queda dicho en la pantalla, en lugar del botón de abrir.
+      if (r.motivo === "personas-apagadas" && campana) personas = { de: campana, estado: "no" };
       return tx(TEXTO_DE_FALLA_AL_CREAR[r.motivo]);
     }
     // Si mientras se creaba se dejó la campaña, esta sala ya no es de esta pantalla: no se toma ni se sigue.
@@ -2123,9 +2171,46 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     return null;
   }
 
+  /**
+   * Si en la vista previa de una campaña de personas no corresponde ofrecer Abrir la inscripción: `mirando` es que todavía se
+   * está preguntando y `no` es que el modo no está prendido. `null` es lo de siempre: una campaña de cuentas, otra vista, o
+   * un paso del cobro o de la activación por delante, que hablan ellos.
+   */
+  function personasEn(): "mirando" | "no" | null {
+    const p = personas;
+    if (vista !== "previa" || campana === null || campana.identidad !== "persona" || p === null || p.de !== campana) return null;
+    if (pasoDeActivar() !== null || (cm?.activo() && cm.descripcion().principal)) return null;
+    return p.estado;
+  }
+
+  /**
+   * Mira si la campaña de personas que está a la vista se puede abrir, antes de ofrecerlo: con el sitio construido sin esa
+   * entrada, o con la sala sin prenderla, quien organiza abriría un QR que ningún celular puede usar. Lo que se sabía se
+   * olvida. Mientras pregunta el botón no está, con un no la pantalla lo dice, y sin respuesta se ofrece abrir como siempre
+   * (la sala rechaza sola lo que no puede). No pinta: pinta quien llama. Una campaña de cuentas no pregunta nada.
+   */
+  function mirarPersonas(): void {
+    personas = null;
+    const c = campana;
+    if (c === null || c.identidad !== "persona" || !deps.personasListas) return;
+    const mia = { de: c, estado: "mirando" as const };
+    personas = mia;
+    void deps
+      .personasListas()
+      .catch(() => null)
+      .then((r) => {
+        // Otra pregunta, u otra campaña, tomó el lugar de esta: su respuesta ya no dice nada.
+        if (personas !== mia) return;
+        personas = r === false ? { de: c, estado: "no" } : null;
+        pintar();
+      });
+  }
+
   async function abrirInscripcion(): Promise<void> {
     // Mientras el cobro no esté pagado no se abre nada, aunque alguien llame esto directo: no solo se esconde el botón.
     if (trabajando || !campana || cm?.bloqueaElAbrir()) return;
+    // Tampoco con el modo de personas sin prender, o mientras todavía se pregunta.
+    if (personasEn() !== null) return;
     // La línea del premio se lee de nuevo justo ahora y no afirma nada hasta que vuelve: abrir no la espera.
     mirarElDeposito("ahora");
     trabajando = true;
@@ -2140,7 +2225,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       etapa = null;
       return irASeguir(ofreceUsar, "previa");
     }
-    if (falla !== null) return terminar(falla);
+    // Que el modo no está prendido lo dicen el título y la línea: el aviso no lo repite.
+    if (falla !== null) return terminar(personasEn() === "no" ? "" : falla);
     // Si se dejó la campaña mientras se creaba la sala, no hay nada que abrir.
     if (!campana) return terminar();
     const s = sala;
@@ -2203,6 +2289,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     mensaje = "";
     if (fase === "lista") {
       vista = "previa";
+      mirarPersonas();
       // Una sala retomada en lista también pide el cobro antes de abrirse.
       void cm?.mirar();
     } else if (fase === "abierta") {
@@ -2457,6 +2544,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     trabajando = false;
     if (!r.ok) return pintar();
     pasada = false;
+    totalParaReponer = null;
     sinLeer = false;
     retomada = false;
     // Lo que se pasó al cuadro ya no es la lista de la campaña: se vacía, así no queda una lista sellable con el margen de la sala.
@@ -2518,8 +2606,13 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // arriba ya salieron) y se pone en el cuadro de nuevo, que es lo que comprueba la sala al sellar.
     const sigueEnElCuadro = e.fase === "cerrada" && (deps.listaPasada?.(g.sala) ?? false);
     if (sigueEnElCuadro) pasada = true;
+    // Con la sala cerrada y la lista en el cuadro, los nombres se reponen cuando el panel tenga todas las filas.
+    if (sigueEnElCuadro) totalParaReponer = e.total;
     irA(e.fase, e.cierraMs);
-    if (sigueEnElCuadro) correrPaso();
+    if (sigueEnElCuadro) {
+      reponerLasEtiquetas();
+      correrPaso();
+    }
     if (e.fase !== "lista") deps.alRetomar?.(e.fase, g.sala);
     // Una memoria de antes no dice de quién es la sala: con una sesión se completa con la campaña firmada.
     if (g.cuenta === undefined) void completarLaDuena();
@@ -2683,6 +2776,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         if (tipo === "duda") return { ...dice("cpoFvDuda"), cobro: true };
       } else if (trabajando) {
         return dice(etapa === "sala" ? "cpoFvSala" : "cpoFvAbriendo");
+      } else if (personasEn() === "mirando") {
+        return dice("cpoFvPreguntando");
       }
     }
     // Cerrar la lista: se mandan las quitas pendientes y se cambia la fase.
@@ -2734,6 +2829,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       vista === "previa" && activacion.tipo === "temprano" ? cabeAbrirYa(activacion.sorteoMs, deps.ahora()) : "",
       leyendoLaLista,
       enFila?.texto ?? "",
+      personasEn() ?? "",
       // En la vista de siempre el aviso de lo que pasó al pedir Tus campañas va arriba del botón, a la vista.
       vista === "elegir" ? mensaje : "",
       vista === "tus" || vista === "seguir"
@@ -2801,7 +2897,16 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
           const { texto: textoDelOtro, accion: accionDelOtro } = d.secundario;
           botones.push(boton(textoDelOtro, "ghost", () => hacer(accionDelOtro)));
         }
-      } else {
+      } else if (personasEn() === "no") {
+        // El modo de personas no está prendido: abrir no se ofrece. Cuando Tinkazo lo prenda, se prueba de nuevo.
+        botones.push(
+          principal(tx("cpoReintentar"), () => {
+            mirarPersonas();
+            pintar();
+          }),
+        );
+      } else if (personasEn() !== "mirando") {
+        // Mientras se pregunta si el modo de personas está prendido, la fila viva dice qué se espera y el botón todavía no está.
         if (!(trabajando && enFila !== null)) botones.push(principal(tx(trabajando ? "cpoAbriendo" : "cpoAbrir"), () => void abrirInscripcion(), trabajando));
       }
       // Mientras se paga o se duda de un pago no se deja la campaña: el pago ya salió con esta pantalla.
@@ -2854,7 +2959,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // Los celulares todavía leen el resultado: la sala no se borra, solo se deja de recordar en esta compu.
       // Con un aviso pendiente a los celulares no se deja de un toque: la pregunta de siempre. Con la lista sellada siempre se
       // pregunta, y con el sorteo hecho también, salvo con el resultado ya avisado a todas o con la sala borrada.
-      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (avisosPendientes(pasoDelPuente(), vista === "sorteada") ? pedirOlvidar() : olvidar())));
+      // Con el resultado en mano se pregunta siempre, también con todas marcadas: dejar la campaña pierde los códigos de entrega.
+      const preguntaAntes = (): boolean => avisosPendientes(pasoDelPuente(), vista === "sorteada") || (vista === "sorteada" && seVanLosCodigos(pasoDelPuente()));
+      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (preguntaAntes() ? pedirOlvidar() : olvidar())));
     } else if (vista === "sin-red") {
       botones.push(principal(tx("cpoReintentar"), () => reintentar?.()));
       botones.push(otroArchivo());
@@ -2974,6 +3081,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (vista === "olvidar" && (vistaAntes === "cerrada" || vistaAntes === "sellada" || vistaAntes === "sorteada")) {
       const paso = pasoDelPuente();
       if (paso.paso !== "sala-borrada" && avisosPendientes(paso, vistaAntes === "sorteada")) linea = tx("cpoOlvidarAviso");
+      // Con el resultado en mano lo que se pierde son los códigos de entrega: los celulares ven el suyo sin que nadie les avise.
+      if (vistaAntes === "sorteada" && seVanLosCodigos(paso)) linea = tx("cpoCodigosAlDejar");
     }
     const delPaso = vista === "cerrada" || vista === "sellada" || vista === "sorteada" ? lineaDelPaso(pasoDelPuente()) : null;
     // Lo que la fila viva ya dice no se repite en la línea: la fila ocupa su lugar.
@@ -2995,6 +3104,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       if (deActivar) {
         titulo = deActivar.titulo;
         linea = deActivar.linea;
+      }
+      // Una campaña de personas con el modo sin prender: se dice eso, en lugar de la hora de cierre y del botón de abrir.
+      if (personasEn() === "no") {
+        titulo = tx("cpoPersonasNoT");
+        linea = tx("cpoPersonasNoL");
       }
     }
     if (campana && vista === "abierta") {
@@ -3048,6 +3162,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // Quien ganó y todavía no sabe: avisarle es lo que sigue, y es el botón principal del panel, que va arriba de la lista
     // (pintarAcciones): su fila no lo repite. Las demás quedan con su botón de apoyo.
     const primeraPorAvisar = paso.filas.findIndex((g) => !g.avisada);
+    const enMano = paso.enMano === true;
     const filasDeGanadoras = paso.filas.map((g, i) => {
       const li = document.createElement("li");
       li.className = "cpo-fila";
@@ -3058,10 +3173,21 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       if (g.avisada) {
         const dicho = document.createElement("p");
         dicho.className = "cpo-salio";
-        dicho.textContent = tx("cpoAvisada");
+        // En mano el panel no sabe si el celular se enteró: solo que quien organiza lo marcó.
+        dicho.textContent = tx(enMano ? "cpoMarcadaAvisada" : "cpoAvisada");
         li.append(dicho);
       } else {
         if (i !== primeraPorAvisar) li.append(boton(fmt("cpoAvisarA", { nombre: g.nombre }), "ghost", () => accionesDelPuente().avisarA?.(g.cuenta)));
+      }
+      if (enMano) {
+        // Sin servicio del acceso no hay nada que preparar ni que recibir: de la fila sale solo el código, si se tiene.
+        if (g.codigo !== undefined) {
+          const codigo = document.createElement("span");
+          codigo.className = "cpo-marca";
+          codigo.textContent = fmt("cpoCodigoDeEntrega", { codigo: g.codigo });
+          li.append(codigo);
+        }
+        return li;
       }
       if (g.alta !== "esperando" && g.alta.estado === "puede") {
         const marca = document.createElement("span");
@@ -3077,6 +3203,26 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       }
       return li;
     });
+    // Los códigos se pidieron todas las veces y no se pudieron leer: el enlace para pedirlos de nuevo, al final. Mientras se
+    // están pidiendo, o sin quien los pida, no aparece: el panel no ofrece algo que no puede hacer.
+    const verCodigos = accionesDelPuente().verCodigos;
+    if (enMano && paso.sinCodigos === true && verCodigos && paso.filas.some((g) => g.codigo === undefined)) {
+      const li = document.createElement("li");
+      li.className = "cpo-fila";
+      li.append(boton(tx("cpoVerCodigos"), "enlace", () => verCodigos()));
+      filasDeGanadoras.push(li);
+    }
+    // El último aviso no se pudo marcar: se dice arriba de la lista, junto al botón que sigue ahí para probar de nuevo.
+    if (enMano && paso.sinAviso === true) {
+      const li = document.createElement("li");
+      li.className = "cpo-fila";
+      const dicho = document.createElement("p");
+      dicho.className = "cpo-salio";
+      dicho.setAttribute("role", "alert");
+      dicho.textContent = tx("cpoNoSeMarco");
+      li.append(dicho);
+      filasDeGanadoras.unshift(li);
+    }
     ganadorasEl.replaceChildren(...filasDeGanadoras);
   }
 
@@ -3087,7 +3233,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
    * de quien mira). Puede lanzar si el premio está mal formado: quien la llama la protege.
    */
   function datosDelDeposito(): { cuenta: string; total: bigint; clave: string } | null {
-    if (!deps.deposito || vista !== "previa" || campana === null || campana.red !== "mainnet" || cm?.bloqueaElAbrir()) return null;
+    if (!deps.deposito || vista !== "previa" || campana === null || campana.premioEnMano !== undefined || campana.red !== "mainnet" || cm?.bloqueaElAbrir()) return null;
     const cuenta = deps.cuenta();
     if (cuenta === null || (pide !== null && pide !== cuenta)) return null;
     const total = totalDePremios(campana.premios);
@@ -3302,7 +3448,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pintarDeposito();
     if (campana && vista === "previa") {
       // Con el cobro prendido todos los montos del panel llevan dos decimales: el premio también (120,00 y no 120).
-      premioEl.textContent = premiosTexto(campana.premios, deps.idioma(), cm?.activo() === true);
+      premioEl.textContent = textoDelPremio(campana, deps.idioma(), cm?.activo() === true);
       const logo = campana.empresa.logo;
       logoEl.hidden = logo === null;
       if (logo) logoEl.src = `data:${logo.tipo};base64,${logo.datos}`;
@@ -3421,7 +3567,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const motivoEnVuelo = pendientes.get(f.n)?.motivo ?? enviando.get(f.n);
     if (motivoEnVuelo) {
       const dicho = (f.revisar ? persona : f.nombre ?? persona);
-      const motivo = tx(TEXTO_DEL_MOTIVO[motivoEnVuelo]).toLocaleLowerCase(deps.idioma());
+      const motivo = tx(textoDelMotivo(motivoEnVuelo, esLineaDePersona(f.cuenta))).toLocaleLowerCase(deps.idioma());
       const p = document.createElement("p");
       p.className = "cpo-salio";
       p.textContent = fmt("cpoSalio", { nombre: dicho, motivo });
@@ -3446,7 +3592,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       p.textContent = tx("cpoPorQue");
       motivos.append(p);
       for (const m of MOTIVOS) {
-        const b = botonDeFila(TEXTO_DEL_MOTIVO[m], "motivo", f.n, "ghost");
+        const b = botonDeFila(textoDelMotivo(m, esLineaDePersona(f.cuenta)), "motivo", f.n, "ghost");
         b.dataset.motivo = m;
         motivos.append(b);
       }

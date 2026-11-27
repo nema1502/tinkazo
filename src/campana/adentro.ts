@@ -1,6 +1,6 @@
 /** Pantallas de quien ya entró: solo pintan los datos recibidos y avisan las acciones de la persona. */
 
-import { horaTexto, premiosTexto } from "./formato";
+import { horaTexto, textoDelPremio } from "./formato";
 import type { MemoriaDeCampana } from "./memoria";
 import type { PasoDeCampana, TipoDePaso } from "./modelo";
 import { caja, conDestacado, llama, marcaDeTilde, rotulosChicos } from "./piezas";
@@ -104,6 +104,9 @@ function enlaceComprobante(raiz: HTMLElement, deps: DepsDelCelular, url: string)
 export function textoDeErrorDeAlta(deps: DepsDelCelular, motivo: MotivoDeAlta, textoDelLimite?: string): string {
   // El límite del servicio de cuentas dice cuánto hay que esperar.
   if (motivo === "limite" && textoDelLimite) return textoDelLimite;
+  // En una campaña de personas el tope puede ser el de la propia persona (volvió a entrar muchas veces en la hora) y no el de la
+  // wifi: cambiar de red no lo arregla, así que no se manda a cambiar de red.
+  if (motivo === "wifi" && deps.persona) return deps.tx("cpErrTopePersona");
   return deps.tx(motivo === "quitada" ? "cpErrOtro" : CLAVES_DE_ALTA[motivo]);
 }
 
@@ -344,6 +347,8 @@ export function pintarAdentro(
     conTarjeta?: boolean;
     salta?: boolean;
     respuestaDesde?: () => number;
+    /** Solo en una campaña de personas: No soy yo, un enlace chico que olvida a la persona en este celular. */
+    alOlvidar?: () => void;
   },
 ): () => void {
   const raiz = seccion(raizPrincipal, "#cmp-adentro", "cmp-adentro cmp-dos");
@@ -353,12 +358,13 @@ export function pintarAdentro(
   // Es la pantalla que queda abierta una hora: arriba dice de quién es el sorteo y qué se sortea.
   izq.append(rotulosChicos([
     sustituir(deps.tx("cpTitulo"), { empresa: deps.campana.empresa.nombre }),
-    premiosTexto(deps.campana.premios, idioma),
+    textoDelPremio(deps.campana, idioma),
   ]));
   izq.append(marcaDeTilde());
   titulo(izq, deps.tx(datos.ya ? "cpYaEstabas" : "cpAdentro"));
   const contador = parrafo(izq, "", "cmp-contador");
   conDestacado(contador, deps.tx(datos.total === 1 ? "cpEnLaLista1" : "cpEnLaListaN"), "n", String(datos.total), "cmp-numero");
+  if (datos.alOlvidar) boton(izq, deps.tx("cpNoSoyYo"), "cmp-otra-cuenta cmp-olvidar", datos.alOlvidar);
   const der = caja("cmp-der");
   const horas = caja("cmp-horas");
   const claveFase = datos.fase === "abierta" ? "cpCierraA" : datos.fase === "cerrada" ? "cpYaCerro" : "cpSellada";
@@ -405,18 +411,31 @@ export function pintarAdentro(
 export function pintarGano(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
-  datos: { avisado: boolean; comprobante: string | null; variante?: VarianteDeGanaste | null },
+  datos: {
+    avisado: boolean;
+    comprobante: string | null;
+    variante?: VarianteDeGanaste | null;
+    codigo?: string | null;
+    /** Solo personas: la sala ya no existe. En lugar de dónde se entrega el premio va la línea de que el sorteo terminó. */
+    termino?: boolean;
+  },
 ): void {
   const raiz = seccion(raizPrincipal, "#cmp-estado", "cmp-estado cmp-gano cmp-dos");
   if (!raiz) return;
   const izq = caja("cmp-izq cmp-hero");
   izq.append(marcaDeTilde());
   titulo(izq, deps.tx("cpGanaste"));
-  const premio = premiosTexto(deps.campana.premios.slice(0, 1), deps.idioma());
+  // Quien ganó se lleva un premio: con premio en mano es el texto solo, sin el para cuántas personas.
+  const premio = textoDelPremio({ ...deps.campana, premios: deps.campana.premios.slice(0, 1) }, deps.idioma());
   parrafo(izq, sustituir(deps.tx("cpPremioDe"), {
     premio,
     empresa: deps.campana.empresa.nombre,
   }), "cmp-premio-resultado");
+  // En una campaña de personas no hay nada que recibir desde el celular: la misma pantalla trae el código y, mientras no llegó,
+  // dice dónde se entrega el premio. Con la sala ya terminada, con código o sin él, dice que hable con quien organiza.
+  if (deps.persona && (!lineaDelCodigo(izq, deps, datos.codigo) || datos.termino)) {
+    parrafo(izq, deps.tx(datos.termino ? "cpTerminoGanaste" : "cpEntregaL"), "cmp-apoyo");
+  }
   // El enlace para ver cómo se eligió va al pie del bloque, y el cartel del stand arriba del bloque.
   if (datos.comprobante) enlaceComprobante(izq, deps, datos.comprobante);
   if (datos.avisado) {
@@ -425,9 +444,11 @@ export function pintarGano(
     raiz.append(der);
   }
   raiz.append(izq);
+  // Sin botón de recibir ni línea que lo pida: quien ganó se lo muestra a quien organiza.
+  if (deps.persona) return;
   const accion = caja("cmp-accion");
   raiz.append(accion);
-  parrafo(accion, datos.variante?.linea ?? deps.tx(deps.persona ? "cpParaRecibirPersona" : "cpParaRecibir"), "cmp-apoyo");
+  parrafo(accion, datos.variante?.linea ?? deps.tx("cpParaRecibir"), "cmp-apoyo");
   const llevar = datos.variante?.llevar;
   if (!llevar) {
     boton(accion, deps.tx("cpRecibir"), "primary", deps.recibir);
@@ -435,6 +456,16 @@ export function pintarGano(
   }
   boton(accion, llevar.texto, "primary", () => llevar.alHacer(accion));
   boton(accion, deps.tx("cpRecibir"), "cmp-de-texto", deps.recibir);
+}
+
+/** Cuatro cifras, y nada más: lo que la sala da a quien ganó. Cualquier otra cosa no se muestra. */
+const ES_CODIGO = /^[0-9]{4}$/u;
+
+/** El código de entrega de quien ganó, con la línea que dice que se lo muestre a quien organiza. Sin código válido no pone nada y dice false. */
+function lineaDelCodigo(destino: HTMLElement, deps: DepsDelCelular, codigo: string | null | undefined): boolean {
+  if (!codigo || !ES_CODIGO.test(codigo)) return false;
+  conDestacado(parrafo(destino, "", "cmp-apoyo cmp-codigo-linea"), deps.tx("cpTuCodigo"), "codigo", codigo, "cmp-hora cmp-codigo");
+  return true;
 }
 
 /** Las líneas de un aviso grande, con el botón de abajo cuando hay un comprobante para ver. */
@@ -476,27 +507,12 @@ export function pintarOtra(
   );
 }
 
-/**
- * Lo que pasa cuando quien ganó una campaña de personas toca Recibir mi premio: por ahora, una pantalla corta, un título y una
- * línea, que dice que el premio se entrega con quien organiza. Reclamar y cobrar desde el celular es de otra etapa, que
- * reemplaza esta función por el camino de verdad. Quien recarga vuelve a Ganaste.
- */
-export function pintarEntrega(raizPrincipal: HTMLElement, deps: DepsDelCelular): void {
-  const raiz = seccion(raizPrincipal, "#cmp-estado", "cmp-estado cmp-entrega cmp-solo");
-  if (!raiz) return;
-  const hero = caja("cmp-izq cmp-hero");
-  hero.append(llama());
-  titulo(hero, deps.tx("cpEntregaT"));
-  parrafo(hero, deps.tx("cpEntregaL"), "cmp-apoyo");
-  raiz.append(hero);
-}
-
 /** La salida de la lista siempre explica el motivo que informó la sala. */
 export function pintarSalio(raizPrincipal: HTMLElement, deps: DepsDelCelular, motivo: MotivoDeSalida): void {
   pintarResultado(raizPrincipal, "cmp-estado cmp-salio", {
     titulo: deps.tx("cpSaliste"),
     apoyo: [
-      sustituir(deps.tx("cpTeSacaron"), { motivo: deps.tx(CLAVES_DE_SALIDA[motivo]) }),
+      sustituir(deps.tx("cpTeSacaron"), { motivo: deps.tx(deps.persona && motivo === "repetida" ? "cpMotivoRepetidaPersona" : CLAVES_DE_SALIDA[motivo]) }),
       deps.tx("cpSiFueError"),
     ],
     problema: true,
@@ -506,25 +522,43 @@ export function pintarSalio(raizPrincipal: HTMLElement, deps: DepsDelCelular, mo
 /**
  * El cierre conserva lo que este celular llegó a saber del resultado. Quien ganó sigue viendo que ganó y puede
  * recibir su premio: la campaña terminó, pero el premio se recibe aunque ya no esté en el stand.
+ * `ganaba`, solo en una campaña de personas: la sala terminó con Ganaste a la vista. La pantalla sigue siendo Ganaste, con el
+ * código que la página ya tenía y la línea de que el sorteo terminó.
  */
 export function pintarTermino(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
   memoria: MemoriaDeCampana | null,
+  ganaba: { codigo: string | null; comprobante: string | null } | null = null,
 ): void {
-  if (memoria?.resultado === "gano") {
-    pintarGano(raizPrincipal, deps, { avisado: false, comprobante: memoria.comprobante });
+  const gano = memoria?.resultado === "gano";
+  if (ganaba) {
+    pintarGano(raizPrincipal, deps, { avisado: false, ...ganaba, termino: true });
     return;
   }
-  const apoyo = memoria?.resultado === "otra"
-    ? [deps.tx("cpOtraPersona"), deps.tx("cpGracias")]
-    : [deps.tx("cpPreguntaEnStand")];
+  if (gano && !deps.persona) {
+    pintarGano(raizPrincipal, deps, { avisado: false, comprobante: memoria?.comprobante ?? null });
+    return;
+  }
+  // En una campaña de personas la sala ya no existe: desde el celular no se puede recibir nada. Quien ganó sigue sabiéndolo, y
+  // se le dice con quién hablar.
+  const apoyo = gano
+    ? [
+        sustituir(deps.tx("cpPremioDe"), {
+          premio: textoDelPremio({ ...deps.campana, premios: deps.campana.premios.slice(0, 1) }, deps.idioma()),
+          empresa: deps.campana.empresa.nombre,
+        }),
+        deps.tx("cpTerminoGanaste"),
+      ]
+    : memoria?.resultado === "otra"
+      ? [deps.tx("cpOtraPersona"), deps.tx("cpGracias")]
+      : [deps.tx("cpPreguntaEnStand")];
   const comprobante = memoria?.resultado && memoria.comprobante ? memoria.comprobante : null;
   pintarResultado(
     raizPrincipal,
     "cmp-estado cmp-termino",
     {
-      titulo: deps.tx("cpTermino"),
+      titulo: deps.tx(gano ? "cpGanaste" : "cpTermino"),
       rotulos: [sustituir(deps.tx("cpTitulo"), { empresa: deps.campana.empresa.nombre })],
       apoyo,
     },

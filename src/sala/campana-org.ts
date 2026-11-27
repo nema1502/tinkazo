@@ -12,6 +12,7 @@ import { seVeDesde } from "../campana/de-quien";
 import { type Campana, leerCampana } from "../campana/modelo";
 import { generarClave } from "./cifra";
 import { esCuentaValida } from "../../workers/sala/src/logica";
+import { formaDeLista } from "../campana/forma-de-lista";
 import { type Dependencias, type EquipoDeSala, type Sala, servicioDeSala } from "./cliente";
 import { horaDeLaSala } from "./hora";
 
@@ -30,7 +31,11 @@ export interface SalaDeCampana extends Sala {
   evento: string;
   red: RedDeCampana;
 }
-export type FallaAlCrear = "forma" | "firma" | "ya-existe" | "vencida" | "cupo-campanas" | "origen" | "red";
+/**
+ * Por qué la sala no creó la campaña. `personas-apagadas` es que la sala no tiene prendidas las campañas de personas (o las
+ * tiene con otro identificador de Google que el sitio): no es una falta de conexión y repetir el pedido no lo arregla.
+ */
+export type FallaAlCrear = "forma" | "firma" | "ya-existe" | "vencida" | "cupo-campanas" | "origen" | "personas-apagadas" | "red";
 /**
  * Lo que puede salir mal en una llamada con token: la sala ya no está, la sala ya no acepta este token (otra compu tomó la
  * campaña), la sala dijo que no, la hora pedida no vale, o no hubo respuesta a tiempo.
@@ -99,6 +104,8 @@ const DE_LA_SALA: Record<string, FallaAlCrear> = {
   vencida: "vencida",
   "cupo-campanas": "cupo-campanas",
   origen: "origen",
+  "personas-apagadas": "personas-apagadas",
+  "personas-configuracion": "personas-apagadas",
 };
 const ES_ID = /^[0-9A-Za-z]{8}$/u;
 const ES_TOKEN = /^[A-Za-z0-9_-]{22}$/u;
@@ -142,6 +149,30 @@ export async function crearCampanaEnSala(
     red: de.red,
   };
   return { ok: true, sala };
+}
+
+/** Cuánto se espera la respuesta de si las campañas de personas están prendidas: es una pregunta chica, antes de abrir. */
+export const PLAZO_DE_PERSONAS_MS = 8_000;
+
+/**
+ * Si una campaña de personas se puede abrir ahora. `clienteDelSitio` es el identificador de Google (público) con que el sitio
+ * abre esas campañas, o `null` si el sitio se construyó sin ellas: entonces no se puede y a la sala no se le pregunta nada.
+ * Si no, la sala dice si las tiene prendidas y con qué identificador (`GET /v1/personas/estado`): tiene que ser el mismo, o
+ * nadie podría entrar. `true` o `false` cuando se sabe, y `null` si no hubo una respuesta que se entienda (sin red, pasado
+ * el plazo u otro estado): quien pregunta sigue como si no hubiera preguntado, y la sala rechaza sola lo que no puede.
+ */
+export async function personasSePuedenAbrir(
+  clienteDelSitio: string | null,
+  dep: DependenciasOrg = {},
+  servicio = servicioDeSala(),
+): Promise<boolean | null> {
+  if (clienteDelSitio === null) return false;
+  const conPlazo: DependenciasOrg = { ...dep, senal: dep.senal ?? ((): AbortSignal => AbortSignal.timeout(PLAZO_DE_PERSONAS_MS)) };
+  const r = await llamar(conPlazo, `${servicio}/v1/personas/estado`, {});
+  if (!r || r.status !== 200) return null;
+  const x: unknown = await r.json().catch(() => null);
+  if (!esObjeto(x) || typeof x.prendido !== "boolean" || typeof x.cliente !== "string") return null;
+  return x.prendido && x.cliente === clienteDelSitio;
 }
 
 /**
@@ -348,16 +379,19 @@ export async function borrarSalaVacia(s: Sala, dep: DependenciasOrg = {}): Promi
 /** Cuántas vueltas de 200 se piden como mucho al leer la lista entera: una campaña admite 300. */
 const VUELTAS_DE_LECTURA = 10;
 
-/** Una fila de `GET equipos` tal como la devuelve la sala, o `null` si no tiene la forma: no se descarta en silencio. */
+/**
+ * Una fila de `GET equipos` tal como la devuelve la sala, o `null` si no tiene la forma: no se descarta en silencio. El campo
+ * `cuenta` es una cuenta o una línea de persona, y cuál de las dos lo decide la lista entera (`formaDeLista`), no cada fila.
+ */
 function leerFila(x: unknown): EquipoDeSala | null {
   if (!esObjeto(x)) return null;
   const { n, cuenta, d, estado, v } = x;
   if (!esEntero(n) || n < 1 || !esEntero(v) || v < 0 || typeof d !== "string" || typeof estado !== "string") return null;
-  if (!esCuentaValida(cuenta)) return null;
+  if (typeof cuenta !== "string") return null;
   return { n, cuenta, d, estado, v };
 }
 
-/** Una vuelta de la lista: las filas con versión mayor que `desde`, o `null` si el pedido falló o alguna fila no se entiende. */
+/** Una vuelta de la lista: las filas con versión mayor que `desde`, o `null` si el pedido falló o alguna fila no tiene la forma de una fila. */
 async function leerVuelta(s: Sala, desde: number, dep: DependenciasOrg): Promise<EquipoDeSala[] | null> {
   const r = await llamar(dep, rutaDe(s, `/equipos?desde=${desde}`), { headers: auth(s) });
   if (!r || !r.ok) return null;
@@ -377,8 +411,24 @@ async function leerVuelta(s: Sala, desde: number, dep: DependenciasOrg): Promise
  * DESPUÉS de las páginas: tiene que estar cerrada las dos veces, con el mismo total y las mismas quitadas, y una última
  * página vacía, pedida después del segundo estado, confirma que nadie entró entre medio. La cantidad leída tiene que ser
  * el total. Si algo no coincide, o cualquier pedido falla, `null` y la lista no se pasa.
+ *
+ * La lista tiene que ser de una sola forma: toda de cuentas o toda de líneas de persona. Una fila que no es ni una ni otra,
+ * sin ninguna línea de persona, es lo de siempre: `null` en cuanto se lee, sin pedir más. Una lista con líneas de persona
+ * junto a otra cosa no se sortea y reintentar no la cambia. Quien lo sabe tratar pide `{ distinguirMezclada: true }` y recibe
+ * `"mezclada"`, y solo si la lectura fue estable de punta a punta. Sin pedirlo, la mezcla es `null`, como cualquier lectura
+ * que no sirve: así quien llama sin saber de personas sigue haciendo lo mismo que antes.
  */
-export async function leerTodasLasAnotadas(s: Sala, dep: DependenciasOrg = {}): Promise<EquipoDeSala[] | null> {
+export function leerTodasLasAnotadas(s: Sala, dep?: DependenciasOrg): Promise<EquipoDeSala[] | null>;
+export function leerTodasLasAnotadas(
+  s: Sala,
+  dep: DependenciasOrg,
+  como: { distinguirMezclada: true },
+): Promise<EquipoDeSala[] | "mezclada" | null>;
+export async function leerTodasLasAnotadas(
+  s: Sala,
+  dep: DependenciasOrg = {},
+  como: { distinguirMezclada?: boolean } = {},
+): Promise<EquipoDeSala[] | "mezclada" | null> {
   const antes = await estadoConToken(s, dep);
   if (typeof antes === "string" || antes.fase !== "cerrada") return null;
   const leidas: EquipoDeSala[] = [];
@@ -389,6 +439,8 @@ export async function leerTodasLasAnotadas(s: Sala, dep: DependenciasOrg = {}): 
     if (!filas) return null;
     if (filas.length === 0) terminada = true;
     leidas.push(...filas);
+    // Una fila que no es una cuenta, con ninguna línea de persona en la lista, se rechaza al leerla, como siempre.
+    if (formaDeLista(leidas.map((f) => f.cuenta)) === "rara") return null;
     desde = Math.max(desde, ...filas.map((f) => f.v));
   }
   if (!terminada) return null;
@@ -397,7 +449,9 @@ export async function leerTodasLasAnotadas(s: Sala, dep: DependenciasOrg = {}): 
   if (despues.total !== antes.total || despues.quitadas !== antes.quitadas) return null;
   if (leidas.length !== despues.total || new Set(leidas.map((f) => f.n)).size !== leidas.length) return null;
   const ultima = await leerVuelta(s, desde, dep);
-  return ultima !== null && ultima.length === 0 ? leidas : null;
+  if (ultima === null || ultima.length !== 0) return null;
+  if (formaDeLista(leidas.map((f) => f.cuenta)) === "mezclada") return como.distinguirMezclada === true ? "mezclada" : null;
+  return leidas;
 }
 
 /** Lo que la sala contesta a un aviso de sellada: su motivo, o `red` si no hubo respuesta que se entienda. */
@@ -477,8 +531,23 @@ export interface ResultadoDeSala {
   comprobante: string;
 }
 
-/** Lee el resultado que la sala guardó, sin token. En este pedido `sin-resultado` es un 404. */
-export async function resultadoDeSala(s: Sala, dep: DependenciasOrg = {}): Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red"> {
+/**
+ * Lee el resultado que la sala guardó, sin token. En este pedido `sin-resultado` es un 404. Las ganadoras son todas cuentas o
+ * todas líneas de persona. Una fila que no es de ninguna de las dos, sin líneas de persona, es `red`, como siempre. Una mezcla
+ * tampoco se sortea y reintentar no la cambia: quien lo sabe tratar pide `{ distinguirMezclada: true }` y recibe `"mezclada"`.
+ * Sin pedirlo, la mezcla es `red`, como cualquier resultado que no sirve.
+ */
+export function resultadoDeSala(s: Sala, dep?: DependenciasOrg): Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red">;
+export function resultadoDeSala(
+  s: Sala,
+  dep: DependenciasOrg,
+  como: { distinguirMezclada: true },
+): Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red" | "mezclada">;
+export async function resultadoDeSala(
+  s: Sala,
+  dep: DependenciasOrg = {},
+  como: { distinguirMezclada?: boolean } = {},
+): Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red" | "mezclada"> {
   const r = await llamar(dep, rutaDe(s, "/campana/resultado"), {});
   if (!r) return "red";
   if (r.status === 404) return (await motivoDe(r)) === "sin-resultado" ? "sin-resultado" : "no-existe";
@@ -487,9 +556,12 @@ export async function resultadoDeSala(s: Sala, dep: DependenciasOrg = {}): Promi
   if (!x || typeof x.sorteo !== "string" || typeof x.comprobante !== "string" || !Array.isArray(x.ganadoras)) return "red";
   const ganadoras: string[] = [];
   for (const g of x.ganadoras as unknown[]) {
-    if (!esCuentaValida(g)) return "red";
+    if (typeof g !== "string") return "red";
     ganadoras.push(g);
   }
+  const forma = formaDeLista(ganadoras);
+  if (forma === "rara") return "red";
+  if (forma === "mezclada") return como.distinguirMezclada === true ? "mezclada" : "red";
   return { sorteo: x.sorteo, ganadoras, comprobante: x.comprobante };
 }
 
@@ -503,6 +575,36 @@ export async function avisarEnSala(s: Sala, cuenta: string, dep: DependenciasOrg
   if (r.status === 204) return "ok";
   const motivo = await motivoDe(r);
   return DE_AVISO.find((m) => m === motivo) ?? "red";
+}
+
+/** Por qué la sala no dio los códigos de entrega, además de las fallas de siempre. */
+export type FallaDeCodigos = FallaDeSala | "fase" | "no-es-de-personas";
+
+const ES_CODIGO_DE_ENTREGA = /^[0-9]{4}$/u;
+
+/**
+ * Los códigos de entrega de las ganadoras de una campaña de personas, en orden de puesto. Solo quien organiza los pide (con
+ * el token de la sala) y se leen en cada pedido: la sala los recalcula y no los guarda. `fase` es que todavía no se sorteó y
+ * `no-es-de-personas` que la sala es de cuentas. Una respuesta buena exige cuatro cifras en cada código y que ninguno se
+ * repita: si no, es `red`, porque no sirve para entregar nada. El código no se escribe en ningún lado.
+ */
+export async function codigosDeEntrega(s: Sala, dep: DependenciasOrg = {}): Promise<string[] | FallaDeCodigos> {
+  // Sin cache del navegador: los códigos salen de la sala cada vez y no se guardan en ningún lado.
+  const r = await llamar(dep, rutaDe(s, "/campana/entrega"), { headers: auth(s), cache: "no-store" });
+  if (!r) return "red";
+  if (r.status === 409) {
+    const motivo = await motivoDe(r);
+    return motivo === "fase" || motivo === "no-es-de-personas" ? motivo : "rechazo";
+  }
+  if (!r.ok) return fallaDe(r);
+  const x = (await r.json().catch(() => null)) as { codigos?: unknown } | null;
+  if (!x || !Array.isArray(x.codigos) || x.codigos.length === 0) return "red";
+  const codigos: string[] = [];
+  for (const c of x.codigos as unknown[]) {
+    if (typeof c !== "string" || !ES_CODIGO_DE_ENTREGA.test(c) || codigos.includes(c)) return "red";
+    codigos.push(c);
+  }
+  return codigos;
 }
 
 /** La cuenta que la campaña nombra para sellar (campo `organizadora` del texto firmado), `null` si no nombra ninguna. */

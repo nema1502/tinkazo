@@ -1,6 +1,6 @@
 /** Pantallas públicas de una campaña y estados de carga, sin consultar la sala por su cuenta. */
 
-import { horaTexto, premiosTexto } from "./formato";
+import { horaTexto, textoDelPremio } from "./formato";
 import { leerCampana, type Campana } from "./modelo";
 import { caja, conDestacado, pintarAviso } from "./piezas";
 import { sustituir } from "./sustituir";
@@ -216,9 +216,9 @@ export function pintarLaCampana(
   izq.append(titulo);
   const premio = caja("cmp-premio cmp-hero");
   parrafo(premio, deps.tx("cpPremioEtiqueta"), "cmp-premio-etiqueta");
-  const textoDelPremio = premiosTexto(campana.premios, idioma);
-  const largo = textoDelPremio.length > TEXTO_LARGO_DEL_PREMIO;
-  parrafo(premio, textoDelPremio, largo ? "cmp-premio-texto cmp-largo" : "cmp-premio-texto");
+  const premioDicho = textoDelPremio(campana, idioma);
+  const largo = premioDicho.length > TEXTO_LARGO_DEL_PREMIO;
+  parrafo(premio, premioDicho, largo ? "cmp-premio-texto cmp-largo" : "cmp-premio-texto");
   // Que participar es gratis va en el bloque del premio, como rótulo: una caja sola parecería un botón.
   parrafo(premio, deps.tx("cpGratisCorto"), "cmp-premio-etiqueta");
   izq.append(premio);
@@ -271,6 +271,10 @@ export function pintarLaCampana(
           sitio.replaceChildren();
           armar();
         });
+        // Quien abrió el enlace desde una aplicación que Google no deja entrar puede copiarlo y abrirlo en el navegador, aunque
+        // esta página no haya reconocido esa aplicación.
+        const aviso = parrafo(sitio, deps.tx("cpEnApp"), "cmp-en-app");
+        boton(sitio, deps.tx("cpCopiar"), "cmp-de-texto", () => copiarEnlace(deps, aviso, sitio, programar));
       }, deps.tx("cpCargando"));
     };
     armar();

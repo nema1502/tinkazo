@@ -49,6 +49,11 @@ export interface Campana {
    * persona. Falta en las campañas de siempre, que se anotan con su cuenta.
    */
   identidad?: "persona";
+  /**
+   * Solo en una campaña de personas con el premio entregado en mano: qué se lleva cada persona que gana, en los dos idiomas. Con
+   * él los montos de `premios` van en cero y no se muestran. Falta en las demás campañas.
+   */
+  premioEnMano?: Bilingue;
   pasos: PasoDeCampana[];
   bases: Bilingue;
   anotadas: number;
@@ -132,11 +137,30 @@ function leerLogo(x: unknown): Campana["empresa"]["logo"] | FalloDeCampana {
 /** Un centavo, en unidades de siete decimales: lo mínimo que la pantalla puede mostrar sin inflar el monto. */
 const UN_CENTAVO = 100000n;
 
-function leerPremios(x: unknown): bigint[] | FalloDeCampana {
+/** Lo más largo que puede ser el premio en mano, en cada idioma. */
+const MAXIMO_DE_PREMIO_EN_MANO = 60;
+
+/**
+ * El premio en mano, si la campaña lo trae: undefined si falta el campo, el texto en los dos idiomas, o el fallo. Solo vale con
+ * identidad persona. Es la misma regla que aplica la sala al texto firmado: de 1 a 60 caracteres en cada idioma, de una sola
+ * línea, con algo escrito y sin nada que no se vea.
+ */
+function leerPremioEnMano(x: unknown, identidad: unknown): Bilingue | undefined | FalloDeCampana {
+  if (x === undefined) return undefined;
+  if (identidad !== "persona") return fallo("premio_en_mano");
+  const texto = leerBilingue(x, "premio_en_mano", MAXIMO_DE_PREMIO_EN_MANO);
+  if (esFallo(texto)) return texto;
+  if (texto.es.trim() === "" || texto.en.trim() === "") return fallo("premio_en_mano");
+  return texto;
+}
+
+/** Con premio en mano todos los montos son exactamente cero. Sin él, de un centavo para arriba, como siempre. */
+function leerPremios(x: unknown, enMano = false): bigint[] | FalloDeCampana {
   if (!Array.isArray(x) || x.length < 1 || x.length > 10) return fallo("premios");
   const premios: bigint[] = [];
   for (const premio of x) {
-    if (!esCadena(premio) || !/^\d{1,16}$/u.test(premio) || BigInt(premio) < UN_CENTAVO) return fallo("premios");
+    if (!esCadena(premio) || !/^\d{1,16}$/u.test(premio)) return fallo("premios");
+    if (enMano ? premio !== "0" : BigInt(premio) < UN_CENTAVO) return fallo("premios");
     premios.push(BigInt(premio));
   }
   return premios;
@@ -245,7 +269,9 @@ export function leerCampana(x: unknown): LecturaDeCampana {
   } catch {
     return fallo("zona");
   }
-  const premios = leerPremios(x.premios);
+  const premioEnMano = leerPremioEnMano(x.premio_en_mano, x.identidad);
+  if (premioEnMano !== undefined && esFallo(premioEnMano)) return premioEnMano;
+  const premios = leerPremios(x.premios, premioEnMano !== undefined);
   if (!Array.isArray(premios)) return premios;
   const horas = leerHoras(x);
   if (esFallo(horas)) return horas;
@@ -278,6 +304,7 @@ export function leerCampana(x: unknown): LecturaDeCampana {
       ...horas,
       entrada: x.entrada,
       ...(x.identidad === "persona" ? { identidad: "persona" as const } : {}),
+      ...(premioEnMano !== undefined ? { premioEnMano } : {}),
       pasos,
       bases,
       anotadas: x.anotadas,

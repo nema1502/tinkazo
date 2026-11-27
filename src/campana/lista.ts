@@ -1,11 +1,12 @@
 /**
  * La lista que se pasa al cuadro del sorteo en una campaña de empresa, y las etiquetas con que se ve en el show.
  *
- * Lo que se sella son solo las cuentas, ordenadas con `listaDeLaCampana`: la misma función que usa la sala al comprobar
- * el sello. Los nombres son etiquetas locales de esta compu (`equipos/etiquetas.ts`) y nunca entran en lo sellado.
+ * Lo que se sella son solo las cuentas (o, en una campaña de personas, sus líneas), ordenadas con `listaDeLaCampana`: la
+ * misma función que usa la sala al comprobar el sello. Los nombres son etiquetas locales de esta compu
+ * (`equipos/etiquetas.ts`) y nunca entran en lo sellado.
  */
 import { listaDeLaCampana } from "../../workers/sala/src/campana";
-import { esCuentaValida } from "../../workers/sala/src/logica";
+import { formaDeLista } from "./forma-de-lista";
 
 /** Lo que el panel sabe de una anotada, además de su cuenta: su número en la sala, su nombre y si el filtro lo tapa. */
 export interface DatosDeAnotada {
@@ -20,21 +21,24 @@ export interface DatosDeAnotada {
 
 /**
  * Las líneas que se sellan y las etiquetas con que se ven. Las cuentas salen solo de `cuentasLeidas`, que es lo que
- * leyó `leerTodasLasAnotadas` de la sala: nunca de las filas del panel, que esconden a quien se está quitando.
+ * leyó `leerTodasLasAnotadas` de la sala: nunca de las filas del panel, que esconden a quien se está quitando. Es toda de
+ * cuentas o toda de líneas de persona, y en las dos la etiqueta de quien no tiene nombre es Persona con su número.
  *
  * Un nombre vacío, o marcado por el filtro y sin mostrar, sale como Persona con su número de la sala. Los nombres
  * repetidos (sin mirar mayúsculas) llevan (2), (3) en el orden de la lista. Las marcadas entran a la lista igual: lo
  * tapado es el nombre, no la persona.
  *
- * `null` si alguna cuenta leída no tiene la forma de una cuenta, con la misma regla de la sala: no se descarta en
- * silencio, porque la lista sellada tiene que ser la que la sala va a comparar.
+ * `null` si alguna fila leída no tiene la forma de las demás (una cuenta mal formada, una mezcla de cuentas y líneas de
+ * persona, o algo que no es ninguna de las dos): no se descarta en silencio, porque la lista sellada tiene que ser la que
+ * la sala va a comparar.
  */
 export function listaYEtiquetas(
   cuentasLeidas: readonly string[],
   porCuenta: ReadonlyMap<string, DatosDeAnotada>,
   persona: (n: number) => string,
 ): { lineas: string[]; etiquetas: Map<string, string> } | null {
-  if (!cuentasLeidas.every((c) => esCuentaValida(c))) return null;
+  const forma = formaDeLista(cuentasLeidas);
+  if (forma !== "cuenta" && forma !== "persona") return null;
   const lineas = listaDeLaCampana(cuentasLeidas);
   const vistas = new Map<string, number>();
   const etiquetas = new Map<string, string>();

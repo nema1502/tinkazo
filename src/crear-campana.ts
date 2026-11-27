@@ -74,6 +74,9 @@ function activarEnElPanel(texto: string): boolean {
 function depsReales(): DepsDelCreador {
   // Lo que cobra Tinkazo, el mismo cobro que después pide el panel de la portada.
   const cobro = comisionDelBuild(entornoDelBuild());
+  // Una campaña de personas no lleva cobro, comisión ni activación: la firma Tinkazo y se baja como archivo. Lo decide el panel
+  // según la campaña que arma o abre, así que acá el cobro va siempre y no depende de la dirección.
+  const persona = anotarseSinBilleteraActivo() && parametros.get("identidad") === "persona";
   return {
     tx: texto,
     dic: (idioma, clave) => String(textos(idioma)[clave] ?? clave),
@@ -89,7 +92,7 @@ function depsReales(): DepsDelCreador {
       return archivo.text();
     },
     // El validador arrastra los dos lectores de la campaña: se baja recién cuando hay algo que bajar.
-    validar: (campana, ahora) => import("./sala/validar-campana").then((m) => m.validarCampanaParaFirmar(campana, ahora)),
+    validar: (campana, ahora) => import("./sala/validar-campana").then((m) => m.validarCampanaParaElFirmador(campana, ahora)),
     descargar: bajarTexto,
     compartir: compartirConElSistema(),
     costo: costoDelRetiroTexto,
@@ -105,7 +108,7 @@ function depsReales(): DepsDelCreador {
     origen: location.origin,
     tema: parametros.get("theme"),
     // Anotarse sin billetera: solo con el interruptor del sitio y el parámetro en la dirección. Sin los dos, la campaña de siempre.
-    ...(anotarseSinBilleteraActivo() && parametros.get("identidad") === "persona" ? { identidad: "persona" as const } : {}),
+    ...(persona ? { identidad: "persona" as const } : {}),
     cuadro: (f) => {
       if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => f());
       else window.setTimeout(f, 16);

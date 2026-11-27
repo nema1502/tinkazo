@@ -7,7 +7,7 @@ import { Keypair } from "@stellar/stellar-sdk/base";
 import { afterAll, describe, expect, it } from "vitest";
 import { leerCampanaFirmada } from "../../workers/sala/src/campana";
 import { verificarFirma } from "../../workers/sala/src/firma";
-import { validarCampanaParaFirmar } from "./validar-campana";
+import { validarCampanaParaElFirmador, validarCampanaParaFirmar } from "./validar-campana";
 
 const modulo = (await import(
   /* @vite-ignore */ new URL("../../scripts/campana-firmar.mjs", import.meta.url).href
@@ -259,5 +259,51 @@ describe("el cobro de la comisión al firmar", () => {
   it("sin el cobro prendido, firma como siempre", () => {
     const campana = JSON.stringify(completa({ premios: ["1000000001"] }));
     expect(firmarCampana(secretoHex, campana, AHORA, validarCampanaParaFirmar).texto).toContain("1000000001");
+  });
+});
+
+describe("el premio en mano al firmar", () => {
+  const EN_MANO = { es: "Auriculares", en: "Headphones" };
+  const MANO = { identidad: "persona", premio_en_mano: EN_MANO, premios: ["0", "0"] };
+
+  const firmarComoTinkazo = (cambios: Record<string, unknown> = {}) =>
+    firmarCampana(secretoHex, cruda(cambios), AHORA, validarCampanaParaElFirmador);
+
+  it("firma una campaña de personas con premio en mano, y la sala y el sitio la leen", () => {
+    const firmada = firmarComoTinkazo(MANO);
+    expect(verificarFirma(firmada.texto, firmada.firma, publicaHex)).toBe(true);
+    expect(leerCampanaFirmada(firmada, publicaHex, AHORA)).toMatchObject({ ok: true, premios: 2, identidad: "persona" });
+    expect(JSON.parse(firmada.texto)).toMatchObject({ premio_en_mano: EN_MANO, premios: ["0", "0"] });
+  });
+
+  it("no firma una campaña de personas con premios en dólares", () => {
+    expect(() => firmarComoTinkazo({ identidad: "persona" })).toThrow(/premio_en_mano/);
+    expect(() => firmarComoTinkazo({ identidad: "persona", premios: ["400000000"] })).toThrow(/premio_en_mano/);
+  });
+
+  it("una campaña de cuentas sigue firmándose con sus montos", () => {
+    expect(() => firmarComoTinkazo({})).not.toThrow();
+    expect(() => firmarComoTinkazo({ identidad: undefined, premios: ["400000000"] })).not.toThrow();
+  });
+
+  it("no firma un premio en mano que la sala o el sitio rechazarían", () => {
+    expect(() => firmarComoTinkazo({ ...MANO, identidad: undefined })).toThrow(/premio_en_mano/);
+    expect(() => firmarComoTinkazo({ ...MANO, premios: ["400000000", "0"] })).toThrow(/premios/);
+    expect(() => firmarComoTinkazo({ ...MANO, premio_en_mano: { es: "a".repeat(61), en: "b" } })).toThrow(/premio_en_mano/);
+    expect(() => firmarComoTinkazo({ ...MANO, premio_en_mano: { es: "   ", en: "b" } })).toThrow(/premio_en_mano/);
+    expect(() => firmarComoTinkazo({ identidad: undefined, premios: ["0"] })).toThrow(/premios/);
+  });
+
+  it("el validador dice por qué una campaña de personas con dólares no se firma", () => {
+    expect(validarCampanaParaElFirmador(cruda({ identidad: "persona" }), AHORA)).toMatchObject({
+      ok: false,
+      quien: "firmador",
+      campo: "premio_en_mano",
+    });
+    expect(() => firmarComoTinkazo({ identidad: "persona" })).toThrow(/Tinkazo no firma esta campaña: revisá el campo premio_en_mano/);
+  });
+
+  it("la validación del armador sigue aceptando lo que leen la sala y el sitio: solo el firmador cierra esta puerta", () => {
+    expect(validarCampanaParaFirmar(cruda({ identidad: "persona" }), AHORA)).toEqual({ ok: true });
   });
 });

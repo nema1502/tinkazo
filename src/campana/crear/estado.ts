@@ -48,6 +48,8 @@ export interface ConservadoDelArchivo {
   anotadas: number;
   /** Solo si el archivo era de una campaña de personas: se repite al volver a armarlo. Falta en las demás. */
   identidad?: "persona";
+  /** El premio escrito en las dos lenguas tal como venía en un archivo de personas: el inglés propio se repite mientras el español no cambie. */
+  premioEnMano?: { es: string; en: string };
   /** El lugar en las dos lenguas tal como venía: el inglés propio se repite mientras el español no cambie. */
   lugar: { es: string; en: string } | null;
 }
@@ -74,6 +76,11 @@ export interface FormularioDeCampana {
   color: ColorDeCampana | null;
   /** Dólares digitales enteros que se lleva cada persona. */
   monto: number | null;
+  /**
+   * Solo en una campaña de personas: lo que se lleva cada persona, escrito, y que se entrega en mano. Con el campo presente (aunque
+   * esté vacío) no hay montos. Falta en las campañas de cuentas. Un archivo de personas que traía dólares se abre con el campo vacío.
+   */
+  premioEnMano?: string;
   /** Si se ve el contador de otro monto. */
   otroMonto: boolean;
   ganan: number;
@@ -96,6 +103,7 @@ export const OTRO_MONTO = { minimo: 5, maximo: 1000, inicial: 10 } as const;
 export const MAXIMO_DE_GANAN = 10;
 export const MAXIMO_DEL_NOMBRE = 40;
 export const MAXIMO_DEL_LUGAR = 60;
+export const MAXIMO_DEL_PREMIO_EN_MANO = 60;
 export const MAXIMO_DEL_PEDIDO = 120;
 export const CLAVE_DE_GUARDADO = "tinkazo.crear-campana.v1";
 export const COLORES_EN_ORDEN: readonly ColorDeCampana[] = ["rojo", "naranja", "amarillo", "verde", "azul", "morado"];
@@ -181,6 +189,7 @@ export type Accion =
   | { t: "otro-menos" }
   | { t: "ganan-mas" }
   | { t: "ganan-menos" }
+  | { t: "premio-mano"; valor: string }
   | { t: "fecha"; valor: string; ahora: number }
   | { t: "hora"; cual: "abre" | "cierra" | "sorteo"; valor: string }
   | { t: "lugar"; valor: string }
@@ -245,6 +254,8 @@ export function reducir(f: FormularioDeCampana, a: Accion): FormularioDeCampana 
       const actual = f.monto ?? OTRO_MONTO.inicial;
       return { ...f, monto: entre(actual - saltoDeBajada(actual), OTRO_MONTO.minimo, OTRO_MONTO.maximo) };
     }
+    case "premio-mano":
+      return { ...f, premioEnMano: limpiarTexto(a.valor).slice(0, MAXIMO_DEL_PREMIO_EN_MANO) };
     case "ganan-mas":
       return { ...f, ganan: entre(f.ganan + 1, 1, MAXIMO_DE_GANAN) };
     case "ganan-menos":
@@ -363,6 +374,9 @@ function leerConservado(x: unknown): ConservadoDelArchivo | null | undefined {
     red: x.red === "testnet" ? "testnet" : "mainnet",
     anotadas: typeof x.anotadas === "number" && Number.isSafeInteger(x.anotadas) && x.anotadas >= 0 ? x.anotadas : 0,
     ...(x.identidad === "persona" ? { identidad: "persona" as const } : {}),
+    ...(esObjeto(x.premioEnMano) && esCadena(x.premioEnMano.es, MAXIMO_DEL_PREMIO_EN_MANO) && esCadena(x.premioEnMano.en, MAXIMO_DEL_PREMIO_EN_MANO)
+      ? { premioEnMano: { es: x.premioEnMano.es, en: x.premioEnMano.en } }
+      : {}),
     lugar,
   };
 }
@@ -406,6 +420,7 @@ export function leerGuardado(texto: string | null): FormularioDeCampana | null {
   const monto = typeof x.monto === "number" && Number.isInteger(x.monto) && x.monto >= 1 && x.monto <= 100_000 ? x.monto : null;
   const ganan = typeof x.ganan === "number" && Number.isInteger(x.ganan) ? entre(x.ganan, 1, MAXIMO_DE_GANAN) : null;
   if (!esCadena(x.nombre, MAXIMO_DEL_NOMBRE) || !esCadena(x.lugar, MAXIMO_DEL_LUGAR) || ganan === null) return null;
+  if (x.premioEnMano !== undefined && !esCadena(x.premioEnMano, MAXIMO_DEL_PREMIO_EN_MANO)) return null;
   if (!esFecha(x.fecha) || !esHora(x.abre) || !esHora(x.cierra) || !esHora(x.sorteo) || !zonaValida(x.zona)) return null;
   if (typeof x.sufijo !== "string" || !/^[a-z0-9]{4}$/u.test(x.sufijo)) return null;
   return {
@@ -418,6 +433,7 @@ export function leerGuardado(texto: string | null): FormularioDeCampana | null {
     color,
     monto,
     otroMonto: x.otroMonto === true,
+    ...(typeof x.premioEnMano === "string" ? { premioEnMano: x.premioEnMano } : {}),
     ganan,
     fecha: x.fecha,
     abre: x.abre,

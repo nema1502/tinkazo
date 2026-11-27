@@ -14,6 +14,7 @@ import {
   type Game,
 } from "../state";
 import { campanaDeLaLista, esListaDeCampana, listaCambiadaDeLaCampana } from "../campana/en-curso";
+import { esLineaDePersona } from "../campana/forma-persona";
 import { ponerPaso } from "../campana/puente";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
 import { avisarCambioConQr } from "./espectadores-de-la-sala";
@@ -1820,6 +1821,25 @@ async function esSinSaldoDelPatrocinador(e: unknown): Promise<boolean> {
 }
 
 /**
+ * El cuadro de la lista con un sorteo retomado que tiene líneas de persona: sin el panel de la campaña montado, el cuadro
+ * queda a la vista y las líneas se verían crudas. No se ve mientras ese sorteo está retomado, y su valor no cambia (otro
+ * código lo lee). Al soltar el sello o al retomar una lista sin líneas vuelve a verse. Solo se toca el cuadro que se
+ * escondió acá (`data-lineas`): con una lista de nombres, Retomar queda como siempre.
+ */
+function cuadroConLineas(esconder: boolean): void {
+  const ta = document.getElementById("ta");
+  if (!ta) return;
+  if (esconder) {
+    ta.dataset.lineas = "1";
+    ta.style.display = "none";
+  } else if (ta.dataset.lineas) {
+    delete ta.dataset.lineas;
+    ta.style.removeProperty("display");
+    if (!ta.getAttribute("style")) ta.removeAttribute("style");
+  }
+}
+
+/**
  * Retoma un sorteo sellado y sin sortear desde "Mis sorteos": repone la lista,
  * el premio y la cantidad de ganadores, y deja el selector de juego listo.
  *
@@ -1844,6 +1864,7 @@ export function resumeFrozen(e: {
   const ta = $<HTMLTextAreaElement>("ta");
   ta.value = e.names.join("\n");
   ta.dispatchEvent(new Event("input"));
+  cuadroConLineas(e.names.some((n) => esLineaDePersona(n)));
   // El modo de la pantalla pasa a ser el del sorteo sellado. Una recarga vuelve a Sortear premios aunque se haya sellado
   // un orden, y el selector de modo sigue a mano hasta retomar: un orden se retoma como orden, y un sorteo común no queda
   // con la cantidad de la lista porque antes se tocó Orden de turnos.
@@ -1893,6 +1914,7 @@ export function unfreeze(lista: string): void {
   countdownTimer = undefined;
   app.frozen = null;
   cerrarLista(false);
+  cuadroConLineas(false);
   // Después de soltar el sello, el contador de ganadoras vuelve a ser de quien sortea (el paso de la campaña lo vuelve a fijar).
   if (fijoPorCampana()) fijarPorCampana(false);
   ponerPremio("");

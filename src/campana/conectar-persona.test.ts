@@ -284,6 +284,19 @@ describe("depsDePersona", () => {
     expect(JSON.parse(String(llamadas.find((l) => l.ruta === "yo")?.init.body))).toEqual({ llave: llaveDelAlta });
   });
 
+  it("llaveGuardada dice si este celular ya tiene su llave, sin crearla", async () => {
+    const memoria = almacenFalso();
+    const a = montar({ yo: [{ estado: 200, cuerpo: YO_ANOTADA }] }, { memoria });
+    expect(a.deps.llaveGuardada?.()).toBe(false);
+    expect(memoria.getItem("tinkazo.equipo.llaves")).toBeNull();
+    await a.deps.yo();
+    expect(a.deps.llaveGuardada?.()).toBe(true);
+    // Otra pestaña del mismo navegador la ve; quien la suelta con No soy yo ya no la tiene.
+    expect(montar({}, { memoria }).deps.llaveGuardada?.()).toBe(true);
+    await a.deps.salir();
+    expect(a.deps.llaveGuardada?.()).toBe(false);
+  });
+
   it("la llave se guarda en el celular y es la misma al volver a abrir la página", async () => {
     const memoria = almacenFalso();
     const a = montar({ yo: [{ estado: 200, cuerpo: YO_ANOTADA }] }, { memoria });

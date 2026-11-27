@@ -7,7 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { asentar, prepararCelular, propio, publico, type Mundo } from "./celular-falso";
-import type { BotonDeGoogle, DepsDelCelular, ResultadoDelAlta, SesionDelCelular } from "./celular";
+import { INTENTOS_POR_LA_LLAVE, type BotonDeGoogle, type DepsDelCelular, type ResultadoDelAlta, type SesionDelCelular } from "./celular";
 import { guardarMemoria, leerMemoria, SIN_CUENTA } from "./memoria";
 import { TEXTOS_CAMPANA } from "./textos";
 
@@ -199,7 +199,8 @@ describe("una campaña de personas: la previa", () => {
       .mockResolvedValueOnce({ ok: true, ya: false } satisfies ResultadoDelAlta);
     const { mundo, g } = await montarPersona({ anotar });
     await entrarYAceptar(mundo, g);
-    expect(texto(mundo, "#cmp-hola .cmp-error")).toContain("wifi");
+    // El tope de quien vuelve a entrar es de la persona y no de la wifi: no se la manda a cambiar de red.
+    expect(texto(mundo, "#cmp-hola .cmp-error")).toBe("Hubo demasiados intentos desde acá. Probá de nuevo en un rato.");
     mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .cmp-accion .primary")?.click();
     await asentar();
     expect(anotar).toHaveBeenCalledTimes(2);
@@ -217,10 +218,14 @@ describe("una campaña de personas: la previa", () => {
     expect(mundo.raiz.querySelector("#cmp-saber .cmp-google .google-falso")).not.toBeNull();
   });
 
-  it("con la sala sin el modo prendido lo dice sin romperse", async () => {
-    const { mundo, g } = await montarPersona({ anotar: vi.fn(async () => ({ ok: false, motivo: "apagada" }) as const) });
+  it("con la sala sin el modo prendido lo dice en una pantalla final, sin Acepto, y no repite el pedido", async () => {
+    const anotar = vi.fn(async () => ({ ok: false, motivo: "apagada" }) as const);
+    const { mundo, g } = await montarPersona({ anotar });
     await entrarYAceptar(mundo, g);
-    expect(texto(mundo, "#cmp-hola .cmp-error")).toBe("Este sorteo todavía no se puede abrir desde acá. Avisale a quien atiende el stand.");
+    expect(texto(mundo, "#cmp-estado")).toContain("Este sorteo todavía no se puede abrir desde acá. Avisale a quien atiende el stand.");
+    expect(mundo.raiz.querySelector("#cmp-estado button")).toBeNull();
+    expect(mundo.raiz.querySelector<HTMLElement>("#cmp-hola")?.hidden).toBe(true);
+    expect(anotar).toHaveBeenCalledTimes(1);
   });
 
   it("cuando Google no entrega la identidad, lo dice y deja un solo botón: probar de nuevo, que arma el de Google otra vez", async () => {
@@ -237,6 +242,27 @@ describe("una campaña de personas: la previa", () => {
     expect(mundo.raiz.querySelector(".google-falso")).not.toBeNull();
     expect(mundo.raiz.querySelector<HTMLElement>("#cmp-saber .cmp-error")?.hidden).toBe(true);
     expect(mundo.raiz.querySelector("#cmp-saber .cmp-google button.primary")).toBeNull();
+  });
+
+  it("si el botón de Google falla, además de probar de nuevo ofrece copiar el enlace y dice que se abra en el navegador", async () => {
+    const copiado: string[] = [];
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async (t: string) => void copiado.push(t) }, configurable: true });
+    const { mundo, g } = await montarPersona();
+    g.fallar("google");
+    await asentar();
+    const botones = [...mundo.raiz.querySelectorAll<HTMLButtonElement>("#cmp-saber .cmp-google button")];
+    expect(botones.map((b) => b.textContent)).toEqual(["Probar de nuevo", "Copiar el enlace"]);
+    expect(botones.filter((b) => b.classList.contains("primary"))).toHaveLength(1);
+    expect(texto(mundo, "#cmp-saber .cmp-google .cmp-en-app")).toBe("Para entrar con Google, abrí este enlace en Chrome o Safari.");
+    botones[1]?.click();
+    await asentar();
+    expect(copiado).toEqual(["https://tinkazo.app/participar.html?demo=campana"]);
+    expect(texto(mundo, "#cmp-saber .cmp-google .cmp-en-app")).toBe("Enlace copiado");
+    // Probar de nuevo deja el botón de Google y saca los dos.
+    botones[0]?.click();
+    await asentar();
+    expect(mundo.raiz.querySelector(".google-falso")).not.toBeNull();
+    expect(mundo.raiz.querySelector("#cmp-saber .cmp-google .cmp-en-app")).toBeNull();
   });
 
   it("un pase vencido o la lista cerrada llevan a su pantalla, como siempre", async () => {
@@ -284,16 +310,14 @@ describe("una campaña de personas: el resultado", () => {
     return memoria;
   };
 
-  it("quien ganó ve Ganaste, y Recibir mi premio lleva a la pantalla de la entrega con quien organiza", async () => {
+  it("quien ganó ve Ganaste con su premio y dónde se lo entregan, sin botón de recibir ni otra pantalla", async () => {
     const recibir = vi.fn();
     const { mundo } = await montarPersona({ ...sorteada(true), recibir }, adentro());
     expect(texto(mundo, "#cmp-estado h1")).toBe("Ganaste");
-    expect(texto(mundo, "#cmp-estado .cmp-apoyo")).toBe("Tocá el botón para ver cómo recibirlo.");
-    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-estado .primary")?.click();
-    await asentar();
-    expect(texto(mundo, "#cmp-estado h1")).toBe("Tu premio te lo da quien organiza");
     expect(texto(mundo, "#cmp-estado .cmp-apoyo")).toBe("Acercate a quien atiende el stand y mostrale esta pantalla.");
-    expect(mundo.raiz.querySelector("#cmp-estado button")).toBeNull();
+    // Sin ningún botón: ni Recibir mi premio ni, después del cierre, No soy yo (la sala no deja volver a entrar).
+    expect(mundo.raiz.querySelectorAll("#cmp-estado button")).toHaveLength(0);
+    expect(texto(mundo, "#cmp-estado") ?? "").not.toContain("Recibir mi premio");
     expect(recibir).not.toHaveBeenCalled();
   });
 
@@ -384,5 +408,173 @@ describe("una campaña de siempre, sin la entrada de personas, es la de siempre"
     await asentar();
     expect(recibir).toHaveBeenCalledTimes(1);
     expect(texto(mundo, "#cmp-estado h1")).toBe("Ganaste");
+  });
+});
+
+describe("una campaña de personas: olvidar a la persona en este celular", () => {
+  const anotada = (): Storage => {
+    const memoria = almacenFalso();
+    guardarMemoria(memoria, SALA, { cuenta: SIN_CUENTA, fase: "abierta", resultado: null, comprobante: null, guardado: AHORA });
+    return memoria;
+  };
+  const olvidar = (mundo: Mundo): HTMLButtonElement | null => mundo.raiz.querySelector<HTMLButtonElement>(".cmp-olvidar");
+
+  it("la pantalla de anotada ofrece No soy yo, que sale de la sesión, borra el recuerdo y vuelve a la previa", async () => {
+    const memoria = anotada();
+    const salir = vi.fn(async () => undefined);
+    const { mundo } = await montarPersona({ sala: SALA, salir }, memoria);
+    expect(texto(mundo, "#cmp-adentro h1")).toBe("Ya estabas en la lista");
+    expect(olvidar(mundo)?.textContent).toBe("No soy yo");
+    olvidar(mundo)?.click();
+    await asentar();
+    expect(salir).toHaveBeenCalledTimes(1);
+    expect(leerMemoria(memoria, SALA, AHORA)).toBeNull();
+    expect(mundo.raiz.querySelector("#cmp-saber .cmp-google")).not.toBeNull();
+    expect(mundo.raiz.querySelector<HTMLElement>("#cmp-adentro")?.hidden).toBe(true);
+  });
+
+  it("después del cierre ninguna pantalla lo ofrece: ni la lista cerrada, ni Ganaste, ni Esta vez salió otra persona", async () => {
+    // La sala no deja entrar de nuevo con la lista cerrada: quien olvidara su celular perdería su código para siempre.
+    const cerrada = await montarPersona({ sala: SALA, yo: async () => propio("cerrada"), publico: async () => ({ ...publico(), fase: "cerrada" }) }, anotada());
+    expect(texto(cerrada.mundo, "#cmp-adentro h1")).toBe("Ya estabas en la lista");
+    expect(olvidar(cerrada.mundo)).toBeNull();
+    document.body.innerHTML = "";
+    const sellada = await montarPersona({ sala: SALA, yo: async () => propio("sellada"), publico: async () => ({ ...publico(), fase: "sellada" }) }, anotada());
+    expect(olvidar(sellada.mundo)).toBeNull();
+    for (const gano of [true, false]) {
+      document.body.innerHTML = "";
+      const memoria = almacenFalso();
+      guardarMemoria(memoria, SALA, { cuenta: SIN_CUENTA, fase: "sorteada", resultado: gano ? "gano" : "otra", comprobante: null, guardado: AHORA });
+      const { mundo } = await montarPersona({
+        sala: SALA,
+        publico: async () => ({ ...publico(), fase: "sorteada" }),
+        yo: async () => ({ ...propio("sorteada"), gano }),
+        resultado: async () => ({ ganadoras: [LINEA], comprobante: "/verificar.html?demo=1" }),
+      }, memoria);
+      expect(texto(mundo, "#cmp-estado h1")).toBe(gano ? "Ganaste" : "Esta vez salió otra persona");
+      expect(olvidar(mundo)).toBeNull();
+    }
+  });
+
+  it("en inglés dice Not me", async () => {
+    const { mundo } = await montarPersona({
+      sala: SALA,
+      idioma: () => "en",
+      tx: (clave) => TEXTOS_CAMPANA.en[clave as keyof typeof TEXTOS_CAMPANA.en] ?? clave,
+    }, anotada());
+    expect(olvidar(mundo)?.textContent).toBe("Not me");
+  });
+
+  it("una campaña de cuentas no ofrece olvidar a nadie", async () => {
+    const memoria = almacenFalso();
+    guardarMemoria(memoria, SALA, { cuenta: `G${"A".repeat(55)}`, fase: "abierta", resultado: null, comprobante: null, guardado: AHORA });
+    const mundo = await prepararCelular({ sala: SALA, memoria });
+    expect(texto(mundo, "#cmp-adentro h1")).toBe("Ya estabas en la lista");
+    expect(olvidar(mundo)).toBeNull();
+  });
+});
+
+describe("una campaña de personas: quien abre el enlace sin recuerdo en este navegador", () => {
+  /** El sorteo ya se hizo y este navegador no recuerda nada de la campaña (otro almacenamiento, o el recuerdo venció). */
+  const despues = (fase: "cerrada" | "sellada" | "sorteada", cambios: Partial<DepsDelCelular> = {}): Partial<DepsDelCelular> => ({
+    sala: SALA,
+    publico: async () => ({ ...publico(), fase }),
+    resultado: async () => ({ ganadoras: [LINEA], comprobante: "/verificar.html?demo=1" }),
+    ...cambios,
+  });
+  const dice = (mundo: Mundo): string => texto(mundo, "#cmp-estado") ?? "";
+
+  it("con la llave de este celular consulta lo propio aunque no haya sesión, y quien ganó ve Ganaste con su código", async () => {
+    const yo = vi.fn(async () => ({ ...propio("sorteada"), gano: true, codigo: "4821" }));
+    const { mundo } = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo }));
+    expect(yo).toHaveBeenCalled();
+    expect(texto(mundo, "#cmp-estado h1")).toBe("Ganaste");
+    expect(texto(mundo, "#cmp-estado .cmp-codigo")).toBe("4821");
+  });
+
+  it("con el pase del enlace vencido, la llave igual lo reconoce: el pase es para anotarse", async () => {
+    const yo = async () => ({ ...propio("sorteada"), gano: true, codigo: "4821" });
+    const { mundo } = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo, publico: async () => ({ ...publico(), fase: "sorteada", pase: "vencido" }) }));
+    expect(texto(mundo, "#cmp-estado h1")).toBe("Ganaste");
+  });
+
+  it("sin la llave no consulta nada: dice que el sorteo ya se hizo y manda a preguntar en el stand", async () => {
+    const yo = vi.fn(async () => ({ ...propio("sorteada"), gano: true }));
+    const { mundo } = await montarPersona(despues("sorteada", { yo }));
+    expect(yo).not.toHaveBeenCalled();
+    expect(dice(mundo)).toContain(TEXTOS_CAMPANA.es.cpSorteado);
+    expect(dice(mundo)).toContain(TEXTOS_CAMPANA.es.cpPreguntaEnStand);
+    expect(dice(mundo)).not.toContain("Ganaste");
+    expect(dice(mundo)).not.toContain("otra persona");
+    expect(mundo.raiz.querySelector("#cmp-estado a")?.getAttribute("href")).toBe("/verificar.html?demo=1");
+  });
+
+  it("la línea del stand sale también en inglés", async () => {
+    const { mundo } = await montarPersona(despues("sorteada", {
+      idioma: () => "en",
+      tx: (clave) => TEXTOS_CAMPANA.en[clave as keyof typeof TEXTOS_CAMPANA.en] ?? clave,
+    }));
+    expect(dice(mundo)).toContain(TEXTOS_CAMPANA.en.cpPreguntaEnStand);
+  });
+
+  it("con la llave de otra persona, o sin respuesta de la sala, cae en la misma pantalla y nunca dice que salió otra persona", async () => {
+    const otra = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo: async () => ({ ...propio("sorteada"), anotada: false }) }));
+    expect(dice(otra.mundo)).toContain(TEXTOS_CAMPANA.es.cpPreguntaEnStand);
+    expect(dice(otra.mundo)).not.toContain("otra persona");
+    // Sin respuesta, la página repite la consulta con tope antes de pintar esa pantalla (`celular-llave.test.ts`).
+    const caida = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo: async () => "red" }));
+    expect(dice(caida.mundo)).toBe("");
+    for (let intento = 1; intento < INTENTOS_POR_LA_LLAVE; intento += 1) {
+      await caida.mundo.disparar(15_000);
+      await asentar();
+    }
+    expect(dice(caida.mundo)).toContain(TEXTOS_CAMPANA.es.cpPreguntaEnStand);
+    expect(dice(caida.mundo)).not.toContain("otra persona");
+  });
+
+  it("si la lista de elegidas no llega, quien ganó igual ve Ganaste con su código: la sala ya dijo que ganó", async () => {
+    const yo = async () => ({ ...propio("sorteada"), gano: true, codigo: "4821" });
+    for (const resultado of [
+      async (): Promise<null> => null,
+      async (): Promise<never> => {
+        throw new Error("red");
+      },
+    ]) {
+      document.body.innerHTML = "";
+      const { mundo } = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo, resultado }));
+      expect(texto(mundo, "#cmp-estado h1")).toBe("Ganaste");
+      expect(texto(mundo, "#cmp-estado .cmp-codigo")).toBe("4821");
+    }
+  });
+
+  it("si la lista de elegidas no llega, quien no ganó ve que salió otra persona y nunca queda en Cargando", async () => {
+    const yo = async () => ({ ...propio("sorteada"), gano: false });
+    const { mundo } = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo, resultado: async () => null }));
+    expect(texto(mundo, "#cmp-estado h1")).toBe("Esta vez salió otra persona");
+  });
+
+  it("si la lista de elegidas no llega y la sala no sabe de quién es la llave, dice que el sorteo ya se hizo", async () => {
+    const yo = async () => ({ ...propio("sorteada"), anotada: false });
+    const { mundo } = await montarPersona(despues("sorteada", { llaveGuardada: () => true, yo, resultado: async () => null }));
+    expect(dice(mundo)).toContain(TEXTOS_CAMPANA.es.cpPreguntaEnStand);
+    expect(dice(mundo)).not.toContain("otra persona");
+  });
+
+  it("con la lista cerrada y la llave, quien ya estaba anotada ve que sigue en la lista y no que se cerró", async () => {
+    const { mundo } = await montarPersona(despues("cerrada", { llaveGuardada: () => true, yo: async () => propio("cerrada") }));
+    expect(texto(mundo, "#cmp-adentro h1")).toBe("Ya estabas en la lista");
+  });
+
+  it("con la inscripción abierta no consulta por la llave: sigue la previa de siempre", async () => {
+    const yo = vi.fn(async () => propio("abierta"));
+    const { mundo } = await montarPersona({ sala: SALA, llaveGuardada: () => true, yo });
+    expect(yo).not.toHaveBeenCalled();
+    expect(mundo.raiz.querySelector("#cmp-saber .cmp-google")).not.toBeNull();
+  });
+
+  it("una campaña de cuentas dice lo de siempre: sin la línea del stand", async () => {
+    const mundo = await prepararCelular({ sala: SALA, publico: async () => ({ ...publico(), fase: "sorteada" }), resultado: async () => ({ ganadoras: [], comprobante: null }) });
+    expect(texto(mundo, "#cmp-estado")).toContain(TEXTOS_CAMPANA.es.cpSorteado);
+    expect(texto(mundo, "#cmp-estado")).not.toContain(TEXTOS_CAMPANA.es.cpPreguntaEnStand);
   });
 });

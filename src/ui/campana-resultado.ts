@@ -14,10 +14,20 @@
  * un error, ni al detalle de un evento, ni al paso que dibuja el panel.
  */
 import { type SorteoDeCampana, conSorteoSinResolver } from "../campana/en-curso";
-import { type FilaDeGanadora, type PasoDelPuente, accionesDelPuente, ponerPaso, ponerRechazo, registrarAcciones } from "../campana/puente";
+import { formaDeLista } from "../campana/forma-de-lista";
+import {
+  type FilaDeGanadora,
+  type PasoDelPuente,
+  accionesDelPuente,
+  pasoDelPuente,
+  ponerPaso,
+  ponerRechazo,
+  registrarAcciones,
+} from "../campana/puente";
 import { roundTime } from "../protocol/quicknet";
 import type {
   EstadoDeSala,
+  FallaDeCodigos,
   FallaDeSala,
   FaseDeSala,
   RespuestaDeAviso,
@@ -64,13 +74,20 @@ export interface DepsDelResultado {
   ponerSellada: (s: SalaDeCampana, sorteo: string, plazoMs: number) => Promise<{ r: RespuestaDeSellada; horaSala: number | null }>;
   estado: (s: SalaDeCampana) => Promise<EstadoDeSala | FallaDeSala>;
   guardarResultado: (s: SalaDeCampana, sorteo: string, comprobante: string) => Promise<RespuestaDeResultado>;
-  resultado: (s: SalaDeCampana) => Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red">;
+  /** `mezclada`: la sala devolvió ganadoras de cuenta junto a líneas de persona. No se sortea y reintentar no lo cambia. */
+  resultado: (s: SalaDeCampana) => Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red" | "mezclada">;
   avisar: (s: SalaDeCampana, cuenta: string) => Promise<RespuestaDeAviso>;
+  /**
+   * Los códigos de entrega de las ganadoras, en orden de puesto: solo se piden en una campaña de personas. Cada pedido lleva su
+   * propio tope de tiempo y no se guarda en ningún lado: el código vive en la memoria de la pestaña.
+   */
+  codigos: (s: SalaDeCampana) => Promise<string[] | FallaDeCodigos>;
   /** Se puede soltar el sello de la pantalla: no hay juego en marcha ni pantalla grande abierta ni sorteo hecho. */
   sePuedeSoltar: () => boolean;
   /** Suelta el sello de la pantalla (deja el cuadro vacío): sigue el paso entero de pasar la lista. */
   soltarElSello: () => Promise<void> | void;
-  nombreDe: (cuenta: string) => string;
+  /** Cómo se llama a una ganadora en la fila: su nombre, o algo que no dice nada de quién es. `puesto` empieza en 0. */
+  nombreDe: (cuenta: string, puesto: number) => string;
   /** Si quien organiza entró con otra billetera que la de Google: el acceso de quien gana no se puede avisar solo. */
   otraBilletera: () => boolean;
   /**
@@ -116,6 +133,10 @@ const PREGUNTAS_DE_ESTADO = 12;
 const ESPERA_DE_LA_SESION_MS = 12_000;
 /** Cuántas veces seguidas la sala puede decir que el pedido está mal formado antes de dejar de insistir: no mejora solo. */
 const MAX_RESPUESTAS_MAL_FORMADAS = 3;
+/** Los códigos de entrega: tres pedidos con dos segundos entre uno y otro, cada uno con su tope. Como mucho 34 segundos. */
+export const INTENTOS_DE_CODIGOS = 3;
+export const ESPERA_DE_CODIGOS_MS = 2_000;
+export const PLAZO_DE_CODIGOS_MS = 10_000;
 const REINTENTO_RESULTADO_MS = 10_000;
 const VIDA_DEL_REINTENTO_MS = 120_000;
 
@@ -148,6 +169,28 @@ const avisadasPorCelular = new Set<string>();
 /** Vuelve a dibujar a las ganadoras con lo último que se sabe de cada una. */
 let repintarGanadoras: (() => void) | null = null;
 
+/**
+ * Los códigos de entrega de la campaña de personas que está a la vista. Viven solo acá, en la memoria de la pestaña: nunca en
+ * el almacenamiento del navegador, ni en la entrada local, ni en un registro.
+ */
+interface CodigosEnMano {
+  sorteo: string;
+  ganadoras: readonly string[];
+  /** Todos los códigos, en orden de puesto, o `null` si todavía no se tienen. */
+  codigos: readonly string[] | null;
+  /** Se pidieron todas las veces y no se pudieron leer: el panel ofrece pedirlos de nuevo. */
+  fallaron: boolean;
+  /** Hay una serie de pedidos en marcha. */
+  pidiendo: boolean;
+  repintar: () => void;
+}
+let codigosEnMano: CodigosEnMano | null = null;
+/**
+ * En una campaña de personas: el último aviso a una ganadora no se pudo marcar. `null` fuera de ese modo, donde esto no existe
+ * y el aviso fallido sigue callado como siempre. Se apaga con el próximo aviso que sale bien.
+ */
+let falloElAviso: boolean | null = null;
+
 /** Para las pruebas: vuelve todo a como estaba. */
 export function reiniciarElResultado(): void {
   avisando.clear();
@@ -156,6 +199,8 @@ export function reiniciarElResultado(): void {
   enviandoResultado = null;
   avisadasPorCelular.clear();
   repintarGanadoras = null;
+  codigosEnMano = null;
+  falloElAviso = null;
 }
 
 function cambiarLaEntrada(d: DepsDelResultado, cambio: (e: SorteoDeCampana) => SorteoDeCampana): SorteoDeCampana | null {
@@ -443,14 +488,21 @@ export function escucharSellos(d: DepsDelResultado): () => void {
 
 /* ------------------------------------------------------------ el resultado */
 
-function filasDelResultado(d: DepsDelResultado, ganadoras: readonly string[]): FilaDeGanadora[] {
-  const altas = d.altasDe();
-  return ganadoras.map((cuenta, puesto) => ({
-    cuenta,
-    nombre: d.nombreDe(cuenta),
-    avisada: avisadasPorCelular.has(cuenta),
-    alta: altas[String(puesto)] ?? "esperando",
-  }));
+function filasDelResultado(d: DepsDelResultado, ganadoras: readonly string[], enMano: boolean, codigos: readonly string[] | null = null): FilaDeGanadora[] {
+  // En mano no hay servicio del acceso: ninguna fila lleva su estado de alta, aunque la entrada local guarde alguno.
+  const altas: Record<string, import("../campana/en-curso").EstadoDeAltaPremio> = enMano ? {} : d.altasDe();
+  return ganadoras.map((cuenta, puesto) => {
+    const fila: FilaDeGanadora = {
+      cuenta,
+      nombre: d.nombreDe(cuenta, puesto),
+      avisada: avisadasPorCelular.has(cuenta),
+      alta: altas[String(puesto)] ?? "esperando",
+    };
+    // La fila solo lleva la clave del código cuando se tiene: así las de una campaña de cuentas quedan como siempre.
+    const codigo = codigos?.[puesto];
+    if (codigo !== undefined) fila.codigo = codigo;
+    return fila;
+  });
 }
 
 /**
@@ -523,11 +575,51 @@ async function mostrarGanadoras(d: DepsDelResultado, sala: SalaDeCampana, sorteo
     await d.esperar(ESPERA_TRAS_GUARDAR_MS);
     leido = await d.resultado(sala);
   }
+  // Una mezcla de cuentas y líneas de persona no se sortea y volver a leer no la cambia: se dice y no hay botón.
+  if (leido === "mezclada") return ponerPaso({ paso: "lista-rara" });
   if (typeof leido === "string") return ponerPaso({ paso: "boton-resultado" });
+  const resultado = leido;
+  // El premio en mano se sabe por las ganadoras mismas, no por un dato aparte que se pueda perder: si todas son líneas de
+  // persona no hay cuenta ni billetera, así que no se espera la sesión, no se avisa al servicio del acceso y no se paga.
+  if (formaDeLista(resultado.ganadoras) === "persona") {
+    // Con las mismas ganadoras de este sorteo que ya se leyeron, los códigos que ya se tienen se conservan.
+    const previo = codigosEnMano;
+    const mismas =
+      previo !== null &&
+      previo.sorteo === sorteo &&
+      previo.ganadoras.length === resultado.ganadoras.length &&
+      previo.ganadoras.every((g, i) => g === resultado.ganadoras[i]);
+    const estado: CodigosEnMano = {
+      sorteo,
+      ganadoras: resultado.ganadoras,
+      codigos: mismas ? previo.codigos : null,
+      fallaron: false,
+      pidiendo: false,
+      repintar: () => undefined,
+    };
+    const repintarEnMano = (): void =>
+      ponerPaso({
+        paso: "resultado",
+        filas: filasDelResultado(d, resultado.ganadoras, true, estado.codigos),
+        otraBilletera: false,
+        enMano: true,
+        ...(estado.fallaron && estado.codigos === null ? { sinCodigos: true as const } : {}),
+        ...(falloElAviso === true ? { sinAviso: true as const } : {}),
+      });
+    estado.repintar = repintarEnMano;
+    codigosEnMano = estado;
+    if (!mismas || falloElAviso === null) falloElAviso = false;
+    repintarGanadoras = repintarEnMano;
+    // Primero se pintan las ganadoras: los códigos llegan después y repintan. Sin ellos la fila ya sirve.
+    repintarEnMano();
+    if (estado.codigos === null) void pedirLosCodigos(d, sala, estado);
+    return;
+  }
+  falloElAviso = null;
   // Tras una recarga la sesión de Google se retoma aparte: hasta que llegue (o pase el tope) no se dice que es otra billetera.
   let esperandoLaSesion = d.otraBilletera() && (d.billeteraPendiente?.() ?? false);
   const repintar = (): void =>
-    ponerPaso({ paso: "resultado", filas: filasDelResultado(d, leido.ganadoras), otraBilletera: d.otraBilletera() && !esperandoLaSesion });
+    ponerPaso({ paso: "resultado", filas: filasDelResultado(d, resultado.ganadoras, false), otraBilletera: d.otraBilletera() && !esperandoLaSesion });
   repintarGanadoras = repintar;
   repintar();
   if (esperandoLaSesion) {
@@ -537,9 +629,47 @@ async function mostrarGanadoras(d: DepsDelResultado, sala: SalaDeCampana, sorteo
   }
   // El servicio del acceso solo se avisa con lo que la sala confirmó, y solo si es lo mismo que se calculó acá.
   const locales = d.sorteado()?.ganadoras ?? null;
-  const coinciden = locales !== null && locales.length === leido.ganadoras.length && locales.every((c, i) => c === leido.ganadoras[i]);
+  const coinciden = locales !== null && locales.length === resultado.ganadoras.length && locales.every((c, i) => c === resultado.ganadoras[i]);
   if (coinciden || d.sorteado() === null) {
-    if (!d.otraBilletera()) d.iniciarAltas(sorteo, leido.ganadoras, repintar);
+    if (!d.otraBilletera()) d.iniciarAltas(sorteo, resultado.ganadoras, repintar);
+  }
+}
+
+/**
+ * Pide los códigos de entrega: hasta tres veces, con dos segundos entre una y otra y un tope por pedido, así que en el peor caso
+ * tarda unos 34 segundos y termina. Con todos a la vista repinta las filas. Si ninguna vez se pudo, repinta con el aviso de que
+ * no se leyeron, y el panel ofrece volver a pedirlos. Nunca deja la espera sin salida y nunca escribe un código en ningún lado.
+ */
+async function pedirLosCodigos(d: DepsDelResultado, sala: SalaDeCampana, estado: CodigosEnMano): Promise<void> {
+  estado.pidiendo = true;
+  estado.fallaron = false;
+  const sigueVigente = (): boolean => codigosEnMano === estado;
+  const repintarSiHaceFalta = (): void => {
+    // Si el panel ya pasó a otro paso (otra compu tomó la campaña, por ejemplo), no se lo pisa: los códigos quedan guardados.
+    if (pasoDelPuente().paso === "resultado") estado.repintar();
+  };
+  try {
+    for (let i = 0; i < INTENTOS_DE_CODIGOS; i++) {
+      if (i > 0) {
+        await d.esperar(ESPERA_DE_CODIGOS_MS);
+        if (!sigueVigente()) return;
+      }
+      const tope = d.esperar(PLAZO_DE_CODIGOS_MS).then((): "red" => "red");
+      const pedido = Promise.resolve()
+        .then(() => d.codigos(sala))
+        .catch((): "red" => "red");
+      const r = await Promise.race([pedido, tope]);
+      if (!sigueVigente()) return;
+      if (Array.isArray(r) && r.length === estado.ganadoras.length) {
+        estado.codigos = r;
+        repintarSiHaceFalta();
+        return;
+      }
+    }
+    estado.fallaron = true;
+    repintarSiHaceFalta();
+  } finally {
+    estado.pidiendo = false;
   }
 }
 
@@ -586,7 +716,13 @@ export function registrarLasAcciones(d: DepsDelResultado): void {
       if (!s) return;
       void d.avisar(s, cuenta).then((r) => {
         if (r === "token") return ponerPaso({ paso: "tomada" });
-        if (r !== "ok") return;
+        if (r !== "ok") {
+          // En mano el aviso es lo único que hace el botón: si no salió, se dice y el botón sigue para probar de nuevo.
+          if (falloElAviso === null) return;
+          falloElAviso = true;
+          return repintarGanadoras?.();
+        }
+        if (falloElAviso === true) falloElAviso = false;
         avisadasPorCelular.add(cuenta);
         repintarGanadoras?.();
       });
@@ -596,6 +732,15 @@ export function registrarLasAcciones(d: DepsDelResultado): void {
       if (e?.sorteo) void mandarResultado(d, d.sala(), e.sorteo);
     },
     comprobarDeNuevo: () => retomarAlArrancar(d),
+    verCodigos: () => {
+      const e = codigosEnMano;
+      const s = d.sala();
+      if (!e || !s || e.codigos !== null || e.pidiendo) return;
+      // Mientras se vuelve a pedir el enlace no se ofrece: el panel lo vuelve a mostrar solo si no se pudo otra vez.
+      e.fallaron = false;
+      e.repintar();
+      void pedirLosCodigos(d, s, e);
+    },
     avisarCelulares: () => {
       const e = d.entrada();
       const f = d.sellado();
