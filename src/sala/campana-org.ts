@@ -559,7 +559,8 @@ const ES_CODIGO_DE_ENTREGA = /^[0-9]{4}$/u;
  * repita: si no, es `red`, porque no sirve para entregar nada. El código no se escribe en ningún lado.
  */
 export async function codigosDeEntrega(s: Sala, dep: DependenciasOrg = {}): Promise<string[] | FallaDeCodigos> {
-  const r = await llamar(dep, rutaDe(s, "/campana/entrega"), { headers: auth(s) });
+  // Sin cache del navegador: los códigos salen de la sala cada vez y no se guardan en ningún lado.
+  const r = await llamar(dep, rutaDe(s, "/campana/entrega"), { headers: auth(s), cache: "no-store" });
   if (!r) return "red";
   if (r.status === 409) {
     const motivo = await motivoDe(r);

@@ -22,6 +22,7 @@ interface Llamada {
   metodo: string;
   url: string;
   auth: string | undefined;
+  cache: RequestCache | undefined;
 }
 type Respuesta = Response | "caida";
 
@@ -32,6 +33,7 @@ function conFetch(respuestas: Respuesta[]): { fetch: typeof fetch; llamadas: Lla
       metodo: init?.method ?? "GET",
       url,
       auth: (init?.headers as Record<string, string> | undefined)?.Authorization,
+      cache: init?.cache,
     });
     const r = respuestas.shift();
     if (r === undefined || r === "caida") throw new Error("sin red");
@@ -46,7 +48,16 @@ describe("los códigos de entrega que da la sala", () => {
   it("pide GET a la ruta de entrega con el token de la sala y devuelve los códigos en orden", async () => {
     const m = conFetch([json({ codigos: ["0421", "7310", "0007"] })]);
     expect(await codigosDeEntrega(SALA, { fetch: m.fetch })).toEqual(["0421", "7310", "0007"]);
-    expect(m.llamadas).toEqual([{ metodo: "GET", url: "https://s.tinkazo.app/v1/sala/AbCd1234/campana/entrega", auth: `Bearer ${TOKEN}` }]);
+    expect(m.llamadas).toEqual([
+      { metodo: "GET", url: "https://s.tinkazo.app/v1/sala/AbCd1234/campana/entrega", auth: `Bearer ${TOKEN}`, cache: "no-store" },
+    ]);
+  });
+
+  it("pide siempre sin cache: un código viejo guardado por el navegador nunca se entrega", async () => {
+    const m = conFetch([json({ codigos: ["0421"] }), json({ error: "fase" }, 409)]);
+    await codigosDeEntrega(SALA, { fetch: m.fetch });
+    await codigosDeEntrega(SALA, { fetch: m.fetch });
+    expect(m.llamadas.map((l) => l.cache)).toEqual(["no-store", "no-store"]);
   });
 
   it("cada motivo del contrato vuelve con su nombre", async () => {
