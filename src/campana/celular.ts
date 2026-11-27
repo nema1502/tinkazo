@@ -1022,7 +1022,10 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       avisoPublico(deps.tx("cpSorteado"), estado.comprobante);
       // Quien se anotó y abre el enlace en otro navegador después del sorteo no recupera su código: se le dice con quién hablar.
       if (deps.persona) {
-        raiz.querySelector("#cmp-estado .cmp-hero")?.append(Object.assign(document.createElement("p"), { className: "cmp-apoyo", textContent: deps.tx("cpPreguntaEnStand") }));
+        const apoyo = document.createElement("p");
+        apoyo.className = "cmp-apoyo";
+        apoyo.textContent = deps.tx("cpPreguntaEnStand");
+        raiz.querySelector("#cmp-estado .cmp-hero")?.append(apoyo);
       }
     }
   };
@@ -1111,7 +1114,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     // En una campaña de personas solo la sala sabe si esta persona ganó, y solo si la llave de este celular sigue siendo la de su
     // fila (anotada desde otro celular, la fila pasó a la llave del otro). Sin esa certeza nunca se dice que no ganó: quien ya
     // vio Ganaste lo conserva, y quien no, ve que el sorteo ya se hizo y no se recuerda ningún resultado.
-    if (deps.persona && propio?.gano !== true && !(propio?.anotada === true && propio.gano === false)) {
+    if (deps.persona && !propio?.gano && !(propio?.anotada && propio.gano === false)) {
       if (estado.memoria?.resultado === "gano") return;
       ir("sorteada");
       return;
@@ -1135,7 +1138,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     if (desmontado) return;
     const avisadoAntes = estado.avisado;
     estado.propio = propio;
-    if (propio.codigo !== undefined) estado.codigo = propio.codigo;
+    estado.codigo = propio.codigo ?? estado.codigo;
     estado.publico = {
       fase: propio.fase,
       total: propio.total,
@@ -1246,7 +1249,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     estado.publico = publico;
     // En una campaña de personas, después del cierre la llave de este celular reconoce a quien se anotó aunque el recuerdo venciera
     // o el enlace se abriera en otro lugar de este celular: el pase es para anotarse, y quien ya está anotada no lo necesita.
-    const conLlave = deps.persona !== undefined && deps.llaveGuardada?.() === true && publico.fase !== "lista" && publico.fase !== "abierta";
+    const conLlave = deps.persona && deps.llaveGuardada?.() && publico.fase !== "lista" && publico.fase !== "abierta";
     if (publico.pase === "vencido" && !memoria && !conLlave) {
       ir("pase");
       return;
@@ -1324,7 +1327,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
         const anterior = estado.publico;
         estado.publico = publico;
         // El botón de Google no se vuelve a armar mientras alguien lo mira: con la previa a la vista solo cambia el número.
-        const enSuLugar = deps.persona !== undefined && estado.pantalla === "previa" && anterior !== null
+        const enSuLugar = deps.persona && estado.pantalla === "previa" && anterior !== null
           && anterior.cierraMs === publico.cierraMs && actualizarElContadorDeLaPrevia(raiz, deps, publico.total);
         if (publico.fase === "abierta") {
           if (!enSuLugar) pintar();
