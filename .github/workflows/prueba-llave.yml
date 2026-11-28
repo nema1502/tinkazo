@@ -1,0 +1,77 @@
+# La prueba de la llave (issue 301): crea una llave con un autenticador virtual, sella una lista, sortea y deja lo que cobró la
+# red de prueba en cada paso. Corre aparte de lo que exige la rama principal: depende del grifo, de la red de prueba, del
+# servicio de azar público, y puede fallar sin que el sitio tenga nada roto. El armado con la página
+# (y la revisión de que no llega a producción) sí frena, y está en ci.yml.
+#
+# Las acciones de terceros van fijadas por el SHA completo de su commit, los mismos de ci.yml.
+name: Prueba de la llave
+
+on:
+  pull_request:
+    paths:
+      - "src/prueba-llave/**"
+      - "prueba/llave/**"
+      - "scripts/recorrido-llave.mjs"
+      - "scripts/resumen-llave.mjs"
+      - "scripts/lib/sin-prueba-de-llave.mjs"
+      - "scripts/lib/previo-llave.mjs"
+      - "scripts/lib/premio-llave.mjs"
+      - "scripts/lib/recorrido-llave.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "vite.config.ts"
+      - ".github/workflows/prueba-llave.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Dos corridas a la vez le pedirían dos veces al grifo.
+concurrency:
+  group: prueba-llave
+  cancel-in-progress: true
+
+jobs:
+  recorrido:
+    name: Recorrido de la prueba de la llave
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Armado con la prueba
+        run: VITE_PRUEBA_LLAVE=1 pnpm build
+      - name: La prueba está entera en el armado
+        run: node scripts/check-sin-prueba-de-llave.mjs dist --presente
+      - name: Servir el sitio
+        run: |
+          pnpm preview --port 4173 &
+          npx wait-on@9.5.1 http://localhost:4173 --timeout 60000
+      - name: Recorrido
+        id: recorrido
+        run: |
+          set +e
+          timeout 2400 node scripts/recorrido-llave.mjs --base http://localhost:4173 --salida medidas-llave.json
+          codigo=$?
+          echo "codigo=$codigo" >> "$GITHUB_OUTPUT"
+          exit $codigo
+      - name: Resumen
+        if: always()
+        env:
+          CODIGO: ${{ steps.recorrido.outputs.codigo }}
+        run: node scripts/resumen-llave.mjs medidas-llave.json "$CODIGO" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: medidas-llave
+          path: medidas-llave.json
+          if-no-files-found: ignore
+          retention-days: 14

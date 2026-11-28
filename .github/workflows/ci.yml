@@ -107,6 +107,15 @@ jobs:
       # país lee raro: la lista es scripts/lib/glosario-neutral.json.
       - name: Español neutral
         run: node scripts/check-glosario.mjs
+      # La prueba de la llave (issue 301) vive solo en la red de prueba y no puede llegar a producción. El armado del sitio
+      # no trae nada de ella, y con la variable puesta (en la revisión automática ya vale GITHUB_ACTIONS) el armado con la
+      # página tiene que salir entero: así un cambio que la rompa frena acá y no en las vistas previas de todos.
+      - name: El armado del sitio no trae la prueba de la llave
+        run: node scripts/check-sin-prueba-de-llave.mjs dist
+      - name: Armado con la prueba de la llave
+        run: VITE_PRUEBA_LLAVE=1 pnpm exec vite build --outDir dist-llave
+      - name: El armado con la prueba trae la página, el kit y sus marcas
+        run: node scripts/check-sin-prueba-de-llave.mjs dist-llave --presente
       # Las páginas de lectura se rompen en silencio: una imagen que no está,
       # una clave de idioma que falta, un enlace del pie a una página borrada.
       - name: Páginas de lectura

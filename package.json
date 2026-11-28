@@ -23,6 +23,8 @@
     "check:glosario": "node scripts/check-glosario.mjs",
     "check:escritura": "node scripts/check-escritura.mjs",
     "check:verificacion": "node scripts/check-verificacion.mjs",
+    "check:sin-prueba-de-llave": "node scripts/check-sin-prueba-de-llave.mjs dist",
+    "recorrido:llave": "node scripts/recorrido-llave.mjs",
     "preflight:mainnet": "node scripts/preflight-mainnet.mjs",
     "audit:game": "node scripts/audit-game.mjs",
     "audit:sound": "node scripts/audit-sound.mjs",
@@ -39,10 +41,13 @@
     "node": ">=24 <25"
   },
   "devDependencies": {
+    "@simplewebauthn/browser": "13.3.0",
     "@types/three": "0.180.0",
+    "buffer": "6.0.3",
     "jsdom": "^26.1.0",
     "jsqr": "^1.4.0",
     "opentype.js": "^2.0.0",
+    "smart-account-kit": "0.10.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.1"
